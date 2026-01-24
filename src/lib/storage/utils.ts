@@ -40,45 +40,27 @@ function getDefaultStorageDir(): string {
 const STORAGE_DIR = getDefaultStorageDir();
 
 /**
- * Validates a path segment to prevent directory traversal attacks.
- * Rejects paths containing '..' or absolute path indicators.
- * @throws Error if path segment is invalid
+ * Safely joins path segments and ensures the result is within STORAGE_DIR.
+ * This is the ONLY function that should construct paths from user input.
+ * 
+ * @param segments - Path segments to join (relative to STORAGE_DIR)
+ * @returns Absolute path guaranteed to be within STORAGE_DIR
+ * @throws Error if the resulting path would escape STORAGE_DIR
  */
-function validatePathSegment(segment: string, paramName: string): void {
-  if (!segment || typeof segment !== 'string') {
-    throw new Error(`${paramName} must be a non-empty string`);
+function safePath(...segments: string[]): string {
+  // Resolve the base storage directory to an absolute path
+  const baseDir = path.resolve(STORAGE_DIR);
+  
+  // Join all segments and resolve to absolute path
+  const targetPath = path.resolve(baseDir, ...segments);
+  
+  // Ensure the resolved path starts with baseDir
+  // This check MUST happen after path.resolve() to catch traversal attacks
+  if (!targetPath.startsWith(baseDir + path.sep) && targetPath !== baseDir) {
+    throw new Error(`Path traversal detected: ${segments.join('/')}`);
   }
   
-  // Normalize and check for traversal attempts
-  const normalized = path.normalize(segment);
-  
-  // Reject if contains parent directory references
-  if (normalized.includes('..')) {
-    throw new Error(`${paramName} cannot contain parent directory references`);
-  }
-  
-  // Reject absolute paths
-  if (path.isAbsolute(segment) || path.isAbsolute(normalized)) {
-    throw new Error(`${paramName} must be a relative path`);
-  }
-  
-  // Reject if normalized path escapes (starts with ..)
-  if (normalized.startsWith('..')) {
-    throw new Error(`${paramName} cannot escape storage directory`);
-  }
-}
-
-/**
- * Validates that a constructed path is within the storage directory.
- * @throws Error if path escapes storage boundary
- */
-function validateWithinStorage(fullPath: string): void {
-  const resolved = path.resolve(fullPath);
-  const storageResolved = path.resolve(STORAGE_DIR);
-  
-  if (!resolved.startsWith(storageResolved + path.sep) && resolved !== storageResolved) {
-    throw new Error('Path must be within storage directory');
-  }
+  return targetPath;
 }
 
 /** Ensures the .data storage directory exists (internal). */
@@ -93,10 +75,7 @@ async function ensureStorageDir(): Promise<void> {
 
 /** Gets the full path for a storage file in .data directory (internal). */
 function getStoragePath(filename: string): string {
-  validatePathSegment(filename, 'filename');
-  const fullPath = path.join(STORAGE_DIR, filename);
-  validateWithinStorage(fullPath);
-  return fullPath;
+  return safePath(filename);
 }
 
 /**
@@ -235,22 +214,12 @@ export async function deleteStorage(filename: string): Promise<void> {
 // =============================================================================
 
 /**
- * Gets the full path for a subdirectory in .data directory.
- */
-function getStorageDir(subdir: string): string {
-  validatePathSegment(subdir, 'subdir');
-  const fullPath = path.join(STORAGE_DIR, subdir);
-  validateWithinStorage(fullPath);
-  return fullPath;
-}
-
-/**
  * Ensures a subdirectory exists in .data directory.
  * 
  * @param subdir - Subdirectory path relative to .data
  */
 export async function ensureDir(subdir: string): Promise<void> {
-  const dirPath = getStorageDir(subdir);
+  const dirPath = safePath(subdir);
   try {
     await fs.mkdir(dirPath, { recursive: true });
   } catch (error) {
@@ -267,9 +236,7 @@ export async function ensureDir(subdir: string): Promise<void> {
  * @returns File contents or null if not found
  */
 export async function readFile(subdir: string, filename: string): Promise<string | null> {
-  validatePathSegment(filename, 'filename');
-  const filePath = path.join(getStorageDir(subdir), filename);
-  validateWithinStorage(filePath);
+  const filePath = safePath(subdir, filename);
   try {
     return await fs.readFile(filePath, 'utf-8');
   } catch (error: unknown) {
@@ -289,10 +256,7 @@ export async function readFile(subdir: string, filename: string): Promise<string
  * @param content - File content to write
  */
 export async function writeFile(subdir: string, filename: string, content: string): Promise<void> {
-  validatePathSegment(filename, 'filename');
-  const dirPath = getStorageDir(subdir);
-  const filePath = path.join(dirPath, filename);
-  validateWithinStorage(filePath);
+  const filePath = safePath(subdir, filename);
   const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   
   try {
@@ -313,9 +277,7 @@ export async function writeFile(subdir: string, filename: string, content: strin
  * @param filename - Name of file in subdirectory
  */
 export async function deleteFile(subdir: string, filename: string): Promise<void> {
-  validatePathSegment(filename, 'filename');
-  const filePath = path.join(getStorageDir(subdir), filename);
-  validateWithinStorage(filePath);
+  const filePath = safePath(subdir, filename);
   try {
     await fs.unlink(filePath);
   } catch (error: unknown) {
@@ -333,7 +295,7 @@ export async function deleteFile(subdir: string, filename: string): Promise<void
  * @param subdir - Subdirectory path relative to .data
  */
 export async function deleteDir(subdir: string): Promise<void> {
-  const dirPath = getStorageDir(subdir);
+  const dirPath = safePath(subdir);
   try {
     await fs.rm(dirPath, { recursive: true, force: true });
     log.debug(`Directory deleted: ${subdir}`);
@@ -353,7 +315,7 @@ export async function deleteDir(subdir: string): Promise<void> {
  * @returns Array of subdirectory names
  */
 export async function listDirs(subdir: string): Promise<string[]> {
-  const dirPath = subdir ? getStorageDir(subdir) : STORAGE_DIR;
+  const dirPath = subdir ? safePath(subdir) : path.resolve(STORAGE_DIR);
   try {
     await ensureStorageDir();
     if (subdir) await ensureDir(subdir);
@@ -375,7 +337,7 @@ export async function listDirs(subdir: string): Promise<string[]> {
  * @returns Array of filenames
  */
 export async function listFiles(subdir: string): Promise<string[]> {
-  const dirPath = getStorageDir(subdir);
+  const dirPath = safePath(subdir);
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     return entries.filter(e => e.isFile()).map(e => e.name);
