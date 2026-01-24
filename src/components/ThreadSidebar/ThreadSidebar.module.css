@@ -1,0 +1,76 @@
+/* ThreadSidebar styles */
+
+.sidebar {
+  width: 280px;
+  min-width: 280px;
+  border-right: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-muted);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sidebarCollapsed {
+  width: 48px;
+  min-width: 48px;
+  border-right: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-muted);
+  padding-top: var(--base-size-8);
+}
+
+.sidebarInner {
+  height: 100%;
+  overflow: hidden;
+}
+
+.header {
+  border-bottom: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-default);
+  min-height: 49px;
+  display: flex;
+  align-items: center;
+}
+
+.headerTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fgColor-default);
+}
+
+.threadList {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--base-size-8);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-24) var(--base-size-16);
+  text-align: center;
+}
+
+.emptyStateText {
+  color: var(--fgColor-muted);
+  font-size: 14px;
+  margin-bottom: var(--base-size-12);
+}
+
+.threadMeta {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+  margin-top: 2px;
+}
+
+.deleteButton {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* Show delete button on hover */
+[class*="ActionList"] [class*="Item"]:hover .deleteButton,
+[class*="ActionList"] [class*="Item"]:focus-within .deleteButton {
+  opacity: 1;
+}

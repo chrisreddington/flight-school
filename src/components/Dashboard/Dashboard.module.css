@@ -1,0 +1,889 @@
+/* Dashboard.module.css
+ * 
+ * Styling for the Flight School Dashboard using Primer CSS custom properties.
+ * All colors, spacing, and typography use design tokens for consistency.
+ */
+
+/* ============================================================================
+   Layout
+   ============================================================================ */
+
+.root {
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--base-size-24, 24px);
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--base-size-24, 24px);
+}
+
+@media (max-width: 1024px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mainContent {
+  min-width: 0;
+  /* PERF: Allow browser to skip rendering off-screen content */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 800px;
+}
+
+.sidebar {
+  min-width: 0;
+  /* PERF: Sidebar is not immediately visible on mobile, defer rendering */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    order: 2;
+  }
+}
+
+/* ============================================================================
+   Header
+   ============================================================================ */
+
+.header {
+  padding: var(--base-size-16, 16px) var(--base-size-24, 24px);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+  background-color: var(--bgColor-default, #ffffff);
+}
+
+.logoIcon {
+  color: var(--fgColor-accent, #0969da);
+  display: flex;
+  align-items: center;
+}
+
+.logoText {
+  font-size: var(--text-title-size-medium, 20px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  margin: 0;
+}
+
+.avatar {
+  cursor: pointer;
+}
+
+.avatarPlaceholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--bgColor-muted, #f6f8fa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================================
+   Cards
+   ============================================================================ */
+
+.card {
+  padding: var(--base-size-24, 24px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  box-shadow: var(--shadow-resting-small, 0 1px 0 rgba(31, 35, 40, 0.04));
+}
+
+.proTipCard {
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+/* ============================================================================
+   Welcome Section (Standalone)
+   ============================================================================ */
+
+.welcomeSection {
+  padding: var(--base-size-8, 8px) 0;
+}
+
+.welcomeHeading {
+  font-size: var(--text-title-size-large, 32px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  margin: 0 0 var(--base-size-4, 4px) 0;
+  line-height: 1.25;
+}
+
+.welcomeSubtext {
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+  font-size: var(--text-body-size-medium, 14px);
+}
+
+/* ============================================================================
+   Daily Focus Section
+   ============================================================================ */
+
+.focusTabs {
+  margin-bottom: var(--base-size-20, 20px);
+}
+
+.focusContent {
+  /* Container for tab content */
+}
+
+/* Challenge Card */
+.challengeCard {
+  padding: var(--base-size-20, 20px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  /* PERF: Fixed minimum height prevents layout shift when content varies */
+  min-height: 180px;
+}
+
+.challengeContent {
+  flex: 1;
+}
+
+.challengeMeta {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.estimatedTime {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+.generatedTimestamp {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+  margin-left: var(--base-size-8, 8px);
+}
+
+.componentTimestamp {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+  font-style: italic;
+  margin-bottom: var(--base-size-12, 12px);
+}
+
+.historyLink {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.historyLink:hover {
+  color: var(--fgColor-accent, #0969da);
+}
+
+.challengeTitle {
+  font-size: var(--text-body-size-large, 16px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  margin: 0 0 var(--base-size-8, 8px) 0;
+}
+
+.challengeDescription {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.challengeActions {
+  margin-top: var(--base-size-16, 16px);
+}
+
+/* Goal Card */
+.goalCard {
+  padding: var(--base-size-20, 20px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  /* PERF: Fixed minimum height prevents layout shift when content varies */
+  min-height: 180px;
+}
+
+.goalTitle {
+  font-size: var(--text-body-size-large, 16px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  margin: 0 0 var(--base-size-8, 8px) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+}
+
+.goalDescription {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+  line-height: 1.5;
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.goalProgress {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.goalProgressText {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.goalProgressPercent {
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.goalAction {
+  /* Button styling */
+}
+
+/* Learn Cards */
+.learnCard {
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  transition: border-color 0.2s ease;
+}
+
+.learnCard:hover {
+  border-color: var(--borderColor-default, #d0d7de);
+}
+
+.learnIcon {
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  color: var(--fgColor-muted, #656d76);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.learnContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.learnTitle {
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.learnDescription {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-small, 12px);
+  margin: var(--base-size-4, 4px) 0;
+  line-height: 1.5;
+}
+
+.learnRelated {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+/* ============================================================================
+   Input Section
+   ============================================================================ */
+
+.inputSection {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.inputWrapper {
+  flex: 1;
+}
+
+.sendButton {
+  min-width: 100px;
+}
+
+.stopButton {
+  min-width: 100px;
+  /* Primer danger button already has red styling, but ensure it stands out */
+  font-weight: 600;
+}
+
+/* ============================================================================
+   Chat History
+   ============================================================================ */
+
+.chatHistory {
+  margin-top: var(--base-size-24, 24px);
+  padding-top: var(--base-size-24, 24px);
+  border-top: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+/* Empty state for chat */
+.emptyState {
+  margin-top: var(--base-size-24, 24px);
+  padding: var(--base-size-40, 40px) var(--base-size-24, 24px);
+  text-align: center;
+  border-top: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+.emptyStateIcon {
+  color: var(--fgColor-muted, #656d76);
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.emptyStateTitle {
+  font-size: var(--text-body-size-large, 16px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  margin: 0;
+}
+
+.emptyStateDescription {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+  margin: 0;
+  max-width: 400px;
+}
+
+/* Timeline badge styles - keep avatars on timeline, unclipped */
+/* Simplified approach: work with Primer's default sizing, just prevent clipping */
+.userBadge,
+.assistantBadge,
+.errorBadge,
+.loadingBadge {
+  overflow: visible !important;
+}
+
+/* Ensure avatars in chat timeline are perfectly circular and not clipped */
+.chatAvatar {
+  border-radius: 50% !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  flex-shrink: 0 !important;
+  object-fit: cover !important;
+}
+
+.messageRole {
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.messageTimestamp {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.messagePerf {
+  margin-top: var(--base-size-4, 4px);
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-4, 4px);
+}
+
+.messageContent {
+  line-height: 1.6;
+  margin: var(--base-size-4, 4px) 0 0 0;
+}
+
+.messageContent p {
+  margin: 0 0 var(--base-size-8, 8px) 0;
+}
+
+.messageContent p:last-child {
+  margin-bottom: 0;
+}
+
+.messageContent ul,
+.messageContent ol {
+  margin: 0 0 var(--base-size-8, 8px) 0;
+  padding-left: var(--base-size-20, 20px);
+}
+
+.messageContent li {
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.messageContent h1,
+.messageContent h2,
+.messageContent h3,
+.messageContent h4 {
+  margin: var(--base-size-16, 16px) 0 var(--base-size-8, 8px) 0;
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.messageContent h1:first-child,
+.messageContent h2:first-child,
+.messageContent h3:first-child,
+.messageContent h4:first-child {
+  margin-top: 0;
+}
+
+.messageContent blockquote {
+  margin: 0 0 var(--base-size-8, 8px) 0;
+  padding-left: var(--base-size-16, 16px);
+  border-left: 3px solid var(--borderColor-default, #d0d7de);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.inlineCode {
+  padding: 2px 6px;
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-small, 3px);
+  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-size: 0.9em;
+}
+
+.codeBlock {
+  margin: var(--base-size-8, 8px) 0 !important;
+  border-radius: var(--borderRadius-medium, 6px) !important;
+  font-size: 13px !important;
+}
+
+.errorBanner {
+  margin-top: var(--base-size-8, 8px);
+}
+
+.demoBanner {
+  margin-bottom: var(--base-size-12, 12px);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.loadingText {
+  color: var(--fgColor-muted, #656d76);
+  font-style: italic;
+}
+
+/* Streaming cursor for real-time text display */
+.streamingCursor {
+  display: inline-block;
+  width: 8px;
+  height: 1em;
+  background-color: var(--fgColor-accent, #0969da);
+  animation: streamingBlink 0.8s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}
+
+@keyframes streamingBlink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ============================================================================
+   Tool Call Display
+   ============================================================================ */
+
+.toolCallContainer {
+  margin-top: var(--base-size-12, 12px);
+}
+
+.toolCallLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin-bottom: var(--base-size-8, 8px);
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+.toolCallItem {
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.toolCallDuration {
+  color: var(--fgColor-muted, #656d76);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+.toolCallResult {
+  color: var(--fgColor-muted, #656d76);
+  display: block;
+  margin-top: var(--base-size-8, 8px);
+  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-size: 11px;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   Section Headers
+   ============================================================================ */
+
+.sectionHeader {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.sectionTitle {
+  font-size: var(--text-body-size-large, 16px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  margin: 0;
+}
+
+.iconAttention {
+  color: var(--fgColor-attention, #9a6700);
+  display: flex;
+  align-items: center;
+}
+
+.iconSuccess {
+  color: var(--fgColor-success, #1a7f37);
+  display: flex;
+  align-items: center;
+}
+
+.iconAccent {
+  color: var(--fgColor-accent, #0969da);
+  display: flex;
+  align-items: center;
+}
+
+/* ============================================================================
+   Profile Stats Section
+   ============================================================================ */
+
+.loadingState {
+  padding: var(--base-size-24, 24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* PERF: Fixed minimum height prevents layout shift when content loads */
+  min-height: 180px;
+}
+
+.experienceLevel {
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.experienceLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.experienceYears {
+  display: block;
+  margin-top: var(--base-size-8, 8px);
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.languagesSection {
+  /* Container for languages */
+}
+
+.languagesLabel {
+  display: block;
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin-bottom: var(--base-size-12, 12px);
+}
+
+.languageRow {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.languageDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.languageName {
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.languagePercent {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+/* Card Divider for combined sections */
+.cardDivider {
+  height: 1px;
+  background-color: var(--borderColor-muted, #d8dee4);
+  margin: var(--base-size-20, 20px) 0;
+}
+
+/* Sub-section header (smaller than main header) */
+.subSectionHeader {
+  margin-bottom: var(--base-size-12, 12px);
+}
+
+.subSectionTitle {
+  font-size: var(--text-body-size-medium, 14px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  color: var(--fgColor-default, #1f2328);
+}
+
+/* ============================================================================
+   This Week Section
+   ============================================================================ */
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--base-size-12, 12px);
+  margin-bottom: var(--base-size-20, 20px);
+}
+
+.statItem {
+  text-align: center;
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.statIcon {
+  color: var(--fgColor-muted, #656d76);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.statValue {
+  display: block;
+  font-size: var(--text-title-size-medium, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: 1.25;
+}
+
+.statLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.recentActivity {
+  border-top: 1px solid var(--borderColor-muted, #d8dee4);
+  padding-top: var(--base-size-16, 16px);
+}
+
+.recentActivityLabel {
+  display: block;
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin-bottom: var(--base-size-12, 12px);
+}
+
+.activityItem {
+  padding: var(--base-size-8, 8px) 0;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+.activityItem:last-child {
+  border-bottom: none;
+}
+
+.activityDescription {
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.activityRepo {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.activityTime {
+  display: block;
+  font-size: 11px;
+  color: var(--fgColor-muted, #656d76);
+  margin-top: var(--base-size-4, 4px);
+}
+
+/* ============================================================================
+   Pro Tip
+   ============================================================================ */
+
+.proTipHeader {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.proTipTitle {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.proTipContent {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.kbd {
+  display: inline-block;
+  padding: 2px var(--base-size-8, 8px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-small, 3px);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  font-size: var(--text-body-size-small, 12px);
+  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  box-shadow: inset 0 -1px 0 var(--borderColor-default, #d0d7de);
+}
+
+/* ============================================================================
+   Footer
+   ============================================================================ */
+
+.footer {
+  margin-top: var(--base-size-24, 24px);
+  padding: var(--base-size-24, 24px);
+  border-top: 1px solid var(--borderColor-muted, #d8dee4);
+  text-align: center;
+  position: relative;
+  z-index: 10;
+}
+
+.footerText {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.footerHeart {
+  color: var(--fgColor-danger, #cf222e);
+  flex-shrink: 0;
+}
+
+.footerLink {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-accent, #0969da);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}
+
+/* ============================================================================
+   Challenge Sandbox Dialog
+   ============================================================================ */
+
+.sandboxDialogContent {
+  min-height: 500px;
+  max-height: 70vh;
+}
+
+/* ============================================================================
+   Create Repo Dialog
+   ============================================================================ */
+
+.createRepoDialogContent {
+  padding: var(--base-size-8, 8px) 0;
+}
+
+.createRepoHint {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+}
+
+.createRepoLoadingTitle {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.createRepoLoadingHint {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+  text-align: center;
+  max-width: 280px;
+}
+
+/* ============================================================================
+   Inline Calibration
+   ============================================================================ */
+
+.calibrationSection {
+  margin-top: var(--base-size-16, 16px);
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-attention-muted, #fff8c5);
+  border: 1px solid var(--borderColor-attention-muted, #d4a72c);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.calibrationHeader {
+  margin-bottom: var(--base-size-12, 12px);
+  color: var(--fgColor-attention, #9a6700);
+}
+
+.calibrationTitle {
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.calibrationItems {
+  margin-bottom: var(--base-size-12, 12px);
+}
+
+.calibrationItem {
+  padding: var(--base-size-8, 8px) var(--base-size-12, 12px);
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-small, 4px);
+}
+
+.skillName {
+  font-weight: var(--base-text-weight-medium, 500);
+  font-size: var(--text-body-size-medium, 14px);
+  color: var(--fgColor-default, #1f2328);
+}
+
+.calibrationLink {
+  font-size: var(--text-body-size-small, 12px);
+}
+
+/* Custom Challenge Queue Indicator */
+.queueIndicator {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  font-style: italic;
+}
+
+/* Screen reader only text */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,185 @@
+/* MessageBubble styles */
+
+.bubble {
+  padding: var(--base-size-12) var(--base-size-16);
+  border-radius: var(--borderRadius-medium);
+  margin-bottom: var(--base-size-8);
+}
+
+.userBubble {
+  background-color: var(--bgColor-muted);
+}
+
+.assistantBubble {
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+}
+
+.avatar {
+  flex-shrink: 0;
+}
+
+.defaultAvatar,
+.copilotAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-muted);
+}
+
+.defaultAvatar {
+  background-color: var(--bgColor-emphasis);
+}
+
+.copilotAvatar {
+  background-color: var(--bgColor-accent-muted);
+  color: var(--fgColor-accent);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header {
+  margin-bottom: var(--base-size-4);
+}
+
+.role {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fgColor-default);
+}
+
+.timestamp {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+}
+
+.messageContent {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fgColor-default);
+}
+
+.messageContent p {
+  margin: 0 0 var(--base-size-8) 0;
+}
+
+.messageContent p:last-child {
+  margin-bottom: 0;
+}
+
+.messageContent ul,
+.messageContent ol {
+  margin: 0 0 var(--base-size-8) 0;
+  padding-left: var(--base-size-20);
+}
+
+.messageContent li {
+  margin-bottom: var(--base-size-4);
+}
+
+/* Tables */
+.messageContent table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--base-size-12) 0;
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
+}
+
+.messageContent th,
+.messageContent td {
+  padding: var(--base-size-8) var(--base-size-12);
+  text-align: left;
+  border: 1px solid var(--borderColor-default);
+}
+
+.messageContent th {
+  background-color: var(--bgColor-muted);
+  font-weight: 600;
+  color: var(--fgColor-default);
+}
+
+.messageContent tr:nth-child(even) {
+  background-color: var(--bgColor-inset);
+}
+
+.messageContent tr:hover {
+  background-color: var(--bgColor-muted);
+}
+
+.codeBlock {
+  border-radius: var(--borderRadius-medium);
+  margin: var(--base-size-8) 0 !important;
+  font-size: 13px !important;
+}
+
+.inlineCode {
+  background-color: var(--bgColor-muted);
+  padding: 2px 6px;
+  border-radius: var(--borderRadius-small);
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.loadingText {
+  color: var(--fgColor-muted);
+  font-style: italic;
+}
+
+.streamingCursor {
+  animation: blink 1s step-end infinite;
+  color: var(--fgColor-accent);
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.errorBanner {
+  margin-top: var(--base-size-4);
+}
+
+.toolCallsIndicator {
+  margin-top: var(--base-size-8);
+  padding-top: var(--base-size-8);
+  border-top: 1px solid var(--borderColor-default);
+}
+
+.toolCallsText {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+  font-style: italic;
+}
+
+.perfMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-8);
+  margin-top: var(--base-size-8);
+  padding-top: var(--base-size-8);
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.perfItem {
+  font-size: 11px;
+  color: var(--fgColor-muted);
+  background-color: var(--bgColor-muted);
+  padding: 2px 6px;
+  border-radius: var(--borderRadius-small);
+}

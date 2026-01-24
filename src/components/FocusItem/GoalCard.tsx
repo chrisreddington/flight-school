@@ -1,0 +1,139 @@
+/**
+ * Shared Goal Card Component
+ * 
+ * Displays a goal with consistent styling and actions across Dashboard and History.
+ * Automatically detects state from storage.
+ */
+
+import { focusStore } from '@/lib/focus';
+import type { GoalState } from '@/lib/focus/state-machine';
+import type { DailyGoal } from '@/lib/focus/types';
+import { getDateKey } from '@/lib/utils/date-utils';
+import { CheckIcon, SkipIcon, ZapIcon } from '@primer/octicons-react';
+import { Button, Heading, Label, Stack } from '@primer/react';
+import { useCallback, useEffect, useState } from 'react';
+import styles from './FocusItem.module.css';
+
+interface GoalCardProps {
+  goal: DailyGoal;
+  /** Optional date key for history items (defaults to today) */
+  dateKey?: string;
+  /** Show history-specific actions (Mark Complete, Skip) */
+  showHistoryActions?: boolean;
+  /** Callback when goal is refreshed/skipped */
+  onRefresh?: () => void;
+  /** Callback after state transition */
+  onStateChange?: () => void;
+  /** Whether refresh is disabled */
+  refreshDisabled?: boolean;
+}
+
+export function GoalCard({
+  goal,
+  dateKey = getDateKey(),
+  showHistoryActions = false,
+  onRefresh,
+  onStateChange,
+  refreshDisabled = false,
+}: GoalCardProps) {
+  const [currentState, setCurrentState] = useState<GoalState>('not-started');
+
+  // Load current state from storage
+  useEffect(() => {
+    (async () => {
+      const history = await focusStore.getHistory();
+      const record = history[dateKey];
+      if (record?.goals) {
+        const item = record.goals.find(g => g.data.id === goal.id);
+        if (item && item.stateHistory.length > 0) {
+          setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
+        }
+      }
+    })();
+  }, [dateKey, goal.id]);
+
+  const handleMarkComplete = useCallback(async () => {
+    await focusStore.transitionGoal(dateKey, goal.id, 'completed', 'dashboard');
+    setCurrentState('completed');
+    if (onStateChange) onStateChange();
+  }, [dateKey, goal.id, onStateChange]);
+
+  const handleSkip = useCallback(async () => {
+    await focusStore.transitionGoal(dateKey, goal.id, 'skipped', 'dashboard');
+    setCurrentState('skipped');
+    if (onStateChange) onStateChange();
+    if (onRefresh) onRefresh();
+  }, [dateKey, goal.id, onStateChange, onRefresh]);
+
+  const isCompleted = currentState === 'completed';
+  const isSkipped = currentState === 'skipped';
+
+  return (
+    <div className={styles.card}>
+      <Stack direction="vertical" gap="normal">
+        <Stack direction="horizontal" justify="space-between" align="center">
+          <Label size="small" variant="accent">
+            <span style={{ marginRight: '4px', display: 'inline-flex' }}><ZapIcon size={12} /></span>
+            Goal
+          </Label>
+        </Stack>
+
+        <Heading as="h3">{goal.title}</Heading>
+        <p className={styles.description}>{goal.description}</p>
+
+        {goal.reasoning && (
+          <p className={styles.reasoning}>
+            <strong>Why:</strong> {goal.reasoning}
+          </p>
+        )}
+
+        <Stack direction="horizontal" gap="condensed">
+          {showHistoryActions ? (
+            <>
+              <Button
+                variant="primary"
+                leadingVisual={CheckIcon}
+                onClick={handleMarkComplete}
+                disabled={isCompleted || isSkipped}
+              >
+                Mark Complete
+              </Button>
+              <Button
+                variant="invisible"
+                leadingVisual={SkipIcon}
+                onClick={handleSkip}
+                disabled={isCompleted || isSkipped || refreshDisabled}
+              >
+                Skip Goal
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                leadingVisual={CheckIcon}
+                onClick={handleMarkComplete}
+                disabled={isCompleted || isSkipped}
+              >
+                Complete
+              </Button>
+              <Button
+                variant="invisible"
+                leadingVisual={SkipIcon}
+                onClick={handleSkip}
+                disabled={isCompleted || isSkipped || refreshDisabled}
+              >
+                Skip Goal
+              </Button>
+            </>
+          )}
+          {(isCompleted || isSkipped) && (
+            <Label variant={isCompleted ? 'success' : 'secondary'}>
+              {isCompleted ? '✓ Completed' : '⏭ Skipped'}
+            </Label>
+          )}
+        </Stack>
+      </Stack>
+    </div>
+  );
+}

@@ -1,0 +1,74 @@
+/* Shared styles for Focus Item cards */
+
+.card {
+  padding: var(--base-size-16);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  background: var(--bgColor-default);
+  position: relative;
+}
+
+.card:hover {
+  border-color: var(--borderColor-accent-emphasis);
+  box-shadow: var(--shadow-small);
+}
+
+.timestamp {
+  position: absolute;
+  top: var(--base-size-8);
+  right: var(--base-size-12);
+  font-size: 12px;
+  color: var(--fgColor-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+}
+
+.description {
+  color: var(--fgColor-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.reasoning {
+  background: var(--bgColor-muted);
+  padding: var(--base-size-12);
+  border-radius: var(--borderRadius-small);
+  font-size: 14px;
+}
+
+.reasoning strong {
+  display: block;
+  margin-bottom: var(--base-size-8);
+  color: var(--fgColor-default);
+}
+
+.reasoning ul {
+  margin: 0;
+  padding-left: var(--base-size-20);
+}
+
+.reasoning li {
+  margin-bottom: var(--base-size-4);
+}
+
+.progressLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fgColor-default);
+}
+
+.progressValue {
+  font-size: 14px;
+  color: var(--fgColor-muted);
+}
+
+.relatedTo {
+  font-size: 14px;
+  color: var(--fgColor-muted);
+  margin: 0;
+}
+
+.relatedTo strong {
+  color: var(--fgColor-default);
+}

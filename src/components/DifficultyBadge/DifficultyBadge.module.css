@@ -1,0 +1,29 @@
+/**
+ * DifficultyBadge component styles
+ *
+ * CSS module for custom difficulty badge styling when Primer Label
+ * isn't sufficient (e.g., for ChallengeSandbox header).
+ */
+
+.badge {
+  padding: 2px 8px;
+  border-radius: var(--borderRadius-small);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-medium);
+  text-transform: capitalize;
+}
+
+.badge[data-difficulty="beginner"] {
+  background-color: var(--bgColor-success-muted);
+  color: var(--fgColor-success);
+}
+
+.badge[data-difficulty="intermediate"] {
+  background-color: var(--bgColor-attention-muted);
+  color: var(--fgColor-attention);
+}
+
+.badge[data-difficulty="advanced"] {
+  background-color: var(--bgColor-danger-muted);
+  color: var(--fgColor-danger);
+}

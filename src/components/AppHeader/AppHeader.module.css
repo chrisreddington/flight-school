@@ -1,0 +1,102 @@
+/* AppHeader.module.css
+ * 
+ * Styling for the shared Flight School header component.
+ */
+
+.header {
+  padding: var(--base-size-16, 16px) var(--base-size-24, 24px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.logoLink {
+  text-decoration: none;
+  color: inherit;
+}
+
+.logoLink:hover {
+  text-decoration: none;
+}
+
+.logoIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-accent, #0969da);
+}
+
+.logoText {
+  font-size: var(--text-title-size-medium, 20px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  color: var(--fgColor-default, #1f2328);
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+/* Breadcrumbs */
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  margin-left: var(--base-size-8, 8px);
+}
+
+.breadcrumbItem {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumbSeparator {
+  color: var(--fgColor-muted, #656d76);
+  margin: 0 var(--base-size-4, 4px);
+}
+
+.breadcrumbLink {
+  color: var(--fgColor-accent, #0969da);
+  text-decoration: none;
+  font-size: var(--text-body-size-medium, 14px);
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbCurrent {
+  color: var(--fgColor-default, #1f2328);
+  font-size: var(--text-body-size-medium, 14px);
+  font-weight: var(--base-text-weight-medium, 500);
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Avatar */
+.avatar {
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.avatar:hover {
+  border-color: var(--borderColor-accent-emphasis, #0969da);
+}
+
+.avatarPlaceholder {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+
+/* SDK Badge Link */
+.sdkBadgeLink {
+  text-decoration: none;
+}
+
+.sdkBadgeLink:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}

@@ -1,0 +1,63 @@
+/**
+ * ExportDialog styles
+ */
+
+.dialogContent {
+  padding: var(--base-size-8) 0;
+}
+
+.hint {
+  color: var(--fgColor-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.loadingTitle {
+  font-weight: 600;
+  margin: 0;
+}
+
+.loadingHint {
+  color: var(--fgColor-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.filePreview {
+  background-color: var(--bgColor-muted);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-12);
+}
+
+.filePreviewTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  margin: 0 0 var(--base-size-8) 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fgColor-muted);
+}
+
+.fileList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  font-family: var(--fontStack-monospace);
+}
+
+.fileList li {
+  padding: var(--base-size-4) 0;
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.fileList li:last-child {
+  border-bottom: none;
+}
+
+.generatedFile {
+  color: var(--fgColor-muted);
+  font-style: italic;
+}

@@ -1,0 +1,81 @@
+name: 🐛 Bug Report
+description: Report a bug or issue with the Flight School app
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this bug! Please fill out the form below.
+        
+        ⚠️ **Privacy Note**: Issues are public and visible to everyone. Please check logs, screenshots, and descriptions for personal information before submitting.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and how to reproduce it
+      placeholder: |
+        Example: When I click the submit button, nothing happens.
+        
+        Steps to reproduce:
+        1. Go to the page
+        2. Click the button
+        3. Nothing appears
+        
+        Expected: A response should appear
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      description: Which browser are you using?
+      options:
+        - Chrome
+        - Firefox
+        - Safari
+        - Edge
+        - Mobile Chrome (Android)
+        - Mobile Safari (iOS)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - iOS
+        - Android
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information (Optional)
+      description: URL that triggers the bug, console errors, screenshots, etc.
+      placeholder: |
+        URL: https://...
+        
+        Console errors (if any):
+        Error: ...
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/chrisreddington/flight-school/blob/main/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

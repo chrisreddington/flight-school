@@ -1,0 +1,186 @@
+/**
+ * MarkdownContent Styles
+ *
+ * Shared styles for markdown rendering across chat components.
+ */
+
+.content {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fgColor-default);
+}
+
+.content p {
+  margin: 0 0 var(--base-size-8) 0;
+}
+
+.content p:last-child {
+  margin-bottom: 0;
+}
+
+.content ul,
+.content ol {
+  margin: 0 0 var(--base-size-8) 0;
+  padding-left: var(--base-size-20);
+}
+
+.content li {
+  margin-bottom: var(--base-size-4);
+}
+
+/* Strong/Bold */
+.content strong {
+  font-weight: 600;
+}
+
+/* Emphasis/Italic */
+.content em {
+  font-style: italic;
+}
+
+/* Headings in markdown content */
+.content h1,
+.content h2,
+.content h3,
+.content h4,
+.content h5,
+.content h6 {
+  margin: var(--base-size-16) 0 var(--base-size-8) 0;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.content h1:first-child,
+.content h2:first-child,
+.content h3:first-child {
+  margin-top: 0;
+}
+
+.content h1 {
+  font-size: 1.5em;
+}
+
+.content h2 {
+  font-size: 1.25em;
+}
+
+.content h3 {
+  font-size: 1.1em;
+}
+
+/* Tables */
+.content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--base-size-12) 0;
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
+}
+
+.content th,
+.content td {
+  padding: var(--base-size-8) var(--base-size-12);
+  text-align: left;
+  border: 1px solid var(--borderColor-default);
+}
+
+.content th {
+  background-color: var(--bgColor-muted);
+  font-weight: 600;
+  color: var(--fgColor-default);
+}
+
+.content tr:nth-child(even) {
+  background-color: var(--bgColor-inset);
+}
+
+.content tr:hover {
+  background-color: var(--bgColor-muted);
+}
+
+/* Code blocks */
+.codeBlock {
+  background-color: var(--bgColor-neutral-muted);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  margin: var(--base-size-8) 0 !important;
+  overflow: hidden;
+}
+
+.codeHeader {
+  background-color: var(--bgColor-muted);
+  padding: var(--base-size-4) var(--base-size-12);
+  border-bottom: 1px solid var(--borderColor-default);
+}
+
+.language {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fgColor-muted);
+  text-transform: uppercase;
+}
+
+.codeBlock pre {
+  margin: 0;
+  padding: var(--base-size-12);
+  overflow-x: auto;
+  background: transparent;
+}
+
+.codeBlock code {
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  font-size: 13px !important;
+  line-height: 1.45;
+  color: var(--fgColor-default);
+}
+
+.inlineCode {
+  background-color: var(--bgColor-muted);
+  padding: 2px 6px;
+  border-radius: var(--borderRadius-small);
+  font-family: monospace;
+  font-size: 13px;
+}
+
+/* Blockquotes */
+.content blockquote {
+  margin: var(--base-size-8) 0;
+  padding: var(--base-size-8) var(--base-size-16);
+  border-left: 4px solid var(--borderColor-accent-muted);
+  background-color: var(--bgColor-muted);
+  color: var(--fgColor-muted);
+}
+
+.content blockquote p {
+  margin: 0;
+}
+
+/* Horizontal rules */
+.content hr {
+  margin: var(--base-size-16) 0;
+  border: none;
+  border-top: 1px solid var(--borderColor-default);
+}
+
+/* Links */
+.content a {
+  color: var(--fgColor-accent);
+  text-decoration: none;
+}
+
+.content a:hover {
+  text-decoration: underline;
+}
+
+/* Streaming cursor */
+.streamingCursor {
+  animation: blink 1s step-end infinite;
+  color: var(--fgColor-accent);
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

@@ -1,0 +1,28 @@
+/* Challenge Page Styles */
+
+.root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bgColor-inset, #f6f8fa);
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--base-size-16, 16px);
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-body-size-large, 16px);
+  color: var(--fgColor-muted, #656d76);
+}

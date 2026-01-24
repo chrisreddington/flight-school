@@ -1,0 +1,70 @@
+name: 🌟 Feature Request
+description: Suggest a new feature or enhancement for the Flight School app
+title: "[Feature]: "
+labels: ["feature", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please describe your idea below.
+        
+        ⚠️ **Privacy Note**: Issues are public and visible to everyone. Please check your descriptions and any attached images for personal information before submitting.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: What type of feature is this?
+      options:
+        - Accessibility
+        - Developer Experience
+        - Documentation
+        - Learning Experience
+        - Other
+        - Performance Optimization
+        - UI/UX Improvement
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: Describe the feature you'd like and why it would be useful
+      placeholder: |
+        Example: I'd like a way to track my learning progress because...
+        
+        This would help users who want to see their improvement over time.
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or References (Optional)
+      description: Screenshots, mockups, or links to similar features in other apps
+      placeholder: "Add links or images that help illustrate your idea"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: implementation-interest
+    attributes:
+      label: Would you like to implement this?
+      description: Let us know if you'd like to contribute code for this feature
+      options:
+        - "I'd like to implement this myself"
+        - "I could implement it with some guidance"
+        - "I'm just suggesting the idea"
+      default: 2
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/chrisreddington/flight-school/blob/main/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

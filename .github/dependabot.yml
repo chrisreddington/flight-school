@@ -1,0 +1,79 @@
+# Dependabot configuration for automated dependency updates
+# Documentation: https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+
+version: 2
+updates:
+  # Monitor npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    groups:
+      # Group all dev dependencies (minor/patch) together
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group TypeScript type definitions
+      types-packages:
+        patterns:
+          - "@types/*"
+      # Group Primer UI packages
+      primer-ui:
+        patterns:
+          - "@primer/*"
+      # Group ESLint ecosystem
+      eslint-ecosystem:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "@typescript-eslint/*"
+      # Group testing packages
+      testing:
+        patterns:
+          - "vitest*"
+          - "@vitest/*"
+      # Group production minor/patch updates
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      # Major updates stay individual for careful review
+
+  # Monitor GitHub Actions (for future workflows)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+
+  # Monitor Dev Container features (for Codespaces)
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "devcontainers"
+    commit-message:
+      prefix: "devcontainer"

@@ -1,0 +1,123 @@
+/* LearningChat styles */
+
+.container {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.chatArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header {
+  padding: var(--base-size-8) var(--base-size-16);
+  border-bottom: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-default);
+  min-height: 49px;
+  display: flex;
+  align-items: center;
+}
+
+.headerIcon {
+  color: var(--fgColor-accent);
+}
+
+.headerTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.headerContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.titleEditContainer {
+  flex: 1;
+  min-width: 0;
+}
+
+.titleInput {
+  flex: 1;
+  min-width: 100px;
+  max-width: 300px;
+}
+
+.editButton {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.header:hover .editButton,
+.header:focus-within .editButton {
+  opacity: 1;
+}
+
+.messagesContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--base-size-16);
+}
+
+.messagesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: var(--base-size-32);
+}
+
+.emptyIcon {
+  color: var(--fgColor-muted);
+  opacity: 0.5;
+  margin-bottom: var(--base-size-16);
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 var(--base-size-8) 0;
+  color: var(--fgColor-default);
+}
+
+.emptyDescription {
+  font-size: 14px;
+  color: var(--fgColor-muted);
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.inputArea {
+  display: flex;
+  flex-direction: row;
+  /* Align to top so repo button aligns with input row, not caption */
+  align-items: flex-start;
+  gap: var(--base-size-8);
+  padding: var(--base-size-12) var(--base-size-16);
+  border-top: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-default);
+  overflow: visible;
+  position: relative;
+}
+
+.inputWrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+}

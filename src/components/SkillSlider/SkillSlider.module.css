@@ -1,0 +1,133 @@
+/* SkillSlider Component Styles */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12, 12px);
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  min-width: 280px;
+  transition: opacity 150ms ease-in-out;
+}
+
+.container.notInterested {
+  opacity: 0.6;
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+
+.sliderWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8, 8px);
+}
+
+.slider {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--bgColor-default, #ffffff);
+  border: 2px solid var(--bgColor-accent-emphasis, #0969da);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--bgColor-default, #ffffff);
+  border: 2px solid var(--bgColor-accent-emphasis, #0969da);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.slider:focus-visible {
+  outline: 2px solid var(--focus-outlineColor, #0969da);
+  outline-offset: 2px;
+}
+
+.slider:disabled {
+  cursor: not-allowed;
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-color: var(--borderColor-muted, #d0d7de);
+}
+
+.levelLabels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--base-size-4, 4px);
+}
+
+.levelLabel {
+  background: none;
+  border: none;
+  padding: var(--base-size-4, 4px) var(--base-size-8, 8px);
+  border-radius: var(--borderRadius-small, 4px);
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--base-text-weight-medium, 500);
+  color: var(--fgColor-muted, #656d76);
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.levelLabel:hover:not(:disabled) {
+  background-color: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-default, #1f2328);
+}
+
+.levelLabel:disabled {
+  cursor: not-allowed;
+  color: var(--fgColor-muted, #8c959f);
+}
+
+.levelLabelActive {
+  background-color: var(--bgColor-accent-muted, #ddf4ff);
+  color: var(--fgColor-accent, #0969da);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.levelLabelActive:hover:not(:disabled) {
+  background-color: var(--bgColor-accent-muted, #ddf4ff);
+  color: var(--fgColor-accent, #0969da);
+}
+
+.notInterestedRow {
+  padding-top: var(--base-size-8, 8px);
+  border-top: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .container {
+    transition: none;
+  }
+  
+  .slider::-webkit-slider-thumb {
+    transition: none;
+  }
+  
+  .levelLabel {
+    transition: none;
+  }
+}

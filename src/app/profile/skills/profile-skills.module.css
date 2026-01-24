@@ -1,0 +1,187 @@
+/* Skill Profile Page Styles */
+
+.root {
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+.main {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--base-size-24, 24px);
+}
+
+.content {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-24, 24px);
+}
+
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--base-size-16, 16px);
+  padding: var(--base-size-48, 48px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.pageHeader {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.pageTitle {
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-8, 8px) 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.pageDescription {
+  font-size: var(--text-body-size-medium, 14px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+}
+
+.infoBox {
+  padding: var(--base-size-12, 12px) var(--base-size-16, 16px);
+  background-color: var(--bgColor-accent-muted, #ddf4ff);
+  border: 1px solid var(--borderColor-accent-muted, #54aeff);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.infoIcon {
+  color: var(--fgColor-accent, #0969da);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.infoText {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-default, #1f2328);
+  margin: 0;
+}
+
+.levelLegend {
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.legendTitle {
+  font-size: var(--text-body-size-medium, 14px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-8, 8px) 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.legendItem {
+  display: flex;
+  gap: var(--base-size-8, 8px);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.legendLevel {
+  font-weight: var(--base-text-weight-medium, 500);
+  min-width: 100px;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.legendDescription {
+  color: var(--fgColor-muted, #656d76);
+}
+
+.skillsSection {
+  margin-top: var(--base-size-8, 8px);
+}
+
+.skillsHeader {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.skillsTitle {
+  font-size: var(--text-title-size-small, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.addSkillForm {
+  margin-bottom: var(--base-size-16, 16px);
+  padding: var(--base-size-16, 16px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.skillsList {
+  margin-top: var(--base-size-8, 8px);
+}
+
+.skillCard {
+  padding: var(--base-size-16, 16px);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  background-color: var(--bgColor-default, #ffffff);
+}
+
+.skillInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-4, 4px);
+}
+
+.skillName {
+  font-weight: var(--base-text-weight-medium, 500);
+  font-size: var(--text-body-size-medium, 14px);
+  color: var(--fgColor-default, #1f2328);
+}
+
+.skillSource {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.emptyState {
+  padding: var(--base-size-24, 24px);
+  text-align: center;
+  color: var(--fgColor-muted, #656d76);
+}
+
+.lastUpdated {
+  margin-top: var(--base-size-16, 16px);
+  padding-top: var(--base-size-16, 16px);
+  border-top: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.lastUpdatedText {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+}
+
+/* Danger Zone */
+.dangerZone {
+  margin-top: var(--base-size-24, 24px);
+  padding: var(--base-size-16, 16px);
+  border: 1px solid var(--borderColor-danger-muted, #ff818266);
+  border-radius: var(--borderRadius-medium, 6px);
+  background-color: var(--bgColor-danger-muted, #ffebe9);
+}
+
+.dangerTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  font-size: var(--text-body-size-medium, 14px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-8, 8px) 0;
+  color: var(--fgColor-danger, #cf222e);
+}
+
+.dangerDescription {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-default, #1f2328);
+  margin: 0 0 var(--base-size-12, 12px) 0;
+}

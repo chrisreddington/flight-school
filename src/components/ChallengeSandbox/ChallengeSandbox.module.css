@@ -1,0 +1,573 @@
+/**
+ * ChallengeSandbox component styles
+ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
+  /* PERF: Isolate layout and style calculations for faster rendering */
+  contain: layout style;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--base-size-12) var(--base-size-16);
+  border-bottom: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-muted);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.headerTitleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-4);
+}
+
+.headerIcon {
+  color: var(--fgColor-accent);
+}
+
+.headerTitle {
+  font-size: var(--text-body-size-large);
+  font-weight: var(--base-text-weight-semibold);
+  margin: 0;
+}
+
+.headerDescription {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  margin: 0;
+}
+
+.difficultyBadge {
+  padding: 2px 8px;
+  border-radius: var(--borderRadius-small);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-medium);
+}
+
+.difficultyBadge[data-difficulty="beginner"] {
+  background-color: var(--bgColor-success-muted);
+  color: var(--fgColor-success);
+}
+
+.difficultyBadge[data-difficulty="intermediate"] {
+  background-color: var(--bgColor-attention-muted);
+  color: var(--fgColor-attention);
+}
+
+.difficultyBadge[data-difficulty="advanced"] {
+  background-color: var(--bgColor-danger-muted);
+  color: var(--fgColor-danger);
+}
+
+/* Main content */
+.content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Editor fullscreen mode - take up all available space */
+.content.editorFullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  background-color: var(--bgColor-default);
+}
+
+.content.editorFullscreen .editorPanel {
+  flex: 1;
+  border-right: none;
+}
+
+.content.editorFullscreen .editorHeader {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.content.editorFullscreen .rightPanel {
+  display: none;
+}
+
+/* Editor panel */
+.editorPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--borderColor-default);
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--base-size-8) var(--base-size-12);
+  border-bottom: 1px solid var(--borderColor-muted);
+  background-color: var(--bgColor-muted);
+}
+
+.editorHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.editorLabel {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-medium);
+  color: var(--fgColor-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.languageBadge {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.editorBody {
+  flex: 1;
+  overflow: hidden;
+  /* PERF: Set explicit min dimensions to prevent Monaco from triggering
+   * forced synchronous layout during initialization. Monaco calls
+   * measureReferenceDomElement and _readFromDomElements which query 
+   * offsetWidth/offsetHeight - setting explicit sizes avoids reflow. */
+  min-height: 300px;
+  min-width: 300px;
+  /* PERF: Content-visibility auto allows browser to skip rendering
+   * off-screen portions, improving initial paint time */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
+}
+
+.codeTextarea {
+  width: 100%;
+  height: 100%;
+  padding: var(--base-size-12);
+  border: none;
+  background-color: var(--bgColor-default);
+  color: var(--fgColor-default);
+  font-family: var(--fontStack-monospace);
+  font-size: var(--text-body-size-medium);
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+
+.codeTextarea:focus {
+  background-color: var(--bgColor-inset);
+}
+
+.codeTextarea::placeholder {
+  color: var(--fgColor-muted);
+}
+
+/* Right panel (hints + evaluation) */
+.rightPanel {
+  width: 350px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Evaluation section */
+.evaluationSection {
+  border-bottom: 1px solid var(--borderColor-default);
+  flex: 0 1 auto;
+  max-height: 50%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* When hints is collapsed, let evaluation expand */
+.evaluationSection.expanded {
+  flex: 1;
+  max-height: none;
+}
+
+.evaluationSection.collapsed {
+  max-height: none;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-8);
+  padding: var(--base-size-8) var(--base-size-12);
+  border-bottom: 1px solid var(--borderColor-muted);
+  background-color: var(--bgColor-muted);
+}
+
+.collapsed .sectionHeader {
+  border-bottom: none;
+}
+
+.sectionHeaderToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.sectionHeaderToggle:hover {
+  color: var(--fgColor-accent);
+}
+
+.sectionHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.sectionIcon {
+  color: var(--fgColor-accent);
+}
+
+.sectionTitle {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-default);
+  margin: 0;
+}
+
+.sectionBody {
+  padding: var(--base-size-12);
+}
+
+/* Evaluation result */
+.resultBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4);
+  padding: var(--base-size-4) var(--base-size-8);
+  border-radius: var(--borderRadius-small);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.resultBadge.correct {
+  background-color: var(--bgColor-success-muted);
+  color: var(--fgColor-success);
+}
+
+.resultBadge.incorrect {
+  background-color: var(--bgColor-danger-muted);
+  color: var(--fgColor-danger);
+}
+
+.feedback {
+  margin-top: var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-default);
+  line-height: 1.5;
+}
+
+/* Markdown content inside feedback */
+.feedback p {
+  margin: 0;
+}
+
+.feedback code {
+  font-family: var(--fontStack-monospace);
+  font-size: 0.9em;
+  background-color: var(--bgColor-muted);
+  padding: 0.1em 0.3em;
+  border-radius: var(--borderRadius-small);
+}
+
+/* Tables in feedback */
+.feedback table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--base-size-8) 0;
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
+  font-size: var(--text-body-size-small);
+}
+
+.feedback th,
+.feedback td {
+  padding: var(--base-size-6) var(--base-size-8);
+  text-align: left;
+  border: 1px solid var(--borderColor-default);
+}
+
+.feedback th {
+  background-color: var(--bgColor-muted);
+  font-weight: 600;
+  color: var(--fgColor-default);
+}
+
+.feedback tr:nth-child(even) {
+  background-color: var(--bgColor-inset);
+}
+
+.feedback tr:hover {
+  background-color: var(--bgColor-muted);
+}
+
+.listSection {
+  margin-top: var(--base-size-12);
+}
+
+.listLabel {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+  margin-bottom: var(--base-size-4);
+}
+
+.list {
+  margin: 0;
+  padding-left: var(--base-size-16);
+}
+
+.listItem {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-default);
+  margin-bottom: var(--base-size-4);
+}
+
+/* Hint section */
+.hintSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* When evaluation is collapsed, hint section already has flex:1 so it expands */
+/* When collapsed, push to bottom with margin-top: auto */
+.hintSection.collapsed {
+  flex: 0 0 auto;
+  overflow: visible;
+  margin-top: auto;
+}
+
+.hintMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--base-size-8);
+}
+
+.hintMessage {
+  margin-bottom: var(--base-size-12);
+  padding: var(--base-size-8);
+  border-radius: var(--borderRadius-medium);
+  background-color: var(--bgColor-muted);
+}
+
+.hintQuestion {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  margin-bottom: var(--base-size-4);
+}
+
+.hintText {
+  font-size: var(--text-body-size-medium);
+  color: var(--fgColor-default);
+  line-height: 1.5;
+}
+
+.hintConcepts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-4);
+  margin-top: var(--base-size-8);
+}
+
+.conceptTag {
+  padding: 2px 6px;
+  border-radius: var(--borderRadius-small);
+  background-color: var(--bgColor-accent-muted);
+  color: var(--fgColor-accent);
+  font-size: var(--text-body-size-small);
+}
+
+.hintInputArea {
+  padding: var(--base-size-8);
+  border-top: 1px solid var(--borderColor-muted);
+  background-color: var(--bgColor-muted);
+}
+
+/* Empty state */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 120px;
+  padding: var(--base-size-24);
+  text-align: center;
+  color: var(--fgColor-muted);
+}
+
+.emptyIcon {
+  margin-bottom: var(--base-size-12);
+  opacity: 0.5;
+}
+
+.emptyText {
+  font-size: var(--text-body-size-medium);
+}
+
+/* Loading state */
+.loading {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  color: var(--fgColor-muted);
+}
+
+/* Streaming content */
+.streaming {
+  font-size: var(--text-body-size-medium);
+  color: var(--fgColor-default);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
+  padding: var(--base-size-12);
+  background-color: var(--bgColor-muted);
+  border-radius: var(--borderRadius-medium);
+  margin-top: var(--base-size-12);
+}
+
+/* Progressive reveal animations for result */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typeIn {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 500px;
+    opacity: 1;
+  }
+}
+
+.resultReveal {
+  animation: fadeSlideIn 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+.resultReveal[data-delay="0"] { animation-delay: 0ms; }
+.resultReveal[data-delay="1"] { animation-delay: 150ms; }
+.resultReveal[data-delay="2"] { animation-delay: 300ms; }
+.resultReveal[data-delay="3"] { animation-delay: 450ms; }
+.resultReveal[data-delay="4"] { animation-delay: 600ms; }
+.resultReveal[data-delay="5"] { animation-delay: 750ms; }
+
+/* Streaming feedback text with typewriter cursor */
+.feedbackStreaming {
+  position: relative;
+}
+
+.feedbackStreaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: var(--fgColor-accent);
+  margin-left: 2px;
+  animation: blink 0.8s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* Hide cursor when reveal is complete */
+.feedbackComplete::after {
+  display: none;
+}
+
+/* List item reveal */
+.listItemReveal {
+  animation: fadeSlideIn 0.2s ease-out forwards;
+  opacity: 0;
+}
+
+/* Unsaved/Saving indicators */
+.unsavedIndicator {
+  color: var(--fgColor-attention);
+  margin-left: var(--base-size-4);
+}
+
+.savingIndicator {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  font-style: italic;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .content {
+    flex-direction: column;
+  }
+
+  .editorPanel {
+    border-right: none;
+    border-bottom: 1px solid var(--borderColor-default);
+    min-height: 200px;
+  }
+
+  .rightPanel {
+    width: 100%;
+    max-height: 300px;
+  }
+}
