@@ -72,3 +72,8 @@
 .relatedTo strong {
   color: var(--fgColor-default);
 }
+
+.loadingText {
+  font-size: 14px;
+  color: var(--fgColor-muted);
+}

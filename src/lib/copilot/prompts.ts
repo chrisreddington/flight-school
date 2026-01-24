@@ -130,11 +130,33 @@ export function buildLearningTopicsPrompt(
   const skillSections = buildSkillProfileSections(skillProfile);
   return `Developer profile: ${profileContext}${skillSections}
 
-Generate TWO learning topics for growth areas.
+Generate THREE learning topics for growth areas.
 ${skillProfile?.skills.length ? 'Exclude EX: skills.' : ''}
 
 JSON only:
 {"learningTopics":[{"id":"","title":"","description":"","type":"concept|pattern|best-practice","relatedTo":""}]}`;
+}
+
+/**
+ * Builds a prompt for generating a single replacement learning topic.
+ */
+export function buildSingleTopicPrompt(
+  profileContext: string,
+  existingTopicTitles: string[],
+  skillProfile?: SkillProfile
+): string {
+  const skillSections = buildSkillProfileSections(skillProfile);
+  const excludeList = existingTopicTitles.length > 0 
+    ? `\nDo NOT suggest these topics (already shown): ${existingTopicTitles.join(', ')}`
+    : '';
+  
+  return `Developer profile: ${profileContext}${skillSections}${excludeList}
+
+Generate ONE learning topic for a growth area.
+${skillProfile?.skills.length ? 'Exclude EX: skills.' : ''}
+
+JSON only:
+{"learningTopic":{"id":"","title":"","description":"","type":"concept|pattern|best-practice","relatedTo":""}}`;
 }
 
 /**

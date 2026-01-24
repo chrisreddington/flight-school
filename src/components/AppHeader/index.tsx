@@ -22,22 +22,22 @@ import { useUserProfile } from '@/hooks/use-user-profile';
 import {
     BugIcon,
     ChevronRightIcon,
+    CopilotIcon,
+    FlameIcon,
     GearIcon,
-    GraphIcon,
+    HistoryIcon,
     PersonIcon,
     RocketIcon,
-    SignOutIcon,
+    StarIcon,
 } from '@primer/octicons-react';
 import {
     ActionList,
     ActionMenu,
     Avatar,
     Heading,
-    IconButton,
     Label,
     Spinner,
     Stack,
-    Tooltip,
 } from '@primer/react';
 import Link from 'next/link';
 import styles from './AppHeader.module.css';
@@ -111,26 +111,8 @@ export function AppHeader() {
           )}
         </Stack>
 
-        {/* Right side: Actions + Profile */}
+        {/* Right side: Profile */}
         <Stack direction="horizontal" align="center" gap="condensed">
-          <ActionMenu>
-            <ActionMenu.Anchor>
-              <Tooltip text="Settings">
-                <IconButton icon={GearIcon} variant="invisible" aria-label="Settings" />
-              </Tooltip>
-            </ActionMenu.Anchor>
-            <ActionMenu.Overlay width="medium">
-              <ActionList>
-                <ActionList.Item onSelect={toggleDebugMode}>
-                  <ActionList.LeadingVisual><BugIcon /></ActionList.LeadingVisual>
-                  Debug Mode
-                  <ActionList.TrailingVisual>
-                    {isDebugMode ? 'On' : 'Off'}
-                  </ActionList.TrailingVisual>
-                </ActionList.Item>
-              </ActionList>
-            </ActionMenu.Overlay>
-          </ActionMenu>
           <ActionMenu>
             <ActionMenu.Anchor>
               {isLoading ? (
@@ -148,25 +130,64 @@ export function AppHeader() {
             </ActionMenu.Anchor>
             <ActionMenu.Overlay width="medium">
               <ActionList>
-                <ActionList.Item>
+                <ActionList.Item inert>
                   <ActionList.LeadingVisual><PersonIcon /></ActionList.LeadingVisual>
-                  Your Profile
-                  <ActionList.Description>@{username}</ActionList.Description>
+                  @{username}
                 </ActionList.Item>
+                <ActionList.Divider />
+                <ActionList.LinkItem href="/habits">
+                  <ActionList.LeadingVisual><FlameIcon /></ActionList.LeadingVisual>
+                  My Habits
+                  <ActionList.Description>Track and manage your habits</ActionList.Description>
+                </ActionList.LinkItem>
+                <ActionList.LinkItem href="/focus-history">
+                  <ActionList.LeadingVisual><HistoryIcon /></ActionList.LeadingVisual>
+                  Focus History
+                  <ActionList.Description>View past focus items</ActionList.Description>
+                </ActionList.LinkItem>
+                <ActionList.Divider />
                 <ActionList.LinkItem href="/profile/skills">
                   <ActionList.LeadingVisual><GearIcon /></ActionList.LeadingVisual>
                   Skill Profile
                   <ActionList.Description>Calibrate your skill levels</ActionList.Description>
                 </ActionList.LinkItem>
-                <ActionList.Item>
-                  <ActionList.LeadingVisual><GraphIcon /></ActionList.LeadingVisual>
-                  Growth Analytics
-                  <ActionList.Description>Track your progress over time</ActionList.Description>
+                <ActionList.Divider />
+                <ActionList.LinkItem 
+                  href="https://github.com/chrisreddington/flight-school" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                >
+                  <ActionList.LeadingVisual><StarIcon /></ActionList.LeadingVisual>
+                  Flight School
+                  <ActionList.Description>Star or contribute on GitHub</ActionList.Description>
+                </ActionList.LinkItem>
+                <ActionList.LinkItem 
+                  href="https://github.com/github/copilot-sdk" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                >
+                  <ActionList.LeadingVisual><CopilotIcon /></ActionList.LeadingVisual>
+                  Copilot SDK
+                  <ActionList.Description>Build your own AI apps</ActionList.Description>
+                </ActionList.LinkItem>
+                <ActionList.Divider />
+                <ActionList.Item onSelect={toggleDebugMode}>
+                  <ActionList.LeadingVisual><BugIcon /></ActionList.LeadingVisual>
+                  Debug Mode
+                  <ActionList.TrailingVisual>
+                    {isDebugMode ? 'On' : 'Off'}
+                  </ActionList.TrailingVisual>
                 </ActionList.Item>
                 <ActionList.Divider />
-                <ActionList.Item variant="danger">
-                  <ActionList.LeadingVisual><SignOutIcon /></ActionList.LeadingVisual>
-                  Sign out
+                <ActionList.Item disabled>
+                  {profile?.meta?.authMethod === 'github-token' && 'Logged in via GITHUB_TOKEN'}
+                  {profile?.meta?.authMethod === 'github-cli' && 'Logged in via GitHub CLI'}
+                  {profile?.meta?.authMethod === 'copilot-mcp' && 'Logged in via Copilot SDK'}
+                  {/* If we have a real profile but no authMethod (old cache), show generic message */}
+                  {(!profile?.meta?.authMethod || profile?.meta?.authMethod === 'none') && 
+                    (profile?.user?.login && profile.user.login !== 'demo-user' 
+                      ? 'Logged in via GitHub CLI' 
+                      : 'Not authenticated')}
                 </ActionList.Item>
               </ActionList>
             </ActionMenu.Overlay>

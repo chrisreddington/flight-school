@@ -12,14 +12,20 @@
 'use client';
 
 import { AppHeader } from '@/components/AppHeader';
+import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
 import { SkillSlider } from '@/components/SkillSlider';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
+import { challengeQueueStore } from '@/lib/challenge/custom-queue';
 import { focusStore } from '@/lib/focus/storage';
+import type { CalibrationNeededItem } from '@/lib/focus/types';
+import { habitStore } from '@/lib/habits/storage';
 import { logger } from '@/lib/logger';
-import { getSkillProfile, saveSkillProfile } from '@/lib/skills/storage';
-import type { SkillLevel, SkillProfile, UserSkill } from '@/lib/skills/types';
-import { SKILL_LEVEL_DESCRIPTIONS, SKILL_LEVEL_LABELS } from '@/lib/skills/types';
+import { skillsStore } from '@/lib/skills/storage';
+import type { SkillLevel, SkillProfile, SkillSource, UserSkill } from '@/lib/skills/types';
+import { DEFAULT_SKILL_PROFILE, SKILL_LEVEL_DESCRIPTIONS, SKILL_LEVEL_LABELS, SKILL_SOURCE_LABELS } from '@/lib/skills/types';
+import { threadStore } from '@/lib/threads/storage';
 import { now } from '@/lib/utils/date-utils';
+import { workspaceStore } from '@/lib/workspace/storage';
 import { AlertIcon, InfoIcon, PlusIcon, TrashIcon } from '@primer/octicons-react';
 import {
     Button,
@@ -27,34 +33,60 @@ import {
     FormControl,
     Heading,
     Link,
+    Spinner,
     Stack,
     TextInput,
 } from '@primer/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styles from './profile-skills.module.css';
-
-/** localStorage keys used by the app (client-side only) */
-const APP_STORAGE_KEYS = [
-  'flight-school-skill-profile',
-  'dgc-threads',
-  'dgc-workspace',
-  'dgc-challenge-history',
-];
 
 /**
  * Skill Profile Page Component
  */
 export default function SkillProfilePage() {
-  const [profile, setProfile] = useState<SkillProfile>(() => getSkillProfile());
+  const [profile, setProfile] = useState<SkillProfile>(DEFAULT_SKILL_PROFILE);
+  const [isLoading, setIsLoading] = useState(true);
   const [newSkillName, setNewSkillName] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[]>([]);
 
   // Register this page in breadcrumb history
   useBreadcrumb('/profile/skills', 'Skill Profile', '/profile/skills');
 
+  // Load profile and calibration items on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const [loaded, calibration] = await Promise.all([
+          skillsStore.get(),
+          focusStore.getCalibrationNeeded(),
+        ]);
+        setProfile(loaded);
+        setCalibrationItems(calibration);
+      } catch (error) {
+        logger.error('Failed to load skill profile', { error }, 'SkillsPage');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  // Handle calibration item changes (from InlineCalibration)
+  // Reload profile when items change (a skill may have been confirmed)
+  const handleCalibrationChange = useCallback(async (items: CalibrationNeededItem[]) => {
+    setCalibrationItems(items);
+    // Reload profile in case a skill was confirmed
+    try {
+      const loaded = await skillsStore.get();
+      setProfile(loaded);
+    } catch {
+      // Best effort
+    }
+  }, []);
+
   // Handle skill level and interest change
-  const handleSkillChange = useCallback((skillId: string, level: SkillLevel, notInterested: boolean) => {
+  const handleSkillChange = useCallback(async (skillId: string, level: SkillLevel, notInterested: boolean) => {
     if (!profile) return;
     
     const updatedSkills = profile.skills.map(skill =>
@@ -68,12 +100,20 @@ export default function SkillProfilePage() {
       lastUpdated: now(),
     };
     
-    saveSkillProfile(updatedProfile);
+    // Optimistic update
     setProfile(updatedProfile);
+    
+    try {
+      await skillsStore.save(updatedProfile);
+    } catch (error) {
+      logger.error('Failed to save skill profile', { error }, 'SkillsPage');
+      // Revert on error
+      setProfile(profile);
+    }
   }, [profile]);
 
   // Handle removing a skill
-  const handleRemoveSkill = useCallback((skillId: string) => {
+  const handleRemoveSkill = useCallback(async (skillId: string) => {
     if (!profile) return;
     
     const updatedSkills = profile.skills.filter(skill => skill.skillId !== skillId);
@@ -83,12 +123,20 @@ export default function SkillProfilePage() {
       lastUpdated: now(),
     };
     
-    saveSkillProfile(updatedProfile);
+    // Optimistic update
     setProfile(updatedProfile);
+    
+    try {
+      await skillsStore.save(updatedProfile);
+    } catch (error) {
+      logger.error('Failed to remove skill', { error }, 'SkillsPage');
+      // Revert on error
+      setProfile(profile);
+    }
   }, [profile]);
 
   // Handle adding a new skill
-  const handleAddSkill = useCallback(() => {
+  const handleAddSkill = useCallback(async () => {
     if (!profile || !newSkillName.trim()) return;
     
     const skillId = newSkillName.toLowerCase().replace(/\s+/g, '-');
@@ -110,34 +158,83 @@ export default function SkillProfilePage() {
       lastUpdated: now(),
     };
     
-    saveSkillProfile(updatedProfile);
+    // Optimistic update
     setProfile(updatedProfile);
     setNewSkillName('');
     setShowAddForm(false);
+    
+    try {
+      await skillsStore.save(updatedProfile);
+    } catch (error) {
+      logger.error('Failed to add skill', { error }, 'SkillsPage');
+      // Revert on error
+      setProfile(profile);
+    }
   }, [profile, newSkillName]);
 
   // Handle clearing all app data
   const handleClearAllData = useCallback(async () => {
-    // Clear localStorage keys
-    APP_STORAGE_KEYS.forEach(key => {
-      try {
-        localStorage.removeItem(key);
-      } catch {
-        // Ignore errors
-      }
-    });
+    // Clear skills storage
+    try {
+      await skillsStore.clear();
+    } catch (error) {
+      logger.error('Failed to clear skills storage', { error }, 'SkillsPage');
+    }
 
-    // Clear focus storage (API-based)
+    // Clear focus storage
     try {
       await focusStore.clear();
     } catch (error) {
       logger.error('Failed to clear focus storage', { error }, 'SkillsPage');
-      // Continue anyway - best effort
+    }
+
+    // Clear chat threads
+    try {
+      await threadStore.clearAll();
+    } catch (error) {
+      logger.error('Failed to clear threads storage', { error }, 'SkillsPage');
+    }
+
+    // Clear workspaces
+    try {
+      await workspaceStore.clearAll();
+    } catch (error) {
+      logger.error('Failed to clear workspaces storage', { error }, 'SkillsPage');
+    }
+
+    // Clear habits
+    try {
+      await habitStore.clear();
+    } catch (error) {
+      logger.error('Failed to clear habits storage', { error }, 'SkillsPage');
+    }
+
+    // Clear custom challenge queue
+    try {
+      await challengeQueueStore.clear();
+    } catch (error) {
+      logger.error('Failed to clear challenge queue', { error }, 'SkillsPage');
     }
 
     // Reload page to reset app state
     window.location.href = '/';
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className={styles.root}>
+        <AppHeader />
+        <main className={styles.main}>
+          <div className={styles.content}>
+            <Stack direction="horizontal" align="center" justify="center" gap="condensed">
+              <Spinner size="medium" />
+              <span>Loading skill profile...</span>
+            </Stack>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.root}>
@@ -161,10 +258,18 @@ export default function SkillProfilePage() {
                 <InfoIcon size={16} className={styles.infoIcon} />
                 <p className={styles.infoText}>
                   Skills are initially detected from your GitHub activity. You can adjust
-                  levels here to fine-tune your recommendations.
+                  levels here to calibrate your recommendations.
                 </p>
               </Stack>
             </div>
+
+            {calibrationItems.length > 0 && (
+              <InlineCalibration 
+                items={calibrationItems} 
+                onItemsChange={handleCalibrationChange}
+                showProfileLink={false}
+              />
+            )}
 
             <div className={styles.levelLegend}>
               <Heading as="h3" className={styles.legendTitle}>Skill Levels</Heading>
@@ -175,6 +280,10 @@ export default function SkillProfilePage() {
                     <span className={styles.legendDescription}>{SKILL_LEVEL_DESCRIPTIONS[level]}</span>
                   </div>
                 ))}
+                <div className={styles.legendItem}>
+                  <span className={styles.legendLevel}>Not interested</span>
+                  <span className={styles.legendDescription}>Deprioritised in recommendations and daily focus</span>
+                </div>
               </Stack>
             </div>
 
@@ -233,7 +342,7 @@ export default function SkillProfilePage() {
                             {skill.displayName || skill.skillId}
                           </span>
                           <span className={styles.skillSource}>
-                            {skill.source === 'github' ? 'Detected from GitHub' : 'Manually added'}
+                            {SKILL_SOURCE_LABELS[skill.source as SkillSource] || skill.source}
                           </span>
                         </div>
                         <Stack direction="horizontal" align="start" gap="condensed">

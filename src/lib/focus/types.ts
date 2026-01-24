@@ -85,6 +85,11 @@ export interface DailyFocusRecord {
   challenges: StatefulChallenge[];
   goals: StatefulGoal[];
   learningTopics: StatefulTopic[][];
+  /**
+   * Skills detected that need user calibration.
+   * Items are removed when confirmed or dismissed by the user.
+   */
+  calibrationNeeded?: CalibrationNeededItem[];
 }
 
 /**

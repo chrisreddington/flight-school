@@ -60,6 +60,15 @@
   margin: 0;
 }
 
+/* Reset markdown content margins within description */
+.headerDescription p {
+  margin: 0;
+}
+
+.headerDescription p + p {
+  margin-top: 0.5em;
+}
+
 .difficultyBadge {
   padding: 2px 8px;
   border-radius: var(--borderRadius-small);

@@ -111,12 +111,33 @@ async function getCompletedHabits(): Promise<HabitWithHistory[]> {
 }
 
 /**
+ * Gets all abandoned/stopped habits.
+ */
+async function getAbandonedHabits(): Promise<HabitWithHistory[]> {
+  const collection = await loadHabits();
+  return collection.habits.filter(h => h.state === 'abandoned');
+}
+
+/**
  * Deletes a habit.
  */
 async function deleteHabit(habitId: string): Promise<void> {
   const collection = await loadHabits();
   collection.habits = collection.habits.filter(h => h.id !== habitId);
   await saveHabits(collection);
+}
+
+/**
+ * Clears all habits from storage.
+ */
+async function clearAllHabits(): Promise<void> {
+  try {
+    await saveHabits({ habits: [] });
+    log.info('All habits cleared');
+  } catch (error) {
+    log.error('Failed to clear all habits', { error });
+    throw error;
+  }
 }
 
 // =============================================================================
@@ -134,5 +155,7 @@ export const habitStore = {
   get: getHabit,
   getActive: getActiveHabits,
   getCompleted: getCompletedHabits,
+  getAbandoned: getAbandonedHabits,
   delete: deleteHabit,
+  clear: clearAllHabits,
 };

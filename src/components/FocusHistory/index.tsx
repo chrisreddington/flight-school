@@ -1,243 +1,734 @@
 'use client';
 
 /**
- * FocusHistory Component
+ * FocusHistory Component V2
  *
- * Displays a list of historical Daily Focus entries as a chronological stream.
- * Users can expand entries to see challenges, goals, and learning topics.
- *
- * @remarks
- * This component reads directly from localStorage via FocusStore.
- * It only renders on the client side.
- *
- * @example
- * ```tsx
- * <FocusHistory />
- * ```
+ * Two-column layout with:
+ * - Left sidebar: 52-week activity graph, search, filters, date navigation
+ * - Right main: Flat card list for selected date range
+ * - Click on activity day to filter to that day
+ * - Stats shown in sidebar
  */
 
 import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
-import { DifficultyBadge } from '@/components/DifficultyBadge';
 import { HabitHistoryCard } from '@/components/FocusItem/HabitHistoryCard';
+import { useActiveOperations } from '@/hooks/use-active-operations';
 import { focusStore } from '@/lib/focus';
 import { habitStore } from '@/lib/habits';
+import { getDateKey } from '@/lib/utils/date-utils';
 import type { HabitWithHistory, DailyCheckIn } from '@/lib/habits/types';
-import type { SkillLevel } from '@/lib/skills/types';
 import type {
-    DailyChallenge,
-    DailyFocusRecord,
-    DailyGoal,
-    LearningTopic
+  DailyChallenge,
+  DailyFocusRecord,
+  DailyGoal,
+  LearningTopic,
 } from '@/lib/focus/types';
+import type {
+  StatefulChallenge,
+  StatefulGoal,
+  StatefulTopic,
+} from '@/lib/focus/state-machine';
 import {
-    BookIcon,
-    CalendarIcon,
-    ChevronDownIcon,
-    ChevronUpIcon,
-    ClockIcon,
-    FlameIcon,
-    RocketIcon,
+  BookIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FlameIcon,
+  GraphIcon,
+  RocketIcon,
+  SearchIcon,
+  SkipIcon,
+  XIcon,
 } from '@primer/octicons-react';
 import {
-    Flash,
-    Heading,
-    Link,
-    Stack,
-    Token,
+  Button,
+  Flash,
+  Link,
+  SkeletonBox,
+  Spinner,
+  Stack,
+  TextInput,
 } from '@primer/react';
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './FocusHistory.module.css';
 
-/**
- * Single item in the history stream.
- */
+// ============================================================================
+// Types
+// ============================================================================
+
+type ItemStatus = 'active' | 'completed' | 'skipped';
+
 type HistoryItem =
-  | { type: 'challenge'; data: DailyChallenge; timestamp: string }
-  | { type: 'goal'; data: DailyGoal; timestamp: string }
-  | { type: 'topics'; data: LearningTopic[]; timestamp: string }
-  | { type: 'habit'; data: HabitWithHistory; timestamp: string };
+  | { type: 'challenge'; data: DailyChallenge; timestamp: string; status: ItemStatus; stateHistory?: StatefulChallenge['stateHistory'] }
+  | { type: 'goal'; data: DailyGoal; timestamp: string; status: ItemStatus; stateHistory?: StatefulGoal['stateHistory'] }
+  | { type: 'topic'; data: LearningTopic; timestamp: string; status: ItemStatus; stateHistory?: StatefulTopic['stateHistory'] }
+  | { type: 'habit'; data: HabitWithHistory; timestamp: string; status: ItemStatus };
 
-type FilterType = 'all' | 'challenge' | 'goal' | 'topics' | 'habits';
+type TypeFilter = 'all' | 'challenge' | 'goal' | 'topic' | 'habit';
+type StatusFilter = 'all' | 'active' | 'completed' | 'skipped';
 
-/** Entry with parsed date for display */
 interface HistoryEntry {
   dateKey: string;
   displayDate: string;
   items: HistoryItem[];
-  versionCount: number;
-  difficulty: SkillLevel; // From the most recent challenge
-  language: string;   // From the most recent challenge
+  totalCount: number;
+  completedCount: number;
+  skippedCount: number;
 }
 
-/**
- * Formats a date key (YYYY-MM-DD) for display.
- */
+interface ActivityDay {
+  date: string;
+  count: number;
+  weekIndex: number;
+  dayOfWeek: number;
+}
+
+interface Stats {
+  total: number;
+  completed: number;
+  skipped: number;
+  active: number;
+  challenges: number;
+  goals: number;
+  topics: number;
+  habits: number;
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const WEEKS_TO_SHOW = 52;
+const DAYS_IN_WEEK = 7;
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
 function formatDateForDisplay(dateKey: string): string {
   const date = new Date(dateKey + 'T12:00:00');
+  const today = getDateKey();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = yesterday.toISOString().split('T')[0];
+
+  if (dateKey === today) return 'Today';
+  if (dateKey === yesterdayKey) return 'Yesterday';
+
   return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
+    weekday: 'short',
+    month: 'short',
     day: 'numeric',
   });
 }
 
-/**
- * Formats a timestamp to time string (e.g. "10:30 AM").
- */
 function formatTime(isoString: string): string {
-    return new Date(isoString).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-    });
+  return new Date(isoString).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
-// PERF: Memoize component to prevent re-renders when parent updates
+function getItemStatus(stateHistory?: Array<{ state: string }>): ItemStatus {
+  if (!stateHistory || stateHistory.length === 0) return 'active';
+  const currentState = stateHistory[stateHistory.length - 1].state;
+  if (currentState === 'completed' || currentState === 'explored') return 'completed';
+  if (currentState === 'skipped' || currentState === 'abandoned') return 'skipped';
+  return 'active';
+}
+
+function matchesSearch(item: HistoryItem, query: string): boolean {
+  if (!query.trim()) return true;
+  const lowerQuery = query.toLowerCase();
+  
+  switch (item.type) {
+    case 'challenge':
+      return (
+        item.data.title.toLowerCase().includes(lowerQuery) ||
+        item.data.description.toLowerCase().includes(lowerQuery) ||
+        item.data.language?.toLowerCase().includes(lowerQuery)
+      );
+    case 'goal':
+      return (
+        item.data.title.toLowerCase().includes(lowerQuery) ||
+        item.data.description.toLowerCase().includes(lowerQuery)
+      );
+    case 'topic':
+      return (
+        item.data.title.toLowerCase().includes(lowerQuery) ||
+        item.data.description.toLowerCase().includes(lowerQuery) ||
+        item.data.relatedTo?.toLowerCase().includes(lowerQuery)
+      );
+    case 'habit':
+      return (
+        item.data.title.toLowerCase().includes(lowerQuery) ||
+        item.data.description?.toLowerCase().includes(lowerQuery)
+      );
+  }
+}
+
+/** Generate 52-week activity data grid */
+function generate52WeekActivity(entries: HistoryEntry[]): ActivityDay[] {
+  const today = new Date();
+  const activity: ActivityDay[] = [];
+  
+  // Start from the beginning of the week, 52 weeks ago
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - (WEEKS_TO_SHOW * DAYS_IN_WEEK) + 1);
+  // Align to start of week (Sunday)
+  startDate.setDate(startDate.getDate() - startDate.getDay());
+  
+  for (let week = 0; week < WEEKS_TO_SHOW; week++) {
+    for (let day = 0; day < DAYS_IN_WEEK; day++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + (week * DAYS_IN_WEEK) + day);
+      const dateKey = date.toISOString().split('T')[0];
+      
+      // Don't include future dates
+      if (date > today) continue;
+      
+      const entry = entries.find(e => e.dateKey === dateKey);
+      activity.push({
+        date: dateKey,
+        count: entry ? entry.items.length : 0,
+        weekIndex: week,
+        dayOfWeek: day,
+      });
+    }
+  }
+  
+  return activity;
+}
+
+/** Group entries by month for sidebar navigation */
+function groupEntriesByMonth(entries: HistoryEntry[]): Map<string, HistoryEntry[]> {
+  const grouped = new Map<string, HistoryEntry[]>();
+  
+  entries.forEach(entry => {
+    const date = new Date(entry.dateKey + 'T12:00:00');
+    const monthKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    
+    if (!grouped.has(monthKey)) {
+      grouped.set(monthKey, []);
+    }
+    grouped.get(monthKey)!.push(entry);
+  });
+  
+  return grouped;
+}
+
+// ============================================================================
+// Sub-Components
+// ============================================================================
+
+/** 52-week contribution graph */
+const ActivityGraph = memo(function ActivityGraph({ 
+  activity,
+  selectedDate,
+  onSelectDate,
+}: { 
+  activity: ActivityDay[];
+  selectedDate: string | null;
+  onSelectDate: (date: string | null) => void;
+}) {
+  const maxCount = Math.max(...activity.map(d => d.count), 1);
+  
+  // Group by weeks for grid layout
+  const weeks: ActivityDay[][] = [];
+  let currentWeek: ActivityDay[] = [];
+  let lastWeekIndex = -1;
+  
+  activity.forEach(day => {
+    if (day.weekIndex !== lastWeekIndex) {
+      if (currentWeek.length > 0) weeks.push(currentWeek);
+      currentWeek = [];
+      lastWeekIndex = day.weekIndex;
+    }
+    currentWeek.push(day);
+  });
+  if (currentWeek.length > 0) weeks.push(currentWeek);
+  
+  // Month labels
+  const monthLabels: { label: string; weekIndex: number }[] = [];
+  let lastMonth = '';
+  activity.forEach(day => {
+    const date = new Date(day.date + 'T12:00:00');
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    if (month !== lastMonth && day.dayOfWeek === 0) {
+      monthLabels.push({ label: month, weekIndex: day.weekIndex });
+      lastMonth = month;
+    }
+  });
+  
+  return (
+    <div className={styles.activityGraph}>
+      <div className={styles.activityGraphHeader}>
+        <GraphIcon size={16} />
+        <span>Activity</span>
+        {selectedDate && (
+          <button 
+            type="button"
+            className={styles.clearSelection}
+            onClick={() => onSelectDate(null)}
+            aria-label="Clear date selection"
+          >
+            <XIcon size={12} />
+            <span>Clear filter</span>
+          </button>
+        )}
+      </div>
+      
+      {/* Grid - clean like GitHub, no day labels */}
+      <div className={styles.activityGridWrapper}>
+        <div className={styles.activityGrid52}>
+          {weeks.map((week, weekIdx) => (
+            <div key={weekIdx} className={styles.activityWeek}>
+              {week.map((day) => {
+                const intensity = day.count === 0 ? 0 : Math.ceil((day.count / maxCount) * 4);
+                const isSelected = day.date === selectedDate;
+                const isToday = day.date === getDateKey();
+                
+                return (
+                  <button
+                    key={day.date}
+                    type="button"
+                    className={`${styles.activityCell52} ${isSelected ? styles.activityCellSelected : ''} ${isToday ? styles.activityCellToday : ''}`}
+                    data-intensity={intensity}
+                    onClick={() => onSelectDate(isSelected ? null : day.date)}
+                    title={`${day.date}: ${day.count} item${day.count === 1 ? '' : 's'}`}
+                    aria-label={`${day.date}: ${day.count} items${isSelected ? ' (selected)' : ''}`}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Legend */}
+      <div className={styles.activityLegend}>
+        <span>Less</span>
+        <div className={styles.activityCell52} data-intensity={0} />
+        <div className={styles.activityCell52} data-intensity={1} />
+        <div className={styles.activityCell52} data-intensity={2} />
+        <div className={styles.activityCell52} data-intensity={3} />
+        <div className={styles.activityCell52} data-intensity={4} />
+        <span>More</span>
+      </div>
+    </div>
+  );
+});
+
+/** Stats summary - simpler horizontal layout */
+const StatsSummary = memo(function StatsSummary({ stats }: { stats: Stats }) {
+  return (
+    <div className={styles.statsSection}>
+      <div className={styles.statsRow}>
+        <span className={styles.statPrimary}>{stats.total} items</span>
+        <span className={styles.statDivider}>·</span>
+        <span className={styles.statSecondary}>
+          <CheckCircleIcon size={12} /> {stats.completed} done
+        </span>
+        <span className={styles.statDivider}>·</span>
+        <span className={styles.statSecondary}>
+          <SkipIcon size={12} /> {stats.skipped} skipped
+        </span>
+      </div>
+    </div>
+  );
+});
+
+/** Date navigation in sidebar */
+const DateNavigation = memo(function DateNavigation({
+  groupedEntries,
+  expandedMonths,
+  onToggleMonth,
+  selectedDate,
+  onSelectDate,
+}: {
+  groupedEntries: Map<string, HistoryEntry[]>;
+  expandedMonths: Set<string>;
+  onToggleMonth: (month: string) => void;
+  selectedDate: string | null;
+  onSelectDate: (date: string) => void;
+}) {
+  return (
+    <div className={styles.dateNav}>
+      <div className={styles.dateNavHeader}>
+        <CalendarIcon size={14} />
+        <span>Browse by Date</span>
+      </div>
+      <div className={styles.dateNavList}>
+        {Array.from(groupedEntries.entries()).map(([month, entries]) => {
+          const isExpanded = expandedMonths.has(month);
+          const totalItems = entries.reduce((sum, e) => sum + e.items.length, 0);
+          
+          return (
+            <div key={month} className={styles.dateNavMonth}>
+              <button
+                type="button"
+                className={styles.dateNavMonthHeader}
+                onClick={() => onToggleMonth(month)}
+                aria-expanded={isExpanded}
+              >
+                {isExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+                <span>{month}</span>
+                <span className={styles.dateNavCount}>{totalItems}</span>
+              </button>
+              
+              {isExpanded && (
+                <div className={styles.dateNavDays}>
+                  {entries.map(entry => (
+                    <button
+                      key={entry.dateKey}
+                      type="button"
+                      className={`${styles.dateNavDay} ${selectedDate === entry.dateKey ? styles.dateNavDaySelected : ''}`}
+                      onClick={() => onSelectDate(entry.dateKey)}
+                    >
+                      <span>{entry.displayDate}</span>
+                      <span className={styles.dateNavDayCount}>{entry.items.length}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+/** Individual item card (no accordion, always full content) */
+const ItemCard = memo(function ItemCard({
+  item,
+  dateKey,
+  onRefresh,
+}: {
+  item: HistoryItem;
+  dateKey: string;
+  onRefresh: () => void;
+}) {
+  const statusIcon = item.status === 'completed' 
+    ? <CheckCircleIcon size={14} className={styles.statusCompleted} />
+    : item.status === 'skipped' 
+    ? <SkipIcon size={14} className={styles.statusSkipped} />
+    : null;
+
+  const typeIcon = item.type === 'challenge' 
+    ? <FlameIcon size={14} />
+    : item.type === 'goal' 
+    ? <RocketIcon size={14} />
+    : item.type === 'topic' 
+    ? <BookIcon size={14} />
+    : <CalendarIcon size={14} />;
+
+  const timeStr = formatTime(item.timestamp);
+  const isInactive = item.status === 'skipped';
+
+  return (
+    <div className={`${styles.itemCard} ${isInactive ? styles.itemCardInactive : ''}`}>
+      <div className={styles.itemCardHeader}>
+        <div className={styles.itemCardMeta}>
+          {statusIcon}
+          <span className={styles.itemCardType}>{typeIcon}</span>
+          <span className={styles.itemCardTime}>{timeStr}</span>
+        </div>
+      </div>
+      <div className={styles.itemCardContent}>
+        {item.type === 'challenge' && (
+          <ChallengeCard
+            challenge={item.data}
+            dateKey={dateKey}
+            showHistoryActions
+            onRefresh={onRefresh}
+            onStateChange={onRefresh}
+          />
+        )}
+        {item.type === 'goal' && (
+          <GoalCard
+            goal={item.data}
+            dateKey={dateKey}
+            showHistoryActions
+            onRefresh={onRefresh}
+            onStateChange={onRefresh}
+          />
+        )}
+        {item.type === 'topic' && (
+          <TopicCard
+            topic={item.data}
+            dateKey={dateKey}
+            showHistoryActions
+            onStateChange={onRefresh}
+          />
+        )}
+        {item.type === 'habit' && (
+          <HabitHistoryCard
+            habit={item.data}
+            dateKey={dateKey}
+            isToday={dateKey === getDateKey()}
+            onUpdate={onRefresh}
+          />
+        )}
+      </div>
+    </div>
+  );
+});
+
+/** Generating skeleton */
+const GeneratingSkeleton = memo(function GeneratingSkeleton({ count }: { count: number }) {
+  return (
+    <div className={styles.generatingSection}>
+      <div className={styles.generatingHeader}>
+        <Spinner size="small" />
+        <span>Generating {count} new item{count > 1 ? 's' : ''}...</span>
+      </div>
+      <Stack direction="vertical" gap="condensed">
+        {Array.from({ length: count }).map((_, i) => (
+          <SkeletonBox key={i} height="120px" />
+        ))}
+      </Stack>
+    </div>
+  );
+});
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 export const FocusHistory = memo(function FocusHistory() {
-  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [isHydrated] = useState(true);
+  const todayDateKey = getDateKey();
+  const { activeTopicIds } = useActiveOperations();
+
+  // State
+  const [allEntries, setAllEntries] = useState<HistoryEntry[]>([]);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
+  const prevActiveCountRef = useRef(activeTopicIds.size);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Force re-render helper
-  const forceRefresh = () => setRefreshKey(prev => prev + 1);
+  const forceRefresh = useCallback(() => setRefreshKey(prev => prev + 1), []);
 
-  const [entries, setEntries] = useState<HistoryEntry[]>([]);
-
+  // Auto-expand current month on load
   useEffect(() => {
-    if (!isHydrated) return;
+    const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    setExpandedMonths(new Set([currentMonth]));
+  }, []);
 
-    (async () => {
+  // Auto-refresh when operations complete
+  useEffect(() => {
+    if (activeTopicIds.size < prevActiveCountRef.current) {
+      const timer = setTimeout(forceRefresh, 500);
+      prevActiveCountRef.current = activeTopicIds.size;
+      return () => clearTimeout(timer);
+    }
+    prevActiveCountRef.current = activeTopicIds.size;
+  }, [activeTopicIds.size, forceRefresh]);
+
+  // Load data
+  useEffect(() => {
+    let cancelled = false;
+    
+    const loadData = async () => {
       const rawHistory = await focusStore.getHistory();
       const habitsCollection = await habitStore.load();
       
-      const newEntries = Object.entries(rawHistory)
+      if (cancelled) return;
+
+      const entries = Object.entries(rawHistory)
         .map(([dateKey, record]) => {
-          // Create the stream of items
           const items: HistoryItem[] = [];
           const r = record as DailyFocusRecord;
-          const versionCount = Math.max(
-            r.challenges?.length ?? 0,
-            r.goals?.length ?? 0,
-            r.learningTopics?.length ?? 0
-          );
+          let completedCount = 0;
+          let skippedCount = 0;
 
-          // 1. Challenges
+          // Challenges
           if (r.challenges) {
             r.challenges.forEach(c => {
-              // Safety check for stateHistory
               if (c.stateHistory && c.stateHistory.length > 0) {
-                items.push({ 
-                  type: 'challenge', 
-                  data: c.data, 
-                  timestamp: c.stateHistory[0].timestamp 
+                const status = getItemStatus(c.stateHistory);
+                items.push({
+                  type: 'challenge',
+                  data: c.data,
+                  timestamp: c.stateHistory[0].timestamp,
+                  status,
+                  stateHistory: c.stateHistory,
                 });
-              }
-            });
-          }
-          // 2. Goals
-          if (r.goals) {
-            r.goals.forEach(g => {
-              // Safety check for stateHistory
-              if (g.stateHistory && g.stateHistory.length > 0) {
-                items.push({ 
-                  type: 'goal', 
-                  data: g.data, 
-                  timestamp: g.stateHistory[0].timestamp 
-                });
-              }
-            });
-          }
-          // 3. Topics (each array is one generation/refresh)
-          if (r.learningTopics) {
-            r.learningTopics.forEach(topicArray => {
-              if (topicArray.length > 0 && topicArray[0].stateHistory && topicArray[0].stateHistory.length > 0) {
-                items.push({ 
-                  type: 'topics', 
-                  data: topicArray.map(t => t.data), // Extract data from StatefulTopic[]
-                  timestamp: topicArray[0].stateHistory[0].timestamp // Use first topic's timestamp
-                });
+                if (status === 'completed') completedCount++;
+                if (status === 'skipped') skippedCount++;
               }
             });
           }
 
-          // 4. Habits - find all habits that have check-ins on this date
+          // Goals
+          if (r.goals) {
+            r.goals.forEach(g => {
+              if (g.stateHistory && g.stateHistory.length > 0) {
+                const status = getItemStatus(g.stateHistory);
+                items.push({
+                  type: 'goal',
+                  data: g.data,
+                  timestamp: g.stateHistory[0].timestamp,
+                  status,
+                  stateHistory: g.stateHistory,
+                });
+                if (status === 'completed') completedCount++;
+                if (status === 'skipped') skippedCount++;
+              }
+            });
+          }
+
+          // Topics
+          if (r.learningTopics) {
+            r.learningTopics.forEach(topicArray => {
+              topicArray.forEach(t => {
+                if (t.stateHistory && t.stateHistory.length > 0) {
+                  const status = getItemStatus(t.stateHistory);
+                  items.push({
+                    type: 'topic',
+                    data: t.data,
+                    timestamp: t.stateHistory[0].timestamp,
+                    status,
+                    stateHistory: t.stateHistory,
+                  });
+                  if (status === 'completed') completedCount++;
+                  if (status === 'skipped') skippedCount++;
+                }
+              });
+            });
+          }
+
+          // Habits
           habitsCollection.habits.forEach((habit: HabitWithHistory) => {
             const checkInForDate = habit.checkIns.find((c: DailyCheckIn) => c.date === dateKey);
+            const isActiveHabit = habit.state === 'active' || habit.state === 'not-started';
+
             if (checkInForDate) {
+              const status: ItemStatus = checkInForDate.completed ? 'completed' : 'active';
               items.push({
                 type: 'habit',
                 data: habit,
                 timestamp: checkInForDate.timestamp,
+                status,
+              });
+              if (status === 'completed') completedCount++;
+            } else if (dateKey === todayDateKey && isActiveHabit) {
+              items.push({
+                type: 'habit',
+                data: habit,
+                timestamp: new Date().toISOString(),
+                status: 'active',
               });
             }
           });
 
-          // Sort by timestamp descending (newest first)
           items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-          // Apply filter
-          const filteredItems = filter === 'all' ? items : items.filter(item => {
-            if (filter === 'habits') return item.type === 'habit';
-            return item.type === filter;
-          });
-
-          // Get difficulty and language from most recent challenge
-          const latestChallenge = r.challenges[r.challenges.length - 1];
-          const difficulty = latestChallenge?.data.difficulty || 'intermediate';
-          const language = latestChallenge?.data.language || 'Mixed';
 
           return {
             dateKey,
             displayDate: formatDateForDisplay(dateKey),
-            items: filteredItems,
-            versionCount,
-            difficulty,
-            language,
+            items,
+            totalCount: items.length,
+            completedCount,
+            skippedCount,
           };
         })
-        .filter(entry => entry.items.length > 0) // Omit days with no items after filtering
-        .sort((a, b) => b.dateKey.localeCompare(a.dateKey)); // Sort by date descending
+        .filter(entry => entry.items.length > 0)
+        .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
-      setEntries(newEntries);
-    })();
-  }, [isHydrated, filter, refreshKey]);
+      setAllEntries(entries);
+      setIsLoading(false);
+    };
+    
+    loadData();
+    return () => { cancelled = true; };
+  }, [refreshKey, todayDateKey]);
 
-  // Loading state is now derived from hydration status
-  const isLoading = !isHydrated;
+  // Filter entries
+  const filteredEntries = useMemo(() => {
+    return allEntries
+      .filter(entry => {
+        // Date filter from graph or sidebar
+        if (selectedDate && entry.dateKey !== selectedDate) return false;
+        return true;
+      })
+      .map(entry => ({
+        ...entry,
+        items: entry.items.filter(item => {
+          if (typeFilter !== 'all' && item.type !== typeFilter) return false;
+          if (statusFilter !== 'all' && item.status !== statusFilter) return false;
+          if (!matchesSearch(item, searchQuery)) return false;
+          return true;
+        }),
+      }))
+      .filter(entry => entry.items.length > 0 || (entry.dateKey === todayDateKey && activeTopicIds.size > 0));
+  }, [allEntries, selectedDate, typeFilter, statusFilter, searchQuery, todayDateKey, activeTopicIds.size]);
 
-  /** Toggle expansion of a date entry */
-  const toggleExpand = (dateKey: string) => {
-    setExpandedDates((prev) => {
+  // Activity data for 52-week graph
+  const activityData = useMemo(() => generate52WeekActivity(allEntries), [allEntries]);
+
+  // Group entries by month for sidebar nav
+  const groupedEntries = useMemo(() => groupEntriesByMonth(allEntries), [allEntries]);
+
+  // Compute stats
+  const stats = useMemo((): Stats => {
+    const relevantEntries = selectedDate 
+      ? allEntries.filter(e => e.dateKey === selectedDate)
+      : allEntries;
+    
+    let total = 0, completed = 0, skipped = 0, active = 0;
+    let challenges = 0, goals = 0, topics = 0, habits = 0;
+    
+    relevantEntries.forEach(entry => {
+      entry.items.forEach(item => {
+        total++;
+        if (item.status === 'completed') completed++;
+        if (item.status === 'skipped') skipped++;
+        if (item.status === 'active') active++;
+        if (item.type === 'challenge') challenges++;
+        if (item.type === 'goal') goals++;
+        if (item.type === 'topic') topics++;
+        if (item.type === 'habit') habits++;
+      });
+    });
+    
+    return { total, completed, skipped, active, challenges, goals, topics, habits };
+  }, [allEntries, selectedDate]);
+
+  // Handlers
+  const toggleMonth = useCallback((month: string) => {
+    setExpandedMonths(prev => {
       const next = new Set(prev);
-      if (next.has(dateKey)) {
-        next.delete(dateKey);
-      } else {
-        next.add(dateKey);
-      }
+      if (next.has(month)) next.delete(month);
+      else next.add(month);
       return next;
     });
-  };
+  }, []);
 
-  if (isLoading || entries.length === 0) {
+  const handleSelectDate = useCallback((date: string | null) => {
+    setSelectedDate(date);
+  }, []);
+
+  // Empty state
+  if (!isLoading && allEntries.length === 0) {
     return (
-      <div className={styles.container}>
-        <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <CalendarIcon size={20} className={styles.headerIcon} />
-            <div className={styles.headerTitleGroup}>
-              <h2 className={styles.headerTitle}>Focus History</h2>
-              <p className={styles.headerDescription}>
-                Browse your past Daily Focus timeline
-              </p>
-            </div>
+      <div className={styles.containerV2}>
+        <div className={styles.headerV2}>
+          <CalendarIcon size={20} className={styles.headerIcon} />
+          <div className={styles.headerTitleGroup}>
+            <h2 className={styles.headerTitle}>Focus History</h2>
+            <p className={styles.headerDescription}>Your learning journey over time</p>
           </div>
         </div>
-
-        <div className={styles.content}>
+        <div className={styles.emptyState}>
           <Flash variant="default">
             <CalendarIcon size={16} />
-            <span>{isLoading ? 'Loading history...' : 'No focus history yet. Your daily focus will be saved here as you use the app.'}</span>
+            <span>No focus history yet. Your daily focus will be saved here as you use the app.</span>
           </Flash>
           <div className={styles.backLink}>
             <Link href="/">← Back to Dashboard</Link>
@@ -247,153 +738,198 @@ export const FocusHistory = memo(function FocusHistory() {
     );
   }
 
+  const hasGenerating = activeTopicIds.size > 0 && (!selectedDate || selectedDate === todayDateKey);
+
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <CalendarIcon size={20} className={styles.headerIcon} />
-          <div className={styles.headerTitleGroup}>
-            <h2 className={styles.headerTitle}>Focus History</h2>
-            <p className={styles.headerDescription}>
-              Browse your past Daily Focus timeline
-            </p>
+    <div className={styles.containerV2}>
+      {/* Two-column layout */}
+      <div className={styles.layoutV2}>
+        {/* Sidebar */}
+        <aside className={styles.sidebar}>
+          {/* Title in sidebar */}
+          <div className={styles.sidebarHeader}>
+            <CalendarIcon size={20} className={styles.sidebarIcon} />
+            <div className={styles.sidebarTitleGroup}>
+              <h2 className={styles.sidebarTitle}>Focus History</h2>
+              <p className={styles.sidebarDescription}>Your learning journey</p>
+            </div>
           </div>
-        </div>
-        <Stack direction="horizontal" gap="condensed">
-          <Token 
-            text="All"
-            onClick={() => setFilter('all')}
-            className={filter === 'all' ? styles.activeFilter : styles.filter}
+
+          {/* 52-week activity graph */}
+          <ActivityGraph 
+            activity={activityData}
+            selectedDate={selectedDate}
+            onSelectDate={handleSelectDate}
           />
-          <Token 
-            text="Challenges"
-            leadingVisual={FlameIcon}
-            onClick={() => setFilter('challenge')}
-            className={filter === 'challenge' ? styles.activeFilter : styles.filter}
+
+          {/* Stats */}
+          <StatsSummary stats={stats} />
+
+          {/* Search */}
+          <div className={styles.sidebarSearch}>
+            <TextInput
+              leadingVisual={SearchIcon}
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              block
+            />
+          </div>
+
+          {/* Filters - cleaner button group style */}
+          <div className={styles.sidebarFilters}>
+            <div className={styles.filterSection}>
+              <span className={styles.filterLabel}>Type</span>
+              <div className={styles.filterButtons}>
+                <button 
+                  type="button"
+                  onClick={() => setTypeFilter('all')}
+                  className={`${styles.filterBtn} ${typeFilter === 'all' ? styles.filterBtnActive : ''}`}
+                >
+                  All
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setTypeFilter('challenge')}
+                  className={`${styles.filterBtn} ${typeFilter === 'challenge' ? styles.filterBtnActive : ''}`}
+                >
+                  <FlameIcon size={12} /> Challenges
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setTypeFilter('goal')}
+                  className={`${styles.filterBtn} ${typeFilter === 'goal' ? styles.filterBtnActive : ''}`}
+                >
+                  <RocketIcon size={12} /> Goals
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setTypeFilter('topic')}
+                  className={`${styles.filterBtn} ${typeFilter === 'topic' ? styles.filterBtnActive : ''}`}
+                >
+                  <BookIcon size={12} /> Topics
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setTypeFilter('habit')}
+                  className={`${styles.filterBtn} ${typeFilter === 'habit' ? styles.filterBtnActive : ''}`}
+                >
+                  <CalendarIcon size={12} /> Habits
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.filterSection}>
+              <span className={styles.filterLabel}>Status</span>
+              <div className={styles.filterButtons}>
+                <button 
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className={`${styles.filterBtn} ${statusFilter === 'all' ? styles.filterBtnActive : ''}`}
+                >
+                  All
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setStatusFilter('active')}
+                  className={`${styles.filterBtn} ${statusFilter === 'active' ? styles.filterBtnActive : ''}`}
+                >
+                  Active
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setStatusFilter('completed')}
+                  className={`${styles.filterBtn} ${statusFilter === 'completed' ? styles.filterBtnActive : ''}`}
+                >
+                  <CheckCircleIcon size={12} /> Done
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setStatusFilter('skipped')}
+                  className={`${styles.filterBtn} ${statusFilter === 'skipped' ? styles.filterBtnActive : ''}`}
+                >
+                  <SkipIcon size={12} /> Skipped
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Date navigation */}
+          <DateNavigation
+            groupedEntries={groupedEntries}
+            expandedMonths={expandedMonths}
+            onToggleMonth={toggleMonth}
+            selectedDate={selectedDate}
+            onSelectDate={(date) => setSelectedDate(date)}
           />
-          <Token 
-            text="Goals"
-            leadingVisual={RocketIcon}
-            onClick={() => setFilter('goal')}
-            className={filter === 'goal' ? styles.activeFilter : styles.filter}
-          />
-          <Token 
-            text="Topics"
-            leadingVisual={BookIcon}
-            onClick={() => setFilter('topics')}
-            className={filter === 'topics' ? styles.activeFilter : styles.filter}
-          />
-          <Token 
-            text="Habits"
-            leadingVisual={RocketIcon}
-            onClick={() => setFilter('habits')}
-            className={filter === 'habits' ? styles.activeFilter : styles.filter}
-          />
-        </Stack>
-      </div>
+        </aside>
 
-      <div className={styles.content}>
-        <Stack direction="vertical" gap="normal">
-        {entries.map((entry) => {
-          const isExpanded = expandedDates.has(entry.dateKey);
-          const count = entry.versionCount;
-
-          return (
-            <div key={entry.dateKey} className={styles.entryCard}>
-              {/* Header - always visible */}
-              <button
-                type="button"
-                className={styles.entryHeader}
-                onClick={() => toggleExpand(entry.dateKey)}
-                aria-expanded={isExpanded}
-                aria-controls={`entry-${entry.dateKey}`}
-              >
-                <Stack direction="horizontal" align="center" gap="condensed">
-                  <CalendarIcon size={16} />
-                  <span className={styles.dateText}>{entry.displayDate}</span>
-                </Stack>
-                <Stack direction="horizontal" align="center" gap="condensed">
-                  <Token text={`${count} version${count === 1 ? '' : 's'}`} />
-                  {entry.difficulty && (
-                    <DifficultyBadge difficulty={entry.difficulty} />
-                  )}
-                  {entry.language !== 'Mixed' && (
-                    <span className={styles.languageText}>{entry.language}</span>
-                  )}
-                  {isExpanded ? <ChevronUpIcon size={16} /> : <ChevronDownIcon size={16} />}
-                </Stack>
-              </button>
-
-              {/* Expanded content (Timeline) */}
-              {isExpanded && (
-                <div id={`entry-${entry.dateKey}`} className={styles.entryContent}>
-                  {entry.items.map((item, index) => {
-                    // Unique key combining type and timestamp
-                    const key = `${item.type}-${item.timestamp}-${index}`;
-                    const timeStr = formatTime(item.timestamp);
-                    
-                    return (
-                      <div key={key} className={styles.versionBlock}>
-                        <div className={styles.versionHeader}>
-                             <ClockIcon size={12} /> {timeStr}
-                        </div>
-
-                        {item.type === 'challenge' && (
-                          <ChallengeCard
-                            challenge={item.data}
-                            dateKey={entry.dateKey}
-                            showHistoryActions
-                            onRefresh={forceRefresh}
-                            onStateChange={forceRefresh}
-                          />
-                        )}
-
-                        {item.type === 'goal' && (
-                          <GoalCard
-                            goal={item.data}
-                            dateKey={entry.dateKey}
-                            showHistoryActions
-                            onRefresh={forceRefresh}
-                            onStateChange={forceRefresh}
-                          />
-                        )}
-
-                        {item.type === 'topics' && (
-                          <div className={styles.section}>
-                            <Heading as="h4" className={styles.sectionTitle}>
-                              <BookIcon size={16} /> Learning Topics
-                            </Heading>
-                            <Stack direction="vertical" gap="condensed">
-                              {item.data.map((topic) => (
-                                <TopicCard
-                                  key={topic.id}
-                                  topic={topic}
-                                  dateKey={entry.dateKey}
-                                  showHistoryActions
-                                  onStateChange={forceRefresh}
-                                />
-                              ))}
-                            </Stack>
-                          </div>
-                        )}
-
-                        {item.type === 'habit' && (
-                          <HabitHistoryCard
-                            habit={item.data}
-                            dateKey={entry.dateKey}
-                          />
-                        )}
-                        
-                        {index < entry.items.length - 1 && <hr className={styles.divider} />}
-                      </div>
-                    );
-                  })}
+        {/* Main content */}
+        <main className={styles.mainContent}>
+          {isLoading ? (
+            <div className={styles.loadingState}>
+              <Spinner size="medium" />
+              <span>Loading history...</span>
+            </div>
+          ) : (
+            <Stack direction="vertical" gap="normal">
+              {/* Selected date indicator */}
+              {selectedDate && (
+                <div className={styles.selectedDateBanner}>
+                  <span>Showing: {formatDateForDisplay(selectedDate)}</span>
+                  <Button variant="invisible" size="small" onClick={() => setSelectedDate(null)}>
+                    Show all
+                  </Button>
                 </div>
               )}
-            </div>
-          );
-        })}
-        </Stack>
+
+              {/* Generating skeleton at top */}
+              {hasGenerating && (
+                <GeneratingSkeleton count={activeTopicIds.size} />
+              )}
+
+              {/* Items */}
+              {filteredEntries.map(entry => {
+                const isToday = entry.dateKey === todayDateKey;
+                return (
+                  <div key={entry.dateKey} className={styles.dateSection}>
+                    <div className={styles.dateSectionHeader}>
+                      {isToday ? (
+                        <span className={styles.todayBadge}>Today</span>
+                      ) : (
+                        <span className={styles.dateSectionTitle}>{entry.displayDate}</span>
+                      )}
+                      <span className={styles.dateSectionCount}>
+                        {entry.items.length} item{entry.items.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <Stack direction="vertical" gap="condensed">
+                      {entry.items.map((item, index) => (
+                        <ItemCard
+                          key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`}
+                          item={item}
+                          dateKey={entry.dateKey}
+                          onRefresh={forceRefresh}
+                        />
+                      ))}
+                    </Stack>
+                  </div>
+                );
+              })}
+
+              {/* No results */}
+              {filteredEntries.length === 0 && !hasGenerating && (
+                <Flash variant="default">
+                  <SearchIcon size={16} />
+                  <span>
+                    No items match your filters.
+                    {searchQuery && ` Try a different search term.`}
+                  </span>
+                </Flash>
+              )}
+            </Stack>
+          )}
+        </main>
       </div>
     </div>
   );

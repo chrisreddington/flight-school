@@ -1,30 +1,601 @@
-/* FocusHistory.module.css
+/* FocusHistory.module.css V2
  * 
- * Styling for the FocusHistory component using Primer CSS custom properties.
- * Follows the same layout pattern as ChallengeSandbox.
+ * Two-column layout with:
+ * - 52-week contribution graph (interactive)
+ * - Sidebar with filters, stats, date navigation
+ * - Main content with flat card list
  */
 
-.container {
+/* ============================================================================
+   Container V2 - Clean two-column layout
+   ============================================================================ */
+
+.containerV2 {
   display: flex;
   flex-direction: column;
   flex: 1;
   height: 100%;
   min-height: 0;
+  overflow-y: auto;
+}
+
+/* No separate header - title moves into sidebar */
+.headerV2 {
+  display: none;
+}
+
+.layoutV2 {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--base-size-16);
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================================
+   Sidebar - WHITE card that stands out from gray page
+   ============================================================================ */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16);
+  padding: var(--base-size-16);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  height: fit-content;
+}
+
+/* Sidebar header with title */
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-12);
+  padding-bottom: var(--base-size-12);
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.sidebarIcon {
+  color: var(--fgColor-accent);
+}
+
+.sidebarTitleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebarTitle {
+  font-size: var(--text-body-size-large);
+  font-weight: var(--base-text-weight-semibold);
+  margin: 0;
+}
+
+.sidebarDescription {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  margin: 0;
+}
+
+.sidebarSearch {
+  /* Search input styling handled by TextInput */
+}
+
+.sidebarFilters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12);
+}
+
+.filterSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+.filterLabel {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+}
+
+/* Filter buttons - clean stacked layout */
+.filterButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-4);
+}
+
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: var(--text-body-size-small);
+  background: var(--bgColor-muted);
+  border: 1px solid transparent;
+  border-radius: var(--borderRadius-small);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--fgColor-muted);
+}
+
+.filterBtn:hover {
+  background-color: var(--bgColor-neutral-muted);
+  color: var(--fgColor-default);
+}
+
+.filterBtnActive {
+  background-color: var(--bgColor-accent-muted);
+  border-color: var(--borderColor-accent-muted);
+  color: var(--fgColor-accent);
+  font-weight: var(--base-text-weight-medium);
+}
+
+.filterBtnActive:hover {
+  background-color: var(--bgColor-accent-muted);
+}
+
+/* ============================================================================
+   52-Week Activity Graph - Inset style inside white sidebar
+   ============================================================================ */
+
+.activityGraph {
+  background-color: var(--bgColor-inset);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-12);
+}
+
+.activityGraphHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+  margin-bottom: var(--base-size-12);
+}
+
+.clearSelection {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 4px 8px;
+  background: var(--bgColor-default);
+  border: 1px solid var(--borderColor-accent-muted);
+  border-radius: var(--borderRadius-small);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-accent);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.clearSelection:hover {
+  background-color: var(--bgColor-accent-muted);
+}
+
+/* Hide month labels - cleaner like GitHub */
+.monthLabels {
+  display: none;
+}
+
+.monthLabel {
+  display: none;
+}
+
+.activityGridWrapper {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.activityGrid52 {
+  display: flex;
+  gap: 3px;
+}
+
+.activityWeek {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Larger cells - more like GitHub */
+.activityCell52 {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: var(--bgColor-neutral-muted, #ebedf0);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.activityCell52:hover {
+  transform: scale(1.2);
+  outline: 1px solid var(--borderColor-emphasis);
+}
+
+.activityCell52:focus-visible {
+  outline: 2px solid var(--focus-outlineColor);
+  outline-offset: 1px;
+}
+
+.activityCell52[data-intensity="1"] {
+  background-color: #9be9a8;
+}
+
+.activityCell52[data-intensity="2"] {
+  background-color: #40c463;
+}
+
+.activityCell52[data-intensity="3"] {
+  background-color: #30a14e;
+}
+
+.activityCell52[data-intensity="4"] {
+  background-color: #216e39;
+}
+
+.activityCellSelected {
+  outline: 2px solid var(--fgColor-accent) !important;
+  outline-offset: 1px;
+  transform: scale(1.1);
+}
+
+.activityCellToday {
+  box-shadow: inset 0 0 0 1px var(--borderColor-emphasis);
+}
+
+.activityLegend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--base-size-12);
+  font-size: 11px;
+  color: var(--fgColor-muted);
+  justify-content: flex-end;
+}
+
+.activityLegend .activityCell52 {
+  cursor: default;
+  width: 10px;
+  height: 10px;
+}
+
+.activityLegend .activityCell52:hover {
+  transform: none;
+  outline: none;
+}
+
+/* ============================================================================
+   Stats Section - Simple horizontal layout
+   ============================================================================ */
+
+.statsSection {
+  padding: var(--base-size-8) 0;
+}
+
+.statsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  flex-wrap: wrap;
+}
+
+.statPrimary {
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-default);
+}
+
+.statSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fgColor-muted);
+}
+
+.statDivider {
+  color: var(--fgColor-muted);
+}
+
+/* ============================================================================
+   Date Navigation - Inset style inside white sidebar
+   ============================================================================ */
+
+.dateNav {
+  background-color: var(--bgColor-inset);
   border-radius: var(--borderRadius-medium);
   overflow: hidden;
 }
 
-/* Header */
-.header {
+.dateNavHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  padding: var(--base-size-12);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+}
+
+.dateNavList {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.dateNavMonth {
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.dateNavMonth:last-child {
+  border-bottom: none;
+}
+
+.dateNavMonthHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  width: 100%;
+  padding: var(--base-size-12) var(--base-size-16);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-body-size-medium);
+  font-weight: var(--base-text-weight-medium);
+  transition: background-color 0.15s ease;
+}
+
+.dateNavMonthHeader:hover {
+  background-color: var(--bgColor-muted);
+}
+
+.dateNavCount {
+  margin-left: auto;
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  background-color: var(--bgColor-neutral-muted);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.dateNavDays {
+  padding: var(--base-size-8) 0;
+  background-color: var(--bgColor-inset);
+}
+
+.dateNavDay {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--base-size-12) var(--base-size-16);
-  border-bottom: 1px solid var(--borderColor-default);
+  width: 100%;
+  padding: var(--base-size-8) var(--base-size-16) var(--base-size-8) var(--base-size-32);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-body-size-medium);
+  color: var(--fgColor-default);
+  transition: background-color 0.15s ease;
+}
+
+.dateNavDay:hover {
+  background-color: var(--bgColor-neutral-muted);
+}
+
+.dateNavDaySelected {
+  background-color: var(--bgColor-accent-muted);
+  color: var(--fgColor-accent);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.dateNavDayCount {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+/* ============================================================================
+   Main Content
+   ============================================================================ */
+
+.mainContent {
+  flex: 1;
+  padding: var(--base-size-16);
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16);
+  /* No independent scroll - flows with page */
+}
+
+.selectedDateBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--base-size-8) var(--base-size-12);
+  background-color: var(--bgColor-accent-muted);
+  border-radius: var(--borderRadius-medium);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-medium);
+  color: var(--fgColor-accent);
+}
+
+/* ============================================================================
+   Date Sections
+   ============================================================================ */
+
+.dateSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+.dateSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  padding-bottom: var(--base-size-8);
+  border-bottom: 1px solid var(--borderColor-muted);
+}
+
+.dateSectionTitle {
+  font-weight: var(--base-text-weight-semibold);
+  font-size: var(--text-body-size-medium);
+}
+
+.dateSectionCount {
+  margin-left: auto;
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+/* ============================================================================
+   Item Cards - Simpler, just border dividers
+   ============================================================================ */
+
+.itemCard {
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
+}
+
+.itemCard:hover {
+  border-color: var(--borderColor-default);
+}
+
+.itemCardInactive {
+  opacity: 0.6;
+}
+
+.itemCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--base-size-8) var(--base-size-12);
   background-color: var(--bgColor-muted);
 }
+
+.itemCardMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.itemCardType {
+  color: var(--fgColor-muted);
+}
+
+.itemCardTime {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.itemCardContent {
+  /* Let the inner card components handle their own padding */
+}
+
+/* ============================================================================
+   Generating Skeleton
+   ============================================================================ */
+
+.generatingSection {
+  background-color: var(--bgColor-attention-muted);
+  border: 1px dashed var(--borderColor-attention-muted);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-12);
+}
+
+.generatingHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-attention);
+  margin-bottom: var(--base-size-8);
+}
+
+/* ============================================================================
+   Status Icons
+   ============================================================================ */
+
+.statusCompleted {
+  color: var(--fgColor-success);
+  flex-shrink: 0;
+}
+
+.statusSkipped {
+  color: var(--fgColor-muted);
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   Empty & Loading States
+   ============================================================================ */
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-32);
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--base-size-8);
+  padding: var(--base-size-32);
+  color: var(--fgColor-muted);
+}
+
+.backLink {
+  margin-top: var(--base-size-24);
+}
+
+/* ============================================================================
+   Filters & Tokens
+   ============================================================================ */
+
+.filter {
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.filter:hover {
+  opacity: 1;
+}
+
+.activeFilter {
+  cursor: pointer;
+  opacity: 1;
+  background-color: var(--bgColor-accent-emphasis, #0969da) !important;
+  color: var(--fgColor-onEmphasis, #ffffff) !important;
+}
+
+/* Today Badge */
+.todayBadge {
+  background-color: var(--bgColor-accent-muted);
+  color: var(--fgColor-accent);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  padding: 2px 6px;
+  border-radius: var(--borderRadius-small);
+}
+
+/* ============================================================================
+   Header (shared)
+   ============================================================================ */
 
 .headerLeft {
   display: flex;
@@ -35,7 +606,7 @@
 .headerTitleGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--base-size-4);
+  gap: 2px;
 }
 
 .headerIcon {
@@ -54,26 +625,154 @@
   margin: 0;
 }
 
-/* Content area */
-.content {
+/* ============================================================================
+   Responsive
+   ============================================================================ */
+
+@media (max-width: 900px) {
+  .layoutV2 {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--borderColor-default);
+    max-height: 400px;
+  }
+
+  .activityGrid52 {
+    max-width: 100%;
+    overflow-x: scroll;
+  }
+
+  .dateNav {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================================
+   Legacy Styles (V1 - kept for backwards compatibility during transition)
+   ============================================================================ */
+
+.container {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  overflow-y: auto;
-  padding: var(--base-size-24, 24px) var(--base-size-16, 16px);
-}
-
-.backLink {
-  margin-top: var(--base-size-24, 24px);
-}
-
-.entryCard {
-  background-color: var(--bgColor-default, #ffffff);
-  border: 1px solid var(--borderColor-default, #d0d7de);
-  border-radius: var(--borderRadius-medium, 6px);
+  height: 100%;
+  min-height: 0;
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
   overflow: hidden;
 }
 
-.entryCard:first-child {
-  margin-top: 0;
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--base-size-12) var(--base-size-16);
+  border-bottom: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-muted);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--base-size-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16);
+}
+
+/* Activity Timeline V1 */
+.activityTimeline {
+  background-color: var(--bgColor-muted);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-12);
+}
+
+.activityHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-muted);
+  margin-bottom: var(--base-size-8);
+}
+
+.activityGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.activityCell {
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: 14px;
+  border-radius: 2px;
+  background-color: var(--bgColor-neutral-muted, #ebedf0);
+}
+
+.activityCell[data-intensity="1"] {
+  background-color: var(--bgColor-success-muted, #9be9a8);
+}
+
+.activityCell[data-intensity="2"] {
+  background-color: var(--bgColor-success-emphasis, #40c463);
+}
+
+.activityCell[data-intensity="3"] {
+  background-color: #30a14e;
+}
+
+.activityCell[data-intensity="4"] {
+  background-color: #216e39;
+}
+
+/* Filters V1 */
+.filtersSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12);
+}
+
+.searchRow {
+  display: flex;
+  gap: var(--base-size-8);
+}
+
+.searchInput {
+  flex: 1;
+  max-width: 300px;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-16);
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+/* Entry Cards V1 */
+.entryCard {
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
 }
 
 .entryHeader {
@@ -81,7 +780,7 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: var(--base-size-20, 20px) var(--base-size-16, 16px);
+  padding: var(--base-size-12) var(--base-size-16);
   background: none;
   border: none;
   cursor: pointer;
@@ -90,151 +789,120 @@
 }
 
 .entryHeader:hover {
-  background-color: var(--bgColor-muted, #f6f8fa);
+  background-color: var(--bgColor-muted);
 }
 
 .entryHeader:focus-visible {
-  outline: 2px solid var(--focus-outlineColor, #0969da);
+  outline: 2px solid var(--focus-outlineColor);
   outline-offset: -2px;
 }
 
 .dateText {
-  font-weight: var(--base-text-weight-semibold, 600);
+  font-weight: var(--base-text-weight-semibold);
+  font-size: var(--text-body-size-medium);
 }
 
-.languageText {
-  color: var(--fgColor-muted, #656d76);
-  font-size: var(--text-body-size-small, 12px);
+.summaryText {
+  color: var(--fgColor-muted);
+  font-size: var(--text-body-size-small);
 }
 
 .entryContent {
-  padding: var(--base-size-16, 16px);
-  padding-top: var(--base-size-16, 16px);
-  border-top: 1px solid var(--borderColor-muted, #d8dee4);
-}
-
-.section {
-  padding-top: var(--base-size-16, 16px);
-}
-
-.section:first-child {
-  padding-top: var(--base-size-8, 8px);
-}
-
-.sectionTitle {
+  padding: var(--base-size-12) var(--base-size-16);
+  border-top: 1px solid var(--borderColor-muted);
   display: flex;
-  align-items: center;
-  gap: var(--base-size-8, 8px);
-  font-size: var(--text-body-size-medium, 14px) !important;
-  font-weight: var(--base-text-weight-semibold, 600) !important;
-  color: var(--fgColor-muted, #656d76);
-  margin-bottom: var(--base-size-8, 8px);
+  flex-direction: column;
+  gap: var(--base-size-8);
 }
 
-.itemTitle {
-  font-weight: var(--base-text-weight-semibold, 600);
-  margin: 0 0 var(--base-size-4, 4px) 0;
+/* Compact Cards V1 */
+.compactCard {
+  background-color: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
 }
 
-.itemDescription {
-  color: var(--fgColor-muted, #656d76);
-  font-size: var(--text-body-size-medium, 14px);
-  margin: 0;
+.compactCard:hover {
+  border-color: var(--borderColor-emphasis);
 }
 
-.itemMeta {
-  color: var(--fgColor-muted, #656d76);
-  font-size: var(--text-body-size-small, 12px);
-  margin: var(--base-size-8, 8px) 0 0 0;
+.compactCardInactive {
+  opacity: 0.6;
+  background-color: var(--bgColor-muted);
 }
 
-.topicItem {
+.compactCardInactive .compactCardTitle {
+  text-decoration: line-through;
+  color: var(--fgColor-muted);
+}
+
+.compactCardHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--base-size-8, 8px) 0;
-  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
-  gap: var(--base-size-12, 12px);
-}
-
-.topicItem:last-child {
-  border-bottom: none;
-}
-
-.topicItem > div:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.topicTitle {
-  display: block;
-  font-weight: var(--base-text-weight-semibold, 600);
-}
-
-.topicDescription {
-  display: block;
-  color: var(--fgColor-muted, #656d76);
-  font-size: var(--text-body-size-medium, 14px);
-}
-
-/* Filter tokens */
-.filter {
+  width: 100%;
+  padding: var(--base-size-8) var(--base-size-12);
+  background: none;
+  border: none;
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.15s ease;
+  text-align: left;
+  transition: background-color 0.15s ease;
+  gap: var(--base-size-8);
 }
 
-.filter:hover {
-  opacity: 1;
+.compactCardHeader:hover {
+  background-color: var(--bgColor-muted);
 }
 
-.activeFilter {
-  cursor: pointer;
-  opacity: 1;
-  background-color: var(--bgColor-accent-emphasis, #0969da);
-  color: var(--fgColor-onEmphasis, #ffffff);
+.compactCardHeader:focus-visible {
+  outline: 2px solid var(--focus-outlineColor);
+  outline-offset: -2px;
 }
 
-/* Version block */
-.versionBlock {
-  margin-bottom: var(--base-size-16, 16px);
-}
-
-.versionHeader {
+.compactCardLeft {
   display: flex;
   align-items: center;
-  gap: var(--base-size-4, 4px);
-  font-size: var(--text-body-size-small, 12px);
-  color: var(--fgColor-muted, #656d76);
-  margin-bottom: var(--base-size-12, 12px);
-  font-weight: var(--base-text-weight-semibold, 600);
+  gap: var(--base-size-8);
+  min-width: 0;
+  flex: 1;
 }
 
-.divider {
-  border: 0;
-  border-top: 1px solid var(--borderColor-muted, #d8dee4);
-  margin: var(--base-size-16, 16px) 0;
+.compactCardRight {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  flex-shrink: 0;
 }
 
-/* Custom badge for custom challenges (AC5.1, AC10.8) */
-.customBadge {
-  margin-left: var(--base-size-8, 8px);
+.compactCardType {
+  color: var(--fgColor-muted);
+  flex-shrink: 0;
 }
 
-/* Screen reader only text */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+.compactCardTitle {
+  font-weight: var(--base-text-weight-medium);
+  font-size: var(--text-body-size-medium);
   white-space: nowrap;
-  border: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Action buttons */
-.itemActions {
-  margin-top: var(--base-size-12, 12px);
+.compactCardTime {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.compactCardContent {
+  padding: var(--base-size-12);
+  border-top: 1px solid var(--borderColor-muted);
+  background-color: var(--bgColor-muted);
+}
+
+/* Load More */
+.loadMoreSection {
+  display: flex;
+  justify-content: center;
+  padding: var(--base-size-16) 0;
 }

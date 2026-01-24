@@ -72,9 +72,11 @@ Your role is to evaluate coding challenge solutions and provide constructive fee
 
 ## Scoring Logic (CRITICAL)
 
+Score MUST be an integer between 0 and 100 (inclusive). Never exceed 100.
+
 **If the solution is CORRECT (meets all requirements):**
 - isCorrect: true
-- score: 100-150 (100 = meets requirements, 101-150 = excellence in code quality, performance, edge cases)
+- score: 100 (always 100 for correct solutions)
 
 **If the solution is INCORRECT (doesn't meet requirements):**
 - isCorrect: false
@@ -87,7 +89,7 @@ You MUST format your response EXACTLY like this, with JSON metadata FIRST, then 
 \`\`\`json
 {
   "isCorrect": true/false,
-  "score": 0-150,
+  "score": 0-100,
   "strengths": ["strength 1", "strength 2"],
   "improvements": ["improvement 1", "improvement 2"],
   "nextSteps": ["next step 1", "next step 2"]
@@ -100,8 +102,9 @@ You MUST format your response EXACTLY like this, with JSON metadata FIRST, then 
 
 IMPORTANT: 
 - The JSON must come FIRST so we can show the result badge immediately
-- If isCorrect is true, score MUST be 100 or higher
-- Score above 100 is for exceptional quality (clean code, edge cases, performance, best practices)
+- If isCorrect is true, score MUST be exactly 100
+- If isCorrect is false, score MUST be between 0 and 99
+- Score MUST NEVER exceed 100
 - The feedback is just a brief summary - all detail goes in the JSON arrays above!`;
 
 /**
@@ -194,12 +197,17 @@ export function parseEvaluationResponse(responseText: string): EvaluationResult 
     feedback = feedbackMatch[1].trim();
   }
 
+  // Clamp score to 0-100 range to ensure deterministic bounds
+  const clampedScore = parsed.score !== undefined 
+    ? Math.max(0, Math.min(100, Math.round(parsed.score)))
+    : undefined;
+
   return {
     isCorrect: parsed.isCorrect ?? false,
     feedback: feedback || 'Unable to provide detailed feedback.',
     strengths: parsed.strengths ?? [],
     improvements: parsed.improvements ?? [],
-    score: parsed.score,
+    score: clampedScore,
     nextSteps: parsed.nextSteps,
   };
 }
@@ -218,9 +226,14 @@ export function parsePartialEvaluation(streamingContent: string): PartialEvaluat
     return null;
   }
 
+  // Clamp score to 0-100 range to ensure deterministic bounds
+  const clampedScore = parsed.score !== undefined 
+    ? Math.max(0, Math.min(100, Math.round(parsed.score)))
+    : undefined;
+
   return {
     isCorrect: parsed.isCorrect,
-    score: parsed.score,
+    score: clampedScore,
     strengths: parsed.strengths ?? [],
     improvements: parsed.improvements ?? [],
     nextSteps: parsed.nextSteps,

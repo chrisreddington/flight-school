@@ -6,6 +6,7 @@
  */
 
 import type { RepoReference } from '@/lib/threads';
+import type { StreamState as GlobalStreamState } from '@/lib/stream-store/types';
 
 // ============================================================================
 // Message Types
@@ -79,6 +80,12 @@ export interface SendMessageOptions {
   conversationId?: string;
   /** Enable learning mode (reasoning, follow-ups) */
   learningMode?: boolean;
+  /**
+   * Callback invoked when stream completes (runs outside React lifecycle).
+   * Use this for critical persistence operations that must succeed even if
+   * the component unmounts during streaming.
+   */
+  onComplete?: (state: GlobalStreamState) => void | Promise<void>;
 }
 
 // ============================================================================

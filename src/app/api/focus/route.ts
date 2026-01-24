@@ -4,7 +4,7 @@
  *
  * Uses Copilot SDK to generate personalized daily focus components.
  * Supports single-component requests for parallel loading:
- * - POST with component: 'challenge' | 'goal' | 'learningTopics'
+ * - POST with component: 'challenge' | 'goal' | 'learningTopics' | 'singleTopic'
  *
  * Uses minimal prompts for faster response times (~5-15s per component).
  */
@@ -16,6 +16,7 @@ import {
     buildChallengePrompt,
     buildGoalPrompt,
     buildLearningTopicsPrompt,
+    buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
 import {
     createLoggedLightweightCoachSession,
@@ -27,7 +28,7 @@ import {
     getFallbackGoal,
     getFallbackLearningTopics,
 } from '@/lib/focus/server-utils';
-import type { FocusResponse } from '@/lib/focus/types';
+import type { FocusResponse, LearningTopic } from '@/lib/focus/types';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import type { CompactDeveloperProfile } from '@/lib/github/types';
 import { logger } from '@/lib/logger';
@@ -36,13 +37,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Focus API');
 
-type FocusComponent = 'challenge' | 'goal' | 'learningTopics';
+type FocusComponent = 'challenge' | 'goal' | 'learningTopics' | 'singleTopic';
 
 /**
  * Generate a single focus component with minimal prompt.
  */
 async function generateSingleComponent(
-  component: FocusComponent,
+  component: Exclude<FocusComponent, 'singleTopic'>,
   serializedContext: string,
   skillProfile?: SkillProfile
 ): Promise<Partial<FocusResponse>> {
@@ -52,6 +53,14 @@ async function generateSingleComponent(
     goal: buildGoalPrompt,
     learningTopics: buildLearningTopicsPrompt,
   };
+  
+  // Debug: log skill profile info
+  if (skillProfile) {
+    log.info(`[${component}] SkillProfile: ${skillProfile.skills.length} skills`);
+    log.info(`[${component}] Skills: ${skillProfile.skills.map(s => `${s.skillId}:${s.level}${s.notInterested ? '(excluded)' : ''}`).join(', ')}`);
+  } else {
+    log.info(`[${component}] No skill profile provided`);
+  }
   
   const prompt = promptBuilders[component](serializedContext, skillProfile);
   
@@ -85,12 +94,47 @@ async function generateSingleComponent(
   return withIds;
 }
 
+/**
+ * Generate a single replacement topic (when user skips one).
+ */
+async function generateSingleTopic(
+  serializedContext: string,
+  existingTopicTitles: string[],
+  skillProfile?: SkillProfile
+): Promise<{ learningTopic: LearningTopic }> {
+  const prompt = buildSingleTopicPrompt(serializedContext, existingTopicTitles, skillProfile);
+  
+  const loggedSession = await createLoggedLightweightCoachSession(
+    'Focus: singleTopic',
+    prompt.slice(0, 50)
+  );
+  
+  log.info(`[singleTopic] Sending prompt (${prompt.length} chars), excluding: ${existingTopicTitles.join(', ')}`);
+  const result = await loggedSession.sendAndWait(prompt);
+  loggedSession.destroy();
+  
+  log.info(`[singleTopic] Complete: ${result.totalTimeMs}ms`);
+  
+  const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.responseText);
+  if (!parsed?.learningTopic) {
+    throw new Error('Failed to parse single topic response');
+  }
+  
+  // Add ID if missing
+  if (!parsed.learningTopic.id) {
+    parsed.learningTopic.id = crypto.randomUUID();
+  }
+  
+  return parsed;
+}
+
 async function generateFocus(options: { 
   component?: FocusComponent;
   skillProfile?: SkillProfile;
-} = {}): Promise<Partial<FocusResponse>> {
+  existingTopicTitles?: string[];
+} = {}): Promise<Partial<FocusResponse> | { learningTopic: LearningTopic }> {
   const startTime = nowMs();
-  const { component, skillProfile } = options;
+  const { component, skillProfile, existingTopicTitles } = options;
 
   let serializedContext = '';
   let compactProfile: CompactDeveloperProfile | null = null;
@@ -103,6 +147,11 @@ async function generateFocus(options: {
       log.info(`Context: ${serializedContext.length} chars`);
     } catch (profileError) {
       log.warn('Failed to build context:', profileError);
+    }
+
+    // Single topic replacement request
+    if (component === 'singleTopic') {
+      return await generateSingleTopic(serializedContext, existingTopicTitles || [], skillProfile);
     }
 
     // Single component request - fast path
@@ -188,11 +237,13 @@ export async function POST(request: NextRequest) {
   const body = await parseJsonBodyWithFallback<{ 
     component?: FocusComponent;
     skillProfile?: SkillProfile;
+    existingTopicTitles?: string[];
   }>(request, {});
   
   const result = await generateFocus({ 
     component: body.component,
     skillProfile: body.skillProfile,
+    existingTopicTitles: body.existingTopicTitles,
   });
   return NextResponse.json(result);
 }

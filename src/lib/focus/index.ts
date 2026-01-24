@@ -18,3 +18,6 @@
 
 // Storage
 export { focusStore } from './storage';
+
+// Regeneration tracking (global store for cross-component visibility)
+export { regenerationStore } from './regeneration-store';

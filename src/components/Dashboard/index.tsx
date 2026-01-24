@@ -39,13 +39,23 @@ export function Dashboard() {
   useBreadcrumb('/', 'Dashboard', '/');
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useUserProfile();
-  const { data: aiFocus, isAIEnabled, toolsUsed, refetch: refetchFocus, loadingComponents, componentTimestamps } = useAIFocus();
+  const { data: aiFocus, isAIEnabled, toolsUsed, refetch: refetchFocus, loadingComponents, componentTimestamps, skipAndReplaceTopic, skippingTopicIds, stopComponent, stopTopicSkip } = useAIFocus();
   
   // Adapter for DailyFocusSection which expects string[] format
   const handleRefresh = useCallback((components?: string[]) => {
     const component = components?.[0] as 'challenge' | 'goal' | 'learningTopics' | undefined;
     refetchFocus(component);
   }, [refetchFocus]);
+
+  // Handle skipping a single topic and generating a replacement
+  const handleSkipTopic = useCallback((skippedTopic: LearningTopic, existingTopicTitles: string[]) => {
+    skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
+  }, [skipAndReplaceTopic]);
+
+  // Handle stopping a topic skip/regeneration - reverts topic state
+  const handleStopSkipTopic = useCallback(() => {
+    stopTopicSkip();
+  }, [stopTopicSkip]);
   
   // Use the new learning chat hook for multi-thread chat
   const {
@@ -129,6 +139,10 @@ export function Dashboard() {
               loadingComponents={loadingComponents}
               componentTimestamps={componentTimestamps}
               onRefresh={handleRefresh}
+              onSkipTopic={handleSkipTopic}
+              onStopSkipTopic={handleStopSkipTopic}
+              onStopComponent={stopComponent}
+              skippingTopicIds={skippingTopicIds}
               onExploreTopic={handleExploreTopic}
             />
             {/* Multi-thread Learning Chat Experience */}

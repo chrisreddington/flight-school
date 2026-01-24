@@ -17,6 +17,7 @@ import {
     calculateExperienceLevel,
     calculateYearsOnGitHub,
     getAuthenticatedUser,
+    getAuthMethod,
     getLanguageColor,
     getLanguageStats,
     getUserEvents,
@@ -67,6 +68,8 @@ export interface ProfileResponse {
     aiEnabled: boolean;
     method: string;
     totalTimeMs: number;
+    /** Authentication method: 'github-token' | 'github-cli' | 'copilot-mcp' | 'none' */
+    authMethod: 'github-token' | 'github-cli' | 'copilot-mcp' | 'none';
   };
 }
 
@@ -96,6 +99,7 @@ function getFallbackResponse(startTime: number): ProfileResponse {
       aiEnabled: false,
       method: 'fallback',
       totalTimeMs: nowMs() - startTime,
+      authMethod: 'none',
     },
   };
 }
@@ -232,6 +236,7 @@ Return ONLY the JSON, no explanation.`;
         aiEnabled: true,
         method: 'copilot-mcp',
         totalTimeMs: totalTime,
+        authMethod: 'copilot-mcp',
       },
     };
   } catch (error) {
@@ -312,6 +317,7 @@ export async function GET() {
         aiEnabled: true,
         method: 'octokit-cached',
         totalTimeMs: nowMs() - startTime,
+        authMethod: getAuthMethod(),
       },
     } satisfies ProfileResponse);
   }
@@ -387,6 +393,7 @@ export async function GET() {
         aiEnabled: true,
         method: 'octokit-direct',
         totalTimeMs: totalTime,
+        authMethod: getAuthMethod(),
       },
     };
 

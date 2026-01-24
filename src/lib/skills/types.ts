@@ -80,9 +80,19 @@ export const SKILL_LEVEL_DESCRIPTIONS: Record<SkillLevel, string> = {
  * Source of the skill level information.
  *
  * - **github**: Detected from GitHub repository analysis
- * - **manual**: User explicitly set via the skill profile UI
+ * - **github-confirmed**: Detected from GitHub, confirmed by user via calibration
+ * - **manual**: User explicitly added via the skill profile UI
  */
-export type SkillSource = 'github' | 'manual';
+export type SkillSource = 'github' | 'github-confirmed' | 'manual';
+
+/**
+ * Display labels for skill sources.
+ */
+export const SKILL_SOURCE_LABELS: Record<SkillSource, string> = {
+  github: 'Detected from GitHub',
+  'github-confirmed': 'Detected from GitHub (confirmed)',
+  manual: 'Added manually',
+};
 
 /**
  * A single skill with its level and metadata.

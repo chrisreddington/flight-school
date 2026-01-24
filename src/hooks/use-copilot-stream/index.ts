@@ -4,6 +4,9 @@
  * React hook for streaming Copilot chat responses via Server-Sent Events (SSE).
  * Handles real-time text streaming, tool calls, performance tracking, and abort control.
  *
+ * **Key feature:** Streams persist across navigation. The hook subscribes to a global
+ * stream store, so streams continue in the background if the user navigates away.
+ *
  * @example
  * ```typescript
  * const {
@@ -26,6 +29,7 @@
 
 import { apiPatch } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
+import { streamStore, type StreamState as GlobalStreamState } from '@/lib/stream-store';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,7 +38,6 @@ import type {
     SendMessageOptions,
     StreamingMessage,
     StreamState,
-    ToolCall,
     UseCopilotStreamReturn,
 } from './types';
 
@@ -48,15 +51,21 @@ export type {
 } from './types';
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-/** Flush interval for streaming content (ms) */
-const STREAMING_FLUSH_INTERVAL = 50;
-
-// ============================================================================
 // Hook Implementation
 // ============================================================================
+
+/**
+ * Convert global stream state to local StreamState format
+ */
+function toLocalStreamState(global: GlobalStreamState): StreamState {
+  return {
+    isLoading: global.status === 'pending' || global.status === 'streaming',
+    streamingContent: global.content,
+    abortController: global.abortController ?? null,
+    streamingBuffer: global.streamingBuffer ?? '',
+    flushTimer: null, // Not tracked locally anymore
+  };
+}
 
 /**
  * Hook for streaming Copilot chat responses.
@@ -64,6 +73,7 @@ const STREAMING_FLUSH_INTERVAL = 50;
  * Key features:
  * - Real-time text streaming via SSE
  * - **Multiple concurrent streams** per conversation ID
+ * - **Streams persist across navigation** via global store
  * - Tool call tracking
  * - Performance metrics collection
  * - Per-conversation abort/stop support
@@ -78,24 +88,61 @@ export function useCopilotStream(
   const [messages, setMessages] = useState<StreamingMessage[]>(initialMessages);
   const [conversationId, setConversationId] = useState<string | null>(null);
   
-  // Track multiple concurrent streams by conversation ID
-  // Using ref + state: ref for abort controllers (no re-render needed), state for UI updates
-  const activeStreamsRef = useRef<Map<string, StreamState>>(new Map());
+  // Track streams locally (synced from global store)
   const [activeStreams, setActiveStreams] = useState<Map<string, StreamState>>(new Map());
+  
+  // Track which streams we're subscribed to
+  const subscribedStreamsRef = useRef<Set<string>>(new Set());
+  const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
 
-  // Cleanup effect: abort all streams and clear timers on unmount
-  // This prevents memory leaks from orphaned timers/controllers
+  // Subscribe to global store activity (for active stream tracking)
   useEffect(() => {
-    // Capture ref value for cleanup (React lint rule requires this for refs that may change)
-    const streamsRef = activeStreamsRef;
-    return () => {
-      streamsRef.current.forEach((stream) => {
-        if (stream.flushTimer !== null) {
-          window.clearTimeout(stream.flushTimer);
+    // Capture refs for cleanup (React lint rule requires this)
+    const subscribedStreams = subscribedStreamsRef.current;
+    const unsubscribers = unsubscribersRef.current;
+    
+    const unsubscribe = streamStore.subscribeToActivity((activeIds) => {
+      // Subscribe to any new streams we're not already subscribed to
+      for (const id of activeIds) {
+        if (!subscribedStreams.has(id)) {
+          subscribedStreams.add(id);
+          const unsub = streamStore.subscribe(id, (state) => {
+            setActiveStreams((prev) => {
+              const next = new Map(prev);
+              if (state.status === 'completed' || state.status === 'error' || state.status === 'aborted') {
+                // Remove completed streams from active
+                next.delete(id);
+              } else {
+                next.set(id, toLocalStreamState(state));
+              }
+              return next;
+            });
+          });
+          unsubscribers.set(id, unsub);
         }
-        stream.abortController?.abort();
-      });
-      streamsRef.current.clear();
+      }
+      
+      // Clean up subscriptions for streams that are no longer active
+      for (const id of subscribedStreams) {
+        if (!activeIds.includes(id)) {
+          const unsub = unsubscribers.get(id);
+          if (unsub) {
+            unsub();
+            unsubscribers.delete(id);
+          }
+          subscribedStreams.delete(id);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      // Clean up all subscriptions on unmount (but DON'T abort streams!)
+      for (const unsub of unsubscribers.values()) {
+        unsub();
+      }
+      unsubscribers.clear();
+      subscribedStreams.clear();
     };
   }, []);
 
@@ -105,14 +152,10 @@ export function useCopilotStream(
   // For backwards compatibility, show content from most recent stream
   const streamingContent = useMemo(() => {
     if (activeStreams.size === 0) return '';
-    // Get the most recently started stream's content
     const streams = Array.from(activeStreams.values());
     return streams[streams.length - 1]?.streamingContent ?? '';
   }, [activeStreams]);
 
-  /**
-   * Generate a unique message ID.
-   */
   /**
    * Ensure a conversation ID exists.
    */
@@ -123,30 +166,6 @@ export function useCopilotStream(
     setConversationId(newId);
     return newId;
   }, [conversationId]);
-
-  /**
-   * Update a stream's state and trigger re-render.
-   */
-  const updateStreamState = useCallback((streamId: string, update: Partial<StreamState>) => {
-    const current = activeStreamsRef.current.get(streamId);
-    if (current) {
-      const updated = { ...current, ...update };
-      activeStreamsRef.current.set(streamId, updated);
-      setActiveStreams(new Map(activeStreamsRef.current));
-    }
-  }, []);
-
-  /**
-   * Remove a stream from tracking.
-   */
-  const removeStream = useCallback((streamId: string) => {
-    const stream = activeStreamsRef.current.get(streamId);
-    if (stream && stream.flushTimer !== null) {
-      window.clearTimeout(stream.flushTimer);
-    }
-    activeStreamsRef.current.delete(streamId);
-    setActiveStreams(new Map(activeStreamsRef.current));
-  }, []);
 
   /**
    * Clear all messages.
@@ -168,17 +187,12 @@ export function useCopilotStream(
    */
   const stopStreaming = useCallback((targetConversationId?: string) => {
     if (targetConversationId) {
-      // Stop specific conversation
-      const stream = activeStreamsRef.current.get(targetConversationId);
-      if (stream?.abortController) {
-        stream.abortController.abort();
-      }
+      streamStore.stopStream(targetConversationId);
     } else {
-      // Stop all streams (backwards compatibility)
-      for (const stream of activeStreamsRef.current.values()) {
-        if (stream.abortController) {
-          stream.abortController.abort();
-        }
+      // Stop all active streams
+      const activeIds = streamStore.getActiveStreamIds();
+      for (const id of activeIds) {
+        streamStore.stopStream(id);
       }
     }
   }, []);
@@ -187,14 +201,15 @@ export function useCopilotStream(
    * Check if a specific conversation is streaming.
    */
   const isStreamingConversation = useCallback((targetConversationId: string): boolean => {
-    return activeStreamsRef.current.has(targetConversationId);
+    return streamStore.isStreaming(targetConversationId);
   }, []);
 
   /**
    * Get streaming content for a specific conversation.
    */
   const getStreamingContent = useCallback((targetConversationId: string): string => {
-    return activeStreamsRef.current.get(targetConversationId)?.streamingContent ?? '';
+    const stream = streamStore.getStream(targetConversationId);
+    return stream?.content ?? '';
   }, []);
 
   /**
@@ -211,32 +226,18 @@ export function useCopilotStream(
     const message = content.trim();
     if (!message) return null;
 
-    const { useGitHubTools = false, repos, conversationId: customConversationId, learningMode = false } = options;
+    const { useGitHubTools = false, repos, conversationId: customConversationId, learningMode = false, onComplete } = options;
     
     // Use provided conversation ID or generate one
     const streamId = customConversationId ?? ensureConversationId();
     
     // Check if this specific conversation is already streaming
-    if (activeStreamsRef.current.has(streamId)) {
+    if (streamStore.isStreaming(streamId)) {
       logger.warn('Conversation is already streaming, ignoring new message', { streamId }, 'useCopilotStream');
       return null;
     }
 
-    // Create abort controller for this stream
-    const abortController = new AbortController();
-    
-    // Initialize stream state
-    const streamState: StreamState = {
-      isLoading: true,
-      streamingContent: '',
-      abortController,
-      streamingBuffer: '',
-      flushTimer: null,
-    };
-    activeStreamsRef.current.set(streamId, streamState);
-    setActiveStreams(new Map(activeStreamsRef.current));
-
-    // Add user message
+    // Add user message immediately
     const userMessage: StreamingMessage = {
       id: generateMessageId(),
       role: 'user',
@@ -245,220 +246,90 @@ export function useCopilotStream(
     };
     setMessages((prev) => [...prev, userMessage]);
 
-    // Track tool calls and response content
-    const toolCalls: ToolCall[] = [];
-    let responseContent = '';
+    // Track start time for client metrics
     const startTime = performance.now();
-    let clientFirstTokenMs: number | undefined;
-    let hasActionableItem = false;
-    let activityEventId: string | undefined;
-    let serverMeta: {
-      totalMs?: number;
-      firstDeltaMs?: number | null;
-      sessionCreateMs?: number | null;
-      sessionPoolHit?: boolean | null;
-      mcpEnabled?: boolean | null;
-      sessionReused?: boolean | null;
-      model?: string;
-      activityEventId?: string;
-    } | null = null;
 
-    /**
-     * Flush streaming buffer to state for this specific stream.
-     */
-    const flushStreaming = () => {
-      const stream = activeStreamsRef.current.get(streamId);
-      if (stream) {
-        updateStreamState(streamId, {
-          streamingContent: stream.streamingBuffer,
-          flushTimer: null,
-        });
-      }
-    };
+    // Start stream via global store
+    const finalState = await streamStore.startStream({
+      type: 'copilot',
+      prompt: message,
+      useGitHubTools,
+      conversationId: streamId,
+      learningMode,
+      repos: repos?.map((r) => ({ fullName: r.fullName })),
+      onComplete,
+    });
 
-    try {
-      // Build request body
-      const requestBody: Record<string, unknown> = {
-        prompt: message,
-        useGitHubTools,
-        conversationId: streamId,
-        learningMode,
-      };
+    // Calculate client-side total time
+    const clientTotalMs = Math.round(performance.now() - startTime);
 
-      // Add repos if provided
-      if (repos && repos.length > 0) {
-        requestBody.repos = repos.map((r) => r.fullName);
-      }
-
-      // Stream response
-      const res = await fetch('/api/copilot/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: abortController.signal,
+    // Update activity metrics if we have an activity event ID
+    if (finalState.serverMeta?.activityEventId && finalState.clientFirstTokenMs != null) {
+      apiPatch('/api/ai-activity/metrics', {
+        eventId: finalState.serverMeta.activityEventId,
+        clientMetrics: {
+          firstTokenMs: finalState.clientFirstTokenMs,
+          totalMs: clientTotalMs,
+        },
+      }, { throwOnError: false }).catch((err) => {
+        logger.warn('Failed to update activity metrics', { err }, 'useCopilotStream');
       });
+    }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to get response');
-      }
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-
-      // Process SSE stream
-      let errorFromStream: Error | null = null;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = decoder.decode(value);
-        const lines = text.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-
-            try {
-              const event = JSON.parse(data);
-
-              if (event.type === 'delta') {
-                // Stream text as it arrives
-                responseContent += event.content;
-                const stream = activeStreamsRef.current.get(streamId);
-                if (stream) {
-                  stream.streamingBuffer = responseContent;
-                  if (clientFirstTokenMs === undefined) {
-                    clientFirstTokenMs = Math.round(performance.now() - startTime);
-                  }
-                  if (stream.flushTimer === null) {
-                    stream.flushTimer = window.setTimeout(flushStreaming, STREAMING_FLUSH_INTERVAL);
-                  }
-                }
-              } else if (event.type === 'tool_start') {
-                toolCalls.push({ name: event.name, args: event.args, result: '' });
-              } else if (event.type === 'tool_complete') {
-                const tc = toolCalls.find((t) => t.name === event.name && !t.result);
-                if (tc) {
-                  tc.result = event.result;
-                  tc.duration = event.duration;
-                }
-              } else if (event.type === 'meta') {
-                serverMeta = {
-                  totalMs: event.totalMs,
-                  firstDeltaMs: event.firstDeltaMs,
-                  sessionCreateMs: event.sessionCreateMs,
-                  sessionPoolHit: event.sessionPoolHit,
-                  mcpEnabled: event.mcpEnabled,
-                  sessionReused: event.sessionReused,
-                  model: event.model,
-                  activityEventId: event.activityEventId,
-                };
-                activityEventId = event.activityEventId;
-                // Check for actionable item flag from server
-                if (event.hasActionableItem) {
-                  hasActionableItem = true;
-                }
-              } else if (event.type === 'done') {
-                responseContent = event.totalContent;
-                if (event.hasActionableItem) {
-                  hasActionableItem = true;
-                }
-              } else if (event.type === 'error') {
-                // Mark error for throwing after stream processing
-                errorFromStream = new Error(event.message);
-              }
-            } catch {
-              // Skip invalid JSON lines
-            }
-          }
-        }
-
-        // Throw error after processing the line
-        if (errorFromStream) {
-          throw errorFromStream;
-        }
-      }
-
-      // Finalize streaming
-      const clientTotalMs = Math.round(performance.now() - startTime);
-      const stream = activeStreamsRef.current.get(streamId);
-      if (stream && stream.flushTimer !== null) {
-        window.clearTimeout(stream.flushTimer);
-        flushStreaming();
-      }
-
-      // Update activity log with client-side metrics (single source of truth for UI)
-      if (activityEventId && clientFirstTokenMs != null) {
-        // Fire and forget - don't block on this
-        apiPatch('/api/ai-activity/metrics', {
-          eventId: activityEventId,
-          clientMetrics: {
-            firstTokenMs: clientFirstTokenMs,
-            totalMs: clientTotalMs,
-          },
-        }, { throwOnError: false }).catch((err) => {
-          logger.warn('Failed to update activity metrics', { err }, 'useCopilotStream');
-        });
-      }
-
-      // Create assistant message
+    // Handle different final states
+    if (finalState.status === 'completed') {
       const assistantMessage: StreamingMessage = {
         id: generateMessageId(),
         role: 'assistant',
-        content: responseContent,
+        content: finalState.content,
         timestamp: now(),
         perf: {
           clientTotalMs,
-          clientFirstTokenMs,
-          serverTotalMs: serverMeta?.totalMs,
-          serverFirstTokenMs: serverMeta?.firstDeltaMs ?? undefined,
-          sessionCreateMs: serverMeta?.sessionCreateMs ?? undefined,
-          sessionPoolHit: serverMeta?.sessionPoolHit ?? undefined,
-          mcpEnabled: serverMeta?.mcpEnabled ?? undefined,
-          sessionReused: serverMeta?.sessionReused ?? undefined,
-          model: serverMeta?.model,
+          clientFirstTokenMs: finalState.clientFirstTokenMs,
+          serverTotalMs: finalState.serverMeta?.totalMs,
+          serverFirstTokenMs: finalState.serverMeta?.firstDeltaMs ?? undefined,
+          sessionCreateMs: finalState.serverMeta?.sessionCreateMs ?? undefined,
+          sessionPoolHit: finalState.serverMeta?.sessionPoolHit ?? undefined,
+          mcpEnabled: finalState.serverMeta?.mcpEnabled ?? undefined,
+          sessionReused: finalState.serverMeta?.sessionReused ?? undefined,
+          model: finalState.serverMeta?.model,
         },
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        hasActionableItem,
+        toolCalls: finalState.toolCalls.length > 0 ? finalState.toolCalls : undefined,
+        hasActionableItem: finalState.hasActionableItem,
       };
-
       setMessages((prev) => [...prev, assistantMessage]);
       return assistantMessage;
-    } catch (err) {
-      // Handle user-initiated cancellation
-      if (err instanceof Error && err.name === 'AbortError') {
-        if (responseContent) {
-          const partialMessage: StreamingMessage = {
-            id: generateMessageId(),
-            role: 'assistant',
-            content: responseContent + '\n\n*(Response stopped)*',
-            timestamp: now(),
-            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-          };
-          setMessages((prev) => [...prev, partialMessage]);
-          return partialMessage;
-        }
-        return null;
-      }
+    }
 
-      // Handle error
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    if (finalState.status === 'aborted') {
+      if (finalState.content) {
+        const partialMessage: StreamingMessage = {
+          id: generateMessageId(),
+          role: 'assistant',
+          content: finalState.content + '\n\n*(Response stopped)*',
+          timestamp: now(),
+          toolCalls: finalState.toolCalls.length > 0 ? finalState.toolCalls : undefined,
+        };
+        setMessages((prev) => [...prev, partialMessage]);
+        return partialMessage;
+      }
+      return null;
+    }
+
+    if (finalState.status === 'error') {
       const errorMessage: StreamingMessage = {
         id: generateMessageId(),
         role: 'assistant',
-        content: errorMsg,
+        content: finalState.error ?? 'Unknown error',
         timestamp: now(),
         isError: true,
       };
       setMessages((prev) => [...prev, errorMessage]);
       return errorMessage;
-    } finally {
-      // Clean up this stream
-      removeStream(streamId);
     }
-  }, [ensureConversationId, updateStreamState, removeStream]);
+
+    return null;
+  }, [ensureConversationId]);
 
   return {
     // State

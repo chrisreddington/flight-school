@@ -36,11 +36,12 @@
 import { useCallback } from 'react';
 
 import { logger } from '@/lib/logger';
+import type { StreamState } from '@/lib/stream-store/types';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
-import { useCopilotStream, type StreamingMessage } from './use-copilot-stream';
+import { useCopilotStream } from './use-copilot-stream';
 import { useThreads, type UseThreadsReturn } from './use-threads';
 
 const log = logger.withTag('useLearningChat');
@@ -105,27 +106,48 @@ export type UseLearningChatReturn = UseLearningChatState & UseLearningChatAction
 // ============================================================================
 
 /**
- * Convert a StreamingMessage to a thread Message.
+ * Convert a completed StreamState to a thread Message.
+ * Used by onComplete callback which runs outside React lifecycle.
  *
- * @param msg - The streaming message to convert
- * @returns A thread-compatible message
+ * @param state - The completed stream state
+ * @returns A thread-compatible message, or null if state is error/empty
  */
-function streamingToThreadMessage(msg: StreamingMessage): Message {
+function streamStateToThreadMessage(state: StreamState): Message | null {
+  // Don't create a message for errors without content
+  if (state.status === 'error' && !state.content) {
+    return null;
+  }
+  
+  // Build content - add indicators for non-completed streams
+  let content = state.content;
+  if (state.status === 'aborted' && content) {
+    content += '\n\n*(Response stopped)*';
+  } else if (state.status === 'error' && content) {
+    content += '\n\n*(Response interrupted)*';
+  }
+  
+  // Don't create empty messages
+  if (!content) {
+    return null;
+  }
+  
   return {
-    id: msg.id,
-    role: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp,
-    toolCalls: msg.toolCalls?.map((tc) => tc.name),
-    hasActionableItem: msg.hasActionableItem,
-    perf: msg.perf ? {
-      clientTotalMs: msg.perf.clientTotalMs,
-      clientFirstTokenMs: msg.perf.clientFirstTokenMs,
-      serverTotalMs: msg.perf.serverTotalMs,
-      sessionPoolHit: msg.perf.sessionPoolHit ?? undefined,
-      mcpEnabled: msg.perf.mcpEnabled ?? undefined,
-      sessionReused: msg.perf.sessionReused ?? undefined,
-    } : undefined,
+    id: generateMessageId(),
+    role: 'assistant',
+    content,
+    timestamp: now(),
+    toolCalls: state.toolCalls?.map((tc) => tc.name),
+    hasActionableItem: state.hasActionableItem,
+    perf: {
+      clientTotalMs: state.completedAt && state.startedAt
+        ? Math.round(state.completedAt - state.startedAt)
+        : undefined,
+      clientFirstTokenMs: state.clientFirstTokenMs,
+      serverTotalMs: state.serverMeta?.totalMs,
+      sessionPoolHit: state.serverMeta?.sessionPoolHit ?? undefined,
+      mcpEnabled: state.serverMeta?.mcpEnabled ?? undefined,
+      sessionReused: state.serverMeta?.sessionReused ?? undefined,
+    },
   };
 }
 
@@ -288,33 +310,61 @@ export function useLearningChat(): UseLearningChatReturn {
         messages: [...thread.messages, userMessage],
       }, targetThreadId);
 
-      // Send streaming message with learning mode enabled
-      const response = await sendStreamingMessage(message, {
-        useGitHubTools,
-        repos: effectiveRepos,
-        conversationId: targetThreadId,
-        learningMode: true,
-      });
+      // Define onComplete callback - this runs outside React lifecycle,
+      // so it persists even if user navigates away during streaming
+      const handleStreamComplete = async (state: StreamState) => {
+        log.debug('Stream completed, persisting to thread:', { 
+          threadId: targetThreadId, 
+          status: state.status,
+          hasContent: !!state.content,
+        });
+        
+        // Convert stream state to thread message
+        const threadMessage = streamStateToThreadMessage(state);
+        if (!threadMessage) {
+          log.debug('No message to persist (empty or error)');
+          return;
+        }
 
-      // Save assistant response to the original thread (not current active thread)
-      if (response) {
-        const threadMessage = streamingToThreadMessage(response);
-
-        // Get fresh thread state directly from storage to avoid stale closure
+        // Get fresh thread state directly from storage to avoid stale data
         // This is critical because the thread state may have changed during streaming
         // (e.g., user navigated away or switched threads)
         const freshThread = await threadStore.getById(targetThreadId);
         
         if (freshThread) {
           // Update the thread with the response message
-          await updateActiveThread({
+          const updatedThread: Thread = {
+            ...freshThread,
             messages: [...freshThread.messages, threadMessage],
-          }, targetThreadId);
+            updatedAt: now(),
+          };
+          await threadStore.update(updatedThread);
+          log.debug('Persisted message to thread storage');
           
-          // Refresh threads to sync React state with storage
-          await refreshThreads();
+          // Try to refresh React state - this is best-effort since component may be unmounted
+          try {
+            await refreshThreads();
+          } catch {
+            // Component unmounted, that's OK - storage is persisted
+            log.debug('Could not refresh React state (component may be unmounted)');
+          }
+        } else {
+          log.warn('Thread not found for persistence:', targetThreadId);
         }
-      }
+      };
+
+      // Send streaming message with learning mode enabled
+      // The onComplete callback handles persistence outside React lifecycle
+      await sendStreamingMessage(message, {
+        useGitHubTools,
+        repos: effectiveRepos,
+        conversationId: targetThreadId,
+        learningMode: true,
+        onComplete: handleStreamComplete,
+      });
+
+      // NOTE: We no longer handle persistence here - it's done in onComplete callback
+      // which runs even if this component unmounts during streaming
     },
     [
       activeThread,

@@ -161,6 +161,20 @@ export async function isGitHubConfigured(): Promise<boolean> {
 }
 
 /**
+ * Get the authentication method currently in use.
+ * @returns 'github-token' if using GITHUB_TOKEN env var, 'github-cli' if using gh CLI
+ */
+export function getAuthMethod(): 'github-token' | 'github-cli' | 'none' {
+  if (process.env.GITHUB_TOKEN) {
+    return 'github-token';
+  }
+  if (cachedGhToken) {
+    return 'github-cli';
+  }
+  return 'none';
+}
+
+/**
  * Invalidate the cached GitHub token.
  * Forces a fresh token retrieval on the next call to getGitHubToken().
  * Use this when authentication fails to ensure retry with fresh credentials.

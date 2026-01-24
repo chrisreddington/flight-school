@@ -8,8 +8,8 @@ import { focusStore } from '@/lib/focus';
 import type { TopicState } from '@/lib/focus/state-machine';
 import type { LearningTopic } from '@/lib/focus/types';
 import { getDateKey } from '@/lib/utils/date-utils';
-import { BookIcon, CheckIcon } from '@primer/octicons-react';
-import { Button, Heading, Label, Stack } from '@primer/react';
+import { BookIcon, CheckIcon, PlusIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
+import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
 
@@ -17,12 +17,18 @@ interface TopicCardProps {
   topic: LearningTopic;
   /** Optional date key for history items (defaults to today) */
   dateKey?: string;
-  /** Show history-specific actions (Explore) */
+  /** Show history-specific actions (shows skipped state in history) */
   showHistoryActions?: boolean;
   /** Callback when topic is explored */
   onExplore?: (topic: LearningTopic) => void;
+  /** Callback when topic is skipped/replaced - receives the topic for replacement */
+  onSkip?: (skippedTopic: LearningTopic) => void;
+  /** Callback to stop the skip/regeneration in progress */
+  onStopSkip?: () => void;
   /** Callback after state transition */
   onStateChange?: () => void;
+  /** Whether skip/new is in progress (loading state) */
+  isSkipping?: boolean;
 }
 
 export function TopicCard({
@@ -30,7 +36,10 @@ export function TopicCard({
   dateKey = getDateKey(),
   showHistoryActions = false,
   onExplore,
+  onSkip,
+  onStopSkip,
   onStateChange,
+  isSkipping = false,
 }: TopicCardProps) {
   const [currentState, setCurrentState] = useState<TopicState>('not-explored');
 
@@ -53,14 +62,56 @@ export function TopicCard({
   }, [dateKey, topic.id]);
 
   const handleExplore = useCallback(async () => {
-    await focusStore.markTopicExplored(dateKey, topic.id, showHistoryActions ? 'history' : 'dashboard');
+    await focusStore.transitionTopic(dateKey, topic.id, 'explored', showHistoryActions ? 'history' : 'dashboard');
     setCurrentState('explored');
     if (onStateChange) onStateChange();
     if (onExplore) onExplore(topic);
   }, [dateKey, topic, showHistoryActions, onStateChange, onExplore]);
 
+  const handleSkip = useCallback(async () => {
+    // Don't mark as skipped yet - wait for replacement to succeed
+    // The parent will mark it as skipped only after successful replacement
+    if (onSkip) onSkip(topic);
+  }, [topic, onSkip]);
+
   const isExplored = currentState === 'explored';
   const isSkipped = currentState === 'skipped';
+
+  // Show loading state while regenerating on dashboard (with stop button)
+  if (isSkipping && !showHistoryActions) {
+    return (
+      <div className={styles.card}>
+        <Stack direction="vertical" gap="normal">
+          <Stack direction="horizontal" align="center" justify="space-between">
+            <Stack direction="horizontal" align="center" gap="condensed">
+              <Spinner size="small" />
+              <span className={styles.loadingText}>Generating new topic...</span>
+            </Stack>
+            {onStopSkip && (
+              <Button
+                variant="danger"
+                size="small"
+                onClick={onStopSkip}
+                leadingVisual={StopIcon}
+                aria-label="Stop generating topic"
+              >
+                Stop
+              </Button>
+            )}
+          </Stack>
+          <SkeletonBox height="24px" width="70%" />
+          <SkeletonBox height="16px" width="100%" />
+          <SkeletonBox height="16px" width="90%" />
+        </Stack>
+      </div>
+    );
+  }
+
+  // Don't render skipped topics on dashboard (they've been replaced)
+  // Only show them in history view
+  if (isSkipped && !showHistoryActions) {
+    return null;
+  }
 
   return (
     <div className={styles.card}>
@@ -70,6 +121,9 @@ export function TopicCard({
             <span style={{ marginRight: '4px', display: 'inline-flex' }}><BookIcon size={12} /></span>
             {topic.type === 'best-practice' ? 'Best Practice' : topic.type === 'concept' ? 'Concept' : 'Pattern'}
           </Label>
+          {isSkipped && showHistoryActions && (
+            <Label variant="secondary">Skipped</Label>
+          )}
         </Stack>
 
         <Heading as="h3">{topic.title}</Heading>
@@ -90,8 +144,15 @@ export function TopicCard({
           >
             {isExplored ? 'Explored' : 'Explore Topic'}
           </Button>
-          {isExplored && (
-            <Label variant="success">✓ Explored</Label>
+          {/* Show Skip for unexplored topics, New for explored topics */}
+          {!isSkipped && (
+            <Button
+              variant="invisible"
+              leadingVisual={isExplored ? PlusIcon : SkipIcon}
+              onClick={handleSkip}
+            >
+              {isExplored ? 'New' : 'Skip'}
+            </Button>
           )}
         </Stack>
       </Stack>

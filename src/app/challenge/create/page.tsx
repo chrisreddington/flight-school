@@ -36,14 +36,14 @@ export default function CreateChallengePage() {
    * Handle saving a challenge to the queue.
    */
   const handleSaveChallenge = useCallback(
-    (challenge: DailyChallenge) => {
+    async (challenge: DailyChallenge) => {
       if (isQueueFull) {
         // Show error - queue is full
         alert(`Queue is full (${maxQueueSize} challenges max). Complete or remove some challenges first.`);
         return;
       }
 
-      const success = addChallenge(challenge);
+      const success = await addChallenge(challenge);
       if (success) {
         // Navigate back to dashboard
         router.push('/');

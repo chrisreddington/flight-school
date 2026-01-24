@@ -26,7 +26,7 @@
 'use client';
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
-import { getMonacoLanguage } from '@/lib/editor/monaco-language-map';
+import { getLanguageDisplayName, getMonacoLanguage } from '@/lib/editor/monaco-language-map';
 import type { OnMount } from '@monaco-editor/react';
 import {
     BeakerIcon,
@@ -71,6 +71,7 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
 
 import { useDebugMode } from '@/contexts/debug-context';
 import { DifficultyBadge } from '@/components/DifficultyBadge';
+import { MarkdownContent } from '@/components/MarkdownContent';
 import styles from './ChallengeSandbox.module.css';
 import { EvaluationResultDisplay } from './evaluation-result-display';
 import { ExportToGitHubDialog } from './export-dialog';
@@ -152,6 +153,7 @@ export function ChallengeSandbox({
     evaluate,
     stopEvaluation,
     requestHint,
+    stopHint,
     reset,
     solveChallengeWithAI,
     isSolving,
@@ -161,6 +163,9 @@ export function ChallengeSandbox({
   // Get active file for language detection
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
   const activeFileName = activeFile?.name ?? 'solution.ts';
+  const activeFileExtension = activeFileName.split('.').pop() ?? '';
+  const activeFileLanguage = getMonacoLanguage(activeFileExtension || challenge.language);
+  const activeFileLanguageDisplay = getLanguageDisplayName(activeFileLanguage);
 
   // Handle reset confirmation dialog
   const handleResetDialogClose = useCallback((gesture: 'confirm' | 'close-button' | 'cancel' | 'escape') => {
@@ -222,7 +227,9 @@ export function ChallengeSandbox({
           <div className={styles.headerTitleGroup}>
             <h2 className={styles.headerTitle}>{challenge.title}</h2>
             {challenge.description && (
-              <p className={styles.headerDescription}>{challenge.description}</p>
+              <div className={styles.headerDescription}>
+                <MarkdownContent content={challenge.description} />
+              </div>
             )}
           </div>
           <DifficultyBadge difficulty={challenge.difficulty} variant="css" />
@@ -274,7 +281,7 @@ export function ChallengeSandbox({
             <div className={styles.editorHeaderRight}>
               <span className={styles.languageBadge}>
                 <CodeIcon size={12} />
-                {challenge.language}
+                {activeFileLanguageDisplay}
               </span>
               {workspace.isSaving && (
                 <span className={styles.savingIndicator}>Saving...</span>
@@ -375,9 +382,9 @@ export function ChallengeSandbox({
                     size="small"
                     onClick={handleEvaluate}
                     leadingVisual={PlayIcon}
-                    disabled={!activeFile?.content.trim()}
+                    disabled={!workspace.files.some(f => f.content.trim())}
                   >
-                    Run
+                    Evaluate
                   </Button>
                 )}
               </div>
@@ -408,6 +415,7 @@ export function ChallengeSandbox({
                 isLoading={isLoadingHint}
                 error={hintError}
                 onRequestHint={requestHint}
+                onStopHint={stopHint}
               />
             )}
           </div>

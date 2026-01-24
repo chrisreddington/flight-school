@@ -1,12 +1,12 @@
 /**
  * useCustomChallengeQueue Hook
  *
- * React hook for managing the custom challenge queue with localStorage persistence.
+ * React hook for managing the custom challenge queue with server-side persistence.
  * Provides CRUD operations and determines the active challenge based on priority.
  *
  * @remarks
- * This hook uses localStorage for persistence. It should only be used
- * in client components. Custom challenges take priority over daily challenges.
+ * This hook uses the `/api/challenges/queue` API for persistence.
+ * Custom challenges take priority over daily challenges.
  *
  * @example
  * ```tsx
@@ -27,7 +27,7 @@
 
 import type { ActiveChallengeResult } from '@/lib/challenge/custom-queue';
 import {
-  customChallengeQueue,
+  challengeQueueStore,
   determineActiveChallenge,
   MAX_CUSTOM_QUEUE_SIZE,
 } from '@/lib/challenge/custom-queue';
@@ -53,19 +53,21 @@ export interface UseCustomChallengeQueueResult {
   /** Number of remaining custom challenges */
   queueRemaining: number;
   /** Add a challenge to the queue (returns false if full) */
-  addChallenge: (challenge: DailyChallenge) => boolean;
+  addChallenge: (challenge: DailyChallenge) => Promise<boolean>;
   /** Remove a challenge by ID */
-  removeChallenge: (challengeId: string) => boolean;
+  removeChallenge: (challengeId: string) => Promise<boolean>;
   /** Move a challenge to a new position */
-  reorderChallenge: (challengeId: string, newIndex: number) => boolean;
+  reorderChallenge: (challengeId: string, newIndex: number) => Promise<boolean>;
   /** Update a challenge in the queue */
-  updateChallenge: (challengeId: string, updates: Partial<DailyChallenge>) => boolean;
+  updateChallenge: (challengeId: string, updates: Partial<DailyChallenge>) => Promise<boolean>;
   /** Complete or skip the active challenge (removes from queue) */
-  advanceQueue: () => DailyChallenge | null;
+  advanceQueue: () => Promise<DailyChallenge | null>;
   /** Clear the entire queue */
-  clearQueue: () => void;
+  clearQueue: () => Promise<void>;
   /** Get a challenge by ID */
-  getById: (challengeId: string) => DailyChallenge | null;
+  getById: (challengeId: string) => Promise<DailyChallenge | null>;
+  /** Whether the queue is loading */
+  isLoading: boolean;
 }
 
 /**
@@ -77,60 +79,55 @@ export interface UseCustomChallengeQueueResult {
 export function useCustomChallengeQueue(
   dailyChallenge: DailyChallenge | null
 ): UseCustomChallengeQueueResult {
-  // State synced with localStorage
+  // State synced with server storage
   const [queue, setQueue] = useState<DailyChallenge[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Sync state from localStorage on mount
+  // Load queue from server on mount
   useEffect(() => {
-    const loadQueue = () => {
-      const stored = customChallengeQueue.getAll();
-      setQueue(stored);
-      setIsInitialized(true);
-    };
-
-    loadQueue();
-
-    // Listen for storage changes from other tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'flight-school-custom-queue') {
-        loadQueue();
+    (async () => {
+      try {
+        const stored = await challengeQueueStore.getAll();
+        setQueue(stored);
+      } catch {
+        // Best effort - use empty queue
+        setQueue([]);
+      } finally {
+        setIsLoading(false);
       }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    })();
   }, []);
 
   // Refresh state from storage
-  const refreshFromStorage = useCallback(() => {
-    setQueue(customChallengeQueue.getAll());
+  const refreshFromStorage = useCallback(async () => {
+    const stored = await challengeQueueStore.getAll();
+    setQueue(stored);
   }, []);
 
   // Add a challenge
-  const addChallenge = useCallback((challenge: DailyChallenge): boolean => {
-    const result = customChallengeQueue.addChallenge(challenge);
+  const addChallenge = useCallback(async (challenge: DailyChallenge): Promise<boolean> => {
+    const result = await challengeQueueStore.addChallenge(challenge);
     if (result) {
-      refreshFromStorage();
+      await refreshFromStorage();
     }
     return result;
   }, [refreshFromStorage]);
 
   // Remove a challenge
-  const removeChallenge = useCallback((challengeId: string): boolean => {
-    const result = customChallengeQueue.removeChallenge(challengeId);
+  const removeChallenge = useCallback(async (challengeId: string): Promise<boolean> => {
+    const result = await challengeQueueStore.removeChallenge(challengeId);
     if (result) {
-      refreshFromStorage();
+      await refreshFromStorage();
     }
     return result;
   }, [refreshFromStorage]);
 
   // Reorder a challenge
   const reorderChallenge = useCallback(
-    (challengeId: string, newIndex: number): boolean => {
-      const result = customChallengeQueue.reorderChallenge(challengeId, newIndex);
+    async (challengeId: string, newIndex: number): Promise<boolean> => {
+      const result = await challengeQueueStore.reorderChallenge(challengeId, newIndex);
       if (result) {
-        refreshFromStorage();
+        await refreshFromStorage();
       }
       return result;
     },
@@ -139,10 +136,10 @@ export function useCustomChallengeQueue(
 
   // Update a challenge
   const updateChallenge = useCallback(
-    (challengeId: string, updates: Partial<DailyChallenge>): boolean => {
-      const result = customChallengeQueue.updateChallenge(challengeId, updates);
+    async (challengeId: string, updates: Partial<DailyChallenge>): Promise<boolean> => {
+      const result = await challengeQueueStore.updateChallenge(challengeId, updates);
       if (result) {
-        refreshFromStorage();
+        await refreshFromStorage();
       }
       return result;
     },
@@ -150,31 +147,31 @@ export function useCustomChallengeQueue(
   );
 
   // Advance queue (complete/skip active custom challenge)
-  const advanceQueue = useCallback((): DailyChallenge | null => {
-    const popped = customChallengeQueue.popFirst();
+  const advanceQueue = useCallback(async (): Promise<DailyChallenge | null> => {
+    const popped = await challengeQueueStore.popFirst();
     if (popped) {
-      refreshFromStorage();
+      await refreshFromStorage();
     }
     return popped;
   }, [refreshFromStorage]);
 
   // Clear the queue
-  const clearQueue = useCallback(() => {
-    customChallengeQueue.clear();
-    refreshFromStorage();
+  const clearQueue = useCallback(async () => {
+    await challengeQueueStore.clear();
+    await refreshFromStorage();
   }, [refreshFromStorage]);
 
   // Get by ID
-  const getById = useCallback((challengeId: string): DailyChallenge | null => {
-    return customChallengeQueue.getById(challengeId);
+  const getById = useCallback(async (challengeId: string): Promise<DailyChallenge | null> => {
+    return challengeQueueStore.getById(challengeId);
   }, []);
 
   // Determine active challenge based on priority (memoized to prevent re-computation)
   const activeResult = useMemo(() => {
-    return isInitialized
+    return !isLoading
       ? determineActiveChallenge(queue, dailyChallenge)
       : { challenge: dailyChallenge, source: 'daily' as const, queueRemaining: 0 };
-  }, [isInitialized, queue, dailyChallenge]);
+  }, [isLoading, queue, dailyChallenge]);
 
   // Memoize the return object to prevent unnecessary re-renders in consumers
   return useMemo(() => ({
@@ -192,6 +189,7 @@ export function useCustomChallengeQueue(
     advanceQueue,
     clearQueue,
     getById,
+    isLoading,
   }), [
     queue,
     activeResult,
@@ -202,5 +200,6 @@ export function useCustomChallengeQueue(
     advanceQueue,
     clearQueue,
     getById,
+    isLoading,
   ]);
 }

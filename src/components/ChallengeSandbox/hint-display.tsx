@@ -9,8 +9,8 @@
 
 'use client';
 
-import { LightBulbIcon } from '@primer/octicons-react';
-import { Spinner, TextInput } from '@primer/react';
+import { LightBulbIcon, StopIcon } from '@primer/octicons-react';
+import { Button, Spinner, Stack, TextInput } from '@primer/react';
 import { useCallback, useState } from 'react';
 
 import type { HintMessage } from '@/hooks/use-challenge-sandbox';
@@ -27,6 +27,8 @@ export interface HintDisplayProps {
   error: string | null;
   /** Callback to request a new hint */
   onRequestHint: (question: string) => void;
+  /** Callback to stop the current hint request */
+  onStopHint?: () => void;
 }
 
 /**
@@ -40,6 +42,7 @@ export function HintDisplay({
   isLoading,
   error,
   onRequestHint,
+  onStopHint,
 }: HintDisplayProps) {
   const [question, setQuestion] = useState('');
 
@@ -87,10 +90,23 @@ export function HintDisplay({
 
         {isLoading && (
           <div className={styles.hintMessage}>
-            <div className={styles.loading}>
-              <Spinner size="small" />
-              <span>Getting hint...</span>
-            </div>
+            <Stack direction="horizontal" align="center" justify="space-between">
+              <div className={styles.loading}>
+                <Spinner size="small" />
+                <span>Getting hint...</span>
+              </div>
+              {onStopHint && (
+                <Button
+                  variant="danger"
+                  size="small"
+                  onClick={onStopHint}
+                  leadingVisual={StopIcon}
+                  aria-label="Stop getting hint"
+                >
+                  Stop
+                </Button>
+              )}
+            </Stack>
           </div>
         )}
 

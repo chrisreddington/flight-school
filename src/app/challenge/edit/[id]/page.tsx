@@ -58,12 +58,14 @@ export default function EditChallengePage() {
 
   // Load challenge on mount
   useEffect(() => {
-    const loaded = getById(challengeId);
-    if (loaded) {
-      setChallenge(loaded);
-      setFormData({ ...loaded });
-    }
-    setIsLoading(false);
+    (async () => {
+      const loaded = await getById(challengeId);
+      if (loaded) {
+        setChallenge(loaded);
+        setFormData({ ...loaded });
+      }
+      setIsLoading(false);
+    })();
   }, [challengeId, getById]);
 
   /**
@@ -121,7 +123,7 @@ export default function EditChallengePage() {
       setSaveError(null);
 
       try {
-        const success = updateChallenge(challengeId, formData);
+        const success = await updateChallenge(challengeId, formData);
         if (success) {
           router.push('/');
         } else {

@@ -260,6 +260,18 @@
   transition: border-color 0.2s ease;
 }
 
+/* Habits Card */
+.habitsCard {
+  padding: var(--base-size-20, 20px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .learnCard:hover {
   border-color: var(--borderColor-default, #d0d7de);
 }

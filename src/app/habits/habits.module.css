@@ -1,0 +1,143 @@
+/* Habits Page Styles */
+
+.root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bgColor-inset, #f6f8fa);
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--base-size-24, 24px);
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.content {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: var(--base-size-24, 24px);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-16, 16px);
+}
+
+.section {
+  margin-bottom: var(--base-size-32, 32px);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.habitsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16, 16px);
+}
+
+.emptyState {
+  padding: var(--base-size-32, 32px);
+  text-align: center;
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px dashed var(--borderColor-muted, #d0d7de);
+}
+
+.emptyIcon {
+  color: var(--fgColor-muted, #656d76);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--base-size-16, 16px);
+  margin-bottom: var(--base-size-24, 24px);
+}
+
+.statCard {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-16, 16px);
+  text-align: center;
+}
+
+.statValue {
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  color: var(--fgColor-default, #1f2328);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.statLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.habitCard {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-16, 16px);
+}
+
+.habitCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--base-size-12, 12px);
+}
+
+.habitCardInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.habitTitle {
+  font-weight: var(--base-text-weight-semibold, 600);
+  color: var(--fgColor-default, #1f2328);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.habitDescription {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.habitMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-8, 8px);
+  margin-top: var(--base-size-12, 12px);
+}
+
+.progressBar {
+  height: 8px;
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-small, 4px);
+  overflow: hidden;
+  margin-top: var(--base-size-12, 12px);
+}
+
+.progressFill {
+  height: 100%;
+  background-color: var(--bgColor-success-emphasis, #1a7f37);
+  transition: width 0.3s ease;
+}

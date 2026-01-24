@@ -165,6 +165,21 @@ class ServerThreadStore implements ThreadStore {
     };
     return this.update(updated);
   }
+
+  /**
+   * Clears all threads from storage.
+   */
+  async clearAll(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      await this.setStorage([]);
+      log.debug('All threads cleared');
+    } catch (error) {
+      log.error('Failed to clear all threads', { error });
+      throw error;
+    }
+  }
 }
 
 /** Default singleton instance for convenience */

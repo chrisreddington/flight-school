@@ -7,6 +7,7 @@
  * @remarks
  * This component appears when the Focus API returns `calibrationNeeded` items,
  * indicating skills that may need user verification or adjustment.
+ * Dismiss/confirm actions are persisted to focus storage.
  *
  * @example
  * ```tsx
@@ -20,9 +21,9 @@
 
 'use client';
 
+import { focusStore } from '@/lib/focus/storage';
 import type { CalibrationNeededItem } from '@/lib/focus/types';
-import { now } from '@/lib/utils/date-utils';
-import { getSkillProfile, saveSkillProfile } from '@/lib/skills/storage';
+import { skillsStore } from '@/lib/skills/storage';
 import type { SkillLevel, UserSkill } from '@/lib/skills/types';
 import { SKILL_LEVEL_LABELS } from '@/lib/skills/types';
 import { AlertIcon, CheckIcon, XIcon } from '@primer/octicons-react';
@@ -34,6 +35,10 @@ import styles from './Dashboard.module.css';
 export interface InlineCalibrationProps {
   /** Skills that need calibration */
   items: CalibrationNeededItem[];
+  /** Callback when items are updated (for parent state sync) */
+  onItemsChange?: (items: CalibrationNeededItem[]) => void;
+  /** Whether to show the link to the full skills profile page (default: true) */
+  showProfileLink?: boolean;
 }
 
 /**
@@ -42,48 +47,70 @@ export interface InlineCalibrationProps {
  * Features:
  * - Shows skills detected from GitHub activity that need confirmation
  * - Quick accept/decline buttons for each skill
+ * - Persists dismiss/confirm to focus storage
  * - Links to full skill profile page for detailed calibration
  */
-export function InlineCalibration({ items }: InlineCalibrationProps) {
-  const [dismissedSkills, setDismissedSkills] = useState<Set<string>>(new Set());
-  const [confirmedSkills, setConfirmedSkills] = useState<Set<string>>(new Set());
+export function InlineCalibration({ items, onItemsChange, showProfileLink = true }: InlineCalibrationProps) {
+  // Track in-flight operations for optimistic UI
+  const [processingSkills, setProcessingSkills] = useState<Set<string>>(new Set());
 
   // Handle accepting a suggested skill level
-  const handleAccept = useCallback((item: CalibrationNeededItem) => {
-    const profile = getSkillProfile();
-    
-    // Check if skill already exists
-    const existingIndex = profile.skills.findIndex(s => s.skillId === item.skillId);
-    
+  const handleAccept = useCallback(async (item: CalibrationNeededItem) => {
+    setProcessingSkills(prev => new Set(prev).add(item.skillId));
+
     const newSkill: UserSkill = {
       skillId: item.skillId,
       displayName: item.displayName,
       level: item.suggestedLevel as SkillLevel,
-      source: 'manual', // User confirmed, so it's manual
+      source: 'github-confirmed', // User confirmed a skill detected from GitHub
       notInterested: false,
     };
 
-    if (existingIndex >= 0) {
-      profile.skills[existingIndex] = newSkill;
-    } else {
-      profile.skills.push(newSkill);
+    try {
+      // Save to skills profile and remove from calibration list
+      await Promise.all([
+        skillsStore.setSkill(newSkill),
+        focusStore.removeCalibrationItem(item.skillId),
+      ]);
+      
+      // Notify parent of the change
+      const updatedItems = items.filter(i => i.skillId !== item.skillId);
+      onItemsChange?.(updatedItems);
+    } catch {
+      // Best effort - item may still be in storage
+    } finally {
+      setProcessingSkills(prev => {
+        const next = new Set(prev);
+        next.delete(item.skillId);
+        return next;
+      });
     }
-
-    profile.lastUpdated = now();
-    saveSkillProfile(profile);
-    
-    setConfirmedSkills(prev => new Set(prev).add(item.skillId));
-  }, []);
+  }, [items, onItemsChange]);
 
   // Handle dismissing a skill suggestion
-  const handleDismiss = useCallback((skillId: string) => {
-    setDismissedSkills(prev => new Set(prev).add(skillId));
-  }, []);
+  const handleDismiss = useCallback(async (skillId: string) => {
+    setProcessingSkills(prev => new Set(prev).add(skillId));
 
-  // Filter out dismissed and confirmed skills
-  const visibleItems = items.filter(
-    item => !dismissedSkills.has(item.skillId) && !confirmedSkills.has(item.skillId)
-  );
+    try {
+      // Remove from storage
+      await focusStore.removeCalibrationItem(skillId);
+      
+      // Notify parent of the change
+      const updatedItems = items.filter(i => i.skillId !== skillId);
+      onItemsChange?.(updatedItems);
+    } catch {
+      // Best effort
+    } finally {
+      setProcessingSkills(prev => {
+        const next = new Set(prev);
+        next.delete(skillId);
+        return next;
+      });
+    }
+  }, [items, onItemsChange]);
+
+  // Filter out items being processed (optimistic removal)
+  const visibleItems = items.filter(item => !processingSkills.has(item.skillId));
 
   if (visibleItems.length === 0) {
     return null;
@@ -133,9 +160,11 @@ export function InlineCalibration({ items }: InlineCalibrationProps) {
         ))}
       </Stack>
       
-      <Link href="/profile/skills" className={styles.calibrationLink}>
-        Manage all skills in your profile →
-      </Link>
+      {showProfileLink && (
+        <Link href="/profile/skills" className={styles.calibrationLink}>
+          Manage all skills in your profile →
+        </Link>
+      )}
     </div>
   );
 }

@@ -39,9 +39,10 @@
 'use client';
 
 import { apiPost } from '@/lib/api-client';
+import { streamStore } from '@/lib/stream-store';
 import { now } from '@/lib/utils/date-utils';
 import { generateHintId } from '@/lib/utils/id-generator';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
     ChallengeDef,
@@ -108,6 +109,8 @@ interface UseChallengeSandboxActions {
   stopEvaluation: () => void;
   /** Request a hint */
   requestHint: (question: string) => Promise<void>;
+  /** Stop current hint request */
+  stopHint: () => void;
   /** Clear all hints */
   clearHints: () => void;
   /** Reset sandbox to initial state (workspace reset + clear hints/evaluation) */
@@ -171,23 +174,110 @@ export function useChallengeSandbox(
   const [isSolving, setIsSolving] = useState(false);
   const [solveError, setSolveError] = useState<string | null>(null);
 
-  // Abort controller for cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Stream ID for evaluation (unique per challenge)
+  const evalStreamId = `eval-${challengeId}`;
+  
+  // Track if we initiated the current evaluation (to avoid double-handling)
+  const initiatedEvalRef = useRef(false);
+
+  // Subscribe to evaluation stream on mount (recovers state if navigated away and back)
+  useEffect(() => {
+    const existingStream = streamStore.getStream(evalStreamId);
+    if (existingStream && (existingStream.status === 'pending' || existingStream.status === 'streaming')) {
+      // There's an active evaluation stream - sync our state
+      setEvaluation((prev) => ({
+        ...prev,
+        isLoading: true,
+      }));
+    }
+
+    const unsubscribe = streamStore.subscribe(evalStreamId, (state) => {
+      if (state.status === 'streaming' || state.status === 'pending') {
+        // Parse streaming buffer for evaluation events
+        try {
+          const data = JSON.parse(state.content || '{}');
+          setEvaluation((prev) => ({
+            ...prev,
+            isLoading: true,
+            streamingFeedback: data.feedbackContent || prev.streamingFeedback,
+            partialResult: data.partial ? {
+              isCorrect: data.partial.isCorrect,
+              score: data.partial.score,
+              strengths: data.partial.strengths || [],
+              improvements: data.partial.improvements || [],
+              nextSteps: data.partial.nextSteps,
+            } : prev.partialResult,
+          }));
+        } catch {
+          // Content isn't JSON yet, just update loading state
+          setEvaluation((prev) => ({
+            ...prev,
+            isLoading: true,
+          }));
+        }
+      } else if (state.status === 'completed') {
+        // Parse final result
+        try {
+          const data = JSON.parse(state.content || '{}');
+          if (data.result) {
+            setEvaluation({
+              isLoading: false,
+              partialResult: data.partial ? {
+                isCorrect: data.partial.isCorrect,
+                score: data.partial.score,
+                strengths: data.partial.strengths || [],
+                improvements: data.partial.improvements || [],
+                nextSteps: data.partial.nextSteps,
+              } : null,
+              streamingFeedback: data.feedbackContent || '',
+              result: {
+                isCorrect: data.result.isCorrect,
+                feedback: data.result.feedback,
+                strengths: data.result.strengths || [],
+                improvements: data.result.improvements || [],
+                score: data.result.score,
+                nextSteps: data.result.nextSteps,
+              },
+              error: null,
+            });
+          }
+        } catch {
+          setEvaluation((prev) => ({
+            ...prev,
+            isLoading: false,
+          }));
+        }
+        initiatedEvalRef.current = false;
+      } else if (state.status === 'error') {
+        setEvaluation({
+          isLoading: false,
+          partialResult: null,
+          streamingFeedback: '',
+          result: null,
+          error: state.error || 'Evaluation failed',
+        });
+        initiatedEvalRef.current = false;
+      } else if (state.status === 'aborted') {
+        setEvaluation((prev) => ({
+          ...prev,
+          isLoading: false,
+        }));
+        initiatedEvalRef.current = false;
+      }
+    });
+
+    return unsubscribe;
+  }, [evalStreamId]);
 
   /**
-   * Run evaluation on all workspace files using streaming API.
+   * Run evaluation on all workspace files using global stream store.
+   * Evaluation continues in background if user navigates away.
    */
   const evaluate = useCallback(async () => {
     // Don't start new evaluation if already in progress
-    if (evaluation.isLoading) return;
+    if (evaluation.isLoading || streamStore.isStreaming(evalStreamId)) return;
 
-    // Cancel any existing request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    initiatedEvalRef.current = true;
 
     setEvaluation({
       isLoading: true,
@@ -197,126 +287,33 @@ export function useChallengeSandbox(
       error: null,
     });
 
-    try {
-      // Build files array for evaluation
-      const files = workspace.files.map((f) => ({
-        name: f.name,
-        content: f.content,
-      }));
+    // Build files array for evaluation
+    const files = workspace.files.map((f) => ({
+      name: f.name,
+      content: f.content,
+    }));
 
-      const response = await fetch('/api/challenge/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge, files }),
-        signal: controller.signal,
-      });
+    // Start evaluation via global store (persists across navigation)
+    await streamStore.startStream({
+      type: 'evaluation',
+      challenge,
+      files,
+      streamId: evalStreamId,
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      const decoder = new TextDecoder();
-      let streamedFeedback = '';
-      let finalResult: EvaluationResult | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-
-          if (data === '[DONE]') continue;
-
-          try {
-            const event = JSON.parse(data);
-
-            if (event.type === 'partial') {
-              // Early metadata - show badge immediately
-              setEvaluation((prev) => ({
-                ...prev,
-                partialResult: {
-                  isCorrect: event.isCorrect,
-                  score: event.score,
-                  strengths: event.strengths || [],
-                  improvements: event.improvements || [],
-                  nextSteps: event.nextSteps,
-                },
-              }));
-            } else if (event.type === 'feedback-delta') {
-              // Streaming feedback text
-              streamedFeedback += event.content;
-              setEvaluation((prev) => ({
-                ...prev,
-                streamingFeedback: streamedFeedback,
-              }));
-            } else if (event.type === 'result') {
-              finalResult = {
-                isCorrect: event.isCorrect,
-                feedback: event.feedback,
-                strengths: event.strengths || [],
-                improvements: event.improvements || [],
-                score: event.score,
-                nextSteps: event.nextSteps,
-              };
-            } else if (event.type === 'error') {
-              throw new Error(event.message);
-            }
-          } catch {
-            // Ignore parse errors for partial lines
-          }
-        }
-      }
-
-      setEvaluation((prev) => ({
-        isLoading: false,
-        partialResult: prev.partialResult,
-        streamingFeedback: streamedFeedback,
-        result: finalResult,
-        error: null,
-      }));
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') {
-        // Request was cancelled
-        setEvaluation((prev) => ({
-          ...prev,
-          isLoading: false,
-        }));
-        return;
-      }
-
-      const errorMessage = error instanceof Error ? error.message : 'Evaluation failed';
-      setEvaluation({
-        isLoading: false,
-        partialResult: null,
-        streamingFeedback: '',
-        result: null,
-        error: errorMessage,
-      });
-    } finally {
-      abortControllerRef.current = null;
-    }
-  }, [challenge, workspace.files, evaluation.isLoading]);
+    // State updates happen via subscription above
+  }, [challenge, workspace.files, evaluation.isLoading, evalStreamId]);
 
   /**
    * Stop the current evaluation.
    */
   const stopEvaluation = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  }, []);
+    streamStore.stopStream(evalStreamId);
+    initiatedEvalRef.current = false;
+  }, [evalStreamId]);
+
+  // Hint abort controller
+  const hintAbortControllerRef = useRef<AbortController | null>(null);
 
   /**
    * Request a hint for the current challenge.
@@ -324,6 +321,14 @@ export function useChallengeSandbox(
   const requestHint = useCallback(
     async (question: string) => {
       if (isLoadingHint) return;
+
+      // Cancel any existing hint request
+      if (hintAbortControllerRef.current) {
+        hintAbortControllerRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      hintAbortControllerRef.current = controller;
 
       setIsLoadingHint(true);
       setHintError(null);
@@ -340,6 +345,9 @@ export function useChallengeSandbox(
           challenge,
           question,
           currentCode: workspace.files.find((f) => f.id === workspace.activeFileId)?.content ?? '',
+        }, {
+          timeout: 60000, // 1 minute for hint generation
+          signal: controller.signal,
         });
 
         if (!data.success) {
@@ -360,14 +368,29 @@ export function useChallengeSandbox(
 
         setHints((prev) => [...prev, hintMessage]);
       } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          // Request was cancelled - don't show error
+          return;
+        }
         const errorMessage = error instanceof Error ? error.message : 'Failed to get hint';
         setHintError(errorMessage);
       } finally {
+        hintAbortControllerRef.current = null;
         setIsLoadingHint(false);
       }
     },
     [challenge, workspace, isLoadingHint]
   );
+
+  /**
+   * Stop the current hint request.
+   */
+  const stopHint = useCallback(() => {
+    if (hintAbortControllerRef.current) {
+      hintAbortControllerRef.current.abort();
+      hintAbortControllerRef.current = null;
+    }
+  }, []);
 
   /**
    * Clear all hints.
@@ -401,6 +424,8 @@ export function useChallengeSandbox(
       }>('/api/challenge/solve', {
         challenge,
         files,
+      }, {
+        timeout: 120000, // 2 minutes for AI generation
       });
 
       if (!data.success || !data.files) {
@@ -432,11 +457,8 @@ export function useChallengeSandbox(
    * Resets workspace to template and clears hints/evaluation.
    */
   const reset = useCallback(() => {
-    // Cancel any in-flight requests
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    // Cancel any in-flight evaluation
+    streamStore.stopStream(evalStreamId);
 
     // Reset workspace to template
     workspace.reset();
@@ -448,7 +470,7 @@ export function useChallengeSandbox(
     setHintError(null);
     setIsSolving(false);
     setSolveError(null);
-  }, [workspace]);
+  }, [workspace, evalStreamId]);
 
   return {
     // State
@@ -465,6 +487,7 @@ export function useChallengeSandbox(
     evaluate,
     stopEvaluation,
     requestHint,
+    stopHint,
     clearHints,
     reset,
     solveChallengeWithAI,

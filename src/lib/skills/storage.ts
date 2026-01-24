@@ -1,93 +1,106 @@
 /**
  * Skill Profile Storage
  *
- * Provides persistent storage for user skill profiles using localStorage.
- * Extends the generic LocalStorageManager with skill-specific operations.
+ * Provides persistent storage for user skill profiles using server-side API.
+ * Data is stored in `.data/skills-profile.json`.
  *
  * @remarks
- * This module is client-side only - it uses localStorage which is
- * only available in the browser. Import only from hooks or components.
+ * This module uses the `/api/skills/storage` API route for persistence.
+ * All operations are async since they require network calls.
  *
  * @example
  * ```typescript
- * import { skillProfileStore, getSkillProfile, saveSkillProfile } from '@/lib/skills';
+ * import { skillsStore } from '@/lib/skills';
  *
  * // Get the current skill profile
- * const profile = getSkillProfile();
+ * const profile = await skillsStore.get();
  *
  * // Update a skill
- * const updatedProfile = {
- *   ...profile,
- *   skills: [...profile.skills, { skillId: 'rust', level: 'beginner', source: 'manual' }]
- * };
- * saveSkillProfile(updatedProfile);
+ * await skillsStore.setSkill({
+ *   skillId: 'typescript',
+ *   level: 'advanced',
+ *   source: 'manual'
+ * });
  *
- * // Or use the store directly
- * skillProfileStore.save(updatedProfile);
+ * // Save entire profile
+ * await skillsStore.save(updatedProfile);
  * ```
  */
 
-import { LocalStorageManager } from '@/lib/storage';
+import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
+import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
 import type { SkillLevel, SkillProfile, UserSkill } from './types';
-import {
-    DEFAULT_SKILL_PROFILE,
-    SKILL_PROFILE_SCHEMA_VERSION,
-    SKILL_PROFILE_STORAGE_KEY,
-} from './types';
+import { DEFAULT_SKILL_PROFILE } from './types';
+
+const log = logger.withTag('SkillsStore');
 
 // =============================================================================
-// Skill Profile Store
+// Skills Store Class (API-backed)
 // =============================================================================
 
 /**
- * localStorage manager for skill profiles.
- *
+ * API-backed skills profile store.
+ * 
  * @remarks
- * Extends LocalStorageManager to provide skill-specific CRUD operations
- * with automatic deduplication of skills by skillId.
+ * Unlike the old localStorage-based store, all methods are async.
+ * This store persists data server-side via the `/api/skills/storage` route.
  */
-class SkillProfileStore extends LocalStorageManager<SkillProfile> {
-  constructor() {
-    super({
-      key: SKILL_PROFILE_STORAGE_KEY,
-      version: SKILL_PROFILE_SCHEMA_VERSION,
-      defaultValue: DEFAULT_SKILL_PROFILE,
-      validate: isValidSkillProfile,
-    });
+class SkillsStore {
+  private cache: SkillProfile | null = null;
+
+  /**
+   * Gets the current skill profile.
+   */
+  async get(): Promise<SkillProfile> {
+    if (typeof window === 'undefined') {
+      return DEFAULT_SKILL_PROFILE;
+    }
+
+    try {
+      const profile = await apiGet<SkillProfile>('/api/skills/storage');
+      this.cache = profile;
+      return profile;
+    } catch (error) {
+      log.error('Failed to load skill profile', { error });
+      return this.cache ?? DEFAULT_SKILL_PROFILE;
+    }
+  }
+
+  /**
+   * Saves a skill profile.
+   */
+  async save(profile: SkillProfile): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    const profileWithTimestamp: SkillProfile = {
+      ...profile,
+      lastUpdated: now(),
+    };
+
+    try {
+      await apiPost<void>('/api/skills/storage', profileWithTimestamp);
+      this.cache = profileWithTimestamp;
+      log.debug('Skill profile saved', { skillCount: profile.skills.length });
+    } catch (error) {
+      log.error('Failed to save skill profile', { error });
+      throw error;
+    }
   }
 
   /**
    * Gets a specific skill from the profile.
-   *
-   * @param skillId - The skill identifier to look up
-   * @returns The UserSkill if found, undefined otherwise
    */
-  getSkill(skillId: string): UserSkill | undefined {
-    const profile = this.get();
+  async getSkill(skillId: string): Promise<UserSkill | undefined> {
+    const profile = await this.get();
     return profile.skills.find(s => s.skillId === skillId);
   }
 
   /**
    * Updates or adds a skill to the profile.
-   *
-   * @remarks
-   * If a skill with the same skillId exists, it will be replaced.
-   * The profile's lastUpdated timestamp is automatically updated.
-   *
-   * @param skill - The skill to add or update
-   *
-   * @example
-   * ```typescript
-   * skillProfileStore.setSkill({
-   *   skillId: 'typescript',
-   *   level: 'advanced',
-   *   source: 'manual'
-   * });
-   * ```
    */
-  setSkill(skill: UserSkill): void {
-    const profile = this.get();
+  async setSkill(skill: UserSkill): Promise<void> {
+    const profile = await this.get();
     const existingIndex = profile.skills.findIndex(s => s.skillId === skill.skillId);
 
     let updatedSkills: UserSkill[];
@@ -98,40 +111,26 @@ class SkillProfileStore extends LocalStorageManager<SkillProfile> {
       updatedSkills = [...profile.skills, skill];
     }
 
-    this.save({
-      skills: updatedSkills,
-      lastUpdated: now(),
-    });
+    await this.save({ skills: updatedSkills, lastUpdated: now() });
   }
 
   /**
    * Removes a skill from the profile.
-   *
-   * @param skillId - The skill identifier to remove
    */
-  removeSkill(skillId: string): void {
-    const profile = this.get();
+  async removeSkill(skillId: string): Promise<void> {
+    const profile = await this.get();
     const updatedSkills = profile.skills.filter(s => s.skillId !== skillId);
 
     if (updatedSkills.length !== profile.skills.length) {
-      this.save({
-        skills: updatedSkills,
-        lastUpdated: now(),
-      });
+      await this.save({ skills: updatedSkills, lastUpdated: now() });
     }
   }
 
   /**
    * Bulk updates multiple skills at once.
-   *
-   * @remarks
-   * Existing skills are updated, new skills are added.
-   * This is more efficient than calling setSkill multiple times.
-   *
-   * @param skills - Array of skills to update or add
    */
-  setSkills(skills: UserSkill[]): void {
-    const profile = this.get();
+  async setSkills(skills: UserSkill[]): Promise<void> {
+    const profile = await this.get();
     const skillMap = new Map<string, UserSkill>();
 
     // Start with existing skills
@@ -144,145 +143,90 @@ class SkillProfileStore extends LocalStorageManager<SkillProfile> {
       skillMap.set(skill.skillId, skill);
     }
 
-    this.save({
-      skills: Array.from(skillMap.values()),
-      lastUpdated: now(),
-    });
+    await this.save({ skills: Array.from(skillMap.values()), lastUpdated: now() });
   }
 
   /**
    * Gets skills filtered by source.
-   *
-   * @param source - Filter by 'github' or 'manual'
-   * @returns Array of skills from the specified source
+   * 
+   * @param source - Source to filter by. Use 'github' to include both 'github' and 'github-confirmed'.
    */
-  getSkillsBySource(source: 'github' | 'manual'): UserSkill[] {
-    const profile = this.get();
+  async getSkillsBySource(source: 'github' | 'manual'): Promise<UserSkill[]> {
+    const profile = await this.get();
+    if (source === 'github') {
+      // Include both direct GitHub detection and GitHub-confirmed skills
+      return profile.skills.filter(s => s.source === 'github' || s.source === 'github-confirmed');
+    }
     return profile.skills.filter(s => s.source === source);
   }
 
   /**
    * Gets skills at a specific level.
-   *
-   * @param level - The skill level to filter by
-   * @returns Array of skills at the specified level
    */
-  getSkillsByLevel(level: SkillLevel): UserSkill[] {
-    const profile = this.get();
+  async getSkillsByLevel(level: SkillLevel): Promise<UserSkill[]> {
+    const profile = await this.get();
     return profile.skills.filter(s => s.level === level);
   }
 
   /**
    * Gets skills the user is interested in (not marked as notInterested).
-   *
-   * @returns Array of skills the user wants to learn about
    */
-  getInterestedSkills(): UserSkill[] {
-    const profile = this.get();
+  async getInterestedSkills(): Promise<UserSkill[]> {
+    const profile = await this.get();
     return profile.skills.filter(s => !s.notInterested);
   }
 
   /**
    * Gets skills marked as not interested.
-   *
-   * @returns Array of skills to exclude from recommendations
    */
-  getExcludedSkills(): UserSkill[] {
-    const profile = this.get();
+  async getExcludedSkills(): Promise<UserSkill[]> {
+    const profile = await this.get();
     return profile.skills.filter(s => s.notInterested === true);
   }
-}
 
-// =============================================================================
-// Validation
-// =============================================================================
+  /**
+   * Clears all skill data.
+   */
+  async clear(): Promise<void> {
+    if (typeof window === 'undefined') return;
 
-/**
- * Validates that data is a valid SkillProfile structure.
- */
-function isValidSkillProfile(data: unknown): data is SkillProfile {
-  if (typeof data !== 'object' || data === null) {
-    return false;
-  }
-
-  const profile = data as SkillProfile;
-
-  if (!Array.isArray(profile.skills)) {
-    return false;
-  }
-
-  if (typeof profile.lastUpdated !== 'string') {
-    return false;
-  }
-
-  // Validate each skill
-  for (const skill of profile.skills) {
-    if (!isValidUserSkill(skill)) {
-      return false;
+    try {
+      await apiDelete<void>('/api/skills/storage');
+      this.cache = null;
+      log.debug('Skill profile cleared');
+    } catch (error) {
+      log.error('Failed to clear skill profile', { error });
+      throw error;
     }
   }
-
-  return true;
-}
-
-/**
- * Validates that data is a valid UserSkill structure.
- */
-function isValidUserSkill(data: unknown): data is UserSkill {
-  if (typeof data !== 'object' || data === null) {
-    return false;
-  }
-
-  const skill = data as UserSkill;
-
-  if (typeof skill.skillId !== 'string' || skill.skillId.length === 0) {
-    return false;
-  }
-
-  const validLevels = ['beginner', 'intermediate', 'advanced'];
-  if (!validLevels.includes(skill.level)) {
-    return false;
-  }
-
-  const validSources = ['github', 'manual'];
-  if (!validSources.includes(skill.source)) {
-    return false;
-  }
-
-  return true;
 }
 
 // =============================================================================
-// Singleton and Convenience Functions
+// Singleton Export
 // =============================================================================
 
-/** Singleton skill profile store instance */
-const skillProfileStore = new SkillProfileStore();
+/** Singleton skills store instance */
+export const skillsStore = new SkillsStore();
+
+// =============================================================================
+// Legacy Compatibility (DEPRECATED)
+// =============================================================================
 
 /**
- * Gets the current skill profile.
- *
- * @remarks
- * Convenience function that wraps skillProfileStore.get().
- *
- * @returns The current SkillProfile from localStorage
+ * @deprecated Use `await skillsStore.get()` instead. This is a sync wrapper that returns cached data.
  */
 export function getSkillProfile(): SkillProfile {
-  return skillProfileStore.get();
+  // Return cached value or default for sync compatibility
+  // Callers should migrate to async skillsStore.get()
+  log.warn('getSkillProfile() is deprecated - use await skillsStore.get() instead');
+  return DEFAULT_SKILL_PROFILE;
 }
 
 /**
- * Saves a skill profile to localStorage.
- *
- * @remarks
- * Convenience function that wraps skillProfileStore.save().
- * Automatically updates the lastUpdated timestamp.
- *
- * @param profile - The profile to save
+ * @deprecated Use `await skillsStore.save(profile)` instead.
  */
 export function saveSkillProfile(profile: SkillProfile): void {
-  skillProfileStore.save({
-    ...profile,
-    lastUpdated: now(),
-  });
+  log.warn('saveSkillProfile() is deprecated - use await skillsStore.save() instead');
+  // Fire and forget for sync compatibility
+  void skillsStore.save(profile);
 }

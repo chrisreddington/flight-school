@@ -11,7 +11,7 @@
       "onAutoForward": "openPreview"
     }
   },
-  "postCreateCommand": "npm install && npx playwright install --with-deps",
+  "postCreateCommand": "npm install && npx playwright install --with-deps && gh extension install github/gh-copilot",
   "customizations": {
     "vscode": {
       "extensions": [

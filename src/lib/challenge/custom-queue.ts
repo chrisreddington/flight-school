@@ -5,27 +5,28 @@
  * Custom challenges take priority over AI-generated daily challenges.
  *
  * @remarks
- * This module is client-side only - uses localStorage.
- * Import only from hooks or components, never from server-side code.
+ * This module uses the `/api/challenges/queue` API route for persistence.
+ * Data is stored server-side in `.data/challenge-queue.json`.
  *
  * @example
  * ```typescript
- * import { customChallengeQueue, determineActiveChallenge } from '@/lib/challenge';
+ * import { challengeQueueStore, determineActiveChallenge } from '@/lib/challenge';
  *
  * // Add a custom challenge
- * customChallengeQueue.addChallenge(customChallenge);
+ * await challengeQueueStore.addChallenge(customChallenge);
  *
  * // Determine which challenge to show (custom takes priority)
- * const active = determineActiveChallenge(
- *   customChallengeQueue.getAll(),
- *   dailyChallenge
- * );
+ * const queue = await challengeQueueStore.getAll();
+ * const active = determineActiveChallenge(queue, dailyChallenge);
  * ```
  */
 
+import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import type { DailyChallenge } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
-import { LocalStorageManager } from '@/lib/storage';
+
+const log = logger.withTag('ChallengeQueueStore');
 
 // =============================================================================
 // Types
@@ -57,17 +58,11 @@ export interface ActiveChallengeResult {
 // Constants
 // =============================================================================
 
-/** localStorage key for custom challenge queue */
-const CUSTOM_QUEUE_STORAGE_KEY = 'flight-school-custom-queue';
-
-/** Current schema version */
-const CUSTOM_QUEUE_SCHEMA_VERSION = 1;
-
 /** Maximum number of challenges in the queue */
 export const MAX_CUSTOM_QUEUE_SIZE = 20;
 
-/** Default empty queue - internal use only */
-const DEFAULT_CUSTOM_QUEUE: CustomChallengeQueue = {
+/** Default empty queue */
+const DEFAULT_QUEUE: CustomChallengeQueue = {
   challenges: [],
   lastUpdated: '',
 };
@@ -90,14 +85,6 @@ const DEFAULT_CUSTOM_QUEUE: CustomChallengeQueue = {
  * @param queue - Current custom challenge queue
  * @param daily - AI-generated daily challenge (may be null)
  * @returns Active challenge result with source information
- *
- * @example
- * ```typescript
- * const result = determineActiveChallenge(queue, daily);
- * if (result.source === 'custom-queue') \{
- *   console.log(`Custom challenge: ${result.challenge?.title}`);
- * \}
- * ```
  */
 export function determineActiveChallenge(
   queue: DailyChallenge[],
@@ -130,47 +117,74 @@ export function determineActiveChallenge(
 }
 
 // =============================================================================
-// Custom Queue Store
+// Challenge Queue Store (API-backed)
 // =============================================================================
 
 /**
- * localStorage manager for custom challenge queue.
+ * API-backed challenge queue store.
  *
  * @remarks
- * Extends LocalStorageManager to provide queue-specific operations
- * including FIFO ordering, reordering, and size limits.
+ * All methods are async since they require network calls.
+ * Persists data server-side via the `/api/challenges/queue` route.
  */
-class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue> {
-  constructor() {
-    super({
-      key: CUSTOM_QUEUE_STORAGE_KEY,
-      version: CUSTOM_QUEUE_SCHEMA_VERSION,
-      defaultValue: DEFAULT_CUSTOM_QUEUE,
-      validate: isValidCustomQueue,
-    });
+class ChallengeQueueStore {
+  private cache: CustomChallengeQueue | null = null;
+
+  /**
+   * Gets the full queue from storage.
+   */
+  private async getStorage(): Promise<CustomChallengeQueue> {
+    if (typeof window === 'undefined') {
+      return DEFAULT_QUEUE;
+    }
+
+    try {
+      const queue = await apiGet<CustomChallengeQueue>('/api/challenges/queue');
+      this.cache = queue;
+      return queue;
+    } catch (error) {
+      log.error('Failed to load challenge queue', { error });
+      return this.cache ?? DEFAULT_QUEUE;
+    }
+  }
+
+  /**
+   * Saves the queue to storage.
+   */
+  private async setStorage(queue: CustomChallengeQueue): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    try {
+      await apiPost<void>('/api/challenges/queue', queue);
+      this.cache = queue;
+    } catch (error) {
+      log.error('Failed to save challenge queue', { error });
+      throw error;
+    }
   }
 
   /**
    * Gets all challenges in the queue.
-   *
-   * @returns Array of challenges in FIFO order
    */
-  getAll(): DailyChallenge[] {
-    return this.get().challenges;
+  async getAll(): Promise<DailyChallenge[]> {
+    const queue = await this.getStorage();
+    return queue.challenges;
   }
 
   /**
    * Gets the number of challenges in the queue.
    */
-  getCount(): number {
-    return this.get().challenges.length;
+  async getCount(): Promise<number> {
+    const queue = await this.getStorage();
+    return queue.challenges.length;
   }
 
   /**
    * Checks if queue is at maximum capacity.
    */
-  isFull(): boolean {
-    return this.getCount() >= MAX_CUSTOM_QUEUE_SIZE;
+  async isFull(): Promise<boolean> {
+    const count = await this.getCount();
+    return count >= MAX_CUSTOM_QUEUE_SIZE;
   }
 
   /**
@@ -179,24 +193,20 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
    * @remarks
    * Challenges are always added with `isCustom: true`.
    * Returns false if queue is full.
-   *
-   * @param challenge - Challenge to add
-   * @returns True if added, false if queue is full
    */
-  addChallenge(challenge: DailyChallenge): boolean {
-    const queue = this.get();
+  async addChallenge(challenge: DailyChallenge): Promise<boolean> {
+    const queue = await this.getStorage();
 
     if (queue.challenges.length >= MAX_CUSTOM_QUEUE_SIZE) {
       return false;
     }
 
-    // Ensure isCustom is set
     const customChallenge: DailyChallenge = {
       ...challenge,
       isCustom: true,
     };
 
-    this.save({
+    await this.setStorage({
       challenges: [...queue.challenges, customChallenge],
       lastUpdated: now(),
     });
@@ -206,21 +216,17 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
 
   /**
    * Removes a challenge from the queue by ID.
-   *
-   * @param challengeId - ID of challenge to remove
-   * @returns True if removed, false if not found
    */
-  removeChallenge(challengeId: string): boolean {
-    const queue = this.get();
+  async removeChallenge(challengeId: string): Promise<boolean> {
+    const queue = await this.getStorage();
     const original = queue.challenges.length;
-
     const updated = queue.challenges.filter(c => c.id !== challengeId);
 
     if (updated.length === original) {
       return false;
     }
 
-    this.save({
+    await this.setStorage({
       challenges: updated,
       lastUpdated: now(),
     });
@@ -230,14 +236,9 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
 
   /**
    * Removes and returns the first challenge (FIFO pop).
-   *
-   * @remarks
-   * Used when completing/skipping the active custom challenge.
-   *
-   * @returns The removed challenge, or null if queue is empty
    */
-  popFirst(): DailyChallenge | null {
-    const queue = this.get();
+  async popFirst(): Promise<DailyChallenge | null> {
+    const queue = await this.getStorage();
 
     if (queue.challenges.length === 0) {
       return null;
@@ -245,7 +246,7 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
 
     const [first, ...rest] = queue.challenges;
 
-    this.save({
+    await this.setStorage({
       challenges: rest,
       lastUpdated: now(),
     });
@@ -255,35 +256,20 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
 
   /**
    * Moves a challenge to a new position in the queue.
-   *
-   * @param challengeId - ID of challenge to move
-   * @param newIndex - Target index (0-based)
-   * @returns True if moved, false if not found or invalid index
    */
-  reorderChallenge(challengeId: string, newIndex: number): boolean {
-    const queue = this.get();
+  async reorderChallenge(challengeId: string, newIndex: number): Promise<boolean> {
+    const queue = await this.getStorage();
     const currentIndex = queue.challenges.findIndex(c => c.id === challengeId);
 
-    if (currentIndex === -1) {
-      return false;
-    }
+    if (currentIndex === -1) return false;
+    if (newIndex < 0 || newIndex >= queue.challenges.length) return false;
+    if (currentIndex === newIndex) return true;
 
-    if (newIndex < 0 || newIndex >= queue.challenges.length) {
-      return false;
-    }
-
-    if (currentIndex === newIndex) {
-      return true; // No change needed
-    }
-
-    // Remove from current position
     const challenges = [...queue.challenges];
     const [moved] = challenges.splice(currentIndex, 1);
-
-    // Insert at new position
     challenges.splice(newIndex, 0, moved);
 
-    this.save({
+    await this.setStorage({
       challenges,
       lastUpdated: now(),
     });
@@ -293,30 +279,24 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
 
   /**
    * Updates a challenge in the queue.
-   *
-   * @param challengeId - ID of challenge to update
-   * @param updates - Partial challenge updates
-   * @returns True if updated, false if not found
    */
-  updateChallenge(
+  async updateChallenge(
     challengeId: string,
     updates: Partial<DailyChallenge>
-  ): boolean {
-    const queue = this.get();
+  ): Promise<boolean> {
+    const queue = await this.getStorage();
     const index = queue.challenges.findIndex(c => c.id === challengeId);
 
-    if (index === -1) {
-      return false;
-    }
+    if (index === -1) return false;
 
     const challenges = [...queue.challenges];
     challenges[index] = {
       ...challenges[index],
       ...updates,
-      isCustom: true, // Always preserve custom flag
+      isCustom: true,
     };
 
-    this.save({
+    await this.setStorage({
       challenges,
       lastUpdated: now(),
     });
@@ -326,85 +306,80 @@ class CustomChallengeQueueStore extends LocalStorageManager<CustomChallengeQueue
 
   /**
    * Gets a challenge by ID.
-   *
-   * @param challengeId - ID to find
-   * @returns Challenge if found, null otherwise
    */
-  getById(challengeId: string): DailyChallenge | null {
-    const queue = this.get();
+  async getById(challengeId: string): Promise<DailyChallenge | null> {
+    const queue = await this.getStorage();
     return queue.challenges.find(c => c.id === challengeId) ?? null;
   }
-}
 
-// =============================================================================
-// Validation
-// =============================================================================
+  /**
+   * Clears all challenges from the queue.
+   */
+  async clear(): Promise<void> {
+    if (typeof window === 'undefined') return;
 
-/** Validates custom queue data structure. */
-function isValidCustomQueue(data: unknown): data is CustomChallengeQueue {
-  if (typeof data !== 'object' || data === null) {
-    return false;
-  }
-
-  const queue = data as CustomChallengeQueue;
-
-  if (!Array.isArray(queue.challenges)) {
-    return false;
-  }
-
-  if (typeof queue.lastUpdated !== 'string') {
-    return false;
-  }
-
-  // Validate each challenge has required fields
-  for (const challenge of queue.challenges) {
-    if (!isValidCustomChallenge(challenge)) {
-      return false;
+    try {
+      await apiDelete<void>('/api/challenges/queue');
+      this.cache = null;
+      log.debug('Challenge queue cleared');
+    } catch (error) {
+      log.error('Failed to clear challenge queue', { error });
+      throw error;
     }
   }
-
-  return true;
-}
-
-/** Validates a challenge has minimum required fields. */
-function isValidCustomChallenge(data: unknown): data is DailyChallenge {
-  if (typeof data !== 'object' || data === null) {
-    return false;
-  }
-
-  const challenge = data as DailyChallenge;
-
-  // Required string fields
-  if (typeof challenge.id !== 'string' || challenge.id.length === 0) {
-    return false;
-  }
-  if (typeof challenge.title !== 'string') {
-    return false;
-  }
-  if (typeof challenge.description !== 'string') {
-    return false;
-  }
-  if (typeof challenge.language !== 'string') {
-    return false;
-  }
-
-  // Validate difficulty
-  const validDifficulties = ['beginner', 'intermediate', 'advanced'];
-  if (!validDifficulties.includes(challenge.difficulty)) {
-    return false;
-  }
-
-  return true;
 }
 
 // =============================================================================
-// Singleton Instance
+// Singleton Export
+// =============================================================================
+
+/** Singleton challenge queue store instance */
+export const challengeQueueStore = new ChallengeQueueStore();
+
+// =============================================================================
+// Legacy Compatibility (DEPRECATED)
 // =============================================================================
 
 /**
- * Singleton custom challenge queue instance.
- *
- * @remarks
- * Use this for all custom queue persistence operations.
+ * @deprecated Use `challengeQueueStore` instead. This alias exists for migration.
  */
-export const customChallengeQueue = new CustomChallengeQueueStore();
+export const customChallengeQueue = {
+  /** @deprecated Use `await challengeQueueStore.getAll()` */
+  getAll: () => {
+    log.warn('customChallengeQueue.getAll() is deprecated - use await challengeQueueStore.getAll()');
+    return [] as DailyChallenge[];
+  },
+  /** @deprecated Use `await challengeQueueStore.getCount()` */
+  getCount: () => {
+    log.warn('customChallengeQueue.getCount() is deprecated');
+    return 0;
+  },
+  /** @deprecated Use `await challengeQueueStore.isFull()` */
+  isFull: () => {
+    log.warn('customChallengeQueue.isFull() is deprecated');
+    return false;
+  },
+  /** @deprecated Use `await challengeQueueStore.addChallenge()` */
+  addChallenge: (challenge: DailyChallenge) => {
+    log.warn('customChallengeQueue.addChallenge() is deprecated');
+    void challengeQueueStore.addChallenge(challenge);
+    return true;
+  },
+  /** @deprecated Use `await challengeQueueStore.removeChallenge()` */
+  removeChallenge: (id: string) => {
+    log.warn('customChallengeQueue.removeChallenge() is deprecated');
+    void challengeQueueStore.removeChallenge(id);
+    return true;
+  },
+  /** @deprecated Use `await challengeQueueStore.popFirst()` */
+  popFirst: () => {
+    log.warn('customChallengeQueue.popFirst() is deprecated');
+    void challengeQueueStore.popFirst();
+    return null;
+  },
+  /** @deprecated Use `await challengeQueueStore.clear()` */
+  clear: () => {
+    log.warn('customChallengeQueue.clear() is deprecated');
+    void challengeQueueStore.clear();
+  },
+};

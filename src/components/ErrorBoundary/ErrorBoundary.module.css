@@ -1,0 +1,140 @@
+/* ErrorBoundary.module.css
+ * 
+ * Styling for the error boundary fallback UI.
+ * Includes a simplified header that works without user context.
+ */
+
+.errorPage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bgColor-default, #ffffff);
+}
+
+/* Header styles (simplified version of AppHeader) */
+.header {
+  padding: var(--base-size-16, 16px) var(--base-size-24, 24px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.logoLink {
+  text-decoration: none;
+  color: inherit;
+}
+
+.logoLink:hover {
+  text-decoration: none;
+}
+
+.logoIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-accent, #0969da);
+}
+
+.logoText {
+  font-size: var(--text-title-size-medium, 20px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  color: var(--fgColor-default, #1f2328);
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+.sdkBadgeLink {
+  text-decoration: none;
+}
+
+.sdkBadgeLink:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.avatar {
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.avatar:hover {
+  border-color: var(--borderColor-accent-emphasis, #0969da);
+}
+
+/* Main content area */
+.content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-48, 48px) var(--base-size-24, 24px);
+}
+
+/* Blankslate-like layout */
+.blankslate {
+  max-width: 500px;
+  text-align: center;
+}
+
+.visual {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.blankslateHeading {
+  font-size: var(--text-title-size-large, 24px) !important;
+  font-weight: var(--base-text-weight-semibold, 600) !important;
+  color: var(--fgColor-default, #1f2328);
+  margin: 0 !important;
+}
+
+.blankslateDescription {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+  margin: 0;
+  max-width: 400px;
+}
+
+/* Error-specific styling */
+.errorIcon {
+  color: var(--fgColor-danger, #d1242f);
+}
+
+.errorDetails {
+  margin-top: var(--base-size-16, 16px);
+  width: 100%;
+  max-width: 500px;
+  text-align: left;
+}
+
+.errorSummary {
+  cursor: pointer;
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.errorSummary:hover {
+  color: var(--fgColor-default, #1f2328);
+}
+
+.errorMessage {
+  margin-top: var(--base-size-8, 8px);
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  font-size: var(--text-body-size-small, 12px);
+  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fgColor-danger, #d1242f);
+}
+
+.actions {
+  margin-top: var(--base-size-16, 16px);
+}
+
+/* 404 Page styling */
+.notFoundIcon {
+  color: var(--fgColor-muted, #656d76);
+}

@@ -8,7 +8,7 @@
  */
 
 // Client
-export { isGitHubConfigured } from './client';
+export { getAuthMethod, isGitHubConfigured } from './client';
 
 // User
 export {

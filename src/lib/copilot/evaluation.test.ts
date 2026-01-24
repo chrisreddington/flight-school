@@ -114,7 +114,7 @@ describe('parseEvaluationResponse', () => {
     const response = `\`\`\`json
 {
   "isCorrect": true,
-  "score": 120,
+  "score": 100,
   "strengths": ["Clean implementation", "Good use of reduce"],
   "improvements": ["Could add type guard"],
   "nextSteps": ["Try with other array methods"]
@@ -129,11 +129,29 @@ Excellent work! Your solution is correct and well-structured.
 
     expect(result).not.toBeNull();
     expect(result?.isCorrect).toBe(true);
-    expect(result?.score).toBe(120);
+    expect(result?.score).toBe(100);
     expect(result?.strengths).toEqual(['Clean implementation', 'Good use of reduce']);
     expect(result?.improvements).toEqual(['Could add type guard']);
     expect(result?.nextSteps).toEqual(['Try with other array methods']);
     expect(result?.feedback).toBe('Excellent work! Your solution is correct and well-structured.');
+  });
+
+  it('should clamp scores above 100 to 100', () => {
+    const response = `{"isCorrect": true, "score": 150, "strengths": [], "improvements": []}`;
+    const result = parseEvaluationResponse(response);
+    expect(result?.score).toBe(100);
+  });
+
+  it('should clamp negative scores to 0', () => {
+    const response = `{"isCorrect": false, "score": -10, "strengths": [], "improvements": []}`;
+    const result = parseEvaluationResponse(response);
+    expect(result?.score).toBe(0);
+  });
+
+  it('should round decimal scores to integers', () => {
+    const response = `{"isCorrect": false, "score": 75.7, "strengths": [], "improvements": []}`;
+    const result = parseEvaluationResponse(response);
+    expect(result?.score).toBe(76);
   });
 
   it('should parse response without feedback markers', () => {

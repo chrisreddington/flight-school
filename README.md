@@ -4,6 +4,77 @@
 
 Flight School is a sample implementation showing how to build AI-powered developer tools using the [GitHub Copilot SDK](https://github.com/github/copilot-sdk). It's a learning platform where developers practice coding challenges, receive real-time AI evaluation, and get personalized guidance all powered by GitHub Copilot.
 
+## Getting Started
+
+The fastest way to run Flight School is with **GitHub Codespaces** — everything is pre-configured:
+
+1. Click **Code** → **Codespaces** → **Create codespace on main**
+2. Wait for setup to complete (installs dependencies and tools automatically)
+3. Run `gh auth login` to authenticate with GitHub
+4. Run `npm run dev` to start the app
+
+That's it! Open the preview URL and you're ready to go.
+
+### Running Locally
+
+To run Flight School on your own machine, you'll need:
+
+- **Node.js 22+** — [Download here](https://nodejs.org/)
+- **GitHub CLI** — [Installation guide](https://cli.github.com/)
+- **GitHub Copilot CLI** — Required for AI features
+- **GitHub Copilot access** — Individual, Business, or Enterprise subscription
+
+#### Step 1: Install and authenticate GitHub CLI
+
+```bash
+# Install GitHub CLI (if not already installed)
+# macOS
+brew install gh
+
+# Windows
+winget install GitHub.cli
+
+# Then authenticate
+gh auth login
+```
+
+#### Step 2: Install GitHub Copilot CLI extension
+
+The Copilot SDK uses the Copilot CLI for AI features. Install it as a GitHub CLI extension:
+
+```bash
+gh extension install github/gh-copilot
+```
+
+#### Step 3: Clone and run
+
+```bash
+git clone https://github.com/chrisreddington/flight-school.git
+cd flight-school
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) — you should see your GitHub profile loaded automatically.
+
+### Alternative: Using a Personal Access Token
+
+If you prefer not to use the GitHub CLI, you can authenticate with a Personal Access Token (PAT):
+
+1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
+2. Click **Generate new token (classic)**
+3. Select these scopes:
+   - `repo` — Access your repositories
+   - `read:user` — Read your profile information
+   - `read:org` — Read organization membership (optional)
+4. Create a `.env.local` file in the project root:
+
+```bash
+GITHUB_TOKEN=ghp_your_token_here
+```
+
+> **Note:** You'll still need the GitHub Copilot CLI installed for AI-powered features like challenges, hints, and coaching. The token only handles GitHub API access for profile and repository data.
+
 ## Vision
 
 AI can be a learning partner, not just a tool that helps generate solutions. Flight School explores how the Copilot SDK can create educational experiences that adapt to each developer's existing experience, their skill level, provide constructive feedback, and guide learners toward understanding.
@@ -46,38 +117,7 @@ Flight School connects to [GitHub's Remote MCP Server](https://github.com/github
 
 The chat and challenge evaluation experiences stream feedback in real-time using the SDK's streaming mode, showing results as they're generated rather than waiting for the full response.
 
-## Using Flight School
-
-### Prerequisites
-
-- Node.js 22+
-- GitHub CLI authenticated (`gh auth login`)
-- GitHub Copilot access
-
-### Quick Start
-
-```bash
-# Clone and install
-git clone https://github.com/chrisreddington/flight-school.git
-cd flight-school
-npm install
-
-# Start the development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) and sign in with your GitHub account.
-
-### Environment Configuration
-
-Flight School automatically uses your GitHub CLI authentication. For explicit configuration:
-
-```bash
-# Optional: Create .env.local
-GITHUB_TOKEN=your_github_pat_here
-```
-
-### Available Commands
+## Available Commands
 
 | Command | Description |
 |---------|-------------|
@@ -90,16 +130,6 @@ GITHUB_TOKEN=your_github_pat_here
 ## Contributing
 
 We welcome contributions! Flight School is both a learning platform and a reference implementation. Improving either helps the community.
-
-### Getting Started
-
-The fastest way to contribute is with **GitHub Codespaces**:
-
-1. Click **Code** → **Codespaces** → **Create codespace on main**
-2. Wait for the dev container to configure (installs dependencies automatically)
-3. Run `npm run dev` and start coding
-
-For local development, see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions.
 
 ### Ways to Contribute
 

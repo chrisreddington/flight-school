@@ -58,6 +58,7 @@ async function apiRequest<T>(
     timeout = 30000,
     retries = 0,
     throwOnError = true,
+    signal: externalSignal,
     ...fetchOptions
   } = options;
 
@@ -72,8 +73,24 @@ async function apiRequest<T>(
     }
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  // Create abort controller for timeout
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), timeout);
+
+  // Create a combined signal if external signal is provided
+  let combinedSignal = timeoutController.signal;
+  if (externalSignal) {
+    // If external signal already aborted, abort immediately
+    if (externalSignal.aborted) {
+      clearTimeout(timeoutId);
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    // Listen to external abort
+    externalSignal.addEventListener('abort', () => {
+      timeoutController.abort();
+    });
+    combinedSignal = timeoutController.signal;
+  }
 
   const requestPromise = (async () => {
     try {
@@ -83,7 +100,9 @@ async function apiRequest<T>(
         try {
           const response = await fetch(url, {
             ...fetchOptions,
-            signal: controller.signal,
+            signal: combinedSignal,
+            // Keep the request alive even during navigation - critical for background operations
+            keepalive: true,
             headers: {
               'Content-Type': 'application/json',
               ...fetchOptions.headers,

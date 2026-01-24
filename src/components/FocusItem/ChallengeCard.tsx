@@ -7,6 +7,7 @@
 
 import { ChallengeActionMenu } from '@/components/ChallengeActionMenu';
 import { DifficultyBadge } from '@/components/DifficultyBadge';
+import { MarkdownContent } from '@/components/MarkdownContent';
 import { focusStore } from '@/lib/focus';
 import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
@@ -80,9 +81,16 @@ export function ChallengeCard({
         if (onStateChange) onStateChange();
       })();
     }
-    // Navigate to sandbox
-    router.push(`/challenge?id=${challenge.id}`);
-  }, [router, challenge.id, currentState, dateKey, onStateChange]);
+    // Navigate to sandbox with full challenge details
+    const params = new URLSearchParams({
+      id: challenge.id,
+      title: challenge.title,
+      description: challenge.description,
+      language: challenge.language,
+      difficulty: challenge.difficulty,
+    });
+    router.push(`/challenge?${params.toString()}`);
+  }, [router, challenge, currentState, dateKey, onStateChange]);
 
   const handleMarkComplete = useCallback(async () => {
     await focusStore.transitionChallenge(dateKey, challenge.id, 'completed', 'history');
@@ -120,10 +128,11 @@ export function ChallengeCard({
             <Label size="small">{challenge.language}</Label>
             {challenge.estimatedTime && (
               <Label size="small" variant="secondary">
-                <ClockIcon size={12} /> {challenge.estimatedTime}
+                <span style={{ marginRight: 4, display: 'inline-flex' }}><ClockIcon size={12} /></span>
+                {challenge.estimatedTime}
               </Label>
             )}
-            {queueCount && queueCount > 1 && (
+            {queueCount !== undefined && queueCount > 1 && (
               <Label size="small" variant="secondary">
                 +{queueCount - 1} more in queue
               </Label>
@@ -143,7 +152,9 @@ export function ChallengeCard({
         </Stack>
 
         <Heading as="h3">{challenge.title}</Heading>
-        <p className={styles.description}>{challenge.description}</p>
+        <div className={styles.description}>
+          <MarkdownContent content={challenge.description} />
+        </div>
 
         {challenge.whyThisChallenge && challenge.whyThisChallenge.length > 0 && (
           <div className={styles.reasoning}>

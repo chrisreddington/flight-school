@@ -6,25 +6,30 @@
  */
 
 import { habitStore } from '@/lib/habits';
-import { checkInHabit, isPendingToday, getRemainingSkips, skipHabitDay } from '@/lib/habits/state-machine';
+import { checkInHabit, isPendingToday, getRemainingSkips, skipHabitDay, undoCheckIn } from '@/lib/habits/state-machine';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { getDateKey } from '@/lib/utils/date-utils';
 import { logger } from '@/lib/logger';
-import { CheckIcon, FlameIcon, PauseIcon, PlayIcon, SkipIcon } from '@primer/octicons-react';
-import { Button, Heading, Label, ProgressBar, Stack } from '@primer/react';
+import { CheckIcon, FlameIcon, KebabHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, SkipIcon, StopIcon, TrashIcon, UndoIcon } from '@primer/octicons-react';
+import { ActionList, ActionMenu, Button, Heading, IconButton, Label, ProgressBar, Stack, useConfirm } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
+import { HabitEditDialog } from '../Habits/HabitEditDialog';
 import styles from './FocusItem.module.css';
 
 interface HabitCardProps {
   habit: HabitWithHistory;
   onUpdate?: () => void;
+  onDelete?: () => void;
 }
 
-export function HabitCard({ habit, onUpdate }: HabitCardProps) {
+export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
   const [currentValue, setCurrentValue] = useState<number>(0);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
+  
+  const confirm = useConfirm();
 
   const dateKey = getDateKey();
   const isPending = isPendingToday(habit, dateKey);
@@ -86,6 +91,56 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
       logger.error('Skip failed', { error }, 'HabitCard');
     }
   }, [habit, dateKey, onUpdate]);
+
+  const handleUndo = useCallback(async () => {
+    try {
+      const updated = undoCheckIn(habit, dateKey);
+      habitStore.update(updated);
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      logger.error('Undo failed', { error }, 'HabitCard');
+    }
+  }, [habit, dateKey, onUpdate]);
+
+  const handleDelete = useCallback(async () => {
+    const confirmed = await confirm({
+      title: 'Delete habit?',
+      content: `Are you sure you want to delete "${habit.title}"? This action cannot be undone.`,
+      confirmButtonContent: 'Delete',
+      confirmButtonType: 'danger',
+    });
+
+    if (confirmed) {
+      try {
+        await habitStore.delete(habit.id);
+        logger.info('Habit deleted', { habitId: habit.id }, 'HabitCard');
+        if (onDelete) onDelete();
+        if (onUpdate) onUpdate();
+      } catch (error) {
+        logger.error('Delete failed', { error }, 'HabitCard');
+      }
+    }
+  }, [habit, confirm, onDelete, onUpdate]);
+
+  const handleStop = useCallback(async () => {
+    const confirmed = await confirm({
+      title: 'Stop habit?',
+      content: `Are you sure you want to stop "${habit.title}"? You can view it later in Stopped Habits.`,
+      confirmButtonContent: 'Stop Habit',
+      confirmButtonType: 'danger',
+    });
+
+    if (confirmed) {
+      try {
+        const updated: HabitWithHistory = { ...habit, state: 'abandoned' };
+        await habitStore.update(updated);
+        logger.info('Habit stopped', { habitId: habit.id }, 'HabitCard');
+        if (onUpdate) onUpdate();
+      } catch (error) {
+        logger.error('Stop failed', { error }, 'HabitCard');
+      }
+    }
+  }, [habit, confirm, onUpdate]);
 
   const handleIncrement = useCallback(() => {
     setCurrentValue(prev => prev + 1);
@@ -165,10 +220,16 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
   // Render action buttons based on mode
   const renderActions = () => {
     if (!isPending) {
+      // Allow undo of today's check-in
       return (
-        <Label variant="success" size="large">
-          ✓ Checked in today
-        </Label>
+        <Stack direction="horizontal" gap="condensed" align="center">
+          <Label variant="success" size="large">
+            ✓ Checked in today
+          </Label>
+          <Button variant="invisible" size="small" leadingVisual={UndoIcon} onClick={handleUndo}>
+            Undo
+          </Button>
+        </Stack>
       );
     }
 
@@ -266,6 +327,28 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             Day {habit.currentDay} of {habit.totalDays}
             {remainingSkips > 0 && ` • ${remainingSkips} skip remaining`}
           </Label>
+          <ActionMenu>
+            <ActionMenu.Anchor>
+              <IconButton icon={KebabHorizontalIcon} aria-label="Habit actions" variant="invisible" size="small" />
+            </ActionMenu.Anchor>
+            <ActionMenu.Overlay>
+              <ActionList>
+                <ActionList.Item onSelect={() => setIsEditDialogOpen(true)}>
+                  <ActionList.LeadingVisual><PencilIcon /></ActionList.LeadingVisual>
+                  Edit
+                </ActionList.Item>
+                <ActionList.Divider />
+                <ActionList.Item onSelect={handleStop}>
+                  <ActionList.LeadingVisual><StopIcon /></ActionList.LeadingVisual>
+                  Stop Habit
+                </ActionList.Item>
+                <ActionList.Item variant="danger" onSelect={handleDelete}>
+                  <ActionList.LeadingVisual><TrashIcon /></ActionList.LeadingVisual>
+                  Delete
+                </ActionList.Item>
+              </ActionList>
+            </ActionMenu.Overlay>
+          </ActionMenu>
         </Stack>
 
         <Heading as="h3">{habit.title}</Heading>
@@ -299,6 +382,13 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
           </Label>
         )}
       </Stack>
+
+      <HabitEditDialog
+        habit={habit}
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        onUpdated={onUpdate}
+      />
     </div>
   );
 }

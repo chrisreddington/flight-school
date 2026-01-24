@@ -11,6 +11,7 @@ import {
   buildChallengePrompt,
   buildGoalPrompt,
   buildLearningTopicsPrompt,
+  buildSingleTopicPrompt,
 } from './prompts';
 import type { SkillProfile } from '@/lib/skills/types';
 
@@ -193,9 +194,9 @@ describe('buildLearningTopicsPrompt', () => {
     expect(prompt).toContain('concept|pattern|best-practice');
   });
 
-  it('should request TWO topics', () => {
+  it('should request THREE topics', () => {
     const prompt = buildLearningTopicsPrompt(profileContext);
-    expect(prompt).toContain('TWO');
+    expect(prompt).toContain('THREE');
   });
 
   describe('with skill profile', () => {
@@ -216,6 +217,40 @@ describe('buildLearningTopicsPrompt', () => {
       const prompt = buildLearningTopicsPrompt(profileContext, skillProfile);
       expect(prompt).toContain('Exclude EX: skills');
     });
+  });
+});
+
+// =============================================================================
+// buildSingleTopicPrompt Tests
+// =============================================================================
+
+describe('buildSingleTopicPrompt', () => {
+  const profileContext = 'typescript,react,node';
+
+  it('should request ONE topic', () => {
+    const prompt = buildSingleTopicPrompt(profileContext, []);
+    expect(prompt).toContain('ONE');
+    expect(prompt).toContain('learningTopic');
+  });
+
+  it('should include existing topic titles to avoid duplicates', () => {
+    const existingTitles = ['React Hooks', 'TypeScript Generics'];
+    const prompt = buildSingleTopicPrompt(profileContext, existingTitles);
+    expect(prompt).toContain('Do NOT suggest these topics');
+    expect(prompt).toContain('React Hooks');
+    expect(prompt).toContain('TypeScript Generics');
+  });
+
+  it('should not include exclusion notice when no existing titles', () => {
+    const prompt = buildSingleTopicPrompt(profileContext, []);
+    expect(prompt).not.toContain('Do NOT suggest these topics');
+  });
+
+  it('should include JSON format for single topic', () => {
+    const prompt = buildSingleTopicPrompt(profileContext, []);
+    expect(prompt).toContain('"learningTopic"');
+    expect(prompt).toContain('"title"');
+    expect(prompt).toContain('"type"');
   });
 });
 

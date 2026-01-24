@@ -38,6 +38,9 @@ async function getCachedProfile(): Promise<ProfileResponse | null> {
     const todayKey = getDateKey();
     if (data.date !== todayKey) return null;
     
+    // Invalidate cache if it's missing authMethod (old schema)
+    if (!data.profile?.meta?.authMethod) return null;
+    
     return data.profile;
   } catch {
     return null;
@@ -96,6 +99,7 @@ function normalizeProfileResponse(profile: ProfileResponse | null): ProfileRespo
     aiEnabled: true,
     method: 'cache-normalized',
     totalTimeMs: 0,
+    authMethod: 'none',
   };
 
   return {
