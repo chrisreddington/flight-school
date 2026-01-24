@@ -116,8 +116,12 @@ function extractExcerpt(content: string): string {
   // Remove badges (common pattern: [![text](image)](link))
   cleaned = cleaned.replace(/\[!\[[^\]]*\]\([^)]+\)\]\([^)]+\)/g, '');
   
-  // Remove HTML tags
-  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  // Remove HTML tags (loop to handle nested/malformed tags)
+  let previousLength;
+  do {
+    previousLength = cleaned.length;
+    cleaned = cleaned.replace(/<[^>]+>/g, '');
+  } while (cleaned.length < previousLength);
   
   // Collapse whitespace
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
