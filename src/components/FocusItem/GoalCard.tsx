@@ -9,7 +9,7 @@ import { focusStore } from '@/lib/focus';
 import type { GoalState } from '@/lib/focus/state-machine';
 import type { DailyGoal } from '@/lib/focus/types';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { CheckIcon, SkipIcon, ZapIcon } from '@primer/octicons-react';
+import { CheckIcon, SkipIcon, StopIcon, ZapIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
@@ -26,6 +26,8 @@ interface GoalCardProps {
   onStateChange?: () => void;
   /** Callback to skip this goal and regenerate a new one (with existing titles to avoid) */
   onSkipAndReplace?: (goalId: string, existingGoalTitles: string[]) => void;
+  /** Callback to stop the skip/regeneration in progress (receives the goal ID) */
+  onStopSkip?: (goalId: string) => void;
   /** Whether skip/regeneration is in progress */
   isSkipping?: boolean;
   /** Whether refresh is disabled */
@@ -39,6 +41,7 @@ export function GoalCard({
   onRefresh,
   onStateChange,
   onSkipAndReplace,
+  onStopSkip,
   isSkipping = false,
   refreshDisabled = false,
 }: GoalCardProps) {
@@ -83,14 +86,27 @@ export function GoalCard({
   const isSkipped = currentState === 'skipped';
   const isToday = isTodayDateKey(dateKey);
 
-  // Show loading state while regenerating
+  // Show loading state while regenerating (with stop button on dashboard)
   if (isSkipping) {
     return (
       <div className={styles.card}>
         <Stack direction="vertical" gap="normal">
-          <Stack direction="horizontal" align="center" gap="condensed">
-            <Spinner size="small" />
-            <span className={styles.loadingText}>Generating new goal...</span>
+          <Stack direction="horizontal" align="center" justify="space-between">
+            <Stack direction="horizontal" align="center" gap="condensed">
+              <Spinner size="small" />
+              <span className={styles.loadingText}>Generating new goal...</span>
+            </Stack>
+            {onStopSkip && (
+              <Button
+                variant="danger"
+                size="small"
+                onClick={() => onStopSkip(goal.id)}
+                leadingVisual={StopIcon}
+                aria-label="Stop generating goal"
+              >
+                Stop
+              </Button>
+            )}
           </Stack>
           <SkeletonBox height="24px" width="70%" />
           <SkeletonBox height="16px" width="100%" />

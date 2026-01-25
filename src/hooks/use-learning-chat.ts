@@ -33,9 +33,10 @@
 
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { logger } from '@/lib/logger';
+import { operationsManager } from '@/lib/operations';
 import type { StreamState } from '@/lib/stream-store/types';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
@@ -46,6 +47,11 @@ import { useThreads, type UseThreadsReturn } from './use-threads';
 
 const log = logger.withTag('useLearningChat');
 const STREAMING_PARTIAL_APPEND_MS = 1500;
+/** Interval for polling thread updates when a background job is active */
+const BACKGROUND_JOB_POLL_INTERVAL_MS = 500;
+
+/** Event name for thread data changes (from background jobs) */
+const THREAD_DATA_CHANGED = 'thread-data-changed';
 
 // ============================================================================
 // Types
@@ -279,6 +285,13 @@ export function useLearningChat(): UseLearningChatReturn {
     activeStreams,
   } = useCopilotStream();
 
+  // Track if there's an active background chat job for the current thread.
+  // This is separate from SSE streaming - it runs server-side.
+  const [hasActiveBackgroundJob, setHasActiveBackgroundJob] = useState(false);
+  const [backgroundJobContent, setBackgroundJobContent] = useState<string>('');
+  const backgroundPollRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMessageCountRef = useRef<number>(0);
+
   // Get ALL streaming thread IDs for sidebar indicators
   const streamingThreadIds = Array.from(activeStreams.keys());
   
@@ -286,13 +299,108 @@ export function useLearningChat(): UseLearningChatReturn {
   const streamingThreadId = streamingThreadIds[streamingThreadIds.length - 1] ?? null;
   
   // Get streaming content for the active thread specifically
+  // Prefer SSE content, fall back to background job content
   const streamingContent = activeThreadId 
-    ? getStreamingContent(activeThreadId) 
+    ? (getStreamingContent(activeThreadId) || backgroundJobContent)
     : defaultStreamingContent;
   
-  // For "isStreaming", return whether the ACTIVE thread is streaming
-  // This gives better UX - shows loading only when current thread is loading
-  const isStreaming = activeThreadId ? isStreamingConversation(activeThreadId) : anyStreaming;
+  // For "isStreaming", include both SSE streaming AND background job streaming
+  // This gives proper UX - shows loading when either is active
+  const sseStreaming = activeThreadId ? isStreamingConversation(activeThreadId) : anyStreaming;
+  const isStreaming = sseStreaming || hasActiveBackgroundJob;
+
+  // Check for active background job and start polling when thread changes
+  // NOTE: setState calls are necessary here to sync with background job state.
+  // This is a one-time sync when thread changes, not a cascading render issue.
+  useEffect(() => {
+    const updateBackgroundJobState = (hasJob: boolean) => {
+      queueMicrotask(() => {
+        setHasActiveBackgroundJob(hasJob);
+        if (!hasJob) {
+          setBackgroundJobContent('');
+        }
+      });
+    };
+
+    const clearBackgroundJobState = () => {
+      queueMicrotask(() => {
+        setHasActiveBackgroundJob(false);
+        setBackgroundJobContent('');
+      });
+    };
+
+    if (!activeThreadId) {
+      updateBackgroundJobState(false);
+      return;
+    }
+
+    // Check if there's an active background job for this thread
+    const activeOp = operationsManager.getActiveChatJobForThread(activeThreadId);
+    const hasJob = !!activeOp;
+    updateBackgroundJobState(hasJob);
+
+    if (hasJob) {
+      log.debug('Detected active background job for thread', { threadId: activeThreadId });
+      
+      // Start polling thread storage for updates
+      // This shows the user what's being generated in the background
+      const pollForUpdates = async () => {
+        try {
+          const freshThread = await threadStore.getById(activeThreadId);
+          if (!freshThread) return;
+          
+          // Look for streaming message or new assistant messages
+          const streamingMsg = freshThread.messages.find(m => m.id.startsWith('streaming-'));
+          if (streamingMsg) {
+            setBackgroundJobContent(streamingMsg.content);
+          } else {
+            // Check if a new assistant message was added
+            const messageCount = freshThread.messages.length;
+            if (messageCount !== lastMessageCountRef.current) {
+              lastMessageCountRef.current = messageCount;
+              // Refresh threads to update UI
+              await refreshThreads();
+            }
+          }
+          
+          // Check if background job is still active
+          const stillActive = operationsManager.hasActiveChatJob(activeThreadId);
+          if (!stillActive) {
+            log.debug('Background job completed, stopping poll');
+            clearBackgroundJobState();
+            if (backgroundPollRef.current) {
+              clearInterval(backgroundPollRef.current);
+              backgroundPollRef.current = null;
+            }
+            // Final refresh to get completed message
+            await refreshThreads();
+          }
+        } catch (err) {
+          log.warn('Error polling for background job updates', { err });
+        }
+      };
+      
+      // Initial poll
+      void pollForUpdates();
+      
+      // Set up interval
+      backgroundPollRef.current = setInterval(pollForUpdates, BACKGROUND_JOB_POLL_INTERVAL_MS);
+    } else {
+      // No active job, clear any previous polling
+      if (backgroundPollRef.current) {
+        clearInterval(backgroundPollRef.current);
+        backgroundPollRef.current = null;
+      }
+      clearBackgroundJobState();
+    }
+
+    return () => {
+      if (backgroundPollRef.current) {
+        clearInterval(backgroundPollRef.current);
+        backgroundPollRef.current = null;
+      }
+    };
+  }, [activeThreadId, refreshThreads]);
 
   useEffect(() => {
     if (isThreadsLoading) return;
@@ -327,10 +435,66 @@ export function useLearningChat(): UseLearningChatReturn {
     void Promise.all(updates.map((thread) => threadStore.update(thread)));
   }, [isThreadsLoading, threads, streamingThreadIds]);
 
-  // Wrap stopStreaming to stop only the active thread's stream by default
-  const stopStreaming = useCallback(() => {
+  // Subscribe to thread data changes from background jobs
+  useEffect(() => {
+    const handleThreadDataChanged = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ threadId?: string }>;
+      const changedThreadId = customEvent.detail?.threadId;
+      
+      log.debug('Thread data changed event received', { changedThreadId });
+      
+      // Refresh threads from storage
+      try {
+        await refreshThreads();
+        log.debug('Threads refreshed from storage after background job');
+      } catch (err) {
+        log.warn('Failed to refresh threads after background job', { err });
+      }
+    };
+
+    window.addEventListener(THREAD_DATA_CHANGED, handleThreadDataChanged);
+    return () => {
+      window.removeEventListener(THREAD_DATA_CHANGED, handleThreadDataChanged);
+    };
+  }, [refreshThreads]);
+
+  // Subscribe to operations manager to detect background job state changes
+  useEffect(() => {
+    if (!activeThreadId) return;
+    
+    const unsubscribe = operationsManager.subscribe(() => {
+      // Check if the background job state changed for the active thread
+      const stillActive = operationsManager.hasActiveChatJob(activeThreadId);
+      
+      if (hasActiveBackgroundJob && !stillActive) {
+        // Job completed! Update state and refresh threads
+        log.debug('Background job state changed - job completed');
+        setHasActiveBackgroundJob(false);
+        setBackgroundJobContent('');
+        void refreshThreads();
+      } else if (!hasActiveBackgroundJob && stillActive) {
+        // Job started (e.g., from another tab) - start tracking
+        log.debug('Background job state changed - job started');
+        setHasActiveBackgroundJob(true);
+      }
+    });
+    
+    return unsubscribe;
+  }, [activeThreadId, hasActiveBackgroundJob, refreshThreads]);
+
+  // Wrap stopStreaming to stop both SSE stream AND background job
+  const stopStreaming = useCallback(async () => {
     if (activeThreadId) {
+      // Stop SSE stream
       stopStreamingBase(activeThreadId);
+      
+      // Also cancel background job if one is running
+      const cancelled = await operationsManager.cancelChatJobForThread(activeThreadId);
+      if (cancelled) {
+        log.debug('Cancelled background chat job', { threadId: activeThreadId });
+        setHasActiveBackgroundJob(false);
+        setBackgroundJobContent('');
+      }
     } else {
       // Stop all if no active thread
       stopStreamingBase();
@@ -509,6 +673,26 @@ export function useLearningChat(): UseLearningChatReturn {
           }
         })();
       };
+
+      // Start a background job in parallel with SSE streaming.
+      // This ensures the response is generated and saved even if the user navigates away.
+      // The SSE stream provides real-time UI updates, while the background job provides
+      // navigation-proof persistence.
+      log.debug('Starting background chat job for resilience', { threadId: targetThreadId });
+      operationsManager.startBackgroundJob({
+        type: 'chat-response',
+        targetId: targetThreadId,
+        input: {
+          threadId: targetThreadId,
+          prompt: message,
+          repos: effectiveRepos,
+          learningMode: true,
+          useGitHubTools,
+        },
+      }).catch(err => {
+        // Don't block on background job - it's a safety net
+        log.warn('Failed to start background chat job (SSE will still work)', { err });
+      });
 
       // Send streaming message with learning mode enabled
       // The onComplete callback handles persistence outside React lifecycle

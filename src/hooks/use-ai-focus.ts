@@ -62,10 +62,14 @@ export interface UseAIFocusResult {
   generatedAtFormatted: string | null;
   componentTimestamps: Record<FocusComponent, string | null>;
   isNewDay: boolean;
-  /** Stop a specific component's AI generation */
+  /** Stop/cancel a specific component's fetch */
   stopComponent: (component: FocusComponent | 'singleTopic') => void;
   /** Stop topic skip - topic returns to original state since it was never marked as skipped */
-  stopTopicSkip: () => void;
+  stopTopicSkip: (topicId: string) => void;
+  /** Stop challenge skip - challenge returns to original state since it was never marked as skipped */
+  stopChallengeSkip: (challengeId: string) => void;
+  /** Stop goal skip - goal returns to original state since it was never marked as skipped */
+  stopGoalSkip: (goalId: string) => void;
   /** Stop all AI generation */
   stopAll: () => void;
 }
@@ -113,13 +117,21 @@ export function useAIFocus(): UseAIFocusResult {
   }, []);
 
   /** Stop topic skip - topic was never marked as skipped so no revert needed */
-  const stopTopicSkip = useCallback(() => {
-    // Abort via operations manager
-    const topicId = currentSkippingTopicIdRef.current;
-    if (topicId) {
-      operationsManager.abort(`topic-regen:${topicId}`);
-    }
-    currentSkippingTopicIdRef.current = null;
+  const stopTopicSkip = useCallback((topicId: string) => {
+    // Cancel via operations manager using the provided ID (not relying on local refs)
+    operationsManager.cancelBackgroundJob(`topic-regeneration:${topicId}`);
+  }, []);
+
+  /** Stop challenge skip - challenge was never marked as skipped so no revert needed */
+  const stopChallengeSkip = useCallback((challengeId: string) => {
+    // Cancel via operations manager using the provided ID (not relying on local refs)
+    operationsManager.cancelBackgroundJob(`challenge-regeneration:${challengeId}`);
+  }, []);
+
+  /** Stop goal skip - goal was never marked as skipped so no revert needed */
+  const stopGoalSkip = useCallback((goalId: string) => {
+    // Cancel via operations manager using the provided ID (not relying on local refs)
+    operationsManager.cancelBackgroundJob(`goal-regeneration:${goalId}`);
   }, []);
 
   /** Stop all in-flight fetches */
@@ -129,11 +141,21 @@ export function useAIFocus(): UseAIFocusResult {
       abortControllersRef.current.delete(key);
     }
     setLoadingComponents([]);
-    // Also abort any topic regeneration via operations manager
+    // Also cancel any regeneration via operations manager
     const topicId = currentSkippingTopicIdRef.current;
     if (topicId) {
-      operationsManager.abort(`topic-regen:${topicId}`);
+      operationsManager.cancelBackgroundJob(`topic-regeneration:${topicId}`);
       currentSkippingTopicIdRef.current = null;
+    }
+    const challengeId = currentSkippingChallengeIdRef.current;
+    if (challengeId) {
+      operationsManager.cancelBackgroundJob(`challenge-regeneration:${challengeId}`);
+      currentSkippingChallengeIdRef.current = null;
+    }
+    const goalId = currentSkippingGoalIdRef.current;
+    if (goalId) {
+      operationsManager.cancelBackgroundJob(`goal-regeneration:${goalId}`);
+      currentSkippingGoalIdRef.current = null;
     }
   }, []);
 
@@ -515,6 +537,8 @@ export function useAIFocus(): UseAIFocusResult {
     isNewDay,
     stopComponent,
     stopTopicSkip,
+    stopChallengeSkip,
+    stopGoalSkip,
     stopAll,
   };
 }

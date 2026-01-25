@@ -7,6 +7,10 @@
  * @remarks
  * This module uses the `/api/threads/storage` API route for persistence
  * instead of localStorage. The data is stored server-side in `.data/threads.json`.
+ *
+ * For file-per-thread storage, threads are stored in:
+ * - `threads/index.json` - Index of all threads
+ * - `threads/{threadId}.json` - Individual thread files
  */
 
 import { apiGet, apiPost } from '@/lib/api-client';

@@ -10,10 +10,26 @@ export type OperationType =
   | 'topic-regeneration'
   | 'challenge-regeneration'
   | 'goal-regeneration'
-  | 'chat-message';
+  | 'chat-message'
+  | 'chat-response';
 
 /** Status of an operation */
 export type OperationStatus = 'pending' | 'in-progress' | 'complete' | 'failed' | 'aborted';
+
+/** Status of a persisted operation state stored in item files. */
+export type OperationStateStatus = 'generating' | 'complete' | 'failed';
+
+/**
+ * Operation state persisted alongside item content for recovery.
+ */
+export interface OperationState {
+  /** Backend job identifier. */
+  jobId: string;
+  /** Current persisted status. */
+  status: OperationStateStatus;
+  /** ISO timestamp when the operation started. */
+  startedAt: string;
+}
 
 /** Metadata for an operation */
 export interface OperationMeta {

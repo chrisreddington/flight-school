@@ -8,8 +8,9 @@
 
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
 import type { SkillProfile } from '@/lib/skills/types';
+import type { RepoReference } from '@/lib/threads';
 
-export type JobType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'focus-generation' | 'challenge-generation';
+export type JobType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'focus-generation' | 'challenge-generation' | 'chat-response';
 
 export interface TopicRegenerationInput {
   existingTopicTitles: string[];
@@ -40,8 +41,25 @@ export interface GoalRegenerationResult {
   goal: DailyGoal;
 }
 
+/** Input for chat response background job */
+export interface ChatResponseInput {
+  threadId: string;
+  prompt: string;
+  repos?: RepoReference[];
+  learningMode?: boolean;
+  useGitHubTools?: boolean;
+}
+
+/** Result from chat response background job */
+export interface ChatResponseResult {
+  threadId: string;
+  content: string;
+  hasActionableItem?: boolean;
+  toolCalls?: string[];
+}
+
 // Note: The actual execution happens in the API route that processes jobs.
 // This file just defines types for type safety.
 
-export type JobInput = TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput;
-export type JobResult = TopicRegenerationResult | ChallengeRegenerationResult | GoalRegenerationResult;
+export type JobInput = TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput;
+export type JobResult = TopicRegenerationResult | ChallengeRegenerationResult | GoalRegenerationResult | ChatResponseResult;

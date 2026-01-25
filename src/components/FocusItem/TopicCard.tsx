@@ -25,8 +25,8 @@ interface TopicCardProps {
   onSkip?: (skippedTopic: LearningTopic) => void;
   /** Callback to skip and replace topic (alternative to onSkip, matches challenge/goal pattern) */
   onSkipAndReplace?: (topicId: string, existingTopicTitles: string[]) => void;
-  /** Callback to stop the skip/regeneration in progress */
-  onStopSkip?: () => void;
+  /** Callback to stop the skip/regeneration in progress (receives the topic ID) */
+  onStopSkip?: (topicId: string) => void;
   /** Callback after state transition */
   onStateChange?: () => void;
   /** Whether skip/new is in progress (loading state) */
@@ -100,7 +100,7 @@ export function TopicCard({
               <Button
                 variant="danger"
                 size="small"
-                onClick={onStopSkip}
+                onClick={() => onStopSkip(topic.id)}
                 leadingVisual={StopIcon}
                 aria-label="Stop generating topic"
               >

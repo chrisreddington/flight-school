@@ -12,7 +12,7 @@ import { focusStore } from '@/lib/focus';
 import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { ClockIcon } from '@primer/octicons-react';
+import { ClockIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -36,6 +36,8 @@ interface ChallengeCardProps {
   onStateChange?: () => void;
   /** Callback to skip this challenge and regenerate a new one (with existing titles to avoid) */
   onSkipAndReplace?: (challengeId: string, existingChallengeTitles: string[]) => void;
+  /** Callback to stop the skip/regeneration in progress (receives the challenge ID) */
+  onStopSkip?: (challengeId: string) => void;
   /** Whether skip/regeneration is in progress */
   isSkipping?: boolean;
   /** Whether refresh is disabled */
@@ -56,6 +58,7 @@ export function ChallengeCard({
   onCreate,
   onStateChange,
   onSkipAndReplace,
+  onStopSkip,
   isSkipping = false,
   refreshDisabled = false,
   timestamp,
@@ -124,14 +127,27 @@ export function ChallengeCard({
   const isInProgress = currentState === 'in-progress';
   const isToday = isTodayDateKey(dateKey);
 
-  // Show loading state while regenerating
+  // Show loading state while regenerating (with stop button on dashboard)
   if (isSkipping) {
     return (
       <div className={styles.card}>
         <Stack direction="vertical" gap="normal">
-          <Stack direction="horizontal" align="center" gap="condensed">
-            <Spinner size="small" />
-            <span className={styles.loadingText}>Generating new challenge...</span>
+          <Stack direction="horizontal" align="center" justify="space-between">
+            <Stack direction="horizontal" align="center" gap="condensed">
+              <Spinner size="small" />
+              <span className={styles.loadingText}>Generating new challenge...</span>
+            </Stack>
+            {onStopSkip && (
+              <Button
+                variant="danger"
+                size="small"
+                onClick={() => onStopSkip(challenge.id)}
+                leadingVisual={StopIcon}
+                aria-label="Stop generating challenge"
+              >
+                Stop
+              </Button>
+            )}
           </Stack>
           <SkeletonBox height="24px" width="70%" />
           <SkeletonBox height="16px" width="100%" />

@@ -2,9 +2,8 @@
  * Tests for Active Operations Manager
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { operationsManager } from './active-operations';
-import type { OperationType } from './types';
 
 // Helper to create a delayed executor
 const createDelayedExecutor = <T>(result: T, delayMs: number) => {

@@ -235,7 +235,15 @@ const ActivityGraph = memo(function ActivityGraph({
   selectedDate: string | null;
   onSelectDate: (date: string | null) => void;
 }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const maxCount = Math.max(...activity.map(d => d.count), 1);
+  
+  // Auto-scroll to show most recent activity (rightmost)
+  useEffect(() => {
+    if (wrapperRef.current) {
+      wrapperRef.current.scrollLeft = wrapperRef.current.scrollWidth;
+    }
+  }, []);
   
   // Group by weeks for grid layout
   const weeks: ActivityDay[][] = [];
@@ -283,7 +291,7 @@ const ActivityGraph = memo(function ActivityGraph({
       </div>
       
       {/* Grid - clean like GitHub, no day labels */}
-      <div className={styles.activityGridWrapper}>
+      <div ref={wrapperRef} className={styles.activityGridWrapper}>
         <div className={styles.activityGrid52}>
           {weeks.map((week, weekIdx) => (
             <div key={weekIdx} className={styles.activityWeek}>
@@ -411,6 +419,9 @@ const ItemCard = memo(function ItemCard({
   onSkipTopic,
   onSkipChallenge,
   onSkipGoal,
+  onStopSkipTopic,
+  onStopSkipChallenge,
+  onStopSkipGoal,
   onExploreTopic,
   isSkippingTopic = false,
   isSkippingChallenge = false,
@@ -422,6 +433,9 @@ const ItemCard = memo(function ItemCard({
   onSkipTopic?: (topicId: string, existingTitles: string[]) => void;
   onSkipChallenge?: (challengeId: string, existingTitles: string[]) => void;
   onSkipGoal?: (goalId: string, existingTitles: string[]) => void;
+  onStopSkipTopic?: (topicId: string) => void;
+  onStopSkipChallenge?: (challengeId: string) => void;
+  onStopSkipGoal?: (goalId: string) => void;
   onExploreTopic?: (topic: LearningTopic) => void;
   isSkippingTopic?: boolean;
   isSkippingChallenge?: boolean;
@@ -462,6 +476,7 @@ const ItemCard = memo(function ItemCard({
             onRefresh={onRefresh}
             onStateChange={onRefresh}
             onSkipAndReplace={onSkipChallenge}
+            onStopSkip={onStopSkipChallenge}
             isSkipping={isSkippingChallenge}
           />
         )}
@@ -473,6 +488,7 @@ const ItemCard = memo(function ItemCard({
             onRefresh={onRefresh}
             onStateChange={onRefresh}
             onSkipAndReplace={onSkipGoal}
+            onStopSkip={onStopSkipGoal}
             isSkipping={isSkippingGoal}
           />
         )}
@@ -483,6 +499,7 @@ const ItemCard = memo(function ItemCard({
             showHistoryActions
             onStateChange={onRefresh}
             onSkipAndReplace={onSkipTopic}
+            onStopSkip={onStopSkipTopic}
             onExplore={onExploreTopic}
             isSkipping={isSkippingTopic}
           />
@@ -534,6 +551,9 @@ export const FocusHistory = memo(function FocusHistory() {
     skippingTopicIds,
     skippingChallengeIds,
     skippingGoalIds,
+    stopTopicSkip,
+    stopChallengeSkip,
+    stopGoalSkip,
   } = useAIFocus();
 
   // Use learning chat for "Explore from History" feature
@@ -994,6 +1014,9 @@ export const FocusHistory = memo(function FocusHistory() {
                           onSkipTopic={skipAndReplaceTopic}
                           onSkipChallenge={skipAndReplaceChallenge}
                           onSkipGoal={skipAndReplaceGoal}
+                          onStopSkipTopic={stopTopicSkip}
+                          onStopSkipChallenge={stopChallengeSkip}
+                          onStopSkipGoal={stopGoalSkip}
                           onExploreTopic={handleExploreTopic}
                           isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
                           isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}

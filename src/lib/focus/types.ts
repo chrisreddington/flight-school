@@ -20,6 +20,7 @@
  * ```
  */
 
+import type { OperationState } from '@/lib/operations/types';
 import type { StatefulChallenge, StatefulGoal, StatefulTopic } from './state-machine';
 
 // Re-export base types for convenience
@@ -105,6 +106,58 @@ export interface FocusStorageSchema {
    * History of focus entries keyed by date (YYYY-MM-DD).
    */
   history: FocusHistory;
+}
+
+/**
+ * Item types represented in file-based focus storage.
+ */
+export type FocusItemType = 'challenge' | 'goal' | 'topic';
+
+/**
+ * Index entry status for file-based focus items.
+ */
+export type FocusIndexStatus = 'generating' | 'complete' | 'failed';
+
+/**
+ * Index entry for a stored focus item.
+ */
+export interface FocusIndexEntry {
+  id: string;
+  type: FocusItemType;
+  dateKey: string;
+  status: FocusIndexStatus;
+  title: string;
+  updatedAt: string;
+}
+
+/**
+ * Index schema for file-based focus storage.
+ */
+export interface FocusIndexSchema {
+  version: 1;
+  updatedAt: string;
+  items: FocusIndexEntry[];
+}
+
+/**
+ * Metadata stored alongside each focus item file.
+ */
+export interface FocusItemMetadata {
+  id: string;
+  type: FocusItemType;
+  dateKey: string;
+  status: FocusIndexStatus;
+  title: string;
+  updatedAt: string;
+  operationState?: OperationState;
+}
+
+/**
+ * File-based storage envelope for focus items.
+ */
+export interface FocusItemFile<T> {
+  metadata: FocusItemMetadata;
+  data: T;
 }
 
 // =============================================================================

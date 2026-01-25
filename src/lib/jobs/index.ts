@@ -7,4 +7,6 @@ export type {
   ChallengeRegenerationResult,
   GoalRegenerationInput,
   GoalRegenerationResult,
+  ChatResponseInput,
+  ChatResponseResult,
 } from './executors';

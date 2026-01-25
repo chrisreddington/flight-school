@@ -56,8 +56,8 @@ You implement plan documents step-by-step with **atomic state updates** that ena
 | Code changes | `npx tsc --noEmit && npm run lint` |
 | Test changes | `npm run test -- {pattern}` |
 | UI changes | `npm run test:e2e -- --grep "{pattern}"` |
-| Full phase | `npm run validate:iteration` |
-| Final | `npm run validate:iteration` |
+| Full phase | `npm test && npx tsc --noEmit && npm run lint` |
+| Final | `npm test && npx tsc --noEmit && npm run lint` |
 
 ## Specialist Routing for Blockers
 | Blocker Type | Primary Specialist | Escalate To |
@@ -108,7 +108,7 @@ For each step in the plan:
    ```
 
 5. **PHASE VALIDATION**: After completing all steps in a phase:
-   - Run: `npm run validate:iteration`
+   - Run: `npm test && npx tsc --noEmit && npm run lint`
    - **DO NOT** proceed if validation fails
    - Document failures in Resumption Section
 
@@ -119,7 +119,7 @@ For each step in the plan:
    - Have all verification commands passed?
    - Are acceptance criteria from spec met?
    - Any deviations documented with justification?
-3. Run final validation: `npm run validate:iteration`
+3. Run final validation: `npm test && npx tsc --noEmit && npm run lint`
 
 ## Phase 3: Completion
 1. Update Resumption Section to `Status: COMPLETE`
@@ -381,7 +381,7 @@ runSubagent("Specialist - Code Quality",
    ## EXECUTION STEPS
    1. Analyze the code smell/violation
    2. Implement fix directly
-   3. Run \`npm run validate:iteration\`
+   3. Run \`npm test && npx tsc --noEmit && npm run lint\`
    
    ## RETURN FORMAT
    \`\`\`json
@@ -530,7 +530,7 @@ Update the plan document's Resumption Section, then report:
 ```markdown
 ### Phase {N} Complete: {Phase Name}
 - **Steps Completed**: {N.1} through {N.M}
-- **Verification**: `npm run validate:iteration` → ✅ Pass
+- **Verification**: `npm test && npx tsc --noEmit && npm run lint` → ✅ Pass
 - **Deviations**: {None | Count with references}
 - **Next Phase**: Phase {N+1} — {Name}
 ```

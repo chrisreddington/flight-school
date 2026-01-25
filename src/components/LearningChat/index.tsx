@@ -59,6 +59,8 @@ interface LearningChatProps {
   availableRepos?: RepoOption[];
   /** Whether repos are loading */
   isReposLoading?: boolean;
+  /** Whether threads are loading from storage */
+  isThreadsLoading?: boolean;
   /** Whether the AI is currently streaming a response (in active thread) */
   isStreaming?: boolean;
   /** IDs of ALL threads that are currently streaming */
@@ -98,6 +100,7 @@ export const LearningChat = memo(function LearningChat({
   handlers,
   availableRepos = [],
   isReposLoading = false,
+  isThreadsLoading = false,
   isStreaming = false,
   streamingThreadIds = [],
   streamingContent,
@@ -203,6 +206,7 @@ export const LearningChat = memo(function LearningChat({
         threads={threads}
         activeThreadId={activeThreadId}
         streamingThreadIds={streamingThreadIds}
+        isLoading={isThreadsLoading}
         onSelectThread={handlers.selectThread}
         onNewThread={handlers.createThread}
         onDeleteThread={handlers.deleteThread}

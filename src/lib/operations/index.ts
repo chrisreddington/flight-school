@@ -7,16 +7,16 @@
 
 import { operationsManager } from './active-operations';
 
-export { operationsManager };
 export type {
-  ActiveOperation,
-  OperationMeta,
-  OperationsListener,
-  OperationsSnapshot,
-  OperationStatus,
-  OperationType,
-  StartOperationOptions,
+    ActiveOperation,
+    OperationMeta,
+    OperationsListener,
+    OperationsSnapshot,
+    OperationStatus,
+    OperationType,
+    StartOperationOptions
 } from './types';
+export { operationsManager };
 
 /**
  * Event name for notifying React components that focus data has changed.
@@ -37,9 +37,9 @@ function notifyFocusDataChanged(): void {
 // Register completion handlers at module load time
 // This ensures handlers are available even when React components are unmounted
 import { focusStore } from '@/lib/focus';
-import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { logger } from '@/lib/logger';
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
+import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 
 const log = logger.withTag('OperationsHandlers');
 
@@ -117,5 +117,26 @@ operationsManager.registerCompletionHandler(
     
     // Notify React components that focus data has changed
     notifyFocusDataChanged();
+  }
+);
+
+// Import thread notification
+import type { ChatResponseResult } from '@/lib/jobs';
+import { notifyThreadDataChanged } from '@/lib/threads';
+
+// Chat response handler - notifies UI when chat job completes
+operationsManager.registerCompletionHandler(
+  'chat-response',
+  async (result: unknown) => {
+    const typedResult = result as ChatResponseResult;
+    if (!typedResult?.threadId) {
+      log.warn('Chat response completed but no threadId returned');
+      return;
+    }
+
+    log.info(`Chat response completed via registered handler for thread: ${typedResult.threadId}`);
+    
+    // Notify React components that thread data has changed
+    notifyThreadDataChanged(typedResult.threadId);
   }
 );

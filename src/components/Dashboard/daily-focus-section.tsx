@@ -51,16 +51,20 @@ interface DailyFocusSectionProps {
   onRefresh: (components?: string[]) => void;
   /** Callback to skip a single topic and get a replacement */
   onSkipTopic?: (skippedTopic: LearningTopic, existingTopicTitles: string[]) => void;
-  /** Callback to stop topic regeneration */
-  onStopSkipTopic?: () => void;
+  /** Callback to stop topic regeneration (receives topic ID) */
+  onStopSkipTopic?: (topicId: string) => void;
   /** Set of topic IDs currently being skipped/regenerated */
   skippingTopicIds?: Set<string>;
   /** Callback to skip a challenge and get a replacement */
   onSkipChallenge?: (challengeId: string, existingChallengeTitles: string[]) => void;
+  /** Callback to stop challenge regeneration (receives challenge ID) */
+  onStopSkipChallenge?: (challengeId: string) => void;
   /** Set of challenge IDs currently being skipped/regenerated */
   skippingChallengeIds?: Set<string>;
   /** Callback to skip a goal and get a replacement */
   onSkipGoal?: (goalId: string, existingGoalTitles: string[]) => void;
+  /** Callback to stop goal regeneration (receives goal ID) */
+  onStopSkipGoal?: (goalId: string) => void;
   /** Set of goal IDs currently being skipped/regenerated */
   skippingGoalIds?: Set<string>;
   /** Callback to open a learning chat pre-seeded with a topic (AC7.1-AC7.4) */
@@ -82,8 +86,10 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   onStopSkipTopic,
   skippingTopicIds = new Set(),
   onSkipChallenge,
+  onStopSkipChallenge,
   skippingChallengeIds = new Set(),
   onSkipGoal,
+  onStopSkipGoal,
   skippingGoalIds = new Set(),
   onExploreTopic,
   onStopComponent,
@@ -225,6 +231,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onEdit={isCustomChallenge ? () => router.push(`/challenge/edit/${challenge.id}`) : undefined}
                   onCreate={handleCreateChallenge}
                   onSkipAndReplace={!isCustomChallenge ? onSkipChallenge : undefined}
+                  onStopSkip={onStopSkipChallenge}
                   isSkipping={skippingChallengeIds.has(challenge.id)}
                   refreshDisabled={isChallengeLoading}
                   timestamp={componentTimestamps.challenge}
@@ -268,6 +275,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                 goal={goal}
                 onRefresh={() => onRefresh(['goal'])}
                 onSkipAndReplace={onSkipGoal}
+                onStopSkip={onStopSkipGoal}
                 isSkipping={skippingGoalIds.has(goal.id)}
                 refreshDisabled={isGoalLoading}
               />
