@@ -184,6 +184,9 @@ export const LearningChat = memo(function LearningChat({
 
   // Only show streaming indicator when viewing the thread that is currently streaming
   const isStreamingInActiveThread = isStreaming && activeThreadId && streamingThreadIds.includes(activeThreadId);
+  const displayMessages = isStreamingInActiveThread
+    ? messages.filter((message) => message.id !== 'streaming')
+    : messages;
   
   // Create a streaming message for display when streaming in this thread
   const streamingMessage: Message | null = isStreamingInActiveThread ? {
@@ -285,10 +288,11 @@ export const LearningChat = memo(function LearningChat({
             </div>
           ) : (
             <div className={styles.messagesList}>
-              {messages.map((message) => (
+              {displayMessages.map((message) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
+                  isStreaming={message.id === 'streaming' && !isStreamingInActiveThread}
                   userAvatarUrl={userAvatarUrl}
                 />
               ))}

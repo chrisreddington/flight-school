@@ -13,6 +13,7 @@
 import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
 import { HabitHistoryCard } from '@/components/FocusItem/HabitHistoryCard';
 import { useActiveOperations } from '@/hooks/use-active-operations';
+import { useAIFocus } from '@/hooks/use-ai-focus';
 import { focusStore } from '@/lib/focus';
 import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
@@ -50,7 +51,9 @@ import {
   Stack,
   TextInput,
 } from '@primer/react';
+import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLearningChat } from '@/hooks/use-learning-chat';
 import styles from './FocusHistory.module.css';
 
 // ============================================================================
@@ -405,10 +408,24 @@ const ItemCard = memo(function ItemCard({
   item,
   dateKey,
   onRefresh,
+  onSkipTopic,
+  onSkipChallenge,
+  onSkipGoal,
+  onExploreTopic,
+  isSkippingTopic = false,
+  isSkippingChallenge = false,
+  isSkippingGoal = false,
 }: {
   item: HistoryItem;
   dateKey: string;
   onRefresh: () => void;
+  onSkipTopic?: (topicId: string, existingTitles: string[]) => void;
+  onSkipChallenge?: (challengeId: string, existingTitles: string[]) => void;
+  onSkipGoal?: (goalId: string, existingTitles: string[]) => void;
+  onExploreTopic?: (topic: LearningTopic) => void;
+  isSkippingTopic?: boolean;
+  isSkippingChallenge?: boolean;
+  isSkippingGoal?: boolean;
 }) {
   const statusIcon = item.status === 'completed' 
     ? <CheckCircleIcon size={14} className={styles.statusCompleted} />
@@ -444,6 +461,8 @@ const ItemCard = memo(function ItemCard({
             showHistoryActions
             onRefresh={onRefresh}
             onStateChange={onRefresh}
+            onSkipAndReplace={onSkipChallenge}
+            isSkipping={isSkippingChallenge}
           />
         )}
         {item.type === 'goal' && (
@@ -453,6 +472,8 @@ const ItemCard = memo(function ItemCard({
             showHistoryActions
             onRefresh={onRefresh}
             onStateChange={onRefresh}
+            onSkipAndReplace={onSkipGoal}
+            isSkipping={isSkippingGoal}
           />
         )}
         {item.type === 'topic' && (
@@ -461,6 +482,9 @@ const ItemCard = memo(function ItemCard({
             dateKey={dateKey}
             showHistoryActions
             onStateChange={onRefresh}
+            onSkipAndReplace={onSkipTopic}
+            onExplore={onExploreTopic}
+            isSkipping={isSkippingTopic}
           />
         )}
         {item.type === 'habit' && (
@@ -499,7 +523,21 @@ const GeneratingSkeleton = memo(function GeneratingSkeleton({ count }: { count: 
 
 export const FocusHistory = memo(function FocusHistory() {
   const todayDateKey = getDateKey();
-  const { activeTopicIds } = useActiveOperations();
+  const { activeTopicIds, activeChallengeIds, activeGoalIds } = useActiveOperations();
+  const router = useRouter();
+  
+  // Use AI focus hook for skip-and-replace operations
+  const { 
+    skipAndReplaceTopic,
+    skipAndReplaceChallenge,
+    skipAndReplaceGoal,
+    skippingTopicIds,
+    skippingChallengeIds,
+    skippingGoalIds,
+  } = useAIFocus();
+
+  // Use learning chat for "Explore from History" feature
+  const { createThread, sendMessage } = useLearningChat();
 
   // State
   const [allEntries, setAllEntries] = useState<HistoryEntry[]>([]);
@@ -509,10 +547,39 @@ export const FocusHistory = memo(function FocusHistory() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
-  const prevActiveCountRef = useRef(activeTopicIds.size);
+  const prevActiveCountRef = useRef(activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Toast for "Explore started" notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const forceRefresh = useCallback(() => setRefreshKey(prev => prev + 1), []);
+  
+  // Handle "Explore" from history - creates thread, starts streaming, navigates
+  const handleExploreTopic = useCallback(async (topic: LearningTopic) => {
+    // Create a new thread for this topic
+    const thread = await createThread({ 
+      title: `Learning: ${topic.title}`,
+      context: {
+        learningFocus: topic.title,
+      },
+    }, true);
+    
+    // Prepare the initial explore message
+    const exploreMessage = `I'd like to learn about "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
+    
+    // Start the chat (this will stream in the background)
+    await sendMessage(exploreMessage, { threadId: thread.id, useGitHubTools: true });
+    
+    // Show toast notification
+    setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
+    
+    // Auto-dismiss toast after 3 seconds
+    setTimeout(() => setToastMessage(null), 3000);
+    
+    // Navigate to dashboard after a short delay to let the stream start
+    setTimeout(() => router.push('/'), 500);
+  }, [createThread, sendMessage, router]);
 
   // Auto-expand current month on load
   useEffect(() => {
@@ -522,13 +589,14 @@ export const FocusHistory = memo(function FocusHistory() {
 
   // Auto-refresh when operations complete
   useEffect(() => {
-    if (activeTopicIds.size < prevActiveCountRef.current) {
+    const activeCount = activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size;
+    if (activeCount < prevActiveCountRef.current) {
       const timer = setTimeout(forceRefresh, 500);
-      prevActiveCountRef.current = activeTopicIds.size;
+      prevActiveCountRef.current = activeCount;
       return () => clearTimeout(timer);
     }
-    prevActiveCountRef.current = activeTopicIds.size;
-  }, [activeTopicIds.size, forceRefresh]);
+    prevActiveCountRef.current = activeCount;
+  }, [activeTopicIds.size, activeChallengeIds.size, activeGoalIds.size, forceRefresh]);
 
   // Load data
   useEffect(() => {
@@ -738,10 +806,23 @@ export const FocusHistory = memo(function FocusHistory() {
     );
   }
 
-  const hasGenerating = activeTopicIds.size > 0 && (!selectedDate || selectedDate === todayDateKey);
+  const activeGenerationCount = activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size;
+  const hasGenerating = activeGenerationCount > 0 && (!selectedDate || selectedDate === todayDateKey);
 
   return (
     <div className={styles.containerV2}>
+      {/* Toast notification for "Explore from History" */}
+      {toastMessage && (
+        <div className={styles.toast}>
+          <Flash variant="success">
+            <Stack direction="horizontal" align="center" gap="condensed">
+              <BookIcon size={16} />
+              <span>{toastMessage}</span>
+            </Stack>
+          </Flash>
+        </div>
+      )}
+      
       {/* Two-column layout */}
       <div className={styles.layoutV2}>
         {/* Sidebar */}
@@ -885,7 +966,7 @@ export const FocusHistory = memo(function FocusHistory() {
 
               {/* Generating skeleton at top */}
               {hasGenerating && (
-                <GeneratingSkeleton count={activeTopicIds.size} />
+                <GeneratingSkeleton count={activeGenerationCount} />
               )}
 
               {/* Items */}
@@ -910,6 +991,13 @@ export const FocusHistory = memo(function FocusHistory() {
                           item={item}
                           dateKey={entry.dateKey}
                           onRefresh={forceRefresh}
+                          onSkipTopic={skipAndReplaceTopic}
+                          onSkipChallenge={skipAndReplaceChallenge}
+                          onSkipGoal={skipAndReplaceGoal}
+                          onExploreTopic={handleExploreTopic}
+                          isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
+                          isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
+                          isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
                         />
                       ))}
                     </Stack>

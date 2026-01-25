@@ -7,7 +7,7 @@
 import { focusStore } from '@/lib/focus';
 import type { TopicState } from '@/lib/focus/state-machine';
 import type { LearningTopic } from '@/lib/focus/types';
-import { getDateKey } from '@/lib/utils/date-utils';
+import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 import { BookIcon, CheckIcon, PlusIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -23,6 +23,8 @@ interface TopicCardProps {
   onExplore?: (topic: LearningTopic) => void;
   /** Callback when topic is skipped/replaced - receives the topic for replacement */
   onSkip?: (skippedTopic: LearningTopic) => void;
+  /** Callback to skip and replace topic (alternative to onSkip, matches challenge/goal pattern) */
+  onSkipAndReplace?: (topicId: string, existingTopicTitles: string[]) => void;
   /** Callback to stop the skip/regeneration in progress */
   onStopSkip?: () => void;
   /** Callback after state transition */
@@ -37,6 +39,7 @@ export function TopicCard({
   showHistoryActions = false,
   onExplore,
   onSkip,
+  onSkipAndReplace,
   onStopSkip,
   onStateChange,
   isSkipping = false,
@@ -71,14 +74,20 @@ export function TopicCard({
   const handleSkip = useCallback(async () => {
     // Don't mark as skipped yet - wait for replacement to succeed
     // The parent will mark it as skipped only after successful replacement
-    if (onSkip) onSkip(topic);
-  }, [topic, onSkip]);
+    // Support both callback patterns
+    if (onSkipAndReplace) {
+      onSkipAndReplace(topic.id, [topic.title]);
+    } else if (onSkip) {
+      onSkip(topic);
+    }
+  }, [topic, onSkip, onSkipAndReplace]);
 
   const isExplored = currentState === 'explored';
   const isSkipped = currentState === 'skipped';
+  const isToday = isTodayDateKey(dateKey);
 
-  // Show loading state while regenerating on dashboard (with stop button)
-  if (isSkipping && !showHistoryActions) {
+  // Show loading state while regenerating (with stop button on dashboard)
+  if (isSkipping) {
     return (
       <div className={styles.card}>
         <Stack direction="vertical" gap="normal">
@@ -144,8 +153,8 @@ export function TopicCard({
           >
             {isExplored ? 'Explored' : 'Explore Topic'}
           </Button>
-          {/* Show Skip for unexplored topics, New for explored topics */}
-          {!isSkipped && (
+          {/* Show Skip for unexplored topics, New for explored topics - only on today's items */}
+          {!isSkipped && isToday && (
             <Button
               variant="invisible"
               leadingVisual={isExplored ? PlusIcon : SkipIcon}

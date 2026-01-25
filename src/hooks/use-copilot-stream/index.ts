@@ -226,7 +226,7 @@ export function useCopilotStream(
     const message = content.trim();
     if (!message) return null;
 
-    const { useGitHubTools = false, repos, conversationId: customConversationId, learningMode = false, onComplete } = options;
+    const { useGitHubTools = false, repos, conversationId: customConversationId, learningMode = false, onComplete, onUpdate } = options;
     
     // Use provided conversation ID or generate one
     const streamId = customConversationId ?? ensureConversationId();
@@ -258,6 +258,7 @@ export function useCopilotStream(
       learningMode,
       repos: repos?.map((r) => ({ fullName: r.fullName })),
       onComplete,
+      onUpdate,
     });
 
     // Calculate client-side total time

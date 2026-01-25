@@ -6,11 +6,20 @@
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
 import { jobStorage } from '@/lib/jobs';
-import type { TopicRegenerationInput, TopicRegenerationResult } from '@/lib/jobs';
-import type { LearningTopic } from '@/lib/focus/types';
+import type { 
+  TopicRegenerationInput, 
+  TopicRegenerationResult,
+  ChallengeRegenerationInput,
+  ChallengeRegenerationResult,
+  GoalRegenerationInput,
+  GoalRegenerationResult,
+} from '@/lib/jobs';
+import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
 import type { SkillProfile } from '@/lib/skills/types';
 import {
   buildSingleTopicPrompt,
+  buildSingleChallengePrompt,
+  buildSingleGoalPrompt,
 } from '@/lib/copilot/prompts';
 import {
   createLoggedLightweightCoachSession,
@@ -23,9 +32,9 @@ import { NextRequest, NextResponse } from 'next/server';
 const log = logger.withTag('Jobs API');
 
 interface CreateJobRequest {
-  type: 'topic-regeneration';
+  type: 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration';
   targetId?: string;
-  input: TopicRegenerationInput;
+  input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput;
 }
 
 /**
@@ -90,6 +99,128 @@ async function executeTopicRegeneration(
   }
 }
 
+/**
+ * Execute a challenge regeneration job.
+ */
+async function executeChallengeRegeneration(
+  jobId: string,
+  input: ChallengeRegenerationInput
+): Promise<void> {
+  jobStorage.markRunning(jobId);
+  
+  try {
+    // Build context
+    let serializedContext = '';
+    try {
+      const compactProfile = await buildCompactContext(1000);
+      serializedContext = serializeContext(compactProfile);
+    } catch (err) {
+      log.warn('Failed to build context:', err);
+    }
+    
+    // Build and send prompt
+    const prompt = buildSingleChallengePrompt(
+      serializedContext, 
+      input.existingChallengeTitles, 
+      input.skillProfile
+    );
+    
+    const loggedSession = await createLoggedLightweightCoachSession(
+      'Job: challenge-regeneration',
+      prompt.slice(0, 50)
+    );
+    
+    log.info(`[Job ${jobId}] Sending challenge prompt (${prompt.length} chars)...`);
+    const result = await loggedSession.sendAndWait(prompt);
+    loggedSession.destroy();
+    
+    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
+    
+    // Parse result
+    const parsed = extractJSON<{ challenge: DailyChallenge }>(result.responseText);
+    if (!parsed?.challenge) {
+      throw new Error('Failed to parse challenge response');
+    }
+    
+    // Add ID if missing
+    if (!parsed.challenge.id) {
+      parsed.challenge.id = crypto.randomUUID();
+    }
+    
+    // Mark completed
+    jobStorage.markCompleted<ChallengeRegenerationResult>(jobId, {
+      challenge: parsed.challenge,
+    });
+    
+    log.info(`[Job ${jobId}] Completed successfully`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error(`[Job ${jobId}] Failed:`, errorMessage);
+    jobStorage.markFailed(jobId, errorMessage);
+  }
+}
+
+/**
+ * Execute a goal regeneration job.
+ */
+async function executeGoalRegeneration(
+  jobId: string,
+  input: GoalRegenerationInput
+): Promise<void> {
+  jobStorage.markRunning(jobId);
+  
+  try {
+    // Build context
+    let serializedContext = '';
+    try {
+      const compactProfile = await buildCompactContext(1000);
+      serializedContext = serializeContext(compactProfile);
+    } catch (err) {
+      log.warn('Failed to build context:', err);
+    }
+    
+    // Build and send prompt
+    const prompt = buildSingleGoalPrompt(
+      serializedContext, 
+      input.existingGoalTitles, 
+      input.skillProfile
+    );
+    
+    const loggedSession = await createLoggedLightweightCoachSession(
+      'Job: goal-regeneration',
+      prompt.slice(0, 50)
+    );
+    
+    log.info(`[Job ${jobId}] Sending goal prompt (${prompt.length} chars)...`);
+    const result = await loggedSession.sendAndWait(prompt);
+    loggedSession.destroy();
+    
+    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
+    
+    // Parse result
+    const parsed = extractJSON<{ goal: DailyGoal }>(result.responseText);
+    if (!parsed?.goal) {
+      throw new Error('Failed to parse goal response');
+    }
+    
+    // Add ID if missing
+    if (!parsed.goal.id) {
+      parsed.goal.id = crypto.randomUUID();
+    }
+    
+    // Mark completed
+    jobStorage.markCompleted<GoalRegenerationResult>(jobId, {
+      goal: parsed.goal,
+    });
+    
+    log.info(`[Job ${jobId}] Completed successfully`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error(`[Job ${jobId}] Failed:`, errorMessage);
+    jobStorage.markFailed(jobId, errorMessage);
+  }
+}
+
 export async function POST(request: NextRequest) {
   const body = await parseJsonBodyWithFallback<CreateJobRequest>(request, {} as CreateJobRequest);
   
@@ -109,10 +240,22 @@ export async function POST(request: NextRequest) {
   });
   
   // Start execution async (don't await - fire and forget)
+  // Use setImmediate to ensure the response is sent first
   if (body.type === 'topic-regeneration') {
-    // Use setImmediate/setTimeout to ensure the response is sent first
     setImmediate(() => {
-      executeTopicRegeneration(jobId, body.input).catch(err => {
+      executeTopicRegeneration(jobId, body.input as TopicRegenerationInput).catch(err => {
+        log.error(`Unhandled error in job ${jobId}:`, err);
+      });
+    });
+  } else if (body.type === 'challenge-regeneration') {
+    setImmediate(() => {
+      executeChallengeRegeneration(jobId, body.input as ChallengeRegenerationInput).catch(err => {
+        log.error(`Unhandled error in job ${jobId}:`, err);
+      });
+    });
+  } else if (body.type === 'goal-regeneration') {
+    setImmediate(() => {
+      executeGoalRegeneration(jobId, body.input as GoalRegenerationInput).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });

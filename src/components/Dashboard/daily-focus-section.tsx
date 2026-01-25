@@ -55,6 +55,14 @@ interface DailyFocusSectionProps {
   onStopSkipTopic?: () => void;
   /** Set of topic IDs currently being skipped/regenerated */
   skippingTopicIds?: Set<string>;
+  /** Callback to skip a challenge and get a replacement */
+  onSkipChallenge?: (challengeId: string, existingChallengeTitles: string[]) => void;
+  /** Set of challenge IDs currently being skipped/regenerated */
+  skippingChallengeIds?: Set<string>;
+  /** Callback to skip a goal and get a replacement */
+  onSkipGoal?: (goalId: string, existingGoalTitles: string[]) => void;
+  /** Set of goal IDs currently being skipped/regenerated */
+  skippingGoalIds?: Set<string>;
   /** Callback to open a learning chat pre-seeded with a topic (AC7.1-AC7.4) */
   onExploreTopic?: (topic: LearningTopic) => void;
   /** Callback to stop a specific component's generation */
@@ -73,6 +81,10 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   onSkipTopic,
   onStopSkipTopic,
   skippingTopicIds = new Set(),
+  onSkipChallenge,
+  skippingChallengeIds = new Set(),
+  onSkipGoal,
+  skippingGoalIds = new Set(),
   onExploreTopic,
   onStopComponent,
 }: DailyFocusSectionProps) {
@@ -212,6 +224,8 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onRefresh={!isCustomChallenge ? () => onRefresh(['challenge']) : undefined}
                   onEdit={isCustomChallenge ? () => router.push(`/challenge/edit/${challenge.id}`) : undefined}
                   onCreate={handleCreateChallenge}
+                  onSkipAndReplace={!isCustomChallenge ? onSkipChallenge : undefined}
+                  isSkipping={skippingChallengeIds.has(challenge.id)}
                   refreshDisabled={isChallengeLoading}
                   timestamp={componentTimestamps.challenge}
                   queueCount={queueRemaining}
@@ -253,6 +267,8 @@ export const DailyFocusSection = memo(function DailyFocusSection({
               <GoalCard
                 goal={goal}
                 onRefresh={() => onRefresh(['goal'])}
+                onSkipAndReplace={onSkipGoal}
+                isSkipping={skippingGoalIds.has(goal.id)}
                 refreshDisabled={isGoalLoading}
               />
             )}

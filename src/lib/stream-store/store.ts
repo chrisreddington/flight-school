@@ -138,7 +138,7 @@ class StreamStoreImpl implements StreamStore {
 
   /** Process a Copilot chat stream */
   private async processCopilotStream(request: CopilotStreamRequest): Promise<StreamState> {
-    const { prompt, useGitHubTools, conversationId, learningMode, repos, onComplete } = request;
+    const { prompt, useGitHubTools, conversationId, learningMode, repos, onComplete, onUpdate } = request;
     const id = conversationId;
 
     // Check if already streaming
@@ -151,6 +151,7 @@ class StreamStoreImpl implements StreamStore {
     const state = createInitialState(id, abortController);
     this.streams.set(id, state);
     this.notifyActivitySubscribers();
+    onUpdate?.(state);
 
     const toolCalls: ToolCall[] = [];
     let responseContent = '';
@@ -172,7 +173,8 @@ class StreamStoreImpl implements StreamStore {
         requestBody.repos = repos.map((r) => r.fullName);
       }
 
-      this.updateStream(id, { status: 'streaming' });
+       this.updateStream(id, { status: 'streaming' });
+       onUpdate?.(this.streams.get(id)!);
 
       const res = await fetch('/api/copilot/stream', {
         method: 'POST',
@@ -190,9 +192,33 @@ class StreamStoreImpl implements StreamStore {
       const decoder = new TextDecoder();
 
       let errorFromStream: Error | null = null;
+      let connectionClosed = false;
+      
       while (true) {
-        const { done, value } = await reader.read();
+        let done: boolean;
+        let value: Uint8Array | undefined;
+        
+        try {
+          const result = await reader.read();
+          done = result.done;
+          value = result.value;
+        } catch (readError) {
+          // Handle "Controller is already closed" error that occurs during navigation
+          // This happens when the browser closes the underlying connection
+          // but the stream store should preserve whatever content was received
+          const errorMessage = readError instanceof Error ? readError.message : String(readError);
+          if (errorMessage.includes('Controller is already closed') || 
+              errorMessage.includes('network error') ||
+              errorMessage.includes('aborted')) {
+            log.debug(`Stream ${id} connection closed, preserving content`);
+            connectionClosed = true;
+            break;
+          }
+          throw readError;
+        }
+        
         if (done) break;
+        if (!value) continue;
 
         const text = decoder.decode(value);
         const lines = text.split('\n');
@@ -216,14 +242,23 @@ class StreamStoreImpl implements StreamStore {
                   if (stream.flushTimer === null) {
                     stream.flushTimer = setTimeout(() => this.flushBuffer(id), STREAMING_FLUSH_INTERVAL);
                   }
+                  onUpdate?.(stream);
                 }
               } else if (event.type === 'tool_start') {
                 toolCalls.push({ name: event.name, args: event.args, result: '' });
+                const stream = this.streams.get(id);
+                if (stream) {
+                  onUpdate?.(stream);
+                }
               } else if (event.type === 'tool_complete') {
                 const tc = toolCalls.find((t) => t.name === event.name && !t.result);
                 if (tc) {
                   tc.result = event.result;
                   tc.duration = event.duration;
+                  const stream = this.streams.get(id);
+                  if (stream) {
+                    onUpdate?.(stream);
+                  }
                 }
               } else if (event.type === 'meta') {
                 serverMeta = {
@@ -239,10 +274,18 @@ class StreamStoreImpl implements StreamStore {
                 if (event.hasActionableItem) {
                   hasActionableItem = true;
                 }
+                const stream = this.streams.get(id);
+                if (stream) {
+                  onUpdate?.(stream);
+                }
               } else if (event.type === 'done') {
                 responseContent = event.totalContent;
                 if (event.hasActionableItem) {
                   hasActionableItem = true;
+                }
+                const stream = this.streams.get(id);
+                if (stream) {
+                  onUpdate?.(stream);
                 }
               } else if (event.type === 'error') {
                 errorFromStream = new Error(event.message);
@@ -265,8 +308,11 @@ class StreamStoreImpl implements StreamStore {
         this.flushBuffer(id);
       }
 
+      // If connection was closed during navigation, mark as interrupted (not error)
+      // The content received so far is preserved and the stream is marked as completed
+      // since the server may have finished processing
       const finalState: Partial<StreamState> = {
-        status: 'completed',
+        status: connectionClosed ? 'completed' : 'completed',
         content: responseContent,
         toolCalls,
         serverMeta,
@@ -275,9 +321,12 @@ class StreamStoreImpl implements StreamStore {
         completedAt: performance.now(),
         abortController: undefined,
         flushTimer: null,
+        // Mark that this was interrupted so callers can handle partial content
+        wasInterrupted: connectionClosed,
       };
 
       this.updateStream(id, finalState);
+      onUpdate?.(this.streams.get(id)!);
       this.notifyActivitySubscribers();
       this.scheduleCleanup(id);
 
@@ -309,6 +358,7 @@ class StreamStoreImpl implements StreamStore {
           flushTimer: null,
         };
         this.updateStream(id, abortedState);
+        onUpdate?.(this.streams.get(id)!);
         this.notifyActivitySubscribers();
         this.scheduleCleanup(id);
         
@@ -337,6 +387,7 @@ class StreamStoreImpl implements StreamStore {
         flushTimer: null,
       };
       this.updateStream(id, errorState);
+      onUpdate?.(this.streams.get(id)!);
       this.notifyActivitySubscribers();
       this.scheduleCleanup(id);
       

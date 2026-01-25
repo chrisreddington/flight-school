@@ -39,7 +39,22 @@ export function Dashboard() {
   useBreadcrumb('/', 'Dashboard', '/');
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useUserProfile();
-  const { data: aiFocus, isAIEnabled, toolsUsed, refetch: refetchFocus, loadingComponents, componentTimestamps, skipAndReplaceTopic, skippingTopicIds, stopComponent, stopTopicSkip } = useAIFocus();
+  const { 
+    data: aiFocus, 
+    isAIEnabled, 
+    toolsUsed, 
+    refetch: refetchFocus, 
+    loadingComponents, 
+    componentTimestamps, 
+    skipAndReplaceTopic, 
+    skipAndReplaceChallenge,
+    skipAndReplaceGoal,
+    skippingTopicIds,
+    skippingChallengeIds,
+    skippingGoalIds,
+    stopComponent, 
+    stopTopicSkip 
+  } = useAIFocus();
   
   // Adapter for DailyFocusSection which expects string[] format
   const handleRefresh = useCallback((components?: string[]) => {
@@ -51,6 +66,16 @@ export function Dashboard() {
   const handleSkipTopic = useCallback((skippedTopic: LearningTopic, existingTopicTitles: string[]) => {
     skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
   }, [skipAndReplaceTopic]);
+
+  // Handle skipping a challenge and generating a replacement
+  const handleSkipChallenge = useCallback((challengeId: string, existingChallengeTitles: string[]) => {
+    skipAndReplaceChallenge(challengeId, existingChallengeTitles);
+  }, [skipAndReplaceChallenge]);
+
+  // Handle skipping a goal and generating a replacement
+  const handleSkipGoal = useCallback((goalId: string, existingGoalTitles: string[]) => {
+    skipAndReplaceGoal(goalId, existingGoalTitles);
+  }, [skipAndReplaceGoal]);
 
   // Handle stopping a topic skip/regeneration - reverts topic state
   const handleStopSkipTopic = useCallback(() => {
@@ -143,6 +168,10 @@ export function Dashboard() {
               onStopSkipTopic={handleStopSkipTopic}
               onStopComponent={stopComponent}
               skippingTopicIds={skippingTopicIds}
+              onSkipChallenge={handleSkipChallenge}
+              skippingChallengeIds={skippingChallengeIds}
+              onSkipGoal={handleSkipGoal}
+              skippingGoalIds={skippingGoalIds}
               onExploreTopic={handleExploreTopic}
             />
             {/* Multi-thread Learning Chat Experience */}

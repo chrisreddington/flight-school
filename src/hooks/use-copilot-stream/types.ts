@@ -86,6 +86,8 @@ export interface SendMessageOptions {
    * the component unmounts during streaming.
    */
   onComplete?: (state: GlobalStreamState) => void | Promise<void>;
+  /** Optional callback invoked when a stream state updates. */
+  onUpdate?: (state: GlobalStreamState) => void;
 }
 
 // ============================================================================

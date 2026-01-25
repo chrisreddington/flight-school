@@ -33,7 +33,7 @@
 
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 
 import { logger } from '@/lib/logger';
 import type { StreamState } from '@/lib/stream-store/types';
@@ -45,6 +45,7 @@ import { useCopilotStream } from './use-copilot-stream';
 import { useThreads, type UseThreadsReturn } from './use-threads';
 
 const log = logger.withTag('useLearningChat');
+const STREAMING_PARTIAL_APPEND_MS = 1500;
 
 // ============================================================================
 // Types
@@ -113,16 +114,21 @@ export type UseLearningChatReturn = UseLearningChatState & UseLearningChatAction
  * @returns A thread-compatible message, or null if state is error/empty
  */
 function streamStateToThreadMessage(state: StreamState): Message | null {
+  // Use streamingBuffer if content is empty (handles interrupted streams)
+  const rawContent = state.content || state.streamingBuffer || '';
+  
   // Don't create a message for errors without content
-  if (state.status === 'error' && !state.content) {
+  if (state.status === 'error' && !rawContent) {
     return null;
   }
   
   // Build content - add indicators for non-completed streams
-  let content = state.content;
+  let content = rawContent;
   if (state.status === 'aborted' && content) {
     content += '\n\n*(Response stopped)*';
   } else if (state.status === 'error' && content) {
+    content += '\n\n*(Response interrupted)*';
+  } else if (state.wasInterrupted && content) {
     content += '\n\n*(Response interrupted)*';
   }
   
@@ -148,6 +154,85 @@ function streamStateToThreadMessage(state: StreamState): Message | null {
       mcpEnabled: state.serverMeta?.mcpEnabled ?? undefined,
       sessionReused: state.serverMeta?.sessionReused ?? undefined,
     },
+  };
+}
+
+/**
+ * Adds or updates a partial streaming message for the thread.
+ */
+function upsertStreamingMessage(
+  thread: Thread,
+  content: string,
+  toolCalls: StreamState['toolCalls'],
+  hasActionableItem?: boolean,
+  isInterrupted?: boolean
+): Thread {
+  const messageSuffix = isInterrupted ? '\n\n*(Response interrupted)*' : '';
+  const messageContent = `${content}${messageSuffix}`;
+  const existingIndex = thread.messages.findIndex((message) => message.id === 'streaming');
+
+  const streamingMessage: Message = {
+    id: 'streaming',
+    role: 'assistant',
+    content: messageContent,
+    timestamp: now(),
+    toolCalls: toolCalls?.map((tc) => tc.name),
+    hasActionableItem,
+  };
+
+  if (existingIndex >= 0) {
+    const updatedMessages = [...thread.messages];
+    updatedMessages[existingIndex] = streamingMessage;
+    return { ...thread, messages: updatedMessages, updatedAt: now() };
+  }
+
+  return {
+    ...thread,
+    messages: [...thread.messages, streamingMessage],
+    updatedAt: now(),
+  };
+}
+
+/**
+ * Removes the partial streaming message from a thread.
+ */
+function removeStreamingMessage(thread: Thread): Thread {
+  const filteredMessages = thread.messages.filter((message) => message.id !== 'streaming');
+  if (filteredMessages.length === thread.messages.length) {
+    return thread;
+  }
+  return { ...thread, messages: filteredMessages, updatedAt: now() };
+}
+
+/**
+ * Converts a stored streaming message into a completed, interrupted message.
+ */
+function finalizeInterruptedMessage(thread: Thread): Thread | null {
+  const streamingMessage = thread.messages.find((message) => message.id === 'streaming');
+  if (!streamingMessage) return null;
+
+  const trimmedContent = streamingMessage.content.trim();
+  if (!trimmedContent) {
+    return removeStreamingMessage(thread);
+  }
+
+  const interruptionNote = '*(Response interrupted)*';
+  const content = streamingMessage.content.includes(interruptionNote)
+    ? streamingMessage.content
+    : `${streamingMessage.content}\n\n${interruptionNote}`;
+
+  const finalizedMessage: Message = {
+    ...streamingMessage,
+    id: generateMessageId(),
+    content,
+    timestamp: now(),
+  };
+
+  const withoutStreaming = thread.messages.filter((message) => message.id !== 'streaming');
+  return {
+    ...thread,
+    messages: [...withoutStreaming, finalizedMessage],
+    updatedAt: now(),
   };
 }
 
@@ -209,6 +294,39 @@ export function useLearningChat(): UseLearningChatReturn {
   // This gives better UX - shows loading only when current thread is loading
   const isStreaming = activeThreadId ? isStreamingConversation(activeThreadId) : anyStreaming;
 
+  useEffect(() => {
+    if (isThreadsLoading) return;
+    if (streamingThreadIds.length === 0) return;
+    if (activeThreadId) return;
+
+    // Auto-select the most recent streaming thread after reload/navigation.
+    const latestStreamingId = streamingThreadIds[streamingThreadIds.length - 1];
+    if (latestStreamingId) {
+      selectThread(latestStreamingId);
+    }
+  }, [isThreadsLoading, streamingThreadIds, activeThreadId, selectThread]);
+
+  useEffect(() => {
+    if (isThreadsLoading || threads.length === 0) return;
+
+    const hasActiveStreams = streamingThreadIds.length > 0;
+    const updates = threads
+      .map((thread) => {
+        if (thread.messages.some((message) => message.id === 'streaming')) {
+          if (hasActiveStreams && streamingThreadIds.includes(thread.id)) {
+            return null;
+          }
+          return finalizeInterruptedMessage(thread);
+        }
+        return null;
+      })
+      .filter((thread): thread is Thread => Boolean(thread));
+
+    if (updates.length === 0) return;
+
+    void Promise.all(updates.map((thread) => threadStore.update(thread)));
+  }, [isThreadsLoading, threads, streamingThreadIds]);
+
   // Wrap stopStreaming to stop only the active thread's stream by default
   const stopStreaming = useCallback(() => {
     if (activeThreadId) {
@@ -238,6 +356,8 @@ export function useLearningChat(): UseLearningChatReturn {
       if (!message) return;
 
       const { useGitHubTools = false, repos, threadId: explicitThreadId } = options;
+      let lastPartialSaveMs = 0;
+      let lastPartialContent = '';
       
       log.debug('sendMessage called:', { explicitThreadId, hasActiveThread: !!activeThread });
 
@@ -321,10 +441,6 @@ export function useLearningChat(): UseLearningChatReturn {
         
         // Convert stream state to thread message
         const threadMessage = streamStateToThreadMessage(state);
-        if (!threadMessage) {
-          log.debug('No message to persist (empty or error)');
-          return;
-        }
 
         // Get fresh thread state directly from storage to avoid stale data
         // This is critical because the thread state may have changed during streaming
@@ -332,10 +448,19 @@ export function useLearningChat(): UseLearningChatReturn {
         const freshThread = await threadStore.getById(targetThreadId);
         
         if (freshThread) {
-          // Update the thread with the response message
+          const cleanedThread = removeStreamingMessage(freshThread);
+
+          if (!threadMessage) {
+            if (cleanedThread !== freshThread) {
+              await threadStore.update(cleanedThread);
+            }
+            log.debug('No message to persist (empty or error)');
+            return;
+          }
+
           const updatedThread: Thread = {
-            ...freshThread,
-            messages: [...freshThread.messages, threadMessage],
+            ...cleanedThread,
+            messages: [...cleanedThread.messages, threadMessage],
             updatedAt: now(),
           };
           await threadStore.update(updatedThread);
@@ -353,6 +478,38 @@ export function useLearningChat(): UseLearningChatReturn {
         }
       };
 
+      const handleStreamUpdate = (state: StreamState) => {
+        if (state.status !== 'pending' && state.status !== 'streaming') return;
+        const partialContent = state.streamingBuffer?.length
+          ? state.streamingBuffer
+          : state.content;
+        if (!partialContent) return;
+
+        const nowMs = Date.now();
+        if (partialContent === lastPartialContent) return;
+        if (nowMs - lastPartialSaveMs < STREAMING_PARTIAL_APPEND_MS) return;
+
+        lastPartialSaveMs = nowMs;
+        lastPartialContent = partialContent;
+
+        void (async () => {
+          try {
+            const freshThread = await threadStore.getById(targetThreadId);
+            if (!freshThread) return;
+            const updatedThread = upsertStreamingMessage(
+              freshThread,
+              partialContent,
+              state.toolCalls,
+              state.hasActionableItem,
+              state.wasInterrupted
+            );
+            await threadStore.update(updatedThread);
+          } catch (error) {
+            log.warn('Failed to persist streaming update', { error });
+          }
+        })();
+      };
+
       // Send streaming message with learning mode enabled
       // The onComplete callback handles persistence outside React lifecycle
       await sendStreamingMessage(message, {
@@ -361,6 +518,7 @@ export function useLearningChat(): UseLearningChatReturn {
         conversationId: targetThreadId,
         learningMode: true,
         onComplete: handleStreamComplete,
+        onUpdate: handleStreamUpdate,
       });
 
       // NOTE: We no longer handle persistence here - it's done in onComplete callback

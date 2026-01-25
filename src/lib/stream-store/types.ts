@@ -44,6 +44,8 @@ export interface StreamState {
   completedAt?: number;
   /** Client-side time to first token (ms) */
   clientFirstTokenMs?: number;
+  /** Whether the stream was interrupted (e.g., navigation) but content was preserved */
+  wasInterrupted?: boolean;
   /** Internal: abort controller for cancellation */
   abortController?: AbortController;
   /** Internal: flush timer for batching updates */
@@ -72,6 +74,8 @@ export interface CopilotStreamRequest {
    * Use this for critical persistence operations like saving messages to storage.
    */
   onComplete?: (state: StreamState) => void | Promise<void>;
+  /** Optional callback invoked when stream state updates. */
+  onUpdate?: (state: StreamState) => void;
 }
 
 /** Options for starting a challenge evaluation stream */

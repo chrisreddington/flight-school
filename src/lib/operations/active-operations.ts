@@ -52,7 +52,7 @@ const POLL_INTERVAL_MS = 1000;
 const MAX_POLL_TIME_MS = 120000;
 
 interface BackgroundJobOptions<T> {
-  type: 'topic-regeneration';
+  type: 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration';
   targetId: string;
   input: Record<string, unknown>;
   onComplete?: (result: T) => void | Promise<void>;
@@ -266,15 +266,9 @@ class ActiveOperationsManager {
             this.notifyListeners();
           }
 
-          // Call React callback if provided
-          if (onComplete && job.result) {
-            try {
-              await onComplete(job.result as T);
-            } catch (err) {
-              log.error(`onComplete callback failed:`, err);
-            }
-          } else if (job.result && job.targetId) {
-            // No React callback - use registered handler (for post-navigation completion)
+          // ALWAYS run registered handler first (for persistence)
+          // This ensures data is saved even if React component unmounted
+          if (job.result && job.targetId) {
             const handler = this.completionHandlers.get(job.type);
             if (handler) {
               try {
@@ -283,6 +277,17 @@ class ActiveOperationsManager {
               } catch (err) {
                 log.error(`Registered completion handler failed:`, err);
               }
+            }
+          }
+
+          // ALSO call React callback if provided (for immediate UI update)
+          // The component may have unmounted, but the callback might still work
+          // If it fails, that's okay - the registered handler already persisted
+          if (onComplete && job.result) {
+            try {
+              await onComplete(job.result as T);
+            } catch (err) {
+              log.error(`onComplete callback failed (component may have unmounted):`, err);
             }
           }
 

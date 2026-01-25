@@ -11,9 +11,9 @@ import { MarkdownContent } from '@/components/MarkdownContent';
 import { focusStore } from '@/lib/focus';
 import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
-import { getDateKey } from '@/lib/utils/date-utils';
+import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 import { ClockIcon } from '@primer/octicons-react';
-import { Button, Heading, Label, Stack } from '@primer/react';
+import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
@@ -34,6 +34,10 @@ interface ChallengeCardProps {
   onCreate?: () => void;
   /** Callback after state transition */
   onStateChange?: () => void;
+  /** Callback to skip this challenge and regenerate a new one (with existing titles to avoid) */
+  onSkipAndReplace?: (challengeId: string, existingChallengeTitles: string[]) => void;
+  /** Whether skip/regeneration is in progress */
+  isSkipping?: boolean;
   /** Whether refresh is disabled */
   refreshDisabled?: boolean;
   /** Optional timestamp for last update */
@@ -51,6 +55,8 @@ export function ChallengeCard({
   onEdit,
   onCreate,
   onStateChange,
+  onSkipAndReplace,
+  isSkipping = false,
   refreshDisabled = false,
   timestamp,
   queueCount,
@@ -99,15 +105,46 @@ export function ChallengeCard({
   }, [dateKey, challenge.id, onStateChange]);
 
   const handleSkip = useCallback(async () => {
+    // If we have skip-and-replace handler, use it for background regeneration
+    // Don't mark as skipped yet - that happens after replacement succeeds
+    if (onSkipAndReplace) {
+      onSkipAndReplace(challenge.id, [challenge.title]);
+      return;
+    }
+    
+    // Fallback: just mark as skipped and refresh
     await focusStore.transitionChallenge(dateKey, challenge.id, 'skipped', 'history');
     setCurrentState('skipped');
     if (onStateChange) onStateChange();
     if (onRefresh) onRefresh();
-  }, [dateKey, challenge.id, onStateChange, onRefresh]);
+  }, [dateKey, challenge.id, challenge.title, onStateChange, onRefresh, onSkipAndReplace]);
 
   const isCompleted = currentState === 'completed';
   const isSkipped = currentState === 'skipped';
   const isInProgress = currentState === 'in-progress';
+  const isToday = isTodayDateKey(dateKey);
+
+  // Show loading state while regenerating
+  if (isSkipping) {
+    return (
+      <div className={styles.card}>
+        <Stack direction="vertical" gap="normal">
+          <Stack direction="horizontal" align="center" gap="condensed">
+            <Spinner size="small" />
+            <span className={styles.loadingText}>Generating new challenge...</span>
+          </Stack>
+          <SkeletonBox height="24px" width="70%" />
+          <SkeletonBox height="16px" width="100%" />
+          <SkeletonBox height="16px" width="90%" />
+        </Stack>
+      </div>
+    );
+  }
+
+  // Don't render skipped challenges on dashboard (they've been replaced)
+  if (isSkipped && !showHistoryActions) {
+    return null;
+  }
 
   return (
     <div className={styles.card}>
@@ -138,17 +175,20 @@ export function ChallengeCard({
               </Label>
             )}
           </Stack>
-          <ChallengeActionMenu
-            challenge={challenge}
-            isCustom={isCustom}
-            onEdit={isCustom ? onEdit : undefined}
-            onSkip={isCustom ? handleSkip : undefined}
-            onRefresh={!isCustom ? onRefresh : undefined}
-            onCreate={onCreate}
-            onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
-            showHistoryActions={showHistoryActions}
-            refreshDisabled={refreshDisabled}
-          />
+          {/* Only show action menu on today's items */}
+          {isToday && (
+            <ChallengeActionMenu
+              challenge={challenge}
+              isCustom={isCustom}
+              onEdit={isCustom ? onEdit : undefined}
+              onSkip={isCustom ? handleSkip : undefined}
+              onRefresh={!isCustom ? onRefresh : undefined}
+              onCreate={onCreate}
+              onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
+              showHistoryActions={showHistoryActions}
+              refreshDisabled={refreshDisabled}
+            />
+          )}
         </Stack>
 
         <Heading as="h3">{challenge.title}</Heading>
