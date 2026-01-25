@@ -10,7 +10,8 @@ export type OperationType =
   | 'topic-regeneration'
   | 'challenge-regeneration'
   | 'goal-regeneration'
-  | 'chat-message';
+  | 'chat-message'
+  | 'chat-response';
 
 /** Status of an operation */
 export type OperationStatus = 'pending' | 'in-progress' | 'complete' | 'failed' | 'aborted';
@@ -45,26 +46,6 @@ export interface ActiveOperation<T = unknown> {
   error?: string;
   /** AbortController for cancellation */
   abortController?: AbortController;
-}
-
-/** Options for starting an operation */
-export interface StartOperationOptions<T> {
-  /** Unique ID for this operation (e.g., topic ID being regenerated) */
-  id: string;
-  /** Type of operation */
-  type: OperationType;
-  /** Human-readable description */
-  description?: string;
-  /** ID of the target item */
-  targetId?: string;
-  /** The async function to execute */
-  executor: (signal: AbortSignal) => Promise<T>;
-  /** Callback when operation completes successfully */
-  onComplete?: (result: T) => void | Promise<void>;
-  /** Callback when operation fails */
-  onError?: (error: Error) => void;
-  /** Additional context */
-  context?: Record<string, unknown>;
 }
 
 /** Listener function signature */

@@ -24,6 +24,9 @@ export async function GET(): Promise<Response> {
 
       // Subscribe to new events
       const unsubscribe = activityLogger.subscribe((event: AIActivityEvent) => {
+        // Check if stream is still open before writing
+        if (controller.desiredSize === null) return;
+        
         try {
           const eventData = JSON.stringify({ type: 'event', event });
           controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
@@ -34,6 +37,12 @@ export async function GET(): Promise<Response> {
 
       // Heartbeat to keep connection alive (every 30s)
       const heartbeat = setInterval(() => {
+        // Check if stream is still open before writing
+        if (controller.desiredSize === null) {
+          clearInterval(heartbeat);
+          return;
+        }
+        
         try {
           controller.enqueue(encoder.encode(`: heartbeat\n\n`));
         } catch {

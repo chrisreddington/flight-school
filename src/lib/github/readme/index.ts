@@ -8,10 +8,10 @@
  */
 
 // Summary (fetching and extracting info from existing READMEs)
-export { getRepoReadmeSummary, type ReadmeSummary } from './summary';
+export { getRepoReadmeSummary } from './summary';
 
 // Learning README generation
-export { generateLearningReadme, type ReadmeGenerationOptions } from './learning-readme';
+export { generateLearningReadme } from './learning-readme';
 
 // Workspace export README generation
 export {

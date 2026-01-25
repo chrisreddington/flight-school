@@ -1,0 +1,13 @@
+/* History Page Styles */
+
+.root {
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+.main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--base-size-24, 24px);
+  min-height: calc(100vh - 60px);
+}

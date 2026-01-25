@@ -160,6 +160,50 @@ JSON only:
 }
 
 /**
+ * Builds a prompt for generating a single replacement challenge.
+ */
+export function buildSingleChallengePrompt(
+  profileContext: string,
+  existingChallengeTitles: string[],
+  skillProfile?: SkillProfile
+): string {
+  const skillSections = buildSkillProfileSections(skillProfile);
+  const excludeList = existingChallengeTitles.length > 0 
+    ? `\nDo NOT suggest these challenges (already shown): ${existingChallengeTitles.join(', ')}`
+    : '';
+  
+  return `Developer profile: ${profileContext}${skillSections}${excludeList}
+
+Generate ONE coding challenge (15-30 min, ZPD-appropriate).
+${skillProfile?.skills.length ? 'Prioritize SK: skills, exclude EX: skills.' : ''}
+
+JSON only:
+{"challenge":{"id":"","title":"","description":"","difficulty":"beginner|intermediate|advanced","language":"","estimatedTime":"","whyThisChallenge":[""]}}`;
+}
+
+/**
+ * Builds a prompt for generating a single replacement goal.
+ */
+export function buildSingleGoalPrompt(
+  profileContext: string,
+  existingGoalTitles: string[],
+  skillProfile?: SkillProfile
+): string {
+  const skillSections = buildSkillProfileSections(skillProfile);
+  const excludeList = existingGoalTitles.length > 0 
+    ? `\nDo NOT suggest these goals (already shown): ${existingGoalTitles.join(', ')}`
+    : '';
+  
+  return `Developer profile: ${profileContext}${skillSections}${excludeList}
+
+Generate ONE daily goal (20-30 min, completable TODAY).
+Pattern: Fix X, Review N PRs, Add N tests, Refactor Y.
+
+JSON only:
+{"goal":{"id":"","title":"","description":"","progress":0,"target":"1 task","reasoning":""}}`;
+}
+
+/**
  * Builds SK: and EX: sections from a skill profile.
  *
  * @param skillProfile - User skill profile (optional)

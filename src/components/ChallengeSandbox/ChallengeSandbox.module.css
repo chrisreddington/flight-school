@@ -464,6 +464,24 @@
   font-size: var(--text-body-size-medium);
 }
 
+/* Completion banner for perfect score (100%) */
+.completionBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  padding: var(--base-size-12) var(--base-size-16);
+  background-color: var(--bgColor-success-muted);
+  border: 1px solid var(--borderColor-success-muted);
+  border-radius: var(--borderRadius-medium);
+  color: var(--fgColor-success);
+  font-size: 14px;
+  margin-bottom: var(--base-size-12);
+}
+
+.completionBanner strong {
+  font-weight: 600;
+}
+
 /* Loading state */
 .loading {
   display: flex;

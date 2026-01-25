@@ -24,7 +24,6 @@ import {
   KebabHorizontalIcon,
   PencilIcon,
   SkipIcon,
-  XIcon,
 } from '@primer/octicons-react';
 import { ActionList, ActionMenu, IconButton } from '@primer/react';
 import { memo } from 'react';
@@ -116,9 +115,10 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
             <ActionList.Divider />
           )}
 
-          {/* AI challenge refresh */}
-          {!isCustom && onRefresh && (
-            <ActionList.Item onSelect={onRefresh} disabled={refreshDisabled}>
+          {/* AI challenge skip (use onSkip for skip-and-replace behavior) */}
+          {/* Only show on dashboard (not history) AND only if NOT completed */}
+          {!isCustom && onSkip && !showHistoryActions && (
+            <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
               <ActionList.LeadingVisual>
                 <SkipIcon />
               </ActionList.LeadingVisual>
@@ -135,12 +135,13 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
               Mark Complete
             </ActionList.Item>
           )}
+          {/* Skip in history - only for AI challenges that aren't completed */}
           {showHistoryActions && onSkip && !isCustom && (
-            <ActionList.Item onSelect={onSkip}>
+            <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
               <ActionList.LeadingVisual>
-                <XIcon />
+                <SkipIcon />
               </ActionList.LeadingVisual>
-              Skip
+              Skip & Replace
             </ActionList.Item>
           )}
           {showHistoryActions && (onMarkComplete || onCreateRepo || onSkip) && onCreate && (

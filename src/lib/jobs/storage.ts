@@ -1,17 +1,18 @@
 /**
  * Background Jobs Storage
  * 
- * In-memory storage for background AI jobs. For production scale,
- * this could be replaced with Redis or a database.
+ * File-based storage for background AI jobs using the storage utils.
+ * This ensures jobs persist across API route invocations in dev mode.
  */
 
 import { logger } from '@/lib/logger';
+import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
 
 const log = logger.withTag('JobStorage');
 
-export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
+type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-export interface BackgroundJob<T = unknown> {
+interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
   targetId?: string;
@@ -24,20 +25,65 @@ export interface BackgroundJob<T = unknown> {
   completedAt?: string;
 }
 
-// In-memory storage (survives across API calls within same server process)
-const jobs = new Map<string, BackgroundJob>();
+// Storage schema for jobs file
+interface JobsStorageSchema {
+  jobs: Record<string, BackgroundJob>;
+  version: number;
+}
+
+const STORAGE_KEY = 'background-jobs';
+const DEFAULT_SCHEMA: JobsStorageSchema = { jobs: {}, version: 1 };
 
 // Cleanup old jobs periodically (keep last 100, remove completed older than 1 hour)
 const MAX_JOBS = 100;
 const MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
 
-function cleanup(): void {
+// Schema validator
+function validateSchema(data: unknown): data is JobsStorageSchema {
+  if (typeof data !== 'object' || data === null) return false;
+  const obj = data as Record<string, unknown>;
+  if (typeof obj.jobs !== 'object' || obj.jobs === null) return false;
+  if (typeof obj.version !== 'number') return false;
+  return true;
+}
+
+// Read jobs from storage (synchronously cached in memory for performance)
+let jobsCache: JobsStorageSchema | null = null;
+
+async function loadJobs(): Promise<JobsStorageSchema> {
+  if (jobsCache !== null) {
+    return jobsCache;
+  }
+  
+  try {
+    const data = await readStorage<JobsStorageSchema>(STORAGE_KEY, DEFAULT_SCHEMA, validateSchema);
+    jobsCache = data;
+    return data;
+  } catch (err) {
+    log.warn('Failed to load jobs from storage, using default:', err);
+    jobsCache = DEFAULT_SCHEMA;
+    return DEFAULT_SCHEMA;
+  }
+}
+
+async function saveJobs(data: JobsStorageSchema): Promise<void> {
+  jobsCache = data;
+  try {
+    await writeStorage(STORAGE_KEY, data);
+  } catch (err) {
+    log.error('Failed to save jobs to storage:', err);
+    throw err;
+  }
+}
+
+function cleanup(schema: JobsStorageSchema): JobsStorageSchema {
   const now = Date.now();
   const toDelete: string[] = [];
+  const jobs = schema.jobs;
   
-  for (const [id, job] of jobs) {
-    // Remove old completed/failed jobs
-    if (job.status === 'completed' || job.status === 'failed') {
+  for (const [id, job] of Object.entries(jobs)) {
+    // Remove old completed/failed/cancelled jobs
+    if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
       const completedAt = job.completedAt ? new Date(job.completedAt).getTime() : 0;
       if (now - completedAt > MAX_AGE_MS) {
         toDelete.push(id);
@@ -46,37 +92,43 @@ function cleanup(): void {
   }
   
   // If still too many, remove oldest completed first
-  if (jobs.size - toDelete.length > MAX_JOBS) {
-    const completed = Array.from(jobs.entries())
+  const remainingCount = Object.keys(jobs).length - toDelete.length;
+  if (remainingCount > MAX_JOBS) {
+    const completed = Object.entries(jobs)
       .filter(([id, job]) => 
-        (job.status === 'completed' || job.status === 'failed') && 
+        (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') && 
         !toDelete.includes(id)
       )
       .sort((a, b) => 
         new Date(a[1].createdAt).getTime() - new Date(b[1].createdAt).getTime()
       );
     
-    const excess = jobs.size - toDelete.length - MAX_JOBS;
+    const excess = remainingCount - MAX_JOBS;
     for (let i = 0; i < excess && i < completed.length; i++) {
       toDelete.push(completed[i][0]);
     }
   }
   
-  for (const id of toDelete) {
-    jobs.delete(id);
+  if (toDelete.length === 0) {
+    return schema;
   }
   
-  if (toDelete.length > 0) {
-    log.debug(`Cleaned up ${toDelete.length} old jobs`);
+  const newJobs = { ...jobs };
+  for (const id of toDelete) {
+    delete newJobs[id];
   }
+  
+  log.debug(`Cleaned up ${toDelete.length} old jobs`);
+  return { ...schema, jobs: newJobs };
 }
 
 export const jobStorage = {
   /**
    * Create a new job.
    */
-  create<T>(job: Omit<BackgroundJob<T>, 'status' | 'createdAt'>): BackgroundJob<T> {
-    cleanup();
+  async create<T>(job: Omit<BackgroundJob<T>, 'status' | 'createdAt'>): Promise<BackgroundJob<T>> {
+    const schema = await loadJobs();
+    const cleaned = cleanup(schema);
     
     const newJob: BackgroundJob<T> = {
       ...job,
@@ -84,7 +136,8 @@ export const jobStorage = {
       createdAt: new Date().toISOString(),
     };
     
-    jobs.set(job.id, newJob as BackgroundJob);
+    cleaned.jobs[job.id] = newJob as BackgroundJob;
+    await saveJobs(cleaned);
     log.info(`Created job: ${job.id} (${job.type})`);
     
     return newJob;
@@ -93,19 +146,22 @@ export const jobStorage = {
   /**
    * Get a job by ID.
    */
-  get<T>(id: string): BackgroundJob<T> | undefined {
-    return jobs.get(id) as BackgroundJob<T> | undefined;
+  async get<T>(id: string): Promise<BackgroundJob<T> | undefined> {
+    const schema = await loadJobs();
+    return schema.jobs[id] as BackgroundJob<T> | undefined;
   },
   
   /**
    * Update a job's status.
    */
-  update<T>(id: string, updates: Partial<BackgroundJob<T>>): BackgroundJob<T> | undefined {
-    const job = jobs.get(id);
+  async update<T>(id: string, updates: Partial<BackgroundJob<T>>): Promise<BackgroundJob<T> | undefined> {
+    const schema = await loadJobs();
+    const job = schema.jobs[id];
     if (!job) return undefined;
     
     const updated = { ...job, ...updates } as BackgroundJob<T>;
-    jobs.set(id, updated as BackgroundJob);
+    schema.jobs[id] = updated as BackgroundJob;
+    await saveJobs(schema);
     
     log.debug(`Updated job ${id}: status=${updated.status}`);
     return updated;
@@ -114,7 +170,7 @@ export const jobStorage = {
   /**
    * Mark a job as running.
    */
-  markRunning(id: string): BackgroundJob | undefined {
+  async markRunning(id: string): Promise<BackgroundJob | undefined> {
     return this.update(id, {
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -124,7 +180,7 @@ export const jobStorage = {
   /**
    * Mark a job as completed with result.
    */
-  markCompleted<T>(id: string, result: T): BackgroundJob<T> | undefined {
+  async markCompleted<T>(id: string, result: T): Promise<BackgroundJob<T> | undefined> {
     return this.update<T>(id, {
       status: 'completed',
       result,
@@ -135,7 +191,7 @@ export const jobStorage = {
   /**
    * Mark a job as failed with error.
    */
-  markFailed(id: string, error: string): BackgroundJob | undefined {
+  async markFailed(id: string, error: string): Promise<BackgroundJob | undefined> {
     return this.update(id, {
       status: 'failed',
       error,
@@ -144,39 +200,80 @@ export const jobStorage = {
   },
   
   /**
+   * Mark a job as cancelled.
+   */
+  async markCancelled(id: string): Promise<BackgroundJob | undefined> {
+    log.info(`Marking job ${id} as cancelled`);
+    return this.update(id, {
+      status: 'cancelled',
+      error: 'Cancelled by user',
+      completedAt: new Date().toISOString(),
+    });
+  },
+  
+  /**
    * Get all jobs of a specific type.
    */
-  getByType(type: string): BackgroundJob[] {
-    return Array.from(jobs.values()).filter(job => job.type === type);
+  async getByType(type: string): Promise<BackgroundJob[]> {
+    const schema = await loadJobs();
+    return Object.values(schema.jobs).filter(job => job.type === type);
   },
   
   /**
    * Get all pending/running jobs.
    */
-  getActive(): BackgroundJob[] {
-    return Array.from(jobs.values()).filter(
+  async getActive(): Promise<BackgroundJob[]> {
+    const schema = await loadJobs();
+    return Object.values(schema.jobs).filter(
       job => job.status === 'pending' || job.status === 'running'
+    );
+  },
+
+  /**
+   * Find the active chat-response job for a thread.
+   */
+  async getActiveChatJobForThread(threadId: string): Promise<BackgroundJob | undefined> {
+    const schema = await loadJobs();
+    return Object.values(schema.jobs).find(
+      job =>
+        job.type === 'chat-response' &&
+        job.targetId === threadId &&
+        (job.status === 'pending' || job.status === 'running')
     );
   },
   
   /**
    * Get all jobs (for debugging).
    */
-  getAll(): BackgroundJob[] {
-    return Array.from(jobs.values());
+  async getAll(): Promise<BackgroundJob[]> {
+    const schema = await loadJobs();
+    return Object.values(schema.jobs);
   },
   
   /**
    * Delete a job.
    */
-  delete(id: string): boolean {
-    return jobs.delete(id);
+  async delete(id: string): Promise<boolean> {
+    const schema = await loadJobs();
+    if (!schema.jobs[id]) return false;
+    
+    delete schema.jobs[id];
+    await saveJobs(schema);
+    return true;
   },
   
   /**
    * Clear all jobs (for testing).
    */
-  clear(): void {
-    jobs.clear();
+  async clear(): Promise<void> {
+    jobsCache = DEFAULT_SCHEMA;
+    await deleteStorage(STORAGE_KEY);
+  },
+  
+  /**
+   * Invalidate cache (force reload from disk).
+   */
+  invalidateCache(): void {
+    jobsCache = null;
   },
 };

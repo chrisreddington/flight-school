@@ -124,6 +124,8 @@ export interface Thread {
   createdAt: string;
   /** ISO timestamp of the last activity in the thread */
   updatedAt: string;
+  /** Whether this thread is currently streaming a response */
+  isStreaming?: boolean;
 }
 
 // =============================================================================

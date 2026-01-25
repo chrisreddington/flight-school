@@ -74,8 +74,21 @@ export function EvaluationResultDisplay({
   const feedbackText = result?.feedback || streamingFeedback;
   const isStreamingFeedback = isLoading && !result && streamingFeedback.length > 0;
 
+  // Check if this is a perfect score (100%)
+  const isPerfectScore = displayResult.isCorrect && displayResult.score === 100;
+
   return (
     <div className={styles.sectionBody}>
+      {/* Perfect score completion message */}
+      {isPerfectScore && (
+        <div className={`${styles.completionBanner} ${styles.resultReveal}`} data-delay="0">
+          <CheckCircleIcon size={16} />
+          <span>
+            <strong>Challenge Complete!</strong> You solved this challenge with a perfect score.
+          </span>
+        </div>
+      )}
+
       {/* Result badge - appears immediately */}
       <div
         className={`${styles.resultBadge} ${styles.resultReveal} ${displayResult.isCorrect ? styles.correct : styles.incorrect}`}

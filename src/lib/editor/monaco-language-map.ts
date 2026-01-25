@@ -50,6 +50,39 @@ const LANGUAGE_MAP: Record<string, string> = {
 };
 
 /**
+ * Extension to Monaco language identifier mapping.
+ */
+const EXTENSION_MAP: Record<string, string> = {
+  'ts': 'typescript',
+  'tsx': 'typescript',
+  'js': 'javascript',
+  'jsx': 'javascript',
+  'mjs': 'javascript',
+  'cjs': 'javascript',
+  'py': 'python',
+  'java': 'java',
+  'cs': 'csharp',
+  'go': 'go',
+  'rs': 'rust',
+  'rb': 'ruby',
+  'php': 'php',
+  'html': 'html',
+  'htm': 'html',
+  'css': 'css',
+  'scss': 'scss',
+  'sass': 'sass',
+  'less': 'less',
+  'json': 'json',
+  'sql': 'sql',
+  'sh': 'shell',
+  'bash': 'shell',
+  'yaml': 'yaml',
+  'yml': 'yaml',
+  'md': 'markdown',
+  'txt': 'plaintext',
+};
+
+/**
  * Display names for Monaco language identifiers.
  */
 const DISPLAY_NAMES: Record<string, string> = {
@@ -87,6 +120,23 @@ const DISPLAY_NAMES: Record<string, string> = {
  */
 export function getMonacoLanguage(language: string): string {
   return LANGUAGE_MAP[language] ?? 'plaintext';
+}
+
+/**
+ * Maps a file extension to Monaco editor language identifier.
+ * 
+ * @param extension - File extension (without the dot)
+ * @returns Monaco editor language identifier, defaults to 'plaintext'
+ * 
+ * @example
+ * ```typescript
+ * getMonacoLanguageFromExtension('ts')  // 'typescript'
+ * getMonacoLanguageFromExtension('py')  // 'python'
+ * getMonacoLanguageFromExtension('xyz') // 'plaintext'
+ * ```
+ */
+export function getMonacoLanguageFromExtension(extension: string): string {
+  return EXTENSION_MAP[extension.toLowerCase()] ?? 'plaintext';
 }
 
 /**

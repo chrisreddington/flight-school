@@ -17,6 +17,8 @@ interface ThreadSidebarProps {
   activeThreadId: string | null;
   /** IDs of threads that are currently streaming */
   streamingThreadIds?: string[];
+  /** Whether threads are loading from storage */
+  isLoading?: boolean;
   /** Callback when a thread is selected */
   onSelectThread: (threadId: string | null) => void;
   /** Callback to create a new thread */
@@ -53,6 +55,7 @@ export const ThreadSidebar = memo(function ThreadSidebar({
   threads,
   activeThreadId,
   streamingThreadIds = [],
+  isLoading = false,
   onSelectThread,
   onNewThread,
   onDeleteThread,
@@ -131,7 +134,12 @@ export const ThreadSidebar = memo(function ThreadSidebar({
 
         {/* Thread List */}
         <div className={styles.threadList}>
-          {sortedThreads.length === 0 ? (
+          {isLoading ? (
+            <div className={styles.emptyState}>
+              <Spinner size="medium" />
+              <p className={styles.emptyStateText}>Loading conversations...</p>
+            </div>
+          ) : sortedThreads.length === 0 ? (
             <div className={styles.emptyState}>
               <p className={styles.emptyStateText}>No conversations yet</p>
               <Button

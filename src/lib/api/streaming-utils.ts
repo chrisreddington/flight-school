@@ -97,30 +97,40 @@ export function createSSEResponse<T extends SSEStreamEvent, TMeta extends SSEStr
     async start(controller) {
       try {
         for await (const event of streamGenerator()) {
+          // Check if stream is still open before writing
+          if (controller.desiredSize === null) break;
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         }
 
         // Send metadata if onComplete returns data
-        if (options?.onComplete) {
+        if (options?.onComplete && controller.desiredSize !== null) {
           const meta = await options.onComplete();
-          if (meta) {
+          if (meta && controller.desiredSize !== null) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(meta)}\n\n`));
           }
         }
 
         // Send termination marker
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        if (controller.desiredSize !== null) {
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        }
         controller.close();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Stream error';
         options?.onError?.(error instanceof Error ? error : new Error(errorMessage));
 
-        // Send error event to client
-        const errorEvent: SSEErrorEvent = {
-          type: 'error',
-          message: errorMessage,
-        };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+        // Send error event to client if stream still open
+        if (controller.desiredSize !== null) {
+          const errorEvent: SSEErrorEvent = {
+            type: 'error',
+            message: errorMessage,
+          };
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+          } catch {
+            // Stream already closed, ignore
+          }
+        }
         controller.close();
       } finally {
         options?.cleanup?.();

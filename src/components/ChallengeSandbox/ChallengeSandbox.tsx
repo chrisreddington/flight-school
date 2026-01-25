@@ -26,7 +26,7 @@
 'use client';
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
-import { getLanguageDisplayName, getMonacoLanguage } from '@/lib/editor/monaco-language-map';
+import { getLanguageDisplayName, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
 import type { OnMount } from '@monaco-editor/react';
 import {
     BeakerIcon,
@@ -40,7 +40,7 @@ import {
     ScreenNormalIcon,
     SkipIcon,
 } from '@primer/octicons-react';
-import { Button, ConfirmationDialog, Flash, IconButton, useTheme } from '@primer/react';
+import { Banner, Button, ConfirmationDialog, IconButton, useTheme } from '@primer/react';
 import dynamic from 'next/dynamic';
 import React, { useCallback, useEffect, useState } from 'react';
 
@@ -164,7 +164,7 @@ export function ChallengeSandbox({
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
   const activeFileName = activeFile?.name ?? 'solution.ts';
   const activeFileExtension = activeFileName.split('.').pop() ?? '';
-  const activeFileLanguage = getMonacoLanguage(activeFileExtension || challenge.language);
+  const activeFileLanguage = getMonacoLanguageFromExtension(activeFileExtension);
   const activeFileLanguageDisplay = getLanguageDisplayName(activeFileLanguage);
 
   // Handle reset confirmation dialog
@@ -251,9 +251,13 @@ export function ChallengeSandbox({
 
       {/* Solution error message */}
       {solveError && (
-        <Flash variant="danger" style={{ marginBottom: 16 }}>
-          {solveError}
-        </Flash>
+        <Banner
+          title="Error"
+          description={solveError}
+          variant="critical"
+          hideTitle
+          style={{ marginBottom: 16 }}
+        />
       )}
 
       {/* Main content */}
@@ -299,7 +303,7 @@ export function ChallengeSandbox({
             {isEditorReady ? (
               <Editor
                 height="100%"
-                language={getMonacoLanguage(activeFileName.split('.').pop() ?? challenge.language)}
+                language={getMonacoLanguageFromExtension(activeFileName.split('.').pop() ?? 'ts')}
                 value={activeFile?.content ?? ''}
                 onChange={(value) => {
                   if (workspace.activeFileId) {

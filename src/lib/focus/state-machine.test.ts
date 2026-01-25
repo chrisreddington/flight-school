@@ -14,6 +14,9 @@ import {
   createStatefulChallenge,
   createStatefulGoal,
   createStatefulTopic,
+  isTerminalChallengeState,
+  isTerminalGoalState,
+  isTerminalTopicState,
   type StatefulChallenge,
   type StatefulGoal,
 } from './state-machine';
@@ -254,6 +257,53 @@ describe('transitionTopicState', () => {
       ({ from, to }) => {
         const topic = createStatefulTopic(mockTopic, from);
         expect(() => transitionTopicState(topic, to)).toThrow();
+      }
+    );
+  });
+});
+
+// =============================================================================
+// Terminal State Helpers
+// =============================================================================
+
+describe('isTerminal helpers', () => {
+  describe('isTerminalChallengeState', () => {
+    it.each([
+      { state: 'completed', expected: true },
+      { state: 'skipped', expected: true },
+      { state: 'not-started', expected: false },
+      { state: 'in-progress', expected: false },
+    ] as const)(
+      'should return $expected for $state',
+      ({ state, expected }) => {
+        expect(isTerminalChallengeState(state)).toBe(expected);
+      }
+    );
+  });
+
+  describe('isTerminalGoalState', () => {
+    it.each([
+      { state: 'completed', expected: true },
+      { state: 'skipped', expected: true },
+      { state: 'not-started', expected: false },
+      { state: 'in-progress', expected: false },
+    ] as const)(
+      'should return $expected for $state',
+      ({ state, expected }) => {
+        expect(isTerminalGoalState(state)).toBe(expected);
+      }
+    );
+  });
+
+  describe('isTerminalTopicState', () => {
+    it.each([
+      { state: 'explored', expected: true },
+      { state: 'skipped', expected: true },
+      { state: 'not-explored', expected: false },
+    ] as const)(
+      'should return $expected for $state',
+      ({ state, expected }) => {
+        expect(isTerminalTopicState(state)).toBe(expected);
       }
     );
   });

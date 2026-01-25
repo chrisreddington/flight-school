@@ -10,6 +10,7 @@
 import { AppHeader } from '@/components/AppHeader';
 import { HabitCreationDialog } from '@/components/Habits/HabitCreationDialog';
 import { HabitEditDialog } from '@/components/Habits/HabitEditDialog';
+import { ProfileNav } from '@/components/ProfileNav';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { habitStore } from '@/lib/habits';
 import {
@@ -27,6 +28,7 @@ import {
   FlameIcon,
   GraphIcon,
   KebabHorizontalIcon,
+  LightBulbIcon,
   PencilIcon,
   PlusIcon,
   SkipIcon,
@@ -332,10 +334,18 @@ export default function HabitsPage() {
       <div className={styles.root}>
         <AppHeader />
         <main className={styles.main}>
-          <Stack align="center" justify="center" style={{ flex: 1 }}>
-            <Spinner size="large" />
-            <Text>Loading habits...</Text>
-          </Stack>
+          <aside className={styles.sidebar}>
+            <ProfileNav />
+            <div className={styles.sidebarCard}>
+              <Spinner size="medium" />
+            </div>
+          </aside>
+          <div className={styles.content}>
+            <Stack align="center" justify="center" style={{ flex: 1, padding: '48px' }}>
+              <Spinner size="large" />
+              <Text>Loading habits...</Text>
+            </Stack>
+          </div>
         </main>
       </div>
     );
@@ -346,52 +356,64 @@ export default function HabitsPage() {
       <AppHeader />
 
       <main className={styles.main}>
+        {/* Left Sidebar */}
+        <aside className={styles.sidebar}>
+          <ProfileNav />
+
+          <div className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <FlameIcon size={20} className={styles.sidebarIcon} />
+              <h2 className={styles.sidebarTitle}>Habit Tracker</h2>
+            </div>
+            <p className={styles.sidebarSubtitle}>Build lasting habits</p>
+            
+            <div className={styles.statsGrid}>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{activeHabits.length}</span>
+                <span className={styles.statLabel}>Active</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{totalCheckIns}</span>
+                <span className={styles.statLabel}>Check-ins</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{currentStreaks}</span>
+                <span className={styles.statLabel}>Streaks</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{totalCompletions}</span>
+                <span className={styles.statLabel}>Completed</span>
+              </div>
+            </div>
+
+            <Button
+              variant="primary"
+              leadingVisual={PlusIcon}
+              onClick={() => setIsCreateDialogOpen(true)}
+              style={{ marginTop: 'var(--base-size-16, 16px)', width: '100%' }}
+            >
+              New Habit
+            </Button>
+          </div>
+
+          <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
+            <h3 className={styles.tipTitle}>
+              <LightBulbIcon size={12} /> Pro Tip
+            </h3>
+            <p className={styles.tipText}>
+              Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
+            </p>
+          </div>
+        </aside>
+
+        {/* Main Content */}
         <div className={styles.content}>
           {/* Header */}
           <div className={styles.header}>
-            <Stack direction="horizontal" align="center" justify="space-between">
-              <div>
-                <Heading as="h1">My Habits</Heading>
-                <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: '4px' }}>
-                  Track your progress and build lasting habits
-                </Text>
-              </div>
-              <Button
-                variant="primary"
-                leadingVisual={PlusIcon}
-                onClick={() => setIsCreateDialogOpen(true)}
-              >
-                New Habit
-              </Button>
-            </Stack>
-          </div>
-
-          {/* Statistics */}
-          <div className={styles.statsGrid}>
-            <div className={styles.statCard}>
-              <div className={styles.statValue}>{activeHabits.length}</div>
-              <div className={styles.statLabel}>
-                Active Habit{activeHabits.length !== 1 ? 's' : ''}
-              </div>
-            </div>
-            <div className={styles.statCard}>
-              <div className={styles.statValue}>{totalCheckIns}</div>
-              <div className={styles.statLabel}>
-                Total Check-in{totalCheckIns !== 1 ? 's' : ''}
-              </div>
-            </div>
-            <div className={styles.statCard}>
-              <div className={styles.statValue}>{currentStreaks}</div>
-              <div className={styles.statLabel}>
-                Current Streak{currentStreaks !== 1 ? 's' : ''}
-              </div>
-            </div>
-            <div className={styles.statCard}>
-              <div className={styles.statValue}>{totalCompletions}</div>
-              <div className={styles.statLabel}>
-                Habit{totalCompletions !== 1 ? 's' : ''} Completed
-              </div>
-            </div>
+            <Heading as="h1">My Habits</Heading>
+            <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: '4px' }}>
+              Track your progress and build lasting habits
+            </Text>
           </div>
 
           {/* Active Habits */}

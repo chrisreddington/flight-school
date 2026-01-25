@@ -1,4 +1,4 @@
-/* FocusHistory.module.css V2
+/* LearningHistory.module.css
  * 
  * Two-column layout with:
  * - 52-week contribution graph (interactive)
@@ -27,24 +27,28 @@
 .layoutV2 {
   display: grid;
   grid-template-columns: 320px 1fr;
-  gap: var(--base-size-16);
+  gap: var(--base-size-24);
   flex: 1;
   min-height: 0;
 }
 
 /* ============================================================================
-   Sidebar - WHITE card that stands out from gray page
+   Sidebar - Contains ProfileNav and filter cards
    ============================================================================ */
 
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: var(--base-size-16);
+  height: fit-content;
+}
+
+/* Sidebar card - for each section in sidebar */
+.sidebarCard {
   padding: var(--base-size-16);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
   border-radius: var(--borderRadius-medium);
-  height: fit-content;
 }
 
 /* Sidebar header with title */
@@ -52,8 +56,7 @@
   display: flex;
   align-items: center;
   gap: var(--base-size-12);
-  padding-bottom: var(--base-size-12);
-  border-bottom: 1px solid var(--borderColor-muted);
+  margin-bottom: var(--base-size-12);
 }
 
 .sidebarIcon {
@@ -79,7 +82,7 @@
 }
 
 .sidebarSearch {
-  /* Search input styling handled by TextInput */
+  margin-bottom: var(--base-size-12);
 }
 
 .sidebarFilters {
@@ -404,7 +407,7 @@
 
 .mainContent {
   flex: 1;
-  padding: var(--base-size-16);
+  padding: var(--base-size-24);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
   border-radius: var(--borderRadius-medium);
@@ -412,6 +415,24 @@
   flex-direction: column;
   gap: var(--base-size-16);
   /* No independent scroll - flows with page */
+}
+
+/* Page header in main content */
+.pageHeader {
+  margin-bottom: var(--base-size-8);
+}
+
+.pageTitle {
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-4, 4px) 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.pageDescription {
+  font-size: var(--text-body-size-medium, 14px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
 }
 
 .selectedDateBanner {
@@ -439,9 +460,37 @@
 .dateSectionHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--base-size-8);
-  padding-bottom: var(--base-size-8);
+  padding: var(--base-size-8) 0;
   border-bottom: 1px solid var(--borderColor-muted);
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.dateSectionHeader:hover {
+  background-color: var(--bgColor-muted);
+  margin: 0 calc(-1 * var(--base-size-8));
+  padding: var(--base-size-8);
+  width: calc(100% + var(--base-size-16));
+  border-radius: var(--borderRadius-small);
+}
+
+.dateSectionLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.dateSectionChevron {
+  color: var(--fgColor-muted);
+  display: flex;
+  align-items: center;
 }
 
 .dateSectionTitle {
@@ -450,13 +499,12 @@
 }
 
 .dateSectionCount {
-  margin-left: auto;
   font-size: var(--text-body-size-small);
   color: var(--fgColor-muted);
 }
 
 /* ============================================================================
-   Item Cards - Simpler, just border dividers
+   Item Cards - Collapsible for skipped items
    ============================================================================ */
 
 .itemCard {
@@ -471,7 +519,11 @@
 }
 
 .itemCardInactive {
-  opacity: 0.6;
+  opacity: 0.7;
+}
+
+.itemCardCollapsed {
+  /* Slightly more compact when collapsed */
 }
 
 .itemCardHeader {
@@ -480,6 +532,22 @@
   justify-content: space-between;
   padding: var(--base-size-8) var(--base-size-12);
   background-color: var(--bgColor-muted);
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.itemCardHeaderClickable {
+  cursor: pointer;
+}
+
+.itemCardHeaderClickable:hover {
+  background-color: var(--bgColor-neutral-muted);
+}
+
+.itemCardHeader:disabled {
+  cursor: default;
 }
 
 .itemCardMeta {
@@ -488,13 +556,30 @@
   gap: var(--base-size-8);
 }
 
+.itemCardChevron {
+  color: var(--fgColor-muted);
+  display: flex;
+  align-items: center;
+}
+
 .itemCardType {
   color: var(--fgColor-muted);
+}
+
+.itemCardTitle {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-medium);
+  color: var(--fgColor-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
 }
 
 .itemCardTime {
   font-size: var(--text-body-size-small);
   color: var(--fgColor-muted);
+  flex-shrink: 0;
 }
 
 .itemCardContent {
@@ -502,24 +587,59 @@
 }
 
 /* ============================================================================
-   Generating Skeleton
+   Generating Banner (compact notification)
    ============================================================================ */
 
-.generatingSection {
-  background-color: var(--bgColor-attention-muted);
-  border: 1px dashed var(--borderColor-attention-muted);
-  border-radius: var(--borderRadius-medium);
-  padding: var(--base-size-12);
-}
-
-.generatingHeader {
+.generatingBanner {
   display: flex;
   align-items: center;
   gap: var(--base-size-8);
+  padding: var(--base-size-8) var(--base-size-12);
+  background-color: var(--bgColor-attention-muted);
+  border: 1px solid var(--borderColor-attention-muted);
+  border-radius: var(--borderRadius-medium);
   font-size: var(--text-body-size-small);
-  font-weight: var(--base-text-weight-semibold);
+}
+
+.generatingText {
   color: var(--fgColor-attention);
-  margin-bottom: var(--base-size-8);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.generatingJumpLinks {
+  display: flex;
+  gap: var(--base-size-8);
+  margin-left: auto;
+}
+
+.jumpLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.jumpLink:hover {
+  color: var(--fgColor-accent);
+  text-decoration: none;
+}
+
+/* Highlight animation when jumping to an item */
+.highlightItem {
+  animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+  0% {
+    box-shadow: 0 0 0 3px var(--borderColor-accent-emphasis);
+  }
+  100% {
+    box-shadow: none;
+  }
 }
 
 /* ============================================================================
@@ -905,4 +1025,27 @@
   display: flex;
   justify-content: center;
   padding: var(--base-size-16) 0;
+}
+
+/* ============================================================================
+   Toast Notification
+   ============================================================================ */
+
+.toast {
+  position: fixed;
+  top: var(--base-size-16);
+  right: var(--base-size-16);
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }

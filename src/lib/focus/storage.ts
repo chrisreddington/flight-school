@@ -27,7 +27,7 @@
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
-import { getDateKey } from '@/lib/utils/date-utils';
+import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 import {
   createStatefulChallenge,
   createStatefulGoal,
@@ -37,12 +37,18 @@ import {
   transitionTopicState,
   getCurrentChallengeState,
   getCurrentGoalState,
+  getCurrentTopicState,
+  isTerminalChallengeState,
+  isTerminalGoalState,
+  isTerminalTopicState,
   type ChallengeState,
   type GoalState,
   type TopicState,
 } from './state-machine';
 import type {
     CalibrationNeededItem,
+    DailyChallenge,
+    DailyGoal,
     FocusHistory,
     FocusResponse,
     FocusStorageSchema,
@@ -83,12 +89,18 @@ interface FocusStoreInterface {
   markTopicExplored(dateKey: string, topicId: string, source?: string): Promise<void>;
   /** Transition topic to new state (explored or skipped) */
   transitionTopic(dateKey: string, topicId: string, newState: TopicState, source?: string): Promise<void>;
-  /** Replace a topic in the current day's topics (for regeneration) */
-  replaceTopic(dateKey: string, oldTopicId: string, newTopic: LearningTopic): Promise<void>;
   /** Remove a calibration item (when confirmed or dismissed) */
   removeCalibrationItem(skillId: string): Promise<void>;
   /** Get pending calibration items for today */
   getCalibrationNeeded(): Promise<CalibrationNeededItem[]>;
+  /** Get the position of a topic in the current day's active topics (for in-place replacement) */
+  getTopicPosition(dateKey: string, topicId: string): Promise<number | null>;
+  /** Add a new topic, optionally at a specific position */
+  addTopic(dateKey: string, newTopic: LearningTopic, position?: number): Promise<void>;
+  /** Add a new challenge (for regeneration after skip) */
+  addChallenge(dateKey: string, newChallenge: DailyChallenge): Promise<void>;
+  /** Add a new goal (for regeneration after skip) */
+  addGoal(dateKey: string, newGoal: DailyGoal): Promise<void>;
 }
 
 /**
@@ -170,7 +182,10 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     return {
         challenge: latestChallenge.data,
         goal: latestGoal.data,
-        learningTopics: latestTopics.map(t => t.data),
+        // Filter out skipped topics - only show active ones on dashboard
+        learningTopics: latestTopics
+          .filter(t => getCurrentTopicState(t) !== 'skipped')
+          .map(t => t.data),
         calibrationNeeded: record.calibrationNeeded,
         meta: {
             generatedAt: latestGeneratedAt,
@@ -278,6 +293,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   /**
    * Transition challenge to a new state.
    * Uses state machine to validate transitions.
+   * Idempotent: returns early if already in target state.
    */
   async transitionChallenge(
     dateKey: string,
@@ -285,6 +301,10 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     newState: ChallengeState,
     source?: string
   ): Promise<void> {
+    if (newState === 'skipped' && !isTodayDateKey(dateKey)) {
+      log.warn('Cannot skip challenge outside of today', { dateKey, challengeId });
+      return;
+    }
     const schema = await this.getStorage();
     const record = schema.history[dateKey];
     
@@ -300,30 +320,43 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       return;
     }
 
-    try {
-      // Use state machine to transition
-      const currentChallenge = record.challenges[index];
-      const currentState = getCurrentChallengeState(currentChallenge);
-      
-      // Prevent skipping completed challenges
-      if (currentState === 'completed' && newState === 'skipped') {
-        log.warn('Cannot skip completed challenge', { dateKey, challengeId });
-        return;
-      }
+    // Use state machine to transition
+    const currentChallenge = record.challenges[index];
+    const currentState = getCurrentChallengeState(currentChallenge);
+    
+    // Idempotent: already in target state
+    if (currentState === newState) {
+      log.debug('Challenge already in target state (idempotent)', { dateKey, challengeId, state: currentState });
+      return;
+    }
+    
+    // Prevent transitions from terminal states (except idempotent which is handled above)
+    if (isTerminalChallengeState(currentState)) {
+      log.debug('Challenge in terminal state, cannot transition', { dateKey, challengeId, currentState, newState });
+      return;
+    }
+    
+    // Prevent skipping completed challenges (extra safety)
+    if (currentState === 'completed' && newState === 'skipped') {
+      log.warn('Cannot skip completed challenge', { dateKey, challengeId });
+      return;
+    }
 
+    try {
       const updated = transitionChallengeState(currentChallenge, newState, source);
       record.challenges[index] = updated;
       
       await this.setStorage(schema);
-      log.debug('Challenge state transitioned', { dateKey, challengeId, newState, source });
+      log.debug('Challenge state transitioned', { dateKey, challengeId, from: currentState, to: newState, source });
     } catch (error) {
-      log.error('Invalid challenge state transition', { dateKey, challengeId, newState, error });
+      log.error('Challenge state transition failed', { dateKey, challengeId, currentState, newState, error });
     }
   }
 
   /**
    * Transition goal to a new state.
    * Uses state machine to validate transitions.
+   * Idempotent: returns early if already in target state.
    */
   async transitionGoal(
     dateKey: string,
@@ -331,6 +364,10 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     newState: GoalState,
     source?: string
   ): Promise<void> {
+    if (newState === 'skipped' && !isTodayDateKey(dateKey)) {
+      log.warn('Cannot skip goal outside of today', { dateKey, goalId });
+      return;
+    }
     const schema = await this.getStorage();
     const record = schema.history[dateKey];
     
@@ -346,30 +383,43 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       return;
     }
 
-    try {
-      // Use state machine to transition
-      const currentGoal = record.goals[index];
-      const currentState = getCurrentGoalState(currentGoal);
-      
-      // Prevent skipping completed goals
-      if (currentState === 'completed' && newState === 'skipped') {
-        log.warn('Cannot skip completed goal', { dateKey, goalId });
-        return;
-      }
+    // Use state machine to transition
+    const currentGoal = record.goals[index];
+    const currentState = getCurrentGoalState(currentGoal);
+    
+    // Idempotent: already in target state
+    if (currentState === newState) {
+      log.debug('Goal already in target state (idempotent)', { dateKey, goalId, state: currentState });
+      return;
+    }
+    
+    // Prevent transitions from terminal states (except idempotent which is handled above)
+    if (isTerminalGoalState(currentState)) {
+      log.debug('Goal in terminal state, cannot transition', { dateKey, goalId, currentState, newState });
+      return;
+    }
+    
+    // Prevent skipping completed goals (extra safety)
+    if (currentState === 'completed' && newState === 'skipped') {
+      log.warn('Cannot skip completed goal', { dateKey, goalId });
+      return;
+    }
 
+    try {
       const updated = transitionGoalState(currentGoal, newState, source);
       record.goals[index] = updated;
       
       await this.setStorage(schema);
-      log.debug('Goal state transitioned', { dateKey, goalId, newState, source });
+      log.debug('Goal state transitioned', { dateKey, goalId, from: currentState, to: newState, source });
     } catch (error) {
-      log.error('Invalid goal state transition', { dateKey, goalId, newState, error });
+      log.error('Goal state transition failed', { dateKey, goalId, currentState, newState, error });
     }
   }
 
   /**
-   * Mark a learning topic as explored or skipped.
+   * Mark a learning topic as explored.
    * Uses state machine to validate transitions.
+   * Idempotent: returns early if already explored.
    */
   async markTopicExplored(
     dateKey: string,
@@ -385,34 +435,44 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
 
     // Find and update the topic (topics are nested in arrays)
-    let found = false;
     for (let i = 0; i < record.learningTopics.length; i++) {
       const topicArray = record.learningTopics[i];
       const topicIndex = topicArray.findIndex(t => t.data.id === topicId);
       
       if (topicIndex !== -1) {
-        try {
-          const updated = transitionTopicState(topicArray[topicIndex], 'explored', source);
-          record.learningTopics[i][topicIndex] = updated;
-          found = true;
-          break;
-        } catch (error) {
-          log.error('Invalid topic state transition', { dateKey, topicId, error });
+        const currentTopic = topicArray[topicIndex];
+        const currentState = getCurrentTopicState(currentTopic);
+        
+        // Idempotent: already explored
+        if (currentState === 'explored') {
+          log.debug('Topic already explored (idempotent)', { dateKey, topicId });
           return;
         }
+        
+        // Cannot transition from terminal states (except idempotent handled above)
+        if (isTerminalTopicState(currentState)) {
+          log.debug('Topic in terminal state, cannot mark as explored', { dateKey, topicId, currentState });
+          return;
+        }
+
+        try {
+          const updated = transitionTopicState(currentTopic, 'explored', source);
+          record.learningTopics[i][topicIndex] = updated;
+          await this.setStorage(schema);
+          log.debug('Topic marked as explored', { dateKey, topicId, from: currentState, source });
+        } catch (error) {
+          log.error('Topic state transition failed', { dateKey, topicId, currentState, targetState: 'explored', error });
+        }
+        return;
       }
     }
 
-    if (found) {
-      await this.setStorage(schema);
-      log.debug('Topic marked as explored', { dateKey, topicId, source });
-    } else {
-      log.warn('Topic not found in record', { dateKey, topicId });
-    }
+    log.warn('Topic not found in record', { dateKey, topicId });
   }
 
   /**
    * Transition a topic to a new state (explored or skipped).
+   * Idempotent: returns early if already in target state.
    */
   async transitionTopic(
     dateKey: string,
@@ -420,6 +480,10 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     newState: TopicState,
     source?: string
   ): Promise<void> {
+    if (newState === 'skipped' && !isTodayDateKey(dateKey)) {
+      log.warn('Cannot skip topic outside of today', { dateKey, topicId });
+      return;
+    }
     const schema = await this.getStorage();
     const record = schema.history[dateKey];
     
@@ -429,40 +493,97 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
 
     // Find and update the topic (topics are nested in arrays)
-    let found = false;
     for (let i = 0; i < record.learningTopics.length; i++) {
       const topicArray = record.learningTopics[i];
       const topicIndex = topicArray.findIndex(t => t.data.id === topicId);
       
       if (topicIndex !== -1) {
-        try {
-          const updated = transitionTopicState(topicArray[topicIndex], newState, source);
-          record.learningTopics[i][topicIndex] = updated;
-          found = true;
-          break;
-        } catch (error) {
-          log.error('Invalid topic state transition', { dateKey, topicId, newState, error });
+        const currentTopic = topicArray[topicIndex];
+        const currentState = getCurrentTopicState(currentTopic);
+        
+        // Idempotent: already in target state
+        if (currentState === newState) {
+          log.debug('Topic already in target state (idempotent)', { dateKey, topicId, state: currentState });
           return;
         }
+        
+        // Cannot transition from terminal states (except idempotent handled above)
+        if (isTerminalTopicState(currentState)) {
+          log.debug('Topic in terminal state, cannot transition', { dateKey, topicId, currentState, newState });
+          return;
+        }
+
+        try {
+          const updated = transitionTopicState(currentTopic, newState, source);
+          record.learningTopics[i][topicIndex] = updated;
+          await this.setStorage(schema);
+          log.debug('Topic transitioned', { dateKey, topicId, from: currentState, to: newState, source });
+        } catch (error) {
+          log.error('Topic state transition failed', { dateKey, topicId, currentState, newState, error });
+        }
+        return;
       }
     }
 
-    if (found) {
-      await this.setStorage(schema);
-      log.debug('Topic transitioned', { dateKey, topicId, newState, source });
-    } else {
-      log.warn('Topic not found in record', { dateKey, topicId });
+    log.warn('Topic not found in record', { dateKey, topicId });
+  }
+
+  /**
+   * Get the position of a topic among active (non-skipped) topics.
+   * Used for in-place replacement - insert new topic at same visual position.
+   */
+  async getTopicPosition(
+    dateKey: string,
+    topicId: string
+  ): Promise<number | null> {
+    const schema = await this.getStorage();
+    const record = schema.history[dateKey];
+    
+    if (!record || record.learningTopics.length === 0) {
+      return null;
     }
+
+    // Work with the MOST RECENT topics array (last one)
+    const lastTopicsIndex = record.learningTopics.length - 1;
+    const topicArray = record.learningTopics[lastTopicsIndex];
+    
+    // Count active topics (not skipped) before this topic
+    let activePosition = 0;
+    for (const statefulTopic of topicArray) {
+      if (statefulTopic.data.id === topicId) {
+        log.debug('Found topic position', { dateKey, topicId, activePosition });
+        return activePosition;
+      }
+      
+      // Only count non-skipped topics towards position
+      const lastState = statefulTopic.stateHistory[statefulTopic.stateHistory.length - 1]?.state;
+      if (lastState !== 'skipped') {
+        activePosition++;
+      }
+    }
+    
+    log.warn('Topic not found for position lookup', { dateKey, topicId });
+    return null;
   }
 
   /**
    * Add a new topic to the current day's most recent topics array.
    * Used when regenerating a topic - keeps the skipped one and adds the new one.
+   * 
+   * @param dateKey - The date key (YYYY-MM-DD)
+   * @param newTopic - The new topic to add
+   * @param position - Optional position index to insert at (for in-place replacement).
+   *                   If not provided, appends to end.
    */
   async addTopic(
     dateKey: string,
-    newTopic: LearningTopic
+    newTopic: LearningTopic,
+    position?: number
   ): Promise<void> {
+    if (!isTodayDateKey(dateKey)) {
+      log.warn('Cannot add topic outside of today', { dateKey, newTopicId: newTopic.id });
+      return;
+    }
     const schema = await this.getStorage();
     const record = schema.history[dateKey];
     
@@ -474,25 +595,21 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     // Work with the MOST RECENT topics array (last one)
     const lastTopicsIndex = record.learningTopics.length - 1;
     
-    // Create new stateful topic and append to the array
+    // Create new stateful topic
     const statefulNewTopic = createStatefulTopic(newTopic);
-    record.learningTopics[lastTopicsIndex].push(statefulNewTopic);
+    
+    // Insert at position or append
+    if (position !== undefined && position >= 0 && position <= record.learningTopics[lastTopicsIndex].length) {
+      // Insert at specific position for in-place replacement
+      record.learningTopics[lastTopicsIndex].splice(position, 0, statefulNewTopic);
+      log.debug('Topic inserted at position', { dateKey, newTopicId: newTopic.id, position });
+    } else {
+      // Append to end (default behavior)
+      record.learningTopics[lastTopicsIndex].push(statefulNewTopic);
+      log.debug('Topic added', { dateKey, newTopicId: newTopic.id });
+    }
 
     await this.setStorage(schema);
-    log.debug('Topic added', { dateKey, newTopicId: newTopic.id });
-  }
-
-  /**
-   * @deprecated Use addTopic instead - we want to keep history of all topics
-   * Replace a topic in the current day's most recent topics array.
-   */
-  async replaceTopic(
-    dateKey: string,
-    oldTopicId: string,
-    newTopic: LearningTopic
-  ): Promise<void> {
-    // Just add the new topic - old one should already be marked skipped
-    await this.addTopic(dateKey, newTopic);
   }
 
   /**
@@ -524,6 +641,62 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     const record = schema.history[todayKey];
 
     return record?.calibrationNeeded || [];
+  }
+
+  /**
+   * Add a new challenge to the current day's challenges.
+   * Used when regenerating a challenge after skip.
+   */
+  async addChallenge(
+    dateKey: string,
+    newChallenge: DailyChallenge
+  ): Promise<void> {
+    if (!isTodayDateKey(dateKey)) {
+      log.warn('Cannot add challenge outside of today', { dateKey, newChallengeId: newChallenge.id });
+      return;
+    }
+    const schema = await this.getStorage();
+    const record = schema.history[dateKey];
+    
+    if (!record) {
+      log.warn('Attempted to add challenge for non-existent date', { dateKey });
+      return;
+    }
+
+    // Create new stateful challenge and append
+    const statefulChallenge = createStatefulChallenge(newChallenge);
+    record.challenges.push(statefulChallenge);
+
+    await this.setStorage(schema);
+    log.debug('Challenge added', { dateKey, newChallengeId: newChallenge.id });
+  }
+
+  /**
+   * Add a new goal to the current day's goals.
+   * Used when regenerating a goal after skip.
+   */
+  async addGoal(
+    dateKey: string,
+    newGoal: DailyGoal
+  ): Promise<void> {
+    if (!isTodayDateKey(dateKey)) {
+      log.warn('Cannot add goal outside of today', { dateKey, newGoalId: newGoal.id });
+      return;
+    }
+    const schema = await this.getStorage();
+    const record = schema.history[dateKey];
+    
+    if (!record) {
+      log.warn('Attempted to add goal for non-existent date', { dateKey });
+      return;
+    }
+
+    // Create new stateful goal and append
+    const statefulGoal = createStatefulGoal(newGoal);
+    record.goals.push(statefulGoal);
+
+    await this.setStorage(schema);
+    log.debug('Goal added', { dateKey, newGoalId: newGoal.id });
   }
 }
 

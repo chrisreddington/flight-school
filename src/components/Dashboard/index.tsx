@@ -13,7 +13,7 @@
  * - Real-time GitHub activity stats
  */
 
-import { useBreadcrumb } from '@/contexts/breadcrumb-context';
+import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
 import { useLearningChat } from '@/hooks/use-learning-chat';
 import { getDisplayName, useUserProfile } from '@/hooks/use-user-profile';
@@ -35,11 +35,28 @@ import { WelcomeSection } from './welcome-section';
 // ============================================================================
 
 export function Dashboard() {
-  // Register homepage in breadcrumb history
-  useBreadcrumb('/', 'Dashboard', '/');
+  // Initialize operations manager on mount (ensures cross-page state sync)
+  useActiveOperations();
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useUserProfile();
-  const { data: aiFocus, isAIEnabled, toolsUsed, refetch: refetchFocus, loadingComponents, componentTimestamps, skipAndReplaceTopic, skippingTopicIds, stopComponent, stopTopicSkip } = useAIFocus();
+  const { 
+    data: aiFocus, 
+    isAIEnabled, 
+    toolsUsed, 
+    refetch: refetchFocus, 
+    loadingComponents, 
+    componentTimestamps, 
+    skipAndReplaceTopic, 
+    skipAndReplaceChallenge,
+    skipAndReplaceGoal,
+    skippingTopicIds,
+    skippingChallengeIds,
+    skippingGoalIds,
+    stopComponent, 
+    stopTopicSkip,
+    stopChallengeSkip,
+    stopGoalSkip,
+  } = useAIFocus();
   
   // Adapter for DailyFocusSection which expects string[] format
   const handleRefresh = useCallback((components?: string[]) => {
@@ -52,15 +69,36 @@ export function Dashboard() {
     skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
   }, [skipAndReplaceTopic]);
 
-  // Handle stopping a topic skip/regeneration - reverts topic state
-  const handleStopSkipTopic = useCallback(() => {
-    stopTopicSkip();
+  // Handle skipping a challenge and generating a replacement
+  const handleSkipChallenge = useCallback((challengeId: string, existingChallengeTitles: string[]) => {
+    skipAndReplaceChallenge(challengeId, existingChallengeTitles);
+  }, [skipAndReplaceChallenge]);
+
+  // Handle skipping a goal and generating a replacement
+  const handleSkipGoal = useCallback((goalId: string, existingGoalTitles: string[]) => {
+    skipAndReplaceGoal(goalId, existingGoalTitles);
+  }, [skipAndReplaceGoal]);
+
+  // Handle stopping a topic skip/regeneration (receives ID from the card)
+  const handleStopSkipTopic = useCallback((topicId: string) => {
+    stopTopicSkip(topicId);
   }, [stopTopicSkip]);
+
+  // Handle stopping a challenge skip/regeneration (receives ID from the card)
+  const handleStopSkipChallenge = useCallback((challengeId: string) => {
+    stopChallengeSkip(challengeId);
+  }, [stopChallengeSkip]);
+
+  // Handle stopping a goal skip/regeneration (receives ID from the card)
+  const handleStopSkipGoal = useCallback((goalId: string) => {
+    stopGoalSkip(goalId);
+  }, [stopGoalSkip]);
   
   // Use the new learning chat hook for multi-thread chat
   const {
     threads,
     activeThreadId,
+    isThreadsLoading,
     isStreaming,
     streamingContent,
     streamingThreadIds,
@@ -143,6 +181,12 @@ export function Dashboard() {
               onStopSkipTopic={handleStopSkipTopic}
               onStopComponent={stopComponent}
               skippingTopicIds={skippingTopicIds}
+              onSkipChallenge={handleSkipChallenge}
+              onStopSkipChallenge={handleStopSkipChallenge}
+              skippingChallengeIds={skippingChallengeIds}
+              onSkipGoal={handleSkipGoal}
+              onStopSkipGoal={handleStopSkipGoal}
+              skippingGoalIds={skippingGoalIds}
               onExploreTopic={handleExploreTopic}
             />
             {/* Multi-thread Learning Chat Experience */}
@@ -152,6 +196,7 @@ export function Dashboard() {
               handlers={chatHandlers}
               availableRepos={availableRepos}
               isReposLoading={profileLoading}
+              isThreadsLoading={isThreadsLoading}
               isStreaming={isStreaming}
               streamingThreadIds={streamingThreadIds}
               streamingContent={streamingContent}

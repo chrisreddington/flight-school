@@ -5,89 +5,70 @@
  */
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
+import type {
+  ChallengeEvaluationInput,
+  ChallengeRegenerationInput,
+  ChatResponseInput,
+  GoalRegenerationInput,
+  TopicRegenerationInput,
+} from '@/lib/jobs';
 import { jobStorage } from '@/lib/jobs';
-import type { TopicRegenerationInput, TopicRegenerationResult } from '@/lib/jobs';
-import type { LearningTopic } from '@/lib/focus/types';
-import type { SkillProfile } from '@/lib/skills/types';
-import {
-  buildSingleTopicPrompt,
-} from '@/lib/copilot/prompts';
-import {
-  createLoggedLightweightCoachSession,
-} from '@/lib/copilot/server';
-import { buildCompactContext, serializeContext } from '@/lib/github/profile';
-import { extractJSON } from '@/lib/utils/json-utils';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  executeChallengeEvaluation,
+  executeChallengeRegeneration,
+  executeChatResponse,
+  executeGoalRegeneration,
+  executeTopicRegeneration,
+  getRegisteredSession,
+  unregisterSession,
+} from './job-executors';
 
 const log = logger.withTag('Jobs API');
 
+type JobType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response' | 'challenge-evaluation';
+
 interface CreateJobRequest {
-  type: 'topic-regeneration';
+  type: JobType;
   targetId?: string;
-  input: TopicRegenerationInput;
+  input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput | ChallengeEvaluationInput;
 }
 
-/**
- * Execute a topic regeneration job.
- * This runs async - the job is marked running, then completed/failed.
+/** 
+ * Cancel a running job by ID.
+ * Marks as cancelled in storage and destroys session if available.
  */
-async function executeTopicRegeneration(
-  jobId: string,
-  input: TopicRegenerationInput
-): Promise<void> {
-  jobStorage.markRunning(jobId);
-  
-  try {
-    // Build context
-    let serializedContext = '';
-    try {
-      const compactProfile = await buildCompactContext(1000);
-      serializedContext = serializeContext(compactProfile);
-    } catch (err) {
-      log.warn('Failed to build context:', err);
-    }
-    
-    // Build and send prompt
-    const prompt = buildSingleTopicPrompt(
-      serializedContext, 
-      input.existingTopicTitles, 
-      input.skillProfile
-    );
-    
-    const loggedSession = await createLoggedLightweightCoachSession(
-      'Job: topic-regeneration',
-      prompt.slice(0, 50)
-    );
-    
-    log.info(`[Job ${jobId}] Sending prompt (${prompt.length} chars)...`);
-    const result = await loggedSession.sendAndWait(prompt);
-    loggedSession.destroy();
-    
-    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
-    
-    // Parse result
-    const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.responseText);
-    if (!parsed?.learningTopic) {
-      throw new Error('Failed to parse topic response');
-    }
-    
-    // Add ID if missing
-    if (!parsed.learningTopic.id) {
-      parsed.learningTopic.id = crypto.randomUUID();
-    }
-    
-    // Mark completed
-    jobStorage.markCompleted<TopicRegenerationResult>(jobId, {
-      learningTopic: parsed.learningTopic,
-    });
-    
-    log.info(`[Job ${jobId}] Completed successfully`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log.error(`[Job ${jobId}] Failed:`, errorMessage);
-    jobStorage.markFailed(jobId, errorMessage);
+export async function cancelRunningJob(jobId: string): Promise<boolean> {
+  const job = await jobStorage.get(jobId);
+  if (!job) {
+    log.debug(`[Job ${jobId}] Job not found in storage`);
+    return false;
   }
+  
+  if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+    log.debug(`[Job ${jobId}] Job already in terminal state: ${job.status}`);
+    return false;
+  }
+  
+  log.info(`[Job ${jobId}] Marking job as cancelled in storage`);
+  await jobStorage.markCancelled(jobId);
+  
+  const session = getRegisteredSession(jobId);
+  if (session) {
+    log.info(`[Job ${jobId}] Destroying Copilot SDK session...`);
+    try {
+      await session.destroy();
+      log.info(`[Job ${jobId}] Copilot SDK session destroyed successfully`);
+    } catch (err) {
+      log.warn(`[Job ${jobId}] Error destroying session:`, err);
+    }
+    unregisterSession(jobId);
+  } else {
+    log.debug(`[Job ${jobId}] No active session to destroy (may be between stages)`);
+  }
+  
+  return true;
 }
 
 export async function POST(request: NextRequest) {
@@ -97,28 +78,48 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
   }
   
-  // Generate job ID
   const jobId = crypto.randomUUID();
   
-  // Create job record
-  const job = jobStorage.create({
+  const job = await jobStorage.create({
     id: jobId,
     type: body.type,
     targetId: body.targetId,
     input: body.input as unknown as Record<string, unknown>,
   });
   
-  // Start execution async (don't await - fire and forget)
+  // Start execution async (fire and forget)
   if (body.type === 'topic-regeneration') {
-    // Use setImmediate/setTimeout to ensure the response is sent first
     setImmediate(() => {
-      executeTopicRegeneration(jobId, body.input).catch(err => {
+      executeTopicRegeneration(jobId, body.input as TopicRegenerationInput).catch(err => {
+        log.error(`Unhandled error in job ${jobId}:`, err);
+      });
+    });
+  } else if (body.type === 'challenge-regeneration') {
+    setImmediate(() => {
+      executeChallengeRegeneration(jobId, body.input as ChallengeRegenerationInput).catch(err => {
+        log.error(`Unhandled error in job ${jobId}:`, err);
+      });
+    });
+  } else if (body.type === 'goal-regeneration') {
+    setImmediate(() => {
+      executeGoalRegeneration(jobId, body.input as GoalRegenerationInput).catch(err => {
+        log.error(`Unhandled error in job ${jobId}:`, err);
+      });
+    });
+  } else if (body.type === 'chat-response') {
+    setImmediate(() => {
+      executeChatResponse(jobId, body.input as ChatResponseInput).catch(err => {
+        log.error(`Unhandled error in job ${jobId}:`, err);
+      });
+    });
+  } else if (body.type === 'challenge-evaluation') {
+    setImmediate(() => {
+      executeChallengeEvaluation(jobId, body.input as ChallengeEvaluationInput).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });
   }
   
-  // Return job info immediately
   return NextResponse.json({
     id: job.id,
     type: job.type,
@@ -132,7 +133,8 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get('type');
   const status = searchParams.get('status');
   
-  let jobs = type ? jobStorage.getByType(type) : jobStorage.getAll();
+  jobStorage.invalidateCache();
+  let jobs = type ? await jobStorage.getByType(type) : await jobStorage.getAll();
   
   if (status) {
     jobs = jobs.filter(job => job.status === status);

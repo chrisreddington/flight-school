@@ -1,27 +1,119 @@
-/* Habits Page Styles */
+/* Habits Page Styles - Full-width two-column layout */
 
 .root {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+  min-height: 100vh;
   background-color: var(--bgColor-inset, #f6f8fa);
-  overflow: hidden;
 }
 
 .main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--base-size-24, 24px);
+  max-width: 1400px;
+  margin: 0 auto;
   padding: var(--base-size-24, 24px);
-  width: 100%;
-  min-height: 0;
-  overflow: auto;
+  min-height: calc(100vh - 60px);
 }
 
+@media (max-width: 900px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16, 16px);
+}
+
+.sidebarCard {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-20, 20px);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.sidebarIcon {
+  color: var(--fgColor-accent, #0969da);
+}
+
+.sidebarTitle {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.sidebarSubtitle {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+/* Stats in sidebar */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--base-size-12, 12px);
+}
+
+.statItem {
+  text-align: center;
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.statValue {
+  display: block;
+  font-size: var(--text-title-size-medium, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: 1.25;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.statLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+/* Tip card in sidebar */
+.tipCard {
+  background-color: var(--bgColor-accent-muted, #ddf4ff);
+  border: 1px solid var(--borderColor-accent-muted, #54aeff);
+}
+
+.tipTitle {
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  color: var(--fgColor-accent, #0969da);
+  margin: 0 0 var(--base-size-8, 8px) 0;
+}
+
+.tipText {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-default, #1f2328);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Main content area */
 .content {
-  max-width: 900px;
-  width: 100%;
-  margin: 0 auto;
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-24, 24px);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .header {
@@ -46,15 +138,15 @@
 }
 
 .habitsList {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--base-size-16, 16px);
 }
 
 .emptyState {
-  padding: var(--base-size-32, 32px);
+  padding: var(--base-size-48, 48px) var(--base-size-32, 32px);
   text-align: center;
-  background-color: var(--bgColor-default, #ffffff);
+  background-color: var(--bgColor-muted, #f6f8fa);
   border-radius: var(--borderRadius-medium, 6px);
   border: 1px dashed var(--borderColor-muted, #d0d7de);
 }
@@ -63,38 +155,17 @@
   color: var(--fgColor-muted, #656d76);
 }
 
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--base-size-16, 16px);
-  margin-bottom: var(--base-size-24, 24px);
-}
-
-.statCard {
-  background-color: var(--bgColor-default, #ffffff);
-  border: 1px solid var(--borderColor-default, #d0d7de);
-  border-radius: var(--borderRadius-medium, 6px);
-  padding: var(--base-size-16, 16px);
-  text-align: center;
-}
-
-.statValue {
-  font-size: var(--text-title-size-large, 32px);
-  font-weight: var(--base-text-weight-semibold, 600);
-  color: var(--fgColor-default, #1f2328);
-  margin-bottom: var(--base-size-4, 4px);
-}
-
-.statLabel {
-  font-size: var(--text-body-size-small, 12px);
-  color: var(--fgColor-muted, #656d76);
-}
-
 .habitCard {
-  background-color: var(--bgColor-default, #ffffff);
-  border: 1px solid var(--borderColor-default, #d0d7de);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
   border-radius: var(--borderRadius-medium, 6px);
   padding: var(--base-size-16, 16px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.habitCard:hover {
+  border-color: var(--borderColor-default, #d0d7de);
+  box-shadow: var(--shadow-resting-small, 0 1px 0 rgba(31, 35, 40, 0.04));
 }
 
 .habitCardHeader {
@@ -130,7 +201,7 @@
 
 .progressBar {
   height: 8px;
-  background-color: var(--bgColor-muted, #f6f8fa);
+  background-color: var(--bgColor-default, #ffffff);
   border-radius: var(--borderRadius-small, 4px);
   overflow: hidden;
   margin-top: var(--base-size-12, 12px);

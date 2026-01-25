@@ -13,6 +13,7 @@
 
 import { AppHeader } from '@/components/AppHeader';
 import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
+import { ProfileNav } from '@/components/ProfileNav';
 import { SkillSlider } from '@/components/SkillSlider';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { challengeQueueStore } from '@/lib/challenge/custom-queue';
@@ -26,7 +27,7 @@ import { DEFAULT_SKILL_PROFILE, SKILL_LEVEL_DESCRIPTIONS, SKILL_LEVEL_LABELS, SK
 import { threadStore } from '@/lib/threads/storage';
 import { now } from '@/lib/utils/date-utils';
 import { workspaceStore } from '@/lib/workspace/storage';
-import { AlertIcon, InfoIcon, PlusIcon, TrashIcon } from '@primer/octicons-react';
+import { AlertIcon, CodeIcon, InfoIcon, MortarBoardIcon, PlusIcon, TrashIcon } from '@primer/octicons-react';
 import {
     Button,
     Flash,
@@ -52,7 +53,7 @@ export default function SkillProfilePage() {
   const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[]>([]);
 
   // Register this page in breadcrumb history
-  useBreadcrumb('/profile/skills', 'Skill Profile', '/profile/skills');
+  useBreadcrumb('/skills', 'Skills', '/skills');
 
   // Load profile and calibration items on mount
   useEffect(() => {
@@ -89,11 +90,14 @@ export default function SkillProfilePage() {
   const handleSkillChange = useCallback(async (skillId: string, level: SkillLevel, notInterested: boolean) => {
     if (!profile) return;
     
-    const updatedSkills = profile.skills.map(skill =>
-      skill.skillId === skillId
-        ? { ...skill, level, notInterested, source: 'manual' as const }
-        : skill
-    );
+    const updatedSkills = profile.skills.map(skill => {
+      if (skill.skillId !== skillId) return skill;
+      // Preserve provenance: GitHub-detected skills become 'github-confirmed' when edited
+      const source = skill.source === 'github' || skill.source === 'github-confirmed'
+        ? 'github-confirmed' as const
+        : 'manual' as const;
+      return { ...skill, level, notInterested, source };
+    });
     
     const updatedProfile: SkillProfile = {
       skills: updatedSkills,
@@ -225,6 +229,11 @@ export default function SkillProfilePage() {
       <div className={styles.root}>
         <AppHeader />
         <main className={styles.main}>
+          <aside className={styles.sidebar}>
+            <div className={styles.sidebarCard}>
+              <Spinner size="medium" />
+            </div>
+          </aside>
           <div className={styles.content}>
             <Stack direction="horizontal" align="center" justify="center" gap="condensed">
               <Spinner size="medium" />
@@ -236,21 +245,119 @@ export default function SkillProfilePage() {
     );
   }
 
+  // Calculate stats
+  const totalSkills = profile?.skills.length || 0;
+  const advancedSkills = profile?.skills.filter(s => s.level === 'advanced').length || 0;
+  const intermediateSkills = profile?.skills.filter(s => s.level === 'intermediate').length || 0;
+  const beginnerSkills = profile?.skills.filter(s => s.level === 'beginner').length || 0;
+
   return (
     <div className={styles.root}>
       <AppHeader />
       
       <main className={styles.main}>
+        {/* Left Sidebar */}
+        <aside className={styles.sidebar}>
+          <ProfileNav />
+          
+          <div className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <MortarBoardIcon size={20} className={styles.sidebarIcon} />
+              <h2 className={styles.sidebarTitle}>Skill Profile</h2>
+            </div>
+            <p className={styles.sidebarSubtitle}>Your learning journey</p>
+            
+            <div className={styles.statsGrid}>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{totalSkills}</span>
+                <span className={styles.statLabel}>Total Skills</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{advancedSkills}</span>
+                <span className={styles.statLabel}>Advanced</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{intermediateSkills}</span>
+                <span className={styles.statLabel}>Intermediate</span>
+              </div>
+              <div className={styles.statItem}>
+                <span className={styles.statValue}>{beginnerSkills}</span>
+                <span className={styles.statLabel}>Beginner</span>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <CodeIcon size={20} className={styles.sidebarIcon} />
+              <h3 className={styles.sidebarTitle}>Skill Levels</h3>
+            </div>
+            <Stack direction="vertical" gap="condensed">
+              {(['beginner', 'intermediate', 'advanced'] as SkillLevel[]).map(level => (
+                <div key={level} className={styles.legendItem}>
+                  <span className={styles.legendLevel}>{SKILL_LEVEL_LABELS[level]}</span>
+                  <span className={styles.legendDescription}>{SKILL_LEVEL_DESCRIPTIONS[level]}</span>
+                </div>
+              ))}
+              <div className={styles.legendItem}>
+                <span className={styles.legendLevel}>Not interested</span>
+                <span className={styles.legendDescription}>Deprioritised in recommendations</span>
+              </div>
+            </Stack>
+          </div>
+
+          {/* Danger Zone in sidebar */}
+          <div className={styles.dangerZone}>
+            <Heading as="h3" className={styles.dangerTitle}>
+              <AlertIcon size={16} /> Reset App Data
+            </Heading>
+            <p className={styles.dangerDescription}>
+              Clear all locally stored data including skill profile, focus history, 
+              chat threads, and challenge history.
+            </p>
+            {showResetConfirm ? (
+              <Flash variant="danger">
+                <Stack direction="vertical" gap="condensed">
+                  <span>Are you sure? This cannot be undone.</span>
+                  <Stack direction="horizontal" gap="condensed">
+                    <Button variant="danger" size="small" onClick={handleClearAllData}>
+                      Yes, Reset
+                    </Button>
+                    <Button variant="invisible" size="small" onClick={() => setShowResetConfirm(false)}>
+                      Cancel
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Flash>
+            ) : (
+              <Button variant="danger" size="small" onClick={() => setShowResetConfirm(true)}>
+                Clear All Data
+              </Button>
+            )}
+          </div>
+        </aside>
+
+        {/* Main Content */}
         <div className={styles.content}>
           <Stack direction="vertical" gap="normal">
             <div className={styles.pageHeader}>
-              <Heading as="h1" className={styles.pageTitle}>
-                Skill Profile
-              </Heading>
-              <p className={styles.pageDescription}>
-                Calibrate your skill levels for personalized learning recommendations.
-                These settings help us tailor challenges and topics to your experience level.
-              </p>
+              <Stack direction="horizontal" align="center" justify="space-between">
+                <div>
+                  <Heading as="h1" className={styles.pageTitle}>
+                    Your Skills
+                  </Heading>
+                  <p className={styles.pageDescription}>
+                    Calibrate your skill levels for personalized learning recommendations.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  leadingVisual={PlusIcon}
+                  onClick={() => setShowAddForm(true)}
+                >
+                  Add Skill
+                </Button>
+              </Stack>
             </div>
 
             <div className={styles.infoBox}>
@@ -271,59 +378,29 @@ export default function SkillProfilePage() {
               />
             )}
 
-            <div className={styles.levelLegend}>
-              <Heading as="h3" className={styles.legendTitle}>Skill Levels</Heading>
-              <Stack direction="vertical" gap="condensed">
-                {(['beginner', 'intermediate', 'advanced'] as SkillLevel[]).map(level => (
-                  <div key={level} className={styles.legendItem}>
-                    <span className={styles.legendLevel}>{SKILL_LEVEL_LABELS[level]}</span>
-                    <span className={styles.legendDescription}>{SKILL_LEVEL_DESCRIPTIONS[level]}</span>
-                  </div>
-                ))}
-                <div className={styles.legendItem}>
-                  <span className={styles.legendLevel}>Not interested</span>
-                  <span className={styles.legendDescription}>Deprioritised in recommendations and daily focus</span>
-                </div>
-              </Stack>
-            </div>
+            {showAddForm && (
+              <div className={styles.addSkillForm}>
+                <FormControl>
+                  <FormControl.Label>Skill Name</FormControl.Label>
+                  <Stack direction="horizontal" gap="condensed">
+                    <TextInput
+                      value={newSkillName}
+                      onChange={(e) => setNewSkillName(e.target.value)}
+                      placeholder="e.g., TypeScript, React, Docker"
+                      aria-label="New skill name"
+                    />
+                    <Button onClick={handleAddSkill} disabled={!newSkillName.trim()}>
+                      Add
+                    </Button>
+                    <Button variant="invisible" onClick={() => setShowAddForm(false)}>
+                      Cancel
+                    </Button>
+                  </Stack>
+                </FormControl>
+              </div>
+            )}
 
             <div className={styles.skillsSection}>
-              <Stack direction="horizontal" align="center" justify="space-between" className={styles.skillsHeader}>
-                <Heading as="h2" className={styles.skillsTitle}>
-                  Your Skills ({profile?.skills.length || 0})
-                </Heading>
-                <Button
-                  variant="primary"
-                  size="small"
-                  leadingVisual={PlusIcon}
-                  onClick={() => setShowAddForm(true)}
-                >
-                  Add Skill
-                </Button>
-              </Stack>
-
-              {showAddForm && (
-                <div className={styles.addSkillForm}>
-                  <FormControl>
-                    <FormControl.Label>Skill Name</FormControl.Label>
-                    <Stack direction="horizontal" gap="condensed">
-                      <TextInput
-                        value={newSkillName}
-                        onChange={(e) => setNewSkillName(e.target.value)}
-                        placeholder="e.g., TypeScript, React, Docker"
-                        aria-label="New skill name"
-                      />
-                      <Button onClick={handleAddSkill} disabled={!newSkillName.trim()}>
-                        Add
-                      </Button>
-                      <Button variant="invisible" onClick={() => setShowAddForm(false)}>
-                        Cancel
-                      </Button>
-                    </Stack>
-                  </FormControl>
-                </div>
-              )}
-
               {profile?.skills.length === 0 ? (
                 <div className={styles.emptyState}>
                   <p>
@@ -368,43 +445,13 @@ export default function SkillProfilePage() {
               )}
             </div>
 
-            <div className={styles.lastUpdated}>
-              {profile?.lastUpdated && (
+            {profile?.lastUpdated && (
+              <div className={styles.lastUpdated}>
                 <p className={styles.lastUpdatedText}>
                   Last updated: {new Date(profile.lastUpdated).toLocaleDateString()}
                 </p>
-              )}
-            </div>
-
-            {/* Reset Data Section */}
-            <div className={styles.dangerZone}>
-              <Heading as="h3" className={styles.dangerTitle}>
-                <AlertIcon size={16} /> Reset App Data
-              </Heading>
-              <p className={styles.dangerDescription}>
-                Clear all locally stored data including skill profile, focus history, 
-                chat threads, and challenge history. This will reset the app to its initial state.
-              </p>
-              {showResetConfirm ? (
-                <Flash variant="danger">
-                  <Stack direction="horizontal" align="center" justify="space-between">
-                    <span>Are you sure? This cannot be undone.</span>
-                    <Stack direction="horizontal" gap="condensed">
-                      <Button variant="danger" onClick={handleClearAllData}>
-                        Yes, Reset Everything
-                      </Button>
-                      <Button variant="invisible" onClick={() => setShowResetConfirm(false)}>
-                        Cancel
-                      </Button>
-                    </Stack>
-                  </Stack>
-                </Flash>
-              ) : (
-                <Button variant="danger" onClick={() => setShowResetConfirm(true)}>
-                  Clear All App Data
-                </Button>
-              )}
-            </div>
+              </div>
+            )}
           </Stack>
         </div>
       </main>

@@ -12,15 +12,6 @@ export interface CopilotChatRequest {
   conversationId?: string;
 }
 
-export interface CopilotStreamRequest {
-  prompt: string;
-  useGitHubTools?: boolean;
-  threadId?: string;
-  learningMode?: boolean;
-  conversationId?: string;
-  repos?: string[];
-}
-
 /**
  * Validates the request body for Copilot chat.
  *
@@ -28,22 +19,6 @@ export interface CopilotStreamRequest {
  * @returns Error message if invalid, null if valid
  */
 export function validateCopilotChatRequest(body: unknown): string | null {
-  const bodyError = validateObject(body, 'Request body');
-  if (bodyError) {
-    return bodyError;
-  }
-
-  const req = body as Record<string, unknown>;
-  return validateRequiredString(req.prompt, 'prompt');
-}
-
-/**
- * Validates the request body for Copilot streaming.
- *
- * @param body - The parsed request body
- * @returns Error message if invalid, null if valid
- */
-export function validateCopilotStreamRequest(body: unknown): string | null {
   const bodyError = validateObject(body, 'Request body');
   if (bodyError) {
     return bodyError;

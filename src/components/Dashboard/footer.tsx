@@ -6,9 +6,10 @@ import styles from './Dashboard.module.css';
 
 const POWERED_BY_LINKS = [
   { name: 'GitHub Copilot SDK', href: 'https://github.com/github/copilot-sdk' },
-  { name: 'Next.js', href: 'https://nextjs.org' },
-  { name: 'Primer', href: 'https://primer.style' },
-  { name: 'Vitest', href: 'https://vitest.dev' },
+  { name: 'Octokit', href: 'https://github.com/octokit/octokit.js' },
+  { name: 'Next.js', href: 'https://github.com/vercel/next.js' },
+  { name: 'Primer', href: 'https://github.com/primer/react' },
+  { name: 'Vitest', href: 'https://github.com/vitest-dev/vitest' },
 ];
 
 export function Footer() {

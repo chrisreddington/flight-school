@@ -10,9 +10,14 @@
 import { AppHeader } from '@/components/AppHeader';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import type { ChallengeDef } from '@/lib/copilot/types';
+import { focusStore } from '@/lib/focus';
+import { logger } from '@/lib/logger';
+import { getDateKey } from '@/lib/utils/date-utils';
 import { useSearchParams } from 'next/navigation';
-import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
 import styles from './challenge.module.css';
+
+const log = logger.withTag('ChallengePage');
 
 // PERF: Code split ChallengeSandbox (includes Monaco Editor ~200KB)
 const ChallengeSandbox = lazy(() => 
@@ -64,6 +69,8 @@ function ChallengePageContent() {
 
   // Parse challenge from URL params
   const { challengeId, challenge } = useMemo((): { challengeId: string; challenge: ChallengeDef } => {
+    // Get actual challenge ID from URL (passed by ChallengeCard)
+    const id = searchParams.get('id');
     const title = searchParams.get('title');
     const description = searchParams.get('description');
     const language = searchParams.get('language');
@@ -76,11 +83,11 @@ function ChallengePageContent() {
       };
     }
 
-    // Generate a stable ID from the challenge parameters
-    const id = `challenge-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)}`;
+    // Use actual ID if available, otherwise generate stable ID from title
+    const actualId = id || `challenge-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)}`;
 
     return {
-      challengeId: id,
+      challengeId: actualId,
       challenge: {
         title: decodeURIComponent(title),
         description: description ? decodeURIComponent(description) : '',
@@ -103,11 +110,28 @@ function ChallengePageContent() {
 
   useBreadcrumb('/challenge', challenge.title, breadcrumbHref);
 
-  // Handle completion
-  const handleComplete = () => {
-    // Challenge completion handling
-    // User will be redirected to dashboard to see completion status
-  };
+  /**
+   * Handle challenge completion when evaluation returns 100%.
+   * Marks challenge as completed in focus storage.
+   * Does NOT redirect - user may want to export to GitHub.
+   */
+  const handleComplete = useCallback(async () => {
+    try {
+      const dateKey = getDateKey();
+      log.info('Marking challenge as completed', { challengeId, dateKey });
+      
+      await focusStore.transitionChallenge(
+        dateKey,
+        challengeId,
+        'completed',
+        'challenge-sandbox'
+      );
+      
+      log.info('Challenge marked as completed', { challengeId, dateKey });
+    } catch (error) {
+      log.error('Failed to mark challenge as completed', { challengeId, error });
+    }
+  }, [challengeId]);
 
   return (
     <div className={styles.root}>

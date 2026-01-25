@@ -91,6 +91,27 @@ const VALID_TOPIC_TRANSITIONS: Record<TopicState, TopicState[]> = {
   'skipped': [], // Terminal state
 };
 
+/**
+ * Check if a state is a terminal state (no valid transitions out).
+ */
+export function isTerminalChallengeState(state: ChallengeState): boolean {
+  return VALID_CHALLENGE_TRANSITIONS[state].length === 0;
+}
+
+/**
+ * Check if a state is a terminal state (no valid transitions out).
+ */
+export function isTerminalGoalState(state: GoalState): boolean {
+  return VALID_GOAL_TRANSITIONS[state].length === 0;
+}
+
+/**
+ * Check if a state is a terminal state (no valid transitions out).
+ */
+export function isTerminalTopicState(state: TopicState): boolean {
+  return VALID_TOPIC_TRANSITIONS[state].length === 0;
+}
+
 // =============================================================================
 // State Query Helpers
 // =============================================================================
@@ -119,9 +140,8 @@ export function getCurrentGoalState(goal: StatefulGoal): GoalState {
 
 /**
  * Gets current topic state.
- * @internal Not exported - only used within this module
  */
-function getCurrentTopicState(topic: StatefulTopic): TopicState {
+export function getCurrentTopicState(topic: StatefulTopic): TopicState {
   return getCurrentState(topic.stateHistory);
 }
 

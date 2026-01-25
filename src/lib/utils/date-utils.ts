@@ -90,3 +90,13 @@ export function formatTimestamp(isoTimestamp: string): string {
   });
   return `${dateStr} at ${timeStr}`;
 }
+
+/**
+ * Check whether a date key is today.
+ *
+ * @param dateKey - Date key in YYYY-MM-DD format
+ * @returns True if the date key matches today in local time
+ */
+export function isTodayDateKey(dateKey: string): boolean {
+  return dateKey === getDateKey();
+}

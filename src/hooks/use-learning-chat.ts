@@ -33,15 +33,13 @@
 
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { logger } from '@/lib/logger';
-import type { StreamState } from '@/lib/stream-store/types';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
-import { threadStore } from '@/lib/threads';
+import { THREAD_DATA_CHANGED_EVENT, threadStore } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
-import { useCopilotStream } from './use-copilot-stream';
 import { useThreads, type UseThreadsReturn } from './use-threads';
 
 const log = logger.withTag('useLearningChat');
@@ -106,48 +104,46 @@ export type UseLearningChatReturn = UseLearningChatState & UseLearningChatAction
 // ============================================================================
 
 /**
- * Convert a completed StreamState to a thread Message.
- * Used by onComplete callback which runs outside React lifecycle.
- *
- * @param state - The completed stream state
- * @returns A thread-compatible message, or null if state is error/empty
+ * Converts a stored streaming message into a completed, interrupted message.
  */
-function streamStateToThreadMessage(state: StreamState): Message | null {
-  // Don't create a message for errors without content
-  if (state.status === 'error' && !state.content) {
-    return null;
+function finalizeInterruptedMessage(thread: Thread): Thread | null {
+  // Find streaming message (now uses 'streaming-{jobId}' format)
+  const streamingMessage = thread.messages.find((message) => 
+    message.id.startsWith('streaming-')
+  );
+  if (!streamingMessage) return null;
+
+  // Remove cursor if present, then trim
+  const trimmedContent = streamingMessage.content.replace(' ▊', '').trim();
+  if (!trimmedContent) {
+    // No content - just remove the streaming message
+    const withoutStreaming = thread.messages.filter((m) => !m.id.startsWith('streaming-'));
+    return {
+      ...thread,
+      messages: withoutStreaming,
+      updatedAt: now(),
+      isStreaming: false,
+    };
   }
-  
-  // Build content - add indicators for non-completed streams
-  let content = state.content;
-  if (state.status === 'aborted' && content) {
-    content += '\n\n*(Response stopped)*';
-  } else if (state.status === 'error' && content) {
-    content += '\n\n*(Response interrupted)*';
-  }
-  
-  // Don't create empty messages
-  if (!content) {
-    return null;
-  }
-  
-  return {
+
+  const interruptionNote = '*(Response interrupted)*';
+  const content = streamingMessage.content.includes(interruptionNote)
+    ? streamingMessage.content.replace(' ▊', '')
+    : `${trimmedContent}\n\n${interruptionNote}`;
+
+  const finalizedMessage: Message = {
+    ...streamingMessage,
     id: generateMessageId(),
-    role: 'assistant',
     content,
     timestamp: now(),
-    toolCalls: state.toolCalls?.map((tc) => tc.name),
-    hasActionableItem: state.hasActionableItem,
-    perf: {
-      clientTotalMs: state.completedAt && state.startedAt
-        ? Math.round(state.completedAt - state.startedAt)
-        : undefined,
-      clientFirstTokenMs: state.clientFirstTokenMs,
-      serverTotalMs: state.serverMeta?.totalMs,
-      sessionPoolHit: state.serverMeta?.sessionPoolHit ?? undefined,
-      mcpEnabled: state.serverMeta?.mcpEnabled ?? undefined,
-      sessionReused: state.serverMeta?.sessionReused ?? undefined,
-    },
+  };
+
+  const withoutStreaming = thread.messages.filter((m) => !m.id.startsWith('streaming-'));
+  return {
+    ...thread,
+    messages: [...withoutStreaming, finalizedMessage],
+    updatedAt: now(),
+    isStreaming: false,
   };
 }
 
@@ -183,41 +179,216 @@ export function useLearningChat(): UseLearningChatReturn {
     refresh: refreshThreads,
   } = useThreads();
 
-  // Streaming - now supports multiple concurrent streams via per-conversation tracking
-  const {
-    isLoading: anyStreaming,
-    streamingContent: defaultStreamingContent,
-    sendMessage: sendStreamingMessage,
-    stopStreaming: stopStreamingBase,
-    isStreamingConversation,
-    getStreamingContent,
-    activeStreams,
-  } = useCopilotStream();
-
-  // Get ALL streaming thread IDs for sidebar indicators
-  const streamingThreadIds = Array.from(activeStreams.keys());
+  // Derive streaming thread IDs from storage (threads with isStreaming: true)
+  // This is the SINGLE SOURCE OF TRUTH for streaming state
+  const streamingThreadIds = useMemo(() => 
+    threads.filter(t => t.isStreaming === true).map(t => t.id),
+    [threads]
+  );
   
   // For backward compatibility, expose a single streamingThreadId (most recently started)
   const streamingThreadId = streamingThreadIds[streamingThreadIds.length - 1] ?? null;
   
-  // Get streaming content for the active thread specifically
-  const streamingContent = activeThreadId 
-    ? getStreamingContent(activeThreadId) 
-    : defaultStreamingContent;
+  // Track threads where we've just started a job (before storage reflects isStreaming)
+  const [pendingStreamThreadIds, setPendingStreamThreadIds] = useState<Set<string>>(new Set());
   
-  // For "isStreaming", return whether the ACTIVE thread is streaming
-  // This gives better UX - shows loading only when current thread is loading
-  const isStreaming = activeThreadId ? isStreamingConversation(activeThreadId) : anyStreaming;
+  // Combine storage-derived streaming IDs with pending ones
+  const allStreamingThreadIds = useMemo(() => {
+    const combined = new Set([...streamingThreadIds, ...pendingStreamThreadIds]);
+    return Array.from(combined);
+  }, [streamingThreadIds, pendingStreamThreadIds]);
+  
+  // Check if active thread is streaming (from storage OR pending)
+  const isStreaming = activeThread?.isStreaming === true || 
+    (activeThreadId ? pendingStreamThreadIds.has(activeThreadId) : false);
+  
+  // Streaming content comes from the thread messages in storage
+  // The streaming message has cursor ` ▊` which gives the typing effect
+  const streamingContent = useMemo(() => {
+    if (!activeThread?.isStreaming) return '';
+    const streamingMsg = activeThread.messages.find(m => m.id.startsWith('streaming-'));
+    return streamingMsg?.content ?? '';
+  }, [activeThread]);
 
-  // Wrap stopStreaming to stop only the active thread's stream by default
-  const stopStreaming = useCallback(() => {
-    if (activeThreadId) {
-      stopStreamingBase(activeThreadId);
-    } else {
-      // Stop all if no active thread
-      stopStreamingBase();
+  // Poll for thread updates while any thread is streaming (including pending)
+  useEffect(() => {
+    if (allStreamingThreadIds.length === 0) return;
+    
+    const POLL_INTERVAL_MS = 400; // Match job write frequency
+    log.debug('Starting polling for streaming threads', { count: allStreamingThreadIds.length });
+    
+    const pollInterval = setInterval(() => {
+      refreshThreads();
+    }, POLL_INTERVAL_MS);
+    
+    return () => {
+      log.debug('Stopping polling for streaming threads');
+      clearInterval(pollInterval);
+    };
+  }, [allStreamingThreadIds.length, refreshThreads]);
+  
+  // Clean up pending stream IDs once storage reflects the streaming state
+  useEffect(() => {
+    if (pendingStreamThreadIds.size === 0) return;
+    
+    // Check if any pending threads now have isStreaming in storage
+    const stillPending = new Set<string>();
+    for (const threadId of pendingStreamThreadIds) {
+      const thread = threads.find(t => t.id === threadId);
+      // Keep as pending if thread not found OR doesn't have isStreaming yet
+      // AND doesn't have a completed message (no cursor)
+      if (!thread) {
+        stillPending.add(threadId);
+      } else if (thread.isStreaming) {
+        // Storage has caught up - no longer pending
+      } else {
+        // Check if there's a streaming message or completed assistant message
+        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
+        const hasCompletedResponse = thread.messages.some(m => 
+          m.role === 'assistant' && !m.id.startsWith('streaming-')
+        );
+        if (!hasStreamingMsg && !hasCompletedResponse) {
+          // Still waiting for job to write first content
+          stillPending.add(threadId);
+        }
+      }
     }
-  }, [activeThreadId, stopStreamingBase]);
+    
+    if (stillPending.size !== pendingStreamThreadIds.size) {
+      setPendingStreamThreadIds(stillPending);
+    }
+  }, [threads, pendingStreamThreadIds]);
+
+  useEffect(() => {
+    if (isThreadsLoading) return;
+    if (streamingThreadIds.length === 0) return;
+    if (activeThreadId) return;
+
+    // Auto-select the most recent streaming thread after reload/navigation.
+    const latestStreamingId = streamingThreadIds[streamingThreadIds.length - 1];
+    if (latestStreamingId) {
+      selectThread(latestStreamingId);
+    }
+  }, [isThreadsLoading, streamingThreadIds, activeThreadId, selectThread]);
+
+  useEffect(() => {
+    if (isThreadsLoading || threads.length === 0) return;
+
+    const hasActiveStreams = streamingThreadIds.length > 0;
+    const updates = threads
+      .map((thread) => {
+        // Check for streaming messages (id starts with 'streaming-')
+        const hasStreamingMessage = thread.messages.some((message) => 
+          message.id.startsWith('streaming-')
+        );
+        if (hasStreamingMessage) {
+          if (hasActiveStreams && streamingThreadIds.includes(thread.id)) {
+            return null; // Still actively streaming
+          }
+          // Finalize interrupted streaming message
+          return finalizeInterruptedMessage(thread);
+        }
+        return null;
+      })
+      .filter((thread): thread is Thread => Boolean(thread));
+
+    if (updates.length === 0) return;
+
+    void Promise.all(updates.map((thread) => threadStore.update(thread)));
+  }, [isThreadsLoading, threads, streamingThreadIds]);
+
+  // Subscribe to thread data changes from background jobs
+  useEffect(() => {
+    const handleThreadDataChanged = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ threadId?: string }>;
+      const changedThreadId = customEvent.detail?.threadId;
+      
+      log.debug('Thread data changed event received', { changedThreadId });
+      
+      // Refresh threads from storage
+      try {
+        await refreshThreads();
+        log.debug('Threads refreshed from storage after background job');
+      } catch (err) {
+        log.warn('Failed to refresh threads after background job', { err });
+      }
+    };
+
+    window.addEventListener(THREAD_DATA_CHANGED_EVENT, handleThreadDataChanged);
+    return () => {
+      window.removeEventListener(THREAD_DATA_CHANGED_EVENT, handleThreadDataChanged);
+    };
+  }, [refreshThreads]);
+
+  // Stop streaming - cancel job and update storage
+  const stopStreaming = useCallback(async () => {
+    const threadId = activeThreadId;
+    if (!threadId) {
+      log.warn('No active thread to stop streaming');
+      return;
+    }
+    
+    log.debug('Stopping stream for thread:', threadId);
+    
+    // Remove from pending (stops showing as streaming immediately)
+    setPendingStreamThreadIds(prev => {
+      const next = new Set(prev);
+      next.delete(threadId);
+      return next;
+    });
+    
+    try {
+      // 1. Find and cancel any running jobs for this thread
+      // We need to find the job by checking jobs API
+      const jobsRes = await fetch('/api/jobs');
+      if (jobsRes.ok) {
+        const { jobs } = await jobsRes.json();
+        const runningJobs = jobs.filter((job: { status: string; input?: { threadId?: string } }) => 
+          job.status === 'running' && 
+          job.input?.threadId === threadId
+        );
+        
+        // Cancel each running job
+        for (const job of runningJobs) {
+          log.debug('Cancelling job:', job.id);
+          await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
+        }
+      }
+      
+      // 2. Update thread in storage - set isStreaming: false, finalize message
+      const thread = await threadStore.getById(threadId);
+      if (thread) {
+        // Find and finalize the streaming message
+        const updatedMessages = thread.messages.map(msg => {
+          if (msg.id.startsWith('streaming-')) {
+            // Remove cursor and add interruption note
+            const content = msg.content.replace(' ▊', '').trim();
+            return {
+              ...msg,
+              id: generateMessageId(), // Give it a permanent ID
+              content: content ? `${content}\n\n*(Response stopped)*` : '',
+            };
+          }
+          return msg;
+        }).filter(msg => msg.content); // Remove empty messages
+        
+        await threadStore.update({
+          ...thread,
+          messages: updatedMessages,
+          isStreaming: false,
+          updatedAt: now(),
+        });
+        
+        log.debug('Thread updated after stop');
+      }
+      
+      // 3. Refresh to show updated state
+      await refreshThreads();
+      
+    } catch (err) {
+      log.error('Failed to stop streaming:', err);
+    }
+  }, [activeThreadId, refreshThreads]);
 
   /**
    * Send a message and save to the active thread.
@@ -289,8 +460,9 @@ export function useLearningChat(): UseLearningChatReturn {
         }
       }
       
-      // Check if THIS thread is already streaming (don't block other threads)
-      if (isStreamingConversation(targetThreadId)) {
+      // Check if THIS thread is already streaming (from storage)
+      const threadFromStorage = threads.find(t => t.id === targetThreadId);
+      if (threadFromStorage?.isStreaming) {
         log.warn(`Thread ${targetThreadId} is already streaming`);
         return;
       }
@@ -310,69 +482,62 @@ export function useLearningChat(): UseLearningChatReturn {
         messages: [...thread.messages, userMessage],
       }, targetThreadId);
 
-      // Define onComplete callback - this runs outside React lifecycle,
-      // so it persists even if user navigates away during streaming
-      const handleStreamComplete = async (state: StreamState) => {
-        log.debug('Stream completed, persisting to thread:', { 
-          threadId: targetThreadId, 
-          status: state.status,
-          hasContent: !!state.content,
+      // Start background job via POST /api/jobs
+      // The job writes to storage, and our polling effect refreshes the UI
+      log.debug('Starting background job for chat response', { threadId: targetThreadId });
+      
+      // Mark this thread as pending streaming IMMEDIATELY
+      // This triggers polling before storage has isStreaming: true
+      setPendingStreamThreadIds(prev => new Set([...prev, targetThreadId]));
+      
+      try {
+        const jobRes = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'chat-response',
+            input: {
+              threadId: targetThreadId,
+              prompt: message,
+              learningMode: true,
+              useGitHubTools,
+              repos: effectiveRepos?.map(r => r.fullName),
+            },
+          }),
         });
-        
-        // Convert stream state to thread message
-        const threadMessage = streamStateToThreadMessage(state);
-        if (!threadMessage) {
-          log.debug('No message to persist (empty or error)');
-          return;
+
+        if (!jobRes.ok) {
+          const err = await jobRes.json();
+          // Remove from pending on error
+          setPendingStreamThreadIds(prev => {
+            const next = new Set(prev);
+            next.delete(targetThreadId);
+            return next;
+          });
+          throw new Error(err.error || 'Failed to start job');
         }
 
-        // Get fresh thread state directly from storage to avoid stale data
-        // This is critical because the thread state may have changed during streaming
-        // (e.g., user navigated away or switched threads)
-        const freshThread = await threadStore.getById(targetThreadId);
+        const { id: jobId } = await jobRes.json();
+        log.debug(`Started job ${jobId} for thread ${targetThreadId}`);
         
-        if (freshThread) {
-          // Update the thread with the response message
-          const updatedThread: Thread = {
-            ...freshThread,
-            messages: [...freshThread.messages, threadMessage],
-            updatedAt: now(),
-          };
-          await threadStore.update(updatedThread);
-          log.debug('Persisted message to thread storage');
-          
-          // Try to refresh React state - this is best-effort since component may be unmounted
-          try {
-            await refreshThreads();
-          } catch {
-            // Component unmounted, that's OK - storage is persisted
-            log.debug('Could not refresh React state (component may be unmounted)');
-          }
-        } else {
-          log.warn('Thread not found for persistence:', targetThreadId);
-        }
-      };
-
-      // Send streaming message with learning mode enabled
-      // The onComplete callback handles persistence outside React lifecycle
-      await sendStreamingMessage(message, {
-        useGitHubTools,
-        repos: effectiveRepos,
-        conversationId: targetThreadId,
-        learningMode: true,
-        onComplete: handleStreamComplete,
-      });
-
-      // NOTE: We no longer handle persistence here - it's done in onComplete callback
-      // which runs even if this component unmounts during streaming
+        // Trigger immediate refresh to pick up the isStreaming flag
+        await refreshThreads();
+      } catch (err) {
+        log.error('Failed to start chat response job:', err);
+        // Remove from pending on error
+        setPendingStreamThreadIds(prev => {
+          const next = new Set(prev);
+          next.delete(targetThreadId);
+          return next;
+        });
+      }
     },
     [
       activeThread,
       createThread,
       updateActiveThread,
-      sendStreamingMessage,
       refreshThreads,
-      isStreamingConversation,
+      threads,
     ]
   );
 
@@ -385,7 +550,7 @@ export function useLearningChat(): UseLearningChatReturn {
     isStreaming,
     streamingContent,
     streamingThreadId,
-    streamingThreadIds,
+    streamingThreadIds: allStreamingThreadIds, // Use combined list including pending
     // Actions
     sendMessage,
     stopStreaming,

@@ -183,16 +183,6 @@ export interface SkillProfile {
 // =============================================================================
 
 /**
- * localStorage key for skill profile data.
- */
-export const SKILL_PROFILE_STORAGE_KEY = 'flight-school-skill-profile';
-
-/**
- * Current schema version for skill profile storage.
- */
-export const SKILL_PROFILE_SCHEMA_VERSION = 1;
-
-/**
  * Default empty skill profile.
  */
 export const DEFAULT_SKILL_PROFILE: SkillProfile = {

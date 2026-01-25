@@ -1,27 +1,27 @@
 /**
- * Focus History Page
+ * History Page
  *
- * Dedicated page for browsing historical Daily Focus entries.
+ * Dedicated page for browsing historical learning entries.
  * Displays the shared header with dynamic breadcrumbs based on navigation history.
  */
 
 'use client';
 
 import { AppHeader } from '@/components/AppHeader';
-import { FocusHistory } from '@/components/FocusHistory';
+import { LearningHistory } from '@/components/LearningHistory';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
-import styles from './focus-history.module.css';
+import styles from './history.module.css';
 
-export default function FocusHistoryPage() {
+export default function HistoryPage() {
   // Register this page in breadcrumb history
-  useBreadcrumb('/focus-history', 'Focus History', '/focus-history');
+  useBreadcrumb('/history', 'History', '/history');
 
   return (
     <div className={styles.root}>
       <AppHeader />
 
       <main className={styles.main}>
-        <FocusHistory />
+        <LearningHistory />
       </main>
     </div>
   );

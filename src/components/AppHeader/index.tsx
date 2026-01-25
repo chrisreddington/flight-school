@@ -24,8 +24,9 @@ import {
     ChevronRightIcon,
     CopilotIcon,
     FlameIcon,
-    GearIcon,
     HistoryIcon,
+    HomeIcon,
+    MortarBoardIcon,
     PersonIcon,
     RocketIcon,
     StarIcon,
@@ -135,22 +136,28 @@ export function AppHeader() {
                   @{username}
                 </ActionList.Item>
                 <ActionList.Divider />
-                <ActionList.LinkItem href="/habits">
-                  <ActionList.LeadingVisual><FlameIcon /></ActionList.LeadingVisual>
-                  My Habits
-                  <ActionList.Description>Track and manage your habits</ActionList.Description>
-                </ActionList.LinkItem>
-                <ActionList.LinkItem href="/focus-history">
-                  <ActionList.LeadingVisual><HistoryIcon /></ActionList.LeadingVisual>
-                  Focus History
-                  <ActionList.Description>View past focus items</ActionList.Description>
-                </ActionList.LinkItem>
-                <ActionList.Divider />
-                <ActionList.LinkItem href="/profile/skills">
-                  <ActionList.LeadingVisual><GearIcon /></ActionList.LeadingVisual>
-                  Skill Profile
-                  <ActionList.Description>Calibrate your skill levels</ActionList.Description>
-                </ActionList.LinkItem>
+                <ActionList.Group title="Learning">
+                  <ActionList.LinkItem href="/">
+                    <ActionList.LeadingVisual><HomeIcon /></ActionList.LeadingVisual>
+                    Dashboard
+                    <ActionList.Description>Your learning overview</ActionList.Description>
+                  </ActionList.LinkItem>
+                  <ActionList.LinkItem href="/skills">
+                    <ActionList.LeadingVisual><MortarBoardIcon /></ActionList.LeadingVisual>
+                    Skills
+                    <ActionList.Description>Calibrate your skill levels</ActionList.Description>
+                  </ActionList.LinkItem>
+                  <ActionList.LinkItem href="/habits">
+                    <ActionList.LeadingVisual><FlameIcon /></ActionList.LeadingVisual>
+                    Habits
+                    <ActionList.Description>Track your learning habits</ActionList.Description>
+                  </ActionList.LinkItem>
+                  <ActionList.LinkItem href="/history">
+                    <ActionList.LeadingVisual><HistoryIcon /></ActionList.LeadingVisual>
+                    History
+                    <ActionList.Description>View past learning items</ActionList.Description>
+                  </ActionList.LinkItem>
+                </ActionList.Group>
                 <ActionList.Divider />
                 <ActionList.LinkItem 
                   href="https://github.com/chrisreddington/flight-school" 

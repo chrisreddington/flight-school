@@ -32,15 +32,16 @@
  * ```
  */
 
-import { apiGet, apiPost } from '@/lib/api-client';
+import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
+import { now } from '@/lib/utils/date-utils';
+import { activeOperationsStore, type ActiveOperationItemType } from './active-operations-store';
 import type {
-  ActiveOperation,
-  OperationsListener,
-  OperationsSnapshot,
-  OperationStatus,
-  OperationType,
-  StartOperationOptions,
+    ActiveOperation,
+    OperationsListener,
+    OperationsSnapshot,
+    OperationStatus,
+    OperationType,
 } from './types';
 
 const log = logger.withTag('OperationsManager');
@@ -52,7 +53,7 @@ const POLL_INTERVAL_MS = 1000;
 const MAX_POLL_TIME_MS = 120000;
 
 interface BackgroundJobOptions<T> {
-  type: 'topic-regeneration';
+  type: 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response';
   targetId: string;
   input: Record<string, unknown>;
   onComplete?: (result: T) => void | Promise<void>;
@@ -68,9 +69,19 @@ interface JobResponse {
   error?: string;
 }
 
-interface JobsListResponse {
-  jobs: JobResponse[];
-}
+const JOB_ITEM_TYPE_BY_TYPE: Partial<Record<OperationType, ActiveOperationItemType>> = {
+  'topic-regeneration': 'topic',
+  'challenge-regeneration': 'challenge',
+  'goal-regeneration': 'goal',
+  'chat-response': 'chat',
+};
+
+const ITEM_TYPE_TO_JOB_TYPE: Record<ActiveOperationItemType, OperationType> = {
+  topic: 'topic-regeneration',
+  challenge: 'challenge-regeneration',
+  goal: 'goal-regeneration',
+  chat: 'chat-response',
+};
 
 class ActiveOperationsManager {
   /** All tracked operations by ID */
@@ -128,46 +139,62 @@ class ActiveOperationsManager {
     this.initialized = true;
 
     try {
-      // Fetch all active (pending/running) jobs from backend
-      const response = await apiGet<JobsListResponse>('/api/jobs?status=pending');
-      const pendingJobs = response?.jobs || [];
+      // On client, fetch active jobs from server API
+      // On server, use local storage (though this rarely happens)
+      let entries: { jobId: string; itemId: string; itemType: ActiveOperationItemType; startedAt: string }[] = [];
       
-      const runningResponse = await apiGet<JobsListResponse>('/api/jobs?status=running');
-      const runningJobs = runningResponse?.jobs || [];
-      
-      const activeJobs = [...pendingJobs, ...runningJobs];
-
-      if (activeJobs.length > 0) {
-        log.info(`Found ${activeJobs.length} active jobs on init`);
+      if (typeof window !== 'undefined') {
+        // Client-side: fetch from API
+        try {
+          const response = await fetch('/api/jobs');
+          if (response.ok) {
+            const data = await response.json();
+            // Transform API response to our entry format - only pending/running jobs
+            entries = (data.jobs || [])
+              .filter((job: { status: string }) => job.status === 'pending' || job.status === 'running')
+              .map((job: { id: string; targetId?: string; type: string; createdAt: string }) => ({
+                jobId: job.id,
+                itemId: job.targetId || job.id,
+                itemType: JOB_ITEM_TYPE_BY_TYPE[job.type as OperationType] || 'topic',
+                startedAt: job.createdAt,
+              }));
+          }
+        } catch (err) {
+          log.warn('Failed to fetch active jobs from API:', err);
+        }
+      } else {
+        // Server-side: use local store
+        const storeEntries = await activeOperationsStore.getEntries();
+        entries = storeEntries;
       }
 
-      // Restore tracking for each active job
-      for (const job of activeJobs) {
-        const operationId = `${job.type}:${job.targetId || job.id}`;
-        
-        // Skip if already tracking
+      if (entries.length > 0) {
+        log.info(`Found ${entries.length} active jobs on init`);
+      }
+
+      for (const entry of entries) {
+        const jobType = ITEM_TYPE_TO_JOB_TYPE[entry.itemType];
+        const operationId = `${jobType}:${entry.itemId}`;
+
         if (this.operations.has(operationId)) continue;
 
-        // Create operation record
         const operation: ActiveOperation = {
           id: operationId,
           status: 'in-progress',
           meta: {
-            type: job.type as OperationType,
-            startedAt: new Date().toISOString(),
-            targetId: job.targetId,
-            jobId: job.id,
+            type: jobType,
+            startedAt: entry.startedAt,
+            targetId: entry.itemId,
+            jobId: entry.jobId,
           },
         };
 
         this.operations.set(operationId, operation);
-        this.jobToOperation.set(job.id, operationId);
-
-        // Start polling for this job (no callbacks - just update state)
-        this.startPolling(job.id, operationId);
+        this.jobToOperation.set(entry.jobId, operationId);
+        this.startPolling(entry.jobId, operationId);
       }
 
-      if (activeJobs.length > 0) {
+      if (entries.length > 0) {
         this.updateSnapshot();
         this.notifyListeners();
       }
@@ -209,7 +236,7 @@ class ActiveOperationsManager {
         status: 'in-progress',
         meta: {
           type: type as OperationType,
-          startedAt: new Date().toISOString(),
+          startedAt: now(),
           targetId,
           jobId,
         },
@@ -218,6 +245,18 @@ class ActiveOperationsManager {
       this.operations.set(operationId, operation);
       this.updateSnapshot();
       this.notifyListeners();
+
+      const itemType = JOB_ITEM_TYPE_BY_TYPE[type as OperationType];
+      if (itemType) {
+        activeOperationsStore.addEntry({
+          itemId: targetId,
+          itemType,
+          jobId,
+          startedAt: operation.meta.startedAt,
+        }).catch((err) => {
+          log.warn('Failed to persist active operation entry', { err, jobId, operationId });
+        });
+      }
 
       // Start polling for job completion
       this.startPolling(jobId, operationId, onComplete as ((result: unknown) => void | Promise<void>) | undefined, onError);
@@ -266,15 +305,9 @@ class ActiveOperationsManager {
             this.notifyListeners();
           }
 
-          // Call React callback if provided
-          if (onComplete && job.result) {
-            try {
-              await onComplete(job.result as T);
-            } catch (err) {
-              log.error(`onComplete callback failed:`, err);
-            }
-          } else if (job.result && job.targetId) {
-            // No React callback - use registered handler (for post-navigation completion)
+          // ALWAYS run registered handler first (for persistence)
+          // This ensures data is saved even if React component unmounted
+          if (job.result && job.targetId) {
             const handler = this.completionHandlers.get(job.type);
             if (handler) {
               try {
@@ -283,6 +316,17 @@ class ActiveOperationsManager {
               } catch (err) {
                 log.error(`Registered completion handler failed:`, err);
               }
+            }
+          }
+
+          // ALSO call React callback if provided (for immediate UI update)
+          // The component may have unmounted, but the callback might still work
+          // If it fails, that's okay - the registered handler already persisted
+          if (onComplete && job.result) {
+            try {
+              await onComplete(job.result as T);
+            } catch (err) {
+              log.error(`onComplete callback failed (component may have unmounted):`, err);
             }
           }
 
@@ -336,116 +380,7 @@ class ActiveOperationsManager {
       this.pollingIntervals.delete(jobId);
     }
     this.jobToOperation.delete(jobId);
-  }
-
-  /**
-   * Start a new operation (legacy method for non-background operations).
-   * For operations that must survive navigation, use startBackgroundJob instead.
-   */
-  start<T>(options: StartOperationOptions<T>): string {
-    const { id, type, description, targetId, executor, onComplete, onError, context } = options;
-
-    // Generate operation ID
-    const operationId = id || `${type}:${targetId || crypto.randomUUID()}`;
-
-    // Check if operation already exists
-    if (this.operations.has(operationId)) {
-      log.warn(`Operation ${operationId} already exists, aborting previous`);
-      this.abort(operationId);
-    }
-
-    // Create abort controller for this operation
-    const abortController = new AbortController();
-
-    // Create the operation record
-    const operation: ActiveOperation<T> = {
-      id: operationId,
-      status: 'in-progress',
-      meta: {
-        type,
-        startedAt: new Date().toISOString(),
-        description,
-        targetId,
-        context,
-      },
-      abortController,
-    };
-
-    // Register the operation
-    this.operations.set(operationId, operation);
-    this.updateSnapshot();
-    this.notifyListeners();
-
-    log.debug(`Started operation: ${operationId}`, { type, targetId });
-
-    // Execute the operation in background (not awaited!)
-    this.executeOperation(operationId, executor, abortController.signal, onComplete, onError);
-
-    return operationId;
-  }
-
-  /**
-   * Execute the operation and handle completion/failure.
-   * This runs independently of the calling code.
-   */
-  private async executeOperation<T>(
-    operationId: string,
-    executor: (signal: AbortSignal) => Promise<T>,
-    signal: AbortSignal,
-    onComplete?: (result: T) => void | Promise<void>,
-    onError?: (error: Error) => void
-  ): Promise<void> {
-    try {
-      // Execute the actual work
-      const result = await executor(signal);
-
-      // Check if aborted during execution
-      if (signal.aborted) {
-        log.debug(`Operation ${operationId} was aborted during execution`);
-        return;
-      }
-
-      // Update operation status
-      const operation = this.operations.get(operationId);
-      if (operation) {
-        operation.status = 'complete';
-        operation.result = result;
-        this.updateSnapshot();
-        this.notifyListeners();
-      }
-
-      log.debug(`Operation ${operationId} completed successfully`);
-
-      // Call completion callback (this handles persistence)
-      if (onComplete) {
-        try {
-          await onComplete(result);
-        } catch (err) {
-          log.error(`onComplete callback failed for ${operationId}:`, err);
-        }
-      }
-
-      // Clean up after a short delay to allow UI to react
-      setTimeout(() => this.cleanup(operationId), 1000);
-    } catch (error) {
-      // Check if this was an abort
-      if ((error as Error).name === 'AbortError') {
-        log.debug(`Operation ${operationId} aborted`);
-        this.updateStatus(operationId, 'aborted');
-        return;
-      }
-
-      // Handle failure
-      log.error(`Operation ${operationId} failed:`, error);
-      this.updateStatus(operationId, 'failed', (error as Error).message);
-
-      if (onError) {
-        onError(error as Error);
-      }
-
-      // Clean up failed operations after delay
-      setTimeout(() => this.cleanup(operationId), 5000);
-    }
+    void this.removeActiveEntry(jobId);
   }
 
   /**
@@ -629,6 +564,92 @@ class ActiveOperationsManager {
         // Ignore listener errors
       }
     });
+  }
+
+  /**
+   * Get active chat-response operations for a specific thread.
+   * Returns the operation if there's an active background job for the thread.
+   */
+  getActiveChatJobForThread(threadId: string): ActiveOperation | undefined {
+    for (const op of this.operations.values()) {
+      if (op.meta.type === 'chat-response' && 
+          op.meta.targetId === threadId && 
+          op.status === 'in-progress') {
+        return op;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Check if there's an active chat-response job for a thread.
+   */
+  hasActiveChatJob(threadId: string): boolean {
+    return this.getActiveChatJobForThread(threadId) !== undefined;
+  }
+
+  /**
+   * Cancel a background job by operation ID.
+   * This stops polling and marks the job as aborted.
+   */
+  async cancelBackgroundJob(operationId: string): Promise<boolean> {
+    const operation = this.operations.get(operationId);
+    if (!operation || operation.status !== 'in-progress') {
+      log.debug(`Cancel request for ${operationId}: operation not found or not in-progress`);
+      return false;
+    }
+
+    log.info(`Cancelling background job: ${operationId}`);
+
+    // Find the jobId from operation metadata
+    const jobId = operation.meta.jobId;
+    if (jobId) {
+      // Stop polling
+      this.stopPolling(jobId);
+      log.info(`[Job ${jobId}] Stopped client-side polling`);
+      
+      // Send cancel request to server (marks job as cancelled, destroys SDK session)
+      try {
+        log.info(`[Job ${jobId}] Sending cancellation request to server...`);
+        const response = await apiDelete(`/api/jobs/${jobId}`);
+        log.info(`[Job ${jobId}] Server cancellation response:`, response);
+      } catch (err) {
+        log.warn(`[Job ${jobId}] Failed to cancel on server (may have completed):`, err);
+      }
+    }
+
+    // Mark as aborted
+    operation.status = 'aborted';
+    this.updateSnapshot();
+    this.notifyListeners();
+    
+    log.info(`Cancelled background job: ${operationId}`);
+    
+    // Clean up immediately
+    setTimeout(() => this.cleanup(operationId), 100);
+    
+    return true;
+  }
+
+  private async removeActiveEntry(jobId: string): Promise<void> {
+    try {
+      await activeOperationsStore.removeByJobId(jobId);
+    } catch (error) {
+      log.warn('Failed to remove active operation entry', { error, jobId });
+    }
+  }
+
+  /**
+   * Cancel active chat job for a thread.
+   */
+  async cancelChatJobForThread(threadId: string): Promise<boolean> {
+    const operation = this.getActiveChatJobForThread(threadId);
+    if (!operation) {
+      return false;
+    }
+    
+    const operationId = `chat-response:${threadId}`;
+    return this.cancelBackgroundJob(operationId);
   }
 }
 
