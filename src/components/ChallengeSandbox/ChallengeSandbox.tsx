@@ -26,7 +26,7 @@
 'use client';
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
-import { getLanguageDisplayName, getMonacoLanguage } from '@/lib/editor/monaco-language-map';
+import { getLanguageDisplayName, getMonacoLanguage, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
 import type { OnMount } from '@monaco-editor/react';
 import {
     BeakerIcon,
@@ -164,7 +164,7 @@ export function ChallengeSandbox({
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
   const activeFileName = activeFile?.name ?? 'solution.ts';
   const activeFileExtension = activeFileName.split('.').pop() ?? '';
-  const activeFileLanguage = getMonacoLanguage(activeFileExtension || challenge.language);
+  const activeFileLanguage = getMonacoLanguageFromExtension(activeFileExtension);
   const activeFileLanguageDisplay = getLanguageDisplayName(activeFileLanguage);
 
   // Handle reset confirmation dialog
@@ -303,7 +303,7 @@ export function ChallengeSandbox({
             {isEditorReady ? (
               <Editor
                 height="100%"
-                language={getMonacoLanguage(activeFileName.split('.').pop() ?? challenge.language)}
+                language={getMonacoLanguageFromExtension(activeFileName.split('.').pop() ?? 'ts')}
                 value={activeFile?.content ?? ''}
                 onChange={(value) => {
                   if (workspace.activeFileId) {

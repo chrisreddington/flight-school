@@ -39,7 +39,6 @@
 'use client';
 
 import { apiPost } from '@/lib/api-client';
-import { streamStore } from '@/lib/stream-store';
 import { now } from '@/lib/utils/date-utils';
 import { generateHintId } from '@/lib/utils/id-generator';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -174,110 +173,131 @@ export function useChallengeSandbox(
   const [isSolving, setIsSolving] = useState(false);
   const [solveError, setSolveError] = useState<string | null>(null);
 
-  // Stream ID for evaluation (unique per challenge)
-  const evalStreamId = `eval-${challengeId}`;
+  // Track current evaluation job ID for polling/cancellation
+  const evaluationJobIdRef = useRef<string | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  // Track if we initiated the current evaluation (to avoid double-handling)
-  const initiatedEvalRef = useRef(false);
+  // Polling interval for evaluation progress
+  const POLL_INTERVAL_MS = 500;
 
-  // Subscribe to evaluation stream on mount (recovers state if navigated away and back)
+  // Cleanup polling on unmount
   useEffect(() => {
-    const existingStream = streamStore.getStream(evalStreamId);
-    if (existingStream && (existingStream.status === 'pending' || existingStream.status === 'streaming')) {
-      // There's an active evaluation stream - sync our state
-      setEvaluation((prev) => ({
-        ...prev,
-        isLoading: true,
-      }));
-    }
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
 
-    const unsubscribe = streamStore.subscribe(evalStreamId, (state) => {
-      if (state.status === 'streaming' || state.status === 'pending') {
-        // Parse streaming buffer for evaluation events
-        try {
-          const data = JSON.parse(state.content || '{}');
+  // Start polling for evaluation progress
+  const startPolling = useCallback((_jobId: string) => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    const poll = async () => {
+      try {
+        // Check evaluation progress
+        const response = await fetch(`/api/evaluations/${challengeId}`);
+        if (!response.ok) return;
+        
+        const progress = await response.json();
+        if (!progress) return;
+        
+        if (progress.status === 'streaming' || progress.status === 'pending') {
           setEvaluation((prev) => ({
             ...prev,
             isLoading: true,
-            streamingFeedback: data.feedbackContent || prev.streamingFeedback,
-            partialResult: data.partial ? {
-              isCorrect: data.partial.isCorrect,
-              score: data.partial.score,
-              strengths: data.partial.strengths || [],
-              improvements: data.partial.improvements || [],
-              nextSteps: data.partial.nextSteps,
-            } : prev.partialResult,
+            partialResult: progress.partial || prev.partialResult,
+            streamingFeedback: progress.streamingFeedback || prev.streamingFeedback,
           }));
-        } catch {
-          // Content isn't JSON yet, just update loading state
-          setEvaluation((prev) => ({
-            ...prev,
-            isLoading: true,
-          }));
+        } else if (progress.status === 'completed') {
+          // Stop polling
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          evaluationJobIdRef.current = null;
+          
+          setEvaluation({
+            isLoading: false,
+            partialResult: progress.partial || null,
+            streamingFeedback: progress.streamingFeedback || '',
+            result: progress.result || null,
+            error: null,
+          });
+        } else if (progress.status === 'failed') {
+          // Stop polling
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          evaluationJobIdRef.current = null;
+          
+          setEvaluation({
+            isLoading: false,
+            partialResult: null,
+            streamingFeedback: '',
+            result: null,
+            error: progress.error || 'Evaluation failed',
+          });
         }
-      } else if (state.status === 'completed') {
-        // Parse final result
-        try {
-          const data = JSON.parse(state.content || '{}');
-          if (data.result) {
+      } catch {
+        // Polling error, continue trying
+      }
+    };
+    
+    // Initial poll
+    poll();
+    
+    // Start interval
+    pollingIntervalRef.current = setInterval(poll, POLL_INTERVAL_MS);
+  }, [challengeId]);
+
+  // Check for existing evaluation on mount (recovers state if navigated away and back)
+  useEffect(() => {
+    const checkExistingEvaluation = async () => {
+      try {
+        // Check evaluation storage for existing progress
+        const response = await fetch(`/api/evaluations/${challengeId}`);
+        if (response.ok) {
+          const progress = await response.json();
+          if (progress && (progress.status === 'pending' || progress.status === 'streaming')) {
+            // Resume polling for this evaluation
+            evaluationJobIdRef.current = progress.jobId;
+            setEvaluation({
+              isLoading: true,
+              partialResult: progress.partial || null,
+              streamingFeedback: progress.streamingFeedback || '',
+              result: null,
+              error: null,
+            });
+            startPolling(progress.jobId);
+          } else if (progress?.status === 'completed' && progress.result) {
             setEvaluation({
               isLoading: false,
-              partialResult: data.partial ? {
-                isCorrect: data.partial.isCorrect,
-                score: data.partial.score,
-                strengths: data.partial.strengths || [],
-                improvements: data.partial.improvements || [],
-                nextSteps: data.partial.nextSteps,
-              } : null,
-              streamingFeedback: data.feedbackContent || '',
-              result: {
-                isCorrect: data.result.isCorrect,
-                feedback: data.result.feedback,
-                strengths: data.result.strengths || [],
-                improvements: data.result.improvements || [],
-                score: data.result.score,
-                nextSteps: data.result.nextSteps,
-              },
+              partialResult: progress.partial || null,
+              streamingFeedback: progress.streamingFeedback || '',
+              result: progress.result,
               error: null,
             });
           }
-        } catch {
-          setEvaluation((prev) => ({
-            ...prev,
-            isLoading: false,
-          }));
         }
-        initiatedEvalRef.current = false;
-      } else if (state.status === 'error') {
-        setEvaluation({
-          isLoading: false,
-          partialResult: null,
-          streamingFeedback: '',
-          result: null,
-          error: state.error || 'Evaluation failed',
-        });
-        initiatedEvalRef.current = false;
-      } else if (state.status === 'aborted') {
-        setEvaluation((prev) => ({
-          ...prev,
-          isLoading: false,
-        }));
-        initiatedEvalRef.current = false;
+      } catch {
+        // No existing evaluation, that's fine
       }
-    });
-
-    return unsubscribe;
-  }, [evalStreamId]);
+    };
+    
+    checkExistingEvaluation();
+  }, [challengeId, startPolling]);
 
   /**
-   * Run evaluation on all workspace files using global stream store.
+   * Run evaluation on all workspace files using background job.
    * Evaluation continues in background if user navigates away.
    */
   const evaluate = useCallback(async () => {
     // Don't start new evaluation if already in progress
-    if (evaluation.isLoading || streamStore.isStreaming(evalStreamId)) return;
-
-    initiatedEvalRef.current = true;
+    if (evaluation.isLoading) return;
 
     setEvaluation({
       isLoading: true,
@@ -293,24 +313,66 @@ export function useChallengeSandbox(
       content: f.content,
     }));
 
-    // Start evaluation via global store (persists across navigation)
-    await streamStore.startStream({
-      type: 'evaluation',
-      challenge,
-      files,
-      streamId: evalStreamId,
-    });
+    try {
+      // Start evaluation via jobs API
+      const response = await apiPost<{ id: string }>('/api/jobs', {
+        type: 'challenge-evaluation',
+        targetId: challengeId,
+        input: {
+          challengeId,
+          challenge: {
+            title: challenge.title,
+            description: challenge.description,
+            language: challenge.language,
+            difficulty: challenge.difficulty,
+            testCases: challenge.testCases ? JSON.stringify(challenge.testCases) : undefined,
+          },
+          files,
+        },
+      });
 
-    // State updates happen via subscription above
-  }, [challenge, workspace.files, evaluation.isLoading, evalStreamId]);
+      if (response?.id) {
+        evaluationJobIdRef.current = response.id;
+        startPolling(response.id);
+      } else {
+        throw new Error('Failed to create evaluation job');
+      }
+    } catch (err) {
+      setEvaluation({
+        isLoading: false,
+        partialResult: null,
+        streamingFeedback: '',
+        result: null,
+        error: err instanceof Error ? err.message : 'Failed to start evaluation',
+      });
+    }
+  }, [challenge, workspace.files, evaluation.isLoading, challengeId, startPolling]);
 
   /**
    * Stop the current evaluation.
    */
-  const stopEvaluation = useCallback(() => {
-    streamStore.stopStream(evalStreamId);
-    initiatedEvalRef.current = false;
-  }, [evalStreamId]);
+  const stopEvaluation = useCallback(async () => {
+    // Stop polling
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
+    // Cancel the job if we have one
+    if (evaluationJobIdRef.current) {
+      try {
+        await fetch(`/api/jobs/${evaluationJobIdRef.current}`, { method: 'DELETE' });
+      } catch {
+        // Ignore cancellation errors
+      }
+      evaluationJobIdRef.current = null;
+    }
+    
+    setEvaluation((prev) => ({
+      ...prev,
+      isLoading: false,
+    }));
+  }, []);
 
   // Hint abort controller
   const hintAbortControllerRef = useRef<AbortController | null>(null);
@@ -458,7 +520,7 @@ export function useChallengeSandbox(
    */
   const reset = useCallback(() => {
     // Cancel any in-flight evaluation
-    streamStore.stopStream(evalStreamId);
+    stopEvaluation();
 
     // Reset workspace to template
     workspace.reset();
@@ -470,7 +532,7 @@ export function useChallengeSandbox(
     setHintError(null);
     setIsSolving(false);
     setSolveError(null);
-  }, [workspace, evalStreamId]);
+  }, [workspace, stopEvaluation]);
 
   return {
     // State

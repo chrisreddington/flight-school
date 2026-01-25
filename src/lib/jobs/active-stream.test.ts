@@ -12,10 +12,10 @@ describe('active-stream storage', () => {
     cleanup = context.cleanup;
     await ensureTestStorageDirectory(context.storageDir);
     vi.resetModules();
-    const module = await import('./active-stream');
-    getActiveStream = module.getActiveStream;
-    setActiveStream = module.setActiveStream;
-    watchActiveStream = module.watchActiveStream;
+    const imported = await import('./active-stream');
+    getActiveStream = imported.getActiveStream;
+    setActiveStream = imported.setActiveStream;
+    watchActiveStream = imported.watchActiveStream;
   });
 
   afterEach(async () => {

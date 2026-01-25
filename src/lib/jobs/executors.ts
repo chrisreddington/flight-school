@@ -56,3 +56,37 @@ export interface ChatResponseResult {
   toolCalls?: string[];
   activeStreamId?: string;
 }
+
+/** Input for challenge evaluation background job */
+export interface ChallengeEvaluationInput {
+  challengeId: string;
+  challenge: {
+    title: string;
+    description: string;
+    language: string;
+    difficulty: string;
+    testCases?: string;
+  };
+  files: Array<{ name: string; content: string }>;
+}
+
+/** Result from challenge evaluation background job */
+export interface ChallengeEvaluationResult {
+  challengeId: string;
+  isCorrect: boolean;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+  score?: number;
+  nextSteps?: string[];
+  /** Streaming feedback content (updated incrementally) */
+  streamingFeedback?: string;
+  /** Partial metadata available before full result */
+  partial?: {
+    isCorrect: boolean;
+    score?: number;
+    strengths: string[];
+    improvements: string[];
+    nextSteps?: string[];
+  };
+}

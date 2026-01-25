@@ -1,5 +1,4 @@
 export { jobStorage } from './storage';
-export type { BackgroundJob } from './storage';
 export type { 
   TopicRegenerationInput, 
   TopicRegenerationResult,
@@ -9,6 +8,6 @@ export type {
   GoalRegenerationResult,
   ChatResponseInput,
   ChatResponseResult,
+  ChallengeEvaluationInput,
+  ChallengeEvaluationResult,
 } from './executors';
-export { getActiveStream, setActiveStream, watchActiveStream } from './active-stream';
-export type { ActiveStreamEntry, ActiveStreamStatus } from './active-stream';

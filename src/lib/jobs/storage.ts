@@ -12,7 +12,7 @@ const log = logger.withTag('JobStorage');
 
 type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-export interface BackgroundJob<T = unknown> {
+interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
   targetId?: string;

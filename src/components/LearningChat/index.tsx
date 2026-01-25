@@ -1,28 +1,15 @@
 'use client';
 
-import type { Message, RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
+import type { RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
 import { CheckIcon, CopilotIcon, PencilIcon, XIcon } from '@primer/octicons-react';
 import { Heading, IconButton, Stack, TextInput, Tooltip } from '@primer/react';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { ChatInput } from '../ChatInput';
 import { MessageBubble } from '../MessageBubble';
 import { RepoSelector } from '../RepoSelector';
+import type { RepoOption } from '../RepoSelector/types';
 import { ThreadSidebar } from '../ThreadSidebar';
 import styles from './LearningChat.module.css';
-
-/**
- * Repository option for the selector.
- */
-interface RepoOption {
-  /** Full name (owner/name) */
-  fullName: string;
-  /** Repository owner */
-  owner: string;
-  /** Repository name */
-  name: string;
-  /** Primary language */
-  language?: string;
-}
 
 /**
  * Consolidated handlers for chat operations (reduces prop drilling)
@@ -102,7 +89,6 @@ export const LearningChat = memo(function LearningChat({
   isThreadsLoading = false,
   isStreaming = false,
   streamingThreadIds = [],
-  streamingContent,
   userAvatarUrl,
 }: LearningChatProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
