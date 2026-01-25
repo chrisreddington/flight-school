@@ -71,13 +71,6 @@ export interface LocalStorageManagerOptions<T> {
   migrate?: MigrationFn<T>;
   /** Optional validator function for loaded data */
   validate?: (data: unknown) => data is T;
-  /**
-   * Optional legacy parser for non-standard storage shapes.
-   *
-   * @remarks
-   * Used to migrate older storage formats that don't match StorageSchema<T>.
-   */
-  legacyParser?: (data: unknown) => T | null;
 }
 
 // =============================================================================
@@ -124,7 +117,6 @@ export class LocalStorageManager<T> {
   protected readonly defaultValue: T;
   protected readonly migrate?: MigrationFn<T>;
   protected readonly validate?: (data: unknown) => data is T;
-  protected readonly legacyParser?: (data: unknown) => T | null;
 
   constructor(options: LocalStorageManagerOptions<T>) {
     this.key = options.key;
@@ -132,7 +124,6 @@ export class LocalStorageManager<T> {
     this.defaultValue = options.defaultValue;
     this.migrate = options.migrate;
     this.validate = options.validate;
-    this.legacyParser = options.legacyParser;
   }
 
   /**
@@ -155,12 +146,6 @@ export class LocalStorageManager<T> {
 
       // Validate basic schema structure
       if (!this.isValidSchema(parsed)) {
-        const legacyData = this.legacyParser?.(parsed);
-        if (legacyData !== null && legacyData !== undefined) {
-          this.save(legacyData);
-          return legacyData;
-        }
-
         logger.warn('Invalid schema, resetting', { key: this.key }, 'LocalStorageManager');
         this.clear();
         return this.defaultValue;

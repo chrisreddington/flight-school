@@ -26,13 +26,4 @@
  */
 
 export { streamStore } from './store';
-export type {
-  CopilotStreamRequest,
-  EvaluationStreamRequest,
-  StreamRequest,
-  StreamServerMeta,
-  StreamState,
-  StreamStatus,
-  StreamStore,
-  StreamSubscriber,
-} from './types';
+export type { StreamState } from './types';

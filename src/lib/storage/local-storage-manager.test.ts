@@ -245,42 +245,6 @@ describe('LocalStorageManager', () => {
     });
   });
 
-  describe('legacyParser', () => {
-    it('should use legacyParser for non-schema data', () => {
-      // Old format without version wrapper
-      mockLocalStorage.setItem('test-key', JSON.stringify(['item1', 'item2']));
-
-      const manager = new LocalStorageManager<TestData>({
-        key: 'test-key',
-        version: 1,
-        defaultValue: { items: [], count: 0 },
-        legacyParser: (data) => {
-          if (Array.isArray(data)) {
-            return { items: data as string[], count: data.length };
-          }
-          return null;
-        },
-      });
-
-      const result = manager.get();
-      expect(result).toEqual({ items: ['item1', 'item2'], count: 2 });
-    });
-
-    it('should return defaultValue when legacyParser returns null', () => {
-      mockLocalStorage.setItem('test-key', JSON.stringify({ unexpected: 'format' }));
-
-      const manager = new LocalStorageManager<TestData>({
-        key: 'test-key',
-        version: 1,
-        defaultValue: { items: ['default'], count: 0 },
-        legacyParser: () => null,
-      });
-
-      const result = manager.get();
-      expect(result).toEqual({ items: ['default'], count: 0 });
-    });
-  });
-
   describe('save', () => {
     it('should save data with schema wrapper', () => {
       const manager = new LocalStorageManager<TestData>({

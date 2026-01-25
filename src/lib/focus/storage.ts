@@ -89,8 +89,6 @@ interface FocusStoreInterface {
   markTopicExplored(dateKey: string, topicId: string, source?: string): Promise<void>;
   /** Transition topic to new state (explored or skipped) */
   transitionTopic(dateKey: string, topicId: string, newState: TopicState, source?: string): Promise<void>;
-  /** Replace a topic in the current day's topics (for regeneration) */
-  replaceTopic(dateKey: string, oldTopicId: string, newTopic: LearningTopic): Promise<void>;
   /** Remove a calibration item (when confirmed or dismissed) */
   removeCalibrationItem(skillId: string): Promise<void>;
   /** Get pending calibration items for today */
@@ -609,19 +607,6 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
 
     await this.setStorage(schema);
-  }
-
-  /**
-   * @deprecated Use addTopic instead - we want to keep history of all topics
-   * Replace a topic in the current day's most recent topics array.
-   */
-  async replaceTopic(
-    dateKey: string,
-    oldTopicId: string,
-    newTopic: LearningTopic
-  ): Promise<void> {
-    // Just add the new topic - old one should already be marked skipped
-    await this.addTopic(dateKey, newTopic);
   }
 
   /**

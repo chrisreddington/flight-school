@@ -42,7 +42,6 @@ import type {
     OperationsSnapshot,
     OperationStatus,
     OperationType,
-    StartOperationOptions,
 } from './types';
 
 const log = logger.withTag('OperationsManager');
@@ -382,116 +381,6 @@ class ActiveOperationsManager {
     }
     this.jobToOperation.delete(jobId);
     void this.removeActiveEntry(jobId);
-  }
-
-  /**
-   * Start a new operation (legacy method for non-background operations).
-   * For operations that must survive navigation, use startBackgroundJob instead.
-   */
-  start<T>(options: StartOperationOptions<T>): string {
-    const { id, type, description, targetId, executor, onComplete, onError, context } = options;
-
-    // Generate operation ID
-    const operationId = id || `${type}:${targetId || crypto.randomUUID()}`;
-
-    // Check if operation already exists
-    if (this.operations.has(operationId)) {
-      log.warn(`Operation ${operationId} already exists, aborting previous`);
-      this.abort(operationId);
-    }
-
-    // Create abort controller for this operation
-    const abortController = new AbortController();
-
-    // Create the operation record
-    const operation: ActiveOperation<T> = {
-      id: operationId,
-      status: 'in-progress',
-      meta: {
-        type,
-        startedAt: new Date().toISOString(),
-        description,
-        targetId,
-        context,
-      },
-      abortController,
-    };
-
-    // Register the operation
-    this.operations.set(operationId, operation);
-    this.updateSnapshot();
-    this.notifyListeners();
-
-    log.debug(`Started operation: ${operationId}`, { type, targetId });
-
-    // Execute the operation in background (not awaited!)
-    this.executeOperation(operationId, executor, abortController.signal, onComplete, onError);
-
-    return operationId;
-  }
-
-  /**
-   * Execute the operation and handle completion/failure.
-   * This runs independently of the calling code.
-   */
-  private async executeOperation<T>(
-    operationId: string,
-    executor: (signal: AbortSignal) => Promise<T>,
-    signal: AbortSignal,
-    onComplete?: (result: T) => void | Promise<void>,
-    onError?: (error: Error) => void
-  ): Promise<void> {
-    try {
-      // Execute the actual work
-      const result = await executor(signal);
-
-      // Check if aborted during execution
-      if (signal.aborted) {
-        log.debug(`Operation ${operationId} was aborted during execution`);
-        return;
-      }
-
-      // Update operation status
-      const operation = this.operations.get(operationId);
-      if (operation) {
-        operation.status = 'complete';
-        operation.result = result;
-        this.updateSnapshot();
-        this.notifyListeners();
-      }
-
-      log.debug(`Operation ${operationId} completed successfully`);
-
-      // Call completion callback (this handles persistence)
-      if (onComplete) {
-        try {
-          await onComplete(result);
-        } catch (err) {
-          log.error(`onComplete callback failed for ${operationId}:`, err);
-        }
-      }
-
-      // Clean up after a short delay to allow UI to react
-      setTimeout(() => this.cleanup(operationId), 1000);
-    } catch (error) {
-      // Check if this was an abort
-      if ((error as Error).name === 'AbortError') {
-        log.debug(`Operation ${operationId} aborted`);
-        this.updateStatus(operationId, 'aborted');
-        return;
-      }
-
-      // Handle failure
-      log.error(`Operation ${operationId} failed:`, error);
-      this.updateStatus(operationId, 'failed', (error as Error).message);
-
-      if (onError) {
-        onError(error as Error);
-      }
-
-      // Clean up failed operations after delay
-      setTimeout(() => this.cleanup(operationId), 5000);
-    }
   }
 
   /**

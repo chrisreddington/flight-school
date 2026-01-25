@@ -7,15 +7,7 @@
 
 import { operationsManager } from './active-operations';
 
-export type {
-    ActiveOperation,
-    OperationMeta,
-    OperationsListener,
-    OperationsSnapshot,
-    OperationStatus,
-    OperationType,
-    StartOperationOptions
-} from './types';
+export type { OperationType } from './types';
 export { operationsManager };
 
 /**

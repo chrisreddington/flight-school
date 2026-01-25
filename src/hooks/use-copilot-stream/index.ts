@@ -46,7 +46,6 @@ export type {
     SendMessageOptions,
     StreamingMessage,
     StreamState,
-    ToolCall,
     UseCopilotStreamReturn
 } from './types';
 

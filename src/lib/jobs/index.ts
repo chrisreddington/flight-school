@@ -1,6 +1,5 @@
-export { jobStorage, type BackgroundJob, type JobStatus } from './storage';
+export { jobStorage } from './storage';
 export type { 
-  JobType, 
   TopicRegenerationInput, 
   TopicRegenerationResult,
   ChallengeRegenerationInput,

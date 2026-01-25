@@ -10,9 +10,9 @@ import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
 
 const log = logger.withTag('JobStorage');
 
-export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-export interface BackgroundJob<T = unknown> {
+interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
   targetId?: string;

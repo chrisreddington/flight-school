@@ -5,4 +5,3 @@
  */
 
 export { RepoSelector } from './RepoSelector';
-export type { RepoOption, RepoSelectorProps } from './types';

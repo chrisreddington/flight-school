@@ -207,26 +207,3 @@ class SkillsStore {
 
 /** Singleton skills store instance */
 export const skillsStore = new SkillsStore();
-
-// =============================================================================
-// Legacy Compatibility (DEPRECATED)
-// =============================================================================
-
-/**
- * @deprecated Use `await skillsStore.get()` instead. This is a sync wrapper that returns cached data.
- */
-export function getSkillProfile(): SkillProfile {
-  // Return cached value or default for sync compatibility
-  // Callers should migrate to async skillsStore.get()
-  log.warn('getSkillProfile() is deprecated - use await skillsStore.get() instead');
-  return DEFAULT_SKILL_PROFILE;
-}
-
-/**
- * @deprecated Use `await skillsStore.save(profile)` instead.
- */
-export function saveSkillProfile(profile: SkillProfile): void {
-  log.warn('saveSkillProfile() is deprecated - use await skillsStore.save() instead');
-  // Fire and forget for sync compatibility
-  void skillsStore.save(profile);
-}

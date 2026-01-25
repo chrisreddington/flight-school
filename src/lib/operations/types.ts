@@ -16,21 +16,6 @@ export type OperationType =
 /** Status of an operation */
 export type OperationStatus = 'pending' | 'in-progress' | 'complete' | 'failed' | 'aborted';
 
-/** Status of a persisted operation state stored in item files. */
-export type OperationStateStatus = 'generating' | 'complete' | 'failed';
-
-/**
- * Operation state persisted alongside item content for recovery.
- */
-export interface OperationState {
-  /** Backend job identifier. */
-  jobId: string;
-  /** Current persisted status. */
-  status: OperationStateStatus;
-  /** ISO timestamp when the operation started. */
-  startedAt: string;
-}
-
 /** Metadata for an operation */
 export interface OperationMeta {
   /** The type of operation */
@@ -61,26 +46,6 @@ export interface ActiveOperation<T = unknown> {
   error?: string;
   /** AbortController for cancellation */
   abortController?: AbortController;
-}
-
-/** Options for starting an operation */
-export interface StartOperationOptions<T> {
-  /** Unique ID for this operation (e.g., topic ID being regenerated) */
-  id: string;
-  /** Type of operation */
-  type: OperationType;
-  /** Human-readable description */
-  description?: string;
-  /** ID of the target item */
-  targetId?: string;
-  /** The async function to execute */
-  executor: (signal: AbortSignal) => Promise<T>;
-  /** Callback when operation completes successfully */
-  onComplete?: (result: T) => void | Promise<void>;
-  /** Callback when operation fails */
-  onError?: (error: Error) => void;
-  /** Additional context */
-  context?: Record<string, unknown>;
 }
 
 /** Listener function signature */

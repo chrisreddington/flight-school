@@ -5,4 +5,3 @@
  */
 
 export { ChallengeSandbox } from './ChallengeSandbox';
-export type { ChallengeSandboxProps } from './types';
