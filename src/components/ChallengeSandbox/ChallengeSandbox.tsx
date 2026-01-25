@@ -40,7 +40,7 @@ import {
     ScreenNormalIcon,
     SkipIcon,
 } from '@primer/octicons-react';
-import { Button, ConfirmationDialog, Flash, IconButton, useTheme } from '@primer/react';
+import { Banner, Button, ConfirmationDialog, IconButton, useTheme } from '@primer/react';
 import dynamic from 'next/dynamic';
 import React, { useCallback, useEffect, useState } from 'react';
 
@@ -251,9 +251,13 @@ export function ChallengeSandbox({
 
       {/* Solution error message */}
       {solveError && (
-        <Flash variant="danger" style={{ marginBottom: 16 }}>
-          {solveError}
-        </Flash>
+        <Banner
+          title="Error"
+          description={solveError}
+          variant="critical"
+          hideTitle
+          style={{ marginBottom: 16 }}
+        />
       )}
 
       {/* Main content */}

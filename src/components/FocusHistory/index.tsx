@@ -43,8 +43,8 @@ import {
   XIcon,
 } from '@primer/octicons-react';
 import {
+  Banner,
   Button,
-  Flash,
   Link,
   Spinner,
   Stack,
@@ -874,10 +874,12 @@ export const FocusHistory = memo(function FocusHistory() {
           </div>
         </div>
         <div className={styles.emptyState}>
-          <Flash variant="default">
-            <CalendarIcon size={16} />
-            <span>No focus history yet. Your daily focus will be saved here as you use the app.</span>
-          </Flash>
+          <Banner
+            title="No focus history yet"
+            description="Your daily focus will be saved here as you use the app."
+            variant="info"
+            hideTitle
+          />
           <div className={styles.backLink}>
             <Link href="/">← Back to Dashboard</Link>
           </div>
@@ -894,12 +896,12 @@ export const FocusHistory = memo(function FocusHistory() {
       {/* Toast notification for "Explore from History" */}
       {toastMessage && (
         <div className={styles.toast}>
-          <Flash variant="success">
-            <Stack direction="horizontal" align="center" gap="condensed">
-              <BookIcon size={16} />
-              <span>{toastMessage}</span>
-            </Stack>
-          </Flash>
+          <Banner
+            title="Success"
+            description={toastMessage}
+            variant="success"
+            hideTitle
+          />
         </div>
       )}
       
@@ -1094,13 +1096,12 @@ export const FocusHistory = memo(function FocusHistory() {
 
               {/* No results */}
               {filteredEntries.length === 0 && !hasGenerating && (
-                <Flash variant="default">
-                  <SearchIcon size={16} />
-                  <span>
-                    No items match your filters.
-                    {searchQuery && ` Try a different search term.`}
-                  </span>
-                </Flash>
+                <Banner
+                  title="No results"
+                  description={`No items match your filters.${searchQuery ? ' Try a different search term.' : ''}`}
+                  variant="info"
+                  hideTitle
+                />
               )}
             </Stack>
           )}
