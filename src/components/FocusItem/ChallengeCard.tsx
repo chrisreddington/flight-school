@@ -192,9 +192,22 @@ export function ChallengeCard({
             )}
           </Stack>
           <Stack direction="horizontal" gap="condensed" align="center">
-            {(isCompleted || isSkipped) && showHistoryActions && (
-              <Label variant={isCompleted ? 'success' : 'secondary'}>
-                {isCompleted ? 'Completed' : 'Skipped'}
+            {/* Show completion status on dashboard AND history */}
+            {isCompleted && (
+              <Label variant="success">
+                Completed
+              </Label>
+            )}
+            {/* Show skipped status only in history */}
+            {isSkipped && showHistoryActions && (
+              <Label variant="secondary">
+                Skipped
+              </Label>
+            )}
+            {/* Show in-progress status on dashboard */}
+            {isInProgress && !showHistoryActions && (
+              <Label variant="accent">
+                In Progress
               </Label>
             )}
             {/* Only show action menu on today's items */}
@@ -203,7 +216,7 @@ export function ChallengeCard({
                 challenge={challenge}
                 isCustom={isCustom}
                 onEdit={isCustom ? onEdit : undefined}
-                onSkip={handleSkip}
+                onSkip={!isCompleted ? handleSkip : undefined}
                 onRefresh={!isCustom ? onRefresh : undefined}
                 onCreate={onCreate}
                 onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
@@ -234,9 +247,9 @@ export function ChallengeCard({
           <Button
             variant="primary"
             onClick={handleStartChallenge}
-            disabled={isCompleted || isSkipped}
+            disabled={isSkipped}
           >
-            {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
+            {isCompleted ? 'View Challenge' : isInProgress ? 'Continue Challenge' : 'Start Challenge'}
           </Button>
         </Stack>
       </Stack>

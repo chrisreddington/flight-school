@@ -116,7 +116,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
           )}
 
           {/* AI challenge skip (use onSkip for skip-and-replace behavior) */}
-          {/* Only show on dashboard (not history - history has its own skip below) */}
+          {/* Only show on dashboard (not history) AND only if NOT completed */}
           {!isCustom && onSkip && !showHistoryActions && (
             <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
               <ActionList.LeadingVisual>
@@ -135,6 +135,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
               Mark Complete
             </ActionList.Item>
           )}
+          {/* Skip in history - only for AI challenges that aren't completed */}
           {showHistoryActions && onSkip && !isCustom && (
             <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
               <ActionList.LeadingVisual>
