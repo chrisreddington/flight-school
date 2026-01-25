@@ -386,14 +386,16 @@ export default function HabitsPage() {
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              leadingVisual={PlusIcon}
-              onClick={() => setIsCreateDialogOpen(true)}
-              style={{ marginTop: 'var(--base-size-16, 16px)', width: '100%' }}
-            >
-              New Habit
-            </Button>
+            {activeHabits.length > 0 && (
+              <Button
+                variant="primary"
+                leadingVisual={PlusIcon}
+                onClick={() => setIsCreateDialogOpen(true)}
+                style={{ marginTop: 'var(--base-size-16, 16px)', width: '100%' }}
+              >
+                New Habit
+              </Button>
+            )}
           </div>
 
           <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
@@ -426,24 +428,25 @@ export default function HabitsPage() {
                 </Heading>
                 <CounterLabel>{activeHabits.length}</CounterLabel>
               </Stack>
+              <Button
+                variant="primary"
+                size="small"
+                leadingVisual={PlusIcon}
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                New Habit
+              </Button>
             </div>
 
             {activeHabits.length === 0 ? (
               <div className={styles.emptyState}>
                 <FlameIcon size={48} className={styles.emptyIcon} />
                 <Heading as="h3" style={{ fontSize: '1.125rem', marginTop: 'var(--base-size-16)' }}>
-                  No active habits
+                  No active habits yet
                 </Heading>
                 <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: 'var(--base-size-8)' }}>
                   Start building better habits by creating your first one.
                 </Text>
-                <Button
-                  variant="primary"
-                  style={{ marginTop: 'var(--base-size-16)' }}
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  Create a Habit
-                </Button>
               </div>
             ) : (
               <div className={styles.habitsList}>
