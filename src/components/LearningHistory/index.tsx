@@ -34,11 +34,11 @@ import {
   BookIcon,
   CalendarIcon,
   CheckCircleIcon,
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  FlameIcon,
+  CodeIcon,
   GraphIcon,
-  RocketIcon,
   SearchIcon,
   SkipIcon,
   XIcon,
@@ -457,9 +457,9 @@ const ItemCard = memo(function ItemCard({
     : null;
 
   const typeIcon = item.type === 'challenge' 
-    ? <FlameIcon size={14} />
+    ? <CodeIcon size={14} />
     : item.type === 'goal' 
-    ? <RocketIcon size={14} />
+    ? <CheckIcon size={14} />
     : item.type === 'topic' 
     ? <BookIcon size={14} />
     : <CalendarIcon size={14} />;
@@ -1017,14 +1017,14 @@ export const LearningHistory = memo(function LearningHistory() {
                   onClick={() => setTypeFilter('challenge')}
                   className={`${styles.filterBtn} ${typeFilter === 'challenge' ? styles.filterBtnActive : ''}`}
                 >
-                  <FlameIcon size={12} /> Challenges
+                  <CodeIcon size={12} /> Challenges
                 </button>
                 <button 
                   type="button"
                   onClick={() => setTypeFilter('goal')}
                   className={`${styles.filterBtn} ${typeFilter === 'goal' ? styles.filterBtnActive : ''}`}
                 >
-                  <RocketIcon size={12} /> Goals
+                  <CheckIcon size={12} /> Goals
                 </button>
                 <button 
                   type="button"

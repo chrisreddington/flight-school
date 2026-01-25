@@ -46,12 +46,16 @@ export interface StreamState {
   clientFirstTokenMs?: number;
   /** Whether the stream was interrupted (e.g., navigation) but content was preserved */
   wasInterrupted?: boolean;
+  /** Background job ID (for cancellation) */
+  jobId?: string;
   /** Internal: abort controller for cancellation */
   abortController?: AbortController;
   /** Internal: flush timer for batching updates */
   flushTimer?: ReturnType<typeof setTimeout> | null;
   /** Internal: buffer for streaming content */
   streamingBuffer?: string;
+  /** Internal: polling interval for storage updates */
+  pollingInterval?: ReturnType<typeof setInterval> | null;
 }
 
 /** Options for starting a copilot chat stream */

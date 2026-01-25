@@ -451,37 +451,22 @@ async function executeChatResponse(
     const toolCalls: string[] = [];
     let hasActionableItem = false;
     let lastSaveTime = Date.now();
-    const SAVE_INTERVAL_MS = 500; // Save every 500ms during streaming
+    const SAVE_INTERVAL_MS = 400; // Save every 400ms during streaming
     
-    // Helper to save current progress to thread (using direct storage access)
-    // NOTE: If SSE already saved a response, we don't want to duplicate
+    // Helper to save current progress to thread
+    // This is the ONLY writer - no SSE duplication
     const saveProgressToThread = async (isFinal: boolean) => {
       try {
         const currentThread = await getThreadById(threadId);
         if (!currentThread) return;
         
-        // Find the user message we're responding to (should be the one with our prompt)
+        // Find the user message we're responding to
         const userMessageIndex = currentThread.messages.findIndex(
           m => m.role === 'user' && m.content === prompt
         );
         
         if (userMessageIndex === -1) {
           log.warn(`[Job ${jobId}] Could not find user message with prompt, skipping save`);
-          return;
-        }
-        
-        // Check if there are any assistant responses AFTER the user message that aren't from this job
-        const responseAfterUser = currentThread.messages.slice(userMessageIndex + 1).find(
-          m => m.role === 'assistant'
-        );
-        
-        // If SSE already saved a complete response (has content, not from our streaming ID, no cursor)
-        if (responseAfterUser && 
-            !responseAfterUser.id.startsWith('streaming-') &&
-            !responseAfterUser.content?.includes(' ▊') &&
-            responseAfterUser.content && responseAfterUser.content.length > 100) {
-          // SSE already saved a complete response, skip saving from background job
-          log.debug(`[Job ${jobId}] SSE already saved response (${responseAfterUser.content.length} chars), skipping background save`);
           return;
         }
         
@@ -499,27 +484,23 @@ async function executeChatResponse(
         
         let updatedMessages: Message[];
         if (existingIndex >= 0) {
-          // Update our existing streaming message
+          // Update existing streaming message
           updatedMessages = [...currentThread.messages];
           updatedMessages[existingIndex] = streamingMessage;
-        } else if (isFinal) {
-          // Only add a new message if this is the final save and there's no complete response yet
-          // Insert right after the user message
+        } else {
+          // Insert new message right after the user message
           updatedMessages = [
             ...currentThread.messages.slice(0, userMessageIndex + 1),
             streamingMessage,
             ...currentThread.messages.slice(userMessageIndex + 1)
           ];
-        } else {
-          // Skip adding new streaming messages - SSE handles real-time updates
-          log.debug(`[Job ${jobId}] Skipping non-final save, SSE handles real-time updates`);
-          return;
         }
         
         await updateThread({
           ...currentThread,
           messages: updatedMessages,
           updatedAt: now(),
+          isStreaming: !isFinal, // Mark thread as streaming
         });
         
         log.debug(`[Job ${jobId}] Saved progress: ${fullContent.length} chars, final=${isFinal}`);
@@ -527,13 +508,13 @@ async function executeChatResponse(
         log.warn(`[Job ${jobId}] Failed to save progress:`, err);
       }
     };
-    
+
     // Process the stream (stream is an AsyncGenerator, not a function)
     for await (const event of session.stream) {
       if (event.type === 'delta') {
         fullContent += event.content;
         
-        // Save periodically during streaming
+        // Save periodically during streaming (batched writes)
         const nowMs = Date.now();
         if (nowMs - lastSaveTime >= SAVE_INTERVAL_MS) {
           await saveProgressToThread(false);

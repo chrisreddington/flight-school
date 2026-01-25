@@ -9,7 +9,7 @@ import { focusStore } from '@/lib/focus';
 import type { GoalState } from '@/lib/focus/state-machine';
 import type { DailyGoal } from '@/lib/focus/types';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { CheckIcon, SkipIcon, StopIcon, ZapIcon } from '@primer/octicons-react';
+import { CheckCircleIcon, CheckIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
@@ -125,7 +125,7 @@ export function GoalCard({
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Label size="small" variant="accent">
-            <span style={{ marginRight: '4px', display: 'inline-flex' }}><ZapIcon size={12} /></span>
+            <span style={{ marginRight: '4px', display: 'inline-flex' }}><CheckIcon size={12} /></span>
             Goal
           </Label>
           {(isCompleted || isSkipped) && showHistoryActions && (
@@ -171,7 +171,7 @@ export function GoalCard({
             <>
               <Button
                 variant="primary"
-                leadingVisual={CheckIcon}
+                leadingVisual={CheckCircleIcon}
                 onClick={handleMarkComplete}
                 disabled={isCompleted || isSkipped}
               >

@@ -54,4 +54,5 @@ export interface ChatResponseResult {
   content: string;
   hasActionableItem?: boolean;
   toolCalls?: string[];
+  activeStreamId?: string;
 }

@@ -153,208 +153,208 @@ class StreamStoreImpl implements StreamStore {
     this.notifyActivitySubscribers();
     onUpdate?.(state);
 
-    const toolCalls: ToolCall[] = [];
-    let responseContent = '';
     const startTime = performance.now();
     let clientFirstTokenMs: number | undefined;
-    let hasActionableItem = false;
-    let serverMeta: StreamServerMeta | undefined;
+    let pollingInterval: NodeJS.Timeout | null = null;
 
     try {
-      // Build request body
-      const requestBody: Record<string, unknown> = {
-        prompt,
-        useGitHubTools,
-        conversationId: id,
-        learningMode,
+      // 1. Start background job
+      const jobBody: Record<string, unknown> = {
+        type: 'chat-response',
+        input: {
+          threadId: id,
+          prompt,
+          learningMode,
+          useGitHubTools,
+        },
       };
 
       if (repos && repos.length > 0) {
-        requestBody.repos = repos.map((r) => r.fullName);
+        jobBody.input = {
+          ...(jobBody.input as Record<string, unknown>),
+          repos: repos.map((r) => r.fullName),
+        };
       }
 
-       this.updateStream(id, { status: 'streaming' });
-       onUpdate?.(this.streams.get(id)!);
+      this.updateStream(id, { status: 'streaming' });
+      onUpdate?.(this.streams.get(id)!);
 
-      const res = await fetch('/api/copilot/stream', {
+      const jobRes = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(jobBody),
         signal: abortController.signal,
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to get response');
+      if (!jobRes.ok) {
+        const err = await jobRes.json();
+        throw new Error(err.error || 'Failed to start job');
       }
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
+      const { jobId } = await jobRes.json();
+      log.debug(`Started job ${jobId} for thread ${id}`);
 
-      let errorFromStream: Error | null = null;
-      let connectionClosed = false;
-      
-      while (true) {
-        let done: boolean;
-        let value: Uint8Array | undefined;
-        
-        try {
-          const result = await reader.read();
-          done = result.done;
-          value = result.value;
-        } catch (readError) {
-          // Handle "Controller is already closed" error that occurs during navigation
-          // This happens when the browser closes the underlying connection
-          // but the stream store should preserve whatever content was received
-          const errorMessage = readError instanceof Error ? readError.message : String(readError);
-          if (errorMessage.includes('Controller is already closed') || 
-              errorMessage.includes('network error') ||
-              errorMessage.includes('aborted')) {
-            log.debug(`Stream ${id} connection closed, preserving content`);
-            connectionClosed = true;
-            break;
+      // Store jobId in state for cancellation
+      this.updateStream(id, { jobId });
+
+      // 2. Poll thread storage for updates
+      const POLL_INTERVAL_MS = 300; // Poll every 300ms for smoother streaming
+      let hasActionableItem = false;
+      let toolCalls: ToolCall[] = [];
+      let lastContent = '';
+
+      // Use a Promise to wait for polling to complete
+      return new Promise<StreamState>((resolve) => {
+        // Handle abort signal
+        const onAbort = async () => {
+          const stream = this.streams.get(id);
+          if (stream?.pollingInterval) {
+            clearInterval(stream.pollingInterval);
           }
-          throw readError;
-        }
-        
-        if (done) break;
-        if (!value) continue;
 
-        const text = decoder.decode(value);
-        const lines = text.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-
+          const abortedState: Partial<StreamState> = {
+            status: 'aborted',
+            content: lastContent,
+            completedAt: performance.now(),
+            abortController: undefined,
+            flushTimer: null,
+            pollingInterval: null,
+          };
+          this.updateStream(id, abortedState);
+          onUpdate?.(this.streams.get(id)!);
+          this.notifyActivitySubscribers();
+          this.scheduleCleanup(id);
+          
+          const abortedStream = this.streams.get(id)!;
+          
+          if (onComplete) {
             try {
-              const event = JSON.parse(data);
-
-              if (event.type === 'delta') {
-                responseContent += event.content;
-                const stream = this.streams.get(id);
-                if (stream) {
-                  stream.streamingBuffer = responseContent;
-                  if (clientFirstTokenMs === undefined) {
-                    clientFirstTokenMs = Math.round(performance.now() - startTime);
-                  }
-                  if (stream.flushTimer === null) {
-                    stream.flushTimer = setTimeout(() => this.flushBuffer(id), STREAMING_FLUSH_INTERVAL);
-                  }
-                  onUpdate?.(stream);
-                }
-              } else if (event.type === 'tool_start') {
-                toolCalls.push({ name: event.name, args: event.args, result: '' });
-                const stream = this.streams.get(id);
-                if (stream) {
-                  onUpdate?.(stream);
-                }
-              } else if (event.type === 'tool_complete') {
-                const tc = toolCalls.find((t) => t.name === event.name && !t.result);
-                if (tc) {
-                  tc.result = event.result;
-                  tc.duration = event.duration;
-                  const stream = this.streams.get(id);
-                  if (stream) {
-                    onUpdate?.(stream);
-                  }
-                }
-              } else if (event.type === 'meta') {
-                serverMeta = {
-                  totalMs: event.totalMs,
-                  firstDeltaMs: event.firstDeltaMs,
-                  sessionCreateMs: event.sessionCreateMs,
-                  sessionPoolHit: event.sessionPoolHit,
-                  mcpEnabled: event.mcpEnabled,
-                  sessionReused: event.sessionReused,
-                  model: event.model,
-                  activityEventId: event.activityEventId,
-                };
-                if (event.hasActionableItem) {
-                  hasActionableItem = true;
-                }
-                const stream = this.streams.get(id);
-                if (stream) {
-                  onUpdate?.(stream);
-                }
-              } else if (event.type === 'done') {
-                responseContent = event.totalContent;
-                if (event.hasActionableItem) {
-                  hasActionableItem = true;
-                }
-                const stream = this.streams.get(id);
-                if (stream) {
-                  onUpdate?.(stream);
-                }
-              } else if (event.type === 'error') {
-                errorFromStream = new Error(event.message);
-              }
-            } catch {
-              // Skip invalid JSON lines
+              await onComplete(abortedStream);
+            } catch (callbackErr) {
+              log.error('onComplete callback error (abort):', callbackErr);
             }
           }
-        }
+          
+          resolve(abortedStream);
+        };
 
-        if (errorFromStream) {
-          throw errorFromStream;
-        }
-      }
+        abortController.signal.addEventListener('abort', onAbort);
 
-      // Finalize
-      const stream = this.streams.get(id);
-      if (stream?.flushTimer) {
-        clearTimeout(stream.flushTimer);
-        this.flushBuffer(id);
-      }
+        const pollThread = async () => {
+          // Check if aborted before making request
+          if (abortController.signal.aborted) return;
 
-      // If connection was closed during navigation, mark as completed (not error)
-      // The content received so far is preserved since the server may have finished processing
-      const finalState: Partial<StreamState> = {
-        status: 'completed',
-        content: responseContent,
-        toolCalls,
-        serverMeta,
-        hasActionableItem,
-        clientFirstTokenMs,
-        completedAt: performance.now(),
-        abortController: undefined,
-        flushTimer: null,
-        // Mark that this was interrupted so callers can handle partial content
-        wasInterrupted: connectionClosed,
-      };
+          try {
+            const res = await fetch(`/api/threads/storage`);
+            if (!res.ok) return;
 
-      this.updateStream(id, finalState);
-      onUpdate?.(this.streams.get(id)!);
-      this.notifyActivitySubscribers();
-      this.scheduleCleanup(id);
+            const data = await res.json();
+            const thread = data.threads.find((t: any) => t.id === id);
+            if (!thread) return;
 
-      const completedStream = this.streams.get(id)!;
-      
-      // Invoke onComplete callback (runs outside React lifecycle)
-      if (onComplete) {
-        try {
-          await onComplete(completedStream);
-        } catch (callbackErr) {
-          log.error('onComplete callback error:', callbackErr);
-        }
-      }
+            // Find the streaming message (has cursor) or the most recent assistant message
+            const streamingMsg = thread.messages.find((m: any) => 
+              m.role === 'assistant' && m.id.startsWith('streaming-')
+            );
+            const latestMsg = streamingMsg || thread.messages.filter((m: any) => m.role === 'assistant').pop();
 
-      return completedStream;
+            if (latestMsg && latestMsg.content) {
+              const content = latestMsg.content; // Keep cursor visible during streaming
+              
+              // Update if content has changed at all
+              if (content !== lastContent) {
+                if (clientFirstTokenMs === undefined && content.length > 0) {
+                  clientFirstTokenMs = Math.round(performance.now() - startTime);
+                }
+
+                lastContent = content;
+                
+                // Extract tool calls and actionable flag
+                if (latestMsg.toolCalls) {
+                  toolCalls = latestMsg.toolCalls.map((name: string) => ({ name, args: {}, result: '' }));
+                }
+                if (latestMsg.hasActionableItem) {
+                  hasActionableItem = true;
+                }
+
+                this.updateStream(id, {
+                  content,
+                  toolCalls,
+                  hasActionableItem,
+                });
+                onUpdate?.(this.streams.get(id)!);
+              }
+
+              // Check if stream is complete (no cursor and no isStreaming flag)
+              if (!thread.isStreaming && !latestMsg.content.includes(' ▊')) {
+                // Stream complete - remove cursor from final content
+                const finalContent = content.replace(' ▊', '');
+                
+                const stream = this.streams.get(id);
+                if (stream?.pollingInterval) {
+                  clearInterval(stream.pollingInterval);
+                }
+                abortController.signal.removeEventListener('abort', onAbort);
+
+                const finalState: Partial<StreamState> = {
+                  status: 'completed',
+                  content: finalContent,
+                  toolCalls,
+                  hasActionableItem,
+                  clientFirstTokenMs,
+                  completedAt: performance.now(),
+                  abortController: undefined,
+                  flushTimer: null,
+                  pollingInterval: null,
+                };
+
+                this.updateStream(id, finalState);
+                onUpdate?.(this.streams.get(id)!);
+                this.notifyActivitySubscribers();
+                this.scheduleCleanup(id);
+
+                const completedStream = this.streams.get(id)!;
+                
+                if (onComplete) {
+                  try {
+                    await onComplete(completedStream);
+                  } catch (callbackErr) {
+                    log.error('onComplete callback error:', callbackErr);
+                  }
+                }
+
+                // Resolve the Promise when complete
+                resolve(completedStream);
+              }
+            }
+          } catch (err) {
+            log.debug('Poll error (continuing):', err);
+          }
+        };
+
+        // Start polling
+        pollingInterval = setInterval(pollThread, POLL_INTERVAL_MS);
+        
+        // Store polling interval in state for cleanup
+        this.updateStream(id, { pollingInterval });
+        
+        // Do initial poll immediately
+        pollThread();
+      });
     } catch (err) {
       const stream = this.streams.get(id);
-      if (stream?.flushTimer) {
-        clearTimeout(stream.flushTimer);
+      if (stream?.pollingInterval) {
+        clearInterval(stream.pollingInterval);
       }
 
       if (err instanceof Error && err.name === 'AbortError') {
         const abortedState: Partial<StreamState> = {
           status: 'aborted',
-          content: responseContent || stream?.content || '',
-          toolCalls,
+          content: stream?.content || '',
           completedAt: performance.now(),
           abortController: undefined,
           flushTimer: null,
+          pollingInterval: null,
         };
         this.updateStream(id, abortedState);
         onUpdate?.(this.streams.get(id)!);
@@ -363,7 +363,6 @@ class StreamStoreImpl implements StreamStore {
         
         const abortedStream = this.streams.get(id)!;
         
-        // Invoke onComplete callback even on abort (partial content may be useful)
         if (onComplete) {
           try {
             await onComplete(abortedStream);
@@ -379,11 +378,11 @@ class StreamStoreImpl implements StreamStore {
       const errorState: Partial<StreamState> = {
         status: 'error',
         error: errorMessage,
-        // Preserve any content received before the error
-        content: responseContent || stream?.content || '',
+        content: stream?.content || '',
         completedAt: performance.now(),
         abortController: undefined,
         flushTimer: null,
+        pollingInterval: null,
       };
       this.updateStream(id, errorState);
       onUpdate?.(this.streams.get(id)!);
@@ -392,7 +391,6 @@ class StreamStoreImpl implements StreamStore {
       
       const errorStream = this.streams.get(id)!;
       
-      // Invoke onComplete callback on error too (so caller can handle)
       if (onComplete) {
         try {
           await onComplete(errorStream);
@@ -545,8 +543,23 @@ class StreamStoreImpl implements StreamStore {
 
   stopStream(id: string): void {
     const stream = this.streams.get(id);
-    if (stream?.abortController) {
-      log.debug(`Stopping stream: ${id}`);
+    if (!stream) return;
+
+    log.debug(`Stopping stream: ${id}`);
+
+    // 1. Clear polling interval
+    if (stream.pollingInterval) {
+      clearInterval(stream.pollingInterval);
+    }
+
+    // 2. Cancel background job if exists
+    if (stream.jobId) {
+      fetch(`/api/jobs/${stream.jobId}`, { method: 'DELETE' })
+        .catch(err => log.error(`Failed to cancel job ${stream.jobId}:`, err));
+    }
+
+    // 3. Abort controller (for the initial job creation request)
+    if (stream.abortController) {
       stream.abortController.abort();
     }
   }

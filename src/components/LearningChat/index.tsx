@@ -1,7 +1,6 @@
 'use client';
 
 import type { Message, RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
-import { now } from '@/lib/utils/date-utils';
 import { CheckIcon, CopilotIcon, PencilIcon, XIcon } from '@primer/octicons-react';
 import { Heading, IconButton, Stack, TextInput, Tooltip } from '@primer/react';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
@@ -185,19 +184,13 @@ export const LearningChat = memo(function LearningChat({
     }
   }, [handleSaveTitle, handleCancelEdit]);
 
-  // Only show streaming indicator when viewing the thread that is currently streaming
-  const isStreamingInActiveThread = isStreaming && activeThreadId && streamingThreadIds.includes(activeThreadId);
-  const displayMessages = isStreamingInActiveThread
-    ? messages.filter((message) => message.id !== 'streaming')
-    : messages;
+  // Detect if active thread is streaming based on thread.isStreaming flag
+  // This is set by the background job in storage
+  const isStreamingInActiveThread = activeThread?.isStreaming === true;
   
-  // Create a streaming message for display when streaming in this thread
-  const streamingMessage: Message | null = isStreamingInActiveThread ? {
-    id: 'streaming',
-    role: 'assistant',
-    content: streamingContent || '',
-    timestamp: now(),
-  } : null;
+  // All messages come directly from storage - no synthetic messages needed
+  // The streaming message has id starting with 'streaming-' and contains cursor ` ▊`
+  const displayMessages = messages;
 
   return (
     <div className={styles.container}>
@@ -292,22 +285,19 @@ export const LearningChat = memo(function LearningChat({
             </div>
           ) : (
             <div className={styles.messagesList}>
-              {displayMessages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isStreaming={message.id === 'streaming' && !isStreamingInActiveThread}
-                  userAvatarUrl={userAvatarUrl}
-                />
-              ))}
-              {streamingMessage && (
-                <MessageBubble
-                  message={streamingMessage}
-                  isStreaming
-                  streamingContent={streamingContent}
-                  userAvatarUrl={userAvatarUrl}
-                />
-              )}
+              {displayMessages.map((message) => {
+                // Message is streaming if it has streaming- prefix or contains cursor
+                const isMessageStreaming = message.id.startsWith('streaming-') || 
+                  (message.role === 'assistant' && message.content.includes(' ▊'));
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    isStreaming={isMessageStreaming}
+                    userAvatarUrl={userAvatarUrl}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

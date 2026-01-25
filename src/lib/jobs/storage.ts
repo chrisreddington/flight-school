@@ -12,12 +12,13 @@ const log = logger.withTag('JobStorage');
 
 type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-interface BackgroundJob<T = unknown> {
+export interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
   targetId?: string;
   status: JobStatus;
   input: Record<string, unknown>;
+  activeStreamId?: string;
   result?: T;
   error?: string;
   createdAt: string;
@@ -226,6 +227,19 @@ export const jobStorage = {
     const schema = await loadJobs();
     return Object.values(schema.jobs).filter(
       job => job.status === 'pending' || job.status === 'running'
+    );
+  },
+
+  /**
+   * Find the active chat-response job for a thread.
+   */
+  async getActiveChatJobForThread(threadId: string): Promise<BackgroundJob | undefined> {
+    const schema = await loadJobs();
+    return Object.values(schema.jobs).find(
+      job =>
+        job.type === 'chat-response' &&
+        job.targetId === threadId &&
+        (job.status === 'pending' || job.status === 'running')
     );
   },
   

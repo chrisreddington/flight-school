@@ -8,11 +8,11 @@ import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
 import type { CalibrationNeededItem, DailyChallenge, FocusResponse, LearningTopic } from '@/lib/focus/types';
 import {
     BookIcon,
-    CheckCircleIcon,
+    CheckIcon,
+    CodeIcon,
     CopilotIcon,
     FlameIcon,
     HistoryIcon,
-    RocketIcon,
     StopIcon,
     ZapIcon,
 } from '@primer/octicons-react';
@@ -186,16 +186,16 @@ export const DailyFocusSection = memo(function DailyFocusSection({
 
       <UnderlinePanels aria-label="Daily focus tabs" className={styles.focusTabs}>
         <UnderlinePanels.Tab aria-selected>
-          <FlameIcon size={16} /> Challenge
+          <CodeIcon size={16} /> Challenge
         </UnderlinePanels.Tab>
         <UnderlinePanels.Tab>
-          <CheckCircleIcon size={16} /> Goal
+          <CheckIcon size={16} /> Goal
         </UnderlinePanels.Tab>
         <UnderlinePanels.Tab>
           <BookIcon size={16} /> Learn
         </UnderlinePanels.Tab>
         <UnderlinePanels.Tab>
-          <RocketIcon size={16} /> Habits
+          <FlameIcon size={16} /> Habits
         </UnderlinePanels.Tab>
 
         <UnderlinePanels.Panel>
