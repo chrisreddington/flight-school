@@ -308,11 +308,10 @@ class StreamStoreImpl implements StreamStore {
         this.flushBuffer(id);
       }
 
-      // If connection was closed during navigation, mark as interrupted (not error)
-      // The content received so far is preserved and the stream is marked as completed
-      // since the server may have finished processing
+      // If connection was closed during navigation, mark as completed (not error)
+      // The content received so far is preserved since the server may have finished processing
       const finalState: Partial<StreamState> = {
-        status: connectionClosed ? 'completed' : 'completed',
+        status: 'completed',
         content: responseContent,
         toolCalls,
         serverMeta,

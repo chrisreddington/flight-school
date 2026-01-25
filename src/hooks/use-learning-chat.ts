@@ -39,7 +39,7 @@ import { logger } from '@/lib/logger';
 import { operationsManager } from '@/lib/operations';
 import type { StreamState } from '@/lib/stream-store/types';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
-import { threadStore } from '@/lib/threads';
+import { THREAD_DATA_CHANGED_EVENT, threadStore } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
 import { useCopilotStream } from './use-copilot-stream';
@@ -49,9 +49,6 @@ const log = logger.withTag('useLearningChat');
 const STREAMING_PARTIAL_APPEND_MS = 1500;
 /** Interval for polling thread updates when a background job is active */
 const BACKGROUND_JOB_POLL_INTERVAL_MS = 500;
-
-/** Event name for thread data changes (from background jobs) */
-const THREAD_DATA_CHANGED = 'thread-data-changed';
 
 // ============================================================================
 // Types
@@ -452,9 +449,9 @@ export function useLearningChat(): UseLearningChatReturn {
       }
     };
 
-    window.addEventListener(THREAD_DATA_CHANGED, handleThreadDataChanged);
+    window.addEventListener(THREAD_DATA_CHANGED_EVENT, handleThreadDataChanged);
     return () => {
-      window.removeEventListener(THREAD_DATA_CHANGED, handleThreadDataChanged);
+      window.removeEventListener(THREAD_DATA_CHANGED_EVENT, handleThreadDataChanged);
     };
   }, [refreshThreads]);
 

@@ -29,7 +29,7 @@ export { threadStore } from './storage';
  * Event name for notifying React components that thread data has changed.
  * Dispatch this after persisting thread data to trigger UI refresh.
  */
-const THREAD_DATA_CHANGED_EVENT = 'thread-data-changed';
+export const THREAD_DATA_CHANGED_EVENT = 'thread-data-changed';
 
 /**
  * Dispatch thread data changed event to notify all listeners.
