@@ -87,7 +87,7 @@ export function useAIFocus(): UseAIFocusResult {
   const currentSkippingGoalIdRef = useRef<string | null>(null);
 
   // Subscribe to global operations manager for cross-component visibility
-  // This allows FocusHistory to show loading states when user navigates away
+  // This allows LearningHistory to show loading states when user navigates away
   const skippingTopicIds = useSyncExternalStore(
     operationsManager.subscribe.bind(operationsManager),
     () => operationsManager.getActiveIdsOfType('topic-regeneration'),

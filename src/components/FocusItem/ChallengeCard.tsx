@@ -191,20 +191,27 @@ export function ChallengeCard({
               </Label>
             )}
           </Stack>
-          {/* Only show action menu on today's items */}
-          {isToday && (
-            <ChallengeActionMenu
-              challenge={challenge}
-              isCustom={isCustom}
-              onEdit={isCustom ? onEdit : undefined}
-              onSkip={handleSkip}
-              onRefresh={!isCustom ? onRefresh : undefined}
-              onCreate={onCreate}
-              onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
-              showHistoryActions={showHistoryActions}
-              refreshDisabled={refreshDisabled}
-            />
-          )}
+          <Stack direction="horizontal" gap="condensed" align="center">
+            {(isCompleted || isSkipped) && showHistoryActions && (
+              <Label variant={isCompleted ? 'success' : 'secondary'}>
+                {isCompleted ? 'Completed' : 'Skipped'}
+              </Label>
+            )}
+            {/* Only show action menu on today's items */}
+            {isToday && (
+              <ChallengeActionMenu
+                challenge={challenge}
+                isCustom={isCustom}
+                onEdit={isCustom ? onEdit : undefined}
+                onSkip={handleSkip}
+                onRefresh={!isCustom ? onRefresh : undefined}
+                onCreate={onCreate}
+                onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
+                showHistoryActions={showHistoryActions}
+                refreshDisabled={refreshDisabled}
+              />
+            )}
+          </Stack>
         </Stack>
 
         <Heading as="h3">{challenge.title}</Heading>
@@ -231,11 +238,6 @@ export function ChallengeCard({
           >
             {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
           </Button>
-          {(isCompleted || isSkipped) && (
-            <Label variant={isCompleted ? 'success' : 'secondary'}>
-              {isCompleted ? '✓ Completed' : '⏭ Skipped'}
-            </Label>
-          )}
         </Stack>
       </Stack>
     </div>

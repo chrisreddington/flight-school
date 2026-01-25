@@ -177,7 +177,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           )}
         </Stack>
         <Stack direction="horizontal" align="center" gap="condensed">
-          <Link href="/focus-history" className={styles.historyLink}>
+          <Link href="/learning-history" className={styles.historyLink}>
             View History
           </Link>
         </Stack>

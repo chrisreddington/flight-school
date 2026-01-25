@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * FocusHistory Component V2
+ * LearningHistory Component
  *
  * Two-column layout with:
  * - Left sidebar: 52-week activity graph, search, filters, date navigation
@@ -53,7 +53,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLearningChat } from '@/hooks/use-learning-chat';
-import styles from './FocusHistory.module.css';
+import styles from './LearningHistory.module.css';
 
 // ============================================================================
 // Types
@@ -410,7 +410,7 @@ const DateNavigation = memo(function DateNavigation({
   );
 });
 
-/** Individual item card (no accordion, always full content) */
+/** Individual item card with collapsible support for skipped items */
 const ItemCard = memo(function ItemCard({
   item,
   dateKey,
@@ -440,6 +440,15 @@ const ItemCard = memo(function ItemCard({
   isSkippingChallenge?: boolean;
   isSkippingGoal?: boolean;
 }) {
+  // Track user's explicit collapsed preference (null = follow automatic state)
+  const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
+  
+  // Compute effective collapsed state:
+  // - Items that are completed/skipped should collapse by default
+  // - User can override by clicking (userCollapsed takes precedence)
+  const shouldAutoCollapse = item.status === 'completed' || item.status === 'skipped';
+  const isCollapsed = userCollapsed !== null ? userCollapsed : shouldAutoCollapse;
+  
   const statusIcon = item.status === 'completed' 
     ? <CheckCircleIcon size={14} className={styles.statusCompleted} />
     : item.status === 'skipped' 
@@ -456,68 +465,91 @@ const ItemCard = memo(function ItemCard({
 
   const timeStr = formatTime(item.timestamp);
   const isInactive = item.status === 'skipped';
+  const isCollapsible = item.status === 'skipped' || item.status === 'completed';
   
-  // Get item ID for scroll-to functionality
-  const itemId = item.type === 'habit' ? item.data.id : item.data.id;
+  // Get item title and ID
+  const itemTitle = item.data.title;
+  const itemId = item.data.id;
+
+  const handleToggle = useCallback(() => {
+    if (isCollapsible) {
+      // Toggle from current state
+      setUserCollapsed(prev => prev !== null ? !prev : !shouldAutoCollapse);
+    }
+  }, [isCollapsible, shouldAutoCollapse]);
 
   return (
     <div 
-      className={`${styles.itemCard} ${isInactive ? styles.itemCardInactive : ''}`}
+      className={`${styles.itemCard} ${isInactive ? styles.itemCardInactive : ''} ${isCollapsed ? styles.itemCardCollapsed : ''}`}
       data-item-id={itemId}
     >
-      <div className={styles.itemCardHeader}>
+      <button 
+        type="button"
+        className={`${styles.itemCardHeader} ${isCollapsible ? styles.itemCardHeaderClickable : ''}`}
+        onClick={handleToggle}
+        disabled={!isCollapsible}
+        aria-expanded={isCollapsible ? !isCollapsed : undefined}
+      >
         <div className={styles.itemCardMeta}>
+          {isCollapsible && (
+            <span className={styles.itemCardChevron}>
+              {isCollapsed ? <ChevronRightIcon size={14} /> : <ChevronDownIcon size={14} />}
+            </span>
+          )}
           {statusIcon}
           <span className={styles.itemCardType}>{typeIcon}</span>
-          <span className={styles.itemCardTime}>{timeStr}</span>
+          {isCollapsed && <span className={styles.itemCardTitle}>{itemTitle}</span>}
         </div>
-      </div>
-      <div className={styles.itemCardContent}>
-        {item.type === 'challenge' && (
-          <ChallengeCard
-            challenge={item.data}
-            dateKey={dateKey}
-            showHistoryActions
-            onRefresh={onRefresh}
-            onStateChange={onRefresh}
-            onSkipAndReplace={onSkipChallenge}
-            onStopSkip={onStopSkipChallenge}
-            isSkipping={isSkippingChallenge}
-          />
-        )}
-        {item.type === 'goal' && (
-          <GoalCard
-            goal={item.data}
-            dateKey={dateKey}
-            showHistoryActions
-            onRefresh={onRefresh}
-            onStateChange={onRefresh}
-            onSkipAndReplace={onSkipGoal}
-            onStopSkip={onStopSkipGoal}
-            isSkipping={isSkippingGoal}
-          />
-        )}
-        {item.type === 'topic' && (
-          <TopicCard
-            topic={item.data}
-            dateKey={dateKey}
-            showHistoryActions
-            onStateChange={onRefresh}
-            onSkipAndReplace={onSkipTopic}
-            onStopSkip={onStopSkipTopic}
-            onExplore={onExploreTopic}
-            isSkipping={isSkippingTopic}
-          />
-        )}
-        {item.type === 'habit' && (
-          <HabitHistoryCard
-            habit={item.data}
-            dateKey={dateKey}
-            isToday={dateKey === getDateKey()}
-            onUpdate={onRefresh}
-          />
-        )}
-      </div>
+        <span className={styles.itemCardTime}>{timeStr}</span>
+      </button>
+      {!isCollapsed && (
+        <div className={styles.itemCardContent}>
+          {item.type === 'challenge' && (
+            <ChallengeCard
+              challenge={item.data}
+              dateKey={dateKey}
+              showHistoryActions
+              onRefresh={onRefresh}
+              onStateChange={onRefresh}
+              onSkipAndReplace={onSkipChallenge}
+              onStopSkip={onStopSkipChallenge}
+              isSkipping={isSkippingChallenge}
+            />
+          )}
+          {item.type === 'goal' && (
+            <GoalCard
+              goal={item.data}
+              dateKey={dateKey}
+              showHistoryActions
+              onRefresh={onRefresh}
+              onStateChange={onRefresh}
+              onSkipAndReplace={onSkipGoal}
+              onStopSkip={onStopSkipGoal}
+              isSkipping={isSkippingGoal}
+            />
+          )}
+          {item.type === 'topic' && (
+            <TopicCard
+              topic={item.data}
+              dateKey={dateKey}
+              showHistoryActions
+              onStateChange={onRefresh}
+              onSkipAndReplace={onSkipTopic}
+              onStopSkip={onStopSkipTopic}
+              onExplore={onExploreTopic}
+              isSkipping={isSkippingTopic}
+            />
+          )}
+          {item.type === 'habit' && (
+            <HabitHistoryCard
+              habit={item.data}
+              dateKey={dateKey}
+              isToday={dateKey === getDateKey()}
+              onUpdate={onRefresh}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -598,7 +630,7 @@ const GeneratingBanner = memo(function GeneratingBanner({
 // Main Component
 // ============================================================================
 
-export const FocusHistory = memo(function FocusHistory() {
+export const LearningHistory = memo(function LearningHistory() {
   const todayDateKey = getDateKey();
   const { activeTopicIds, activeChallengeIds, activeGoalIds } = useActiveOperations();
   const router = useRouter();
@@ -626,6 +658,7 @@ export const FocusHistory = memo(function FocusHistory() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const prevActiveCountRef = useRef(activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size);
   const [isLoading, setIsLoading] = useState(true);
@@ -634,6 +667,18 @@ export const FocusHistory = memo(function FocusHistory() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const forceRefresh = useCallback(() => setRefreshKey(prev => prev + 1), []);
+  
+  const toggleDayCollapse = useCallback((dateKey: string) => {
+    setCollapsedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }, []);
   
   // Handle "Explore" from history - creates thread, starts streaming, navigates
   const handleExploreTopic = useCallback(async (topic: LearningTopic) => {
@@ -869,14 +914,14 @@ export const FocusHistory = memo(function FocusHistory() {
         <div className={styles.headerV2}>
           <CalendarIcon size={20} className={styles.headerIcon} />
           <div className={styles.headerTitleGroup}>
-            <h2 className={styles.headerTitle}>Focus History</h2>
+            <h2 className={styles.headerTitle}>Learning History</h2>
             <p className={styles.headerDescription}>Your learning journey over time</p>
           </div>
         </div>
         <div className={styles.emptyState}>
           <Banner
-            title="No focus history yet"
-            description="Your daily focus will be saved here as you use the app."
+            title="No learning history yet"
+            description="Your daily learning will be saved here as you use the app."
             variant="info"
             hideTitle
           />
@@ -913,7 +958,7 @@ export const FocusHistory = memo(function FocusHistory() {
           <div className={styles.sidebarHeader}>
             <CalendarIcon size={20} className={styles.sidebarIcon} />
             <div className={styles.sidebarTitleGroup}>
-              <h2 className={styles.sidebarTitle}>Focus History</h2>
+              <h2 className={styles.sidebarTitle}>Learning History</h2>
               <p className={styles.sidebarDescription}>Your learning journey</p>
             </div>
           </div>
@@ -1058,38 +1103,51 @@ export const FocusHistory = memo(function FocusHistory() {
               {/* Items */}
               {filteredEntries.map(entry => {
                 const isToday = entry.dateKey === todayDateKey;
+                const isDayCollapsed = collapsedDays.has(entry.dateKey);
                 return (
                   <div key={entry.dateKey} className={styles.dateSection}>
-                    <div className={styles.dateSectionHeader}>
-                      {isToday ? (
-                        <span className={styles.todayBadge}>Today</span>
-                      ) : (
-                        <span className={styles.dateSectionTitle}>{entry.displayDate}</span>
-                      )}
+                    <button
+                      type="button"
+                      className={styles.dateSectionHeader}
+                      onClick={() => toggleDayCollapse(entry.dateKey)}
+                      aria-expanded={!isDayCollapsed}
+                    >
+                      <div className={styles.dateSectionLeft}>
+                        <span className={styles.dateSectionChevron}>
+                          {isDayCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
+                        </span>
+                        {isToday ? (
+                          <span className={styles.todayBadge}>Today</span>
+                        ) : (
+                          <span className={styles.dateSectionTitle}>{entry.displayDate}</span>
+                        )}
+                      </div>
                       <span className={styles.dateSectionCount}>
                         {entry.items.length} item{entry.items.length !== 1 ? 's' : ''}
                       </span>
-                    </div>
-                    <Stack direction="vertical" gap="condensed">
-                      {entry.items.map((item, index) => (
-                        <ItemCard
-                          key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`}
-                          item={item}
-                          dateKey={entry.dateKey}
-                          onRefresh={forceRefresh}
-                          onSkipTopic={skipAndReplaceTopic}
-                          onSkipChallenge={skipAndReplaceChallenge}
-                          onSkipGoal={skipAndReplaceGoal}
-                          onStopSkipTopic={stopTopicSkip}
-                          onStopSkipChallenge={stopChallengeSkip}
-                          onStopSkipGoal={stopGoalSkip}
-                          onExploreTopic={handleExploreTopic}
-                          isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
-                          isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
-                          isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
-                        />
-                      ))}
-                    </Stack>
+                    </button>
+                    {!isDayCollapsed && (
+                      <Stack direction="vertical" gap="condensed">
+                        {entry.items.map((item, index) => (
+                          <ItemCard
+                            key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`}
+                            item={item}
+                            dateKey={entry.dateKey}
+                            onRefresh={forceRefresh}
+                            onSkipTopic={skipAndReplaceTopic}
+                            onSkipChallenge={skipAndReplaceChallenge}
+                            onSkipGoal={skipAndReplaceGoal}
+                            onStopSkipTopic={stopTopicSkip}
+                            onStopSkipChallenge={stopChallengeSkip}
+                            onStopSkipGoal={stopGoalSkip}
+                            onExploreTopic={handleExploreTopic}
+                            isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
+                            isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
+                            isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
+                          />
+                        ))}
+                      </Stack>
+                    )}
                   </div>
                 );
               })}

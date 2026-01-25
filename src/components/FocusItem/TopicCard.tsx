@@ -130,8 +130,10 @@ export function TopicCard({
             <span style={{ marginRight: '4px', display: 'inline-flex' }}><BookIcon size={12} /></span>
             {topic.type === 'best-practice' ? 'Best Practice' : topic.type === 'concept' ? 'Concept' : 'Pattern'}
           </Label>
-          {isSkipped && showHistoryActions && (
-            <Label variant="secondary">Skipped</Label>
+          {(isExplored || isSkipped) && showHistoryActions && (
+            <Label variant={isExplored ? 'success' : 'secondary'}>
+              {isExplored ? 'Explored' : 'Skipped'}
+            </Label>
           )}
         </Stack>
 

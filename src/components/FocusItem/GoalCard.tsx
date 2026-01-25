@@ -128,6 +128,11 @@ export function GoalCard({
             <span style={{ marginRight: '4px', display: 'inline-flex' }}><ZapIcon size={12} /></span>
             Goal
           </Label>
+          {(isCompleted || isSkipped) && showHistoryActions && (
+            <Label variant={isCompleted ? 'success' : 'secondary'}>
+              {isCompleted ? 'Completed' : 'Skipped'}
+            </Label>
+          )}
         </Stack>
 
         <Heading as="h3">{goal.title}</Heading>
@@ -184,11 +189,6 @@ export function GoalCard({
                 </Button>
               )}
             </>
-          )}
-          {(isCompleted || isSkipped) && (
-            <Label variant={isCompleted ? 'success' : 'secondary'}>
-              {isCompleted ? '✓ Completed' : '⏭ Skipped'}
-            </Label>
           )}
         </Stack>
       </Stack>

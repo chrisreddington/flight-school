@@ -1,4 +1,4 @@
-/* FocusHistory.module.css V2
+/* LearningHistory.module.css
  * 
  * Two-column layout with:
  * - 52-week contribution graph (interactive)
@@ -439,9 +439,37 @@
 .dateSectionHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--base-size-8);
-  padding-bottom: var(--base-size-8);
+  padding: var(--base-size-8) 0;
   border-bottom: 1px solid var(--borderColor-muted);
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.dateSectionHeader:hover {
+  background-color: var(--bgColor-muted);
+  margin: 0 calc(-1 * var(--base-size-8));
+  padding: var(--base-size-8);
+  width: calc(100% + var(--base-size-16));
+  border-radius: var(--borderRadius-small);
+}
+
+.dateSectionLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.dateSectionChevron {
+  color: var(--fgColor-muted);
+  display: flex;
+  align-items: center;
 }
 
 .dateSectionTitle {
@@ -450,13 +478,12 @@
 }
 
 .dateSectionCount {
-  margin-left: auto;
   font-size: var(--text-body-size-small);
   color: var(--fgColor-muted);
 }
 
 /* ============================================================================
-   Item Cards - Simpler, just border dividers
+   Item Cards - Collapsible for skipped items
    ============================================================================ */
 
 .itemCard {
@@ -471,7 +498,11 @@
 }
 
 .itemCardInactive {
-  opacity: 0.6;
+  opacity: 0.7;
+}
+
+.itemCardCollapsed {
+  /* Slightly more compact when collapsed */
 }
 
 .itemCardHeader {
@@ -480,6 +511,22 @@
   justify-content: space-between;
   padding: var(--base-size-8) var(--base-size-12);
   background-color: var(--bgColor-muted);
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.itemCardHeaderClickable {
+  cursor: pointer;
+}
+
+.itemCardHeaderClickable:hover {
+  background-color: var(--bgColor-neutral-muted);
+}
+
+.itemCardHeader:disabled {
+  cursor: default;
 }
 
 .itemCardMeta {
@@ -488,13 +535,30 @@
   gap: var(--base-size-8);
 }
 
+.itemCardChevron {
+  color: var(--fgColor-muted);
+  display: flex;
+  align-items: center;
+}
+
 .itemCardType {
   color: var(--fgColor-muted);
+}
+
+.itemCardTitle {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-medium);
+  color: var(--fgColor-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
 }
 
 .itemCardTime {
   font-size: var(--text-body-size-small);
   color: var(--fgColor-muted);
+  flex-shrink: 0;
 }
 
 .itemCardContent {

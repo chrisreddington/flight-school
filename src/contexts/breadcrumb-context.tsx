@@ -39,7 +39,7 @@ export interface BreadcrumbItem {
 
 /** Page registration for breadcrumb system */
 interface PageRegistration {
-  /** URL path pattern (e.g., '/challenge', '/focus-history') */
+  /** URL path pattern (e.g., '/challenge', '/learning-history') */
   path: string;
   /** Display label */
   label: string;
@@ -226,7 +226,7 @@ export function useBreadcrumbContext(): BreadcrumbContextValue {
  * Uses useSyncExternalStore pattern for immediate synchronous updates
  * without causing React state update warnings.
  *
- * @param path - URL path pattern (e.g., '/challenge', '/focus-history')
+ * @param path - URL path pattern (e.g., '/challenge', '/learning-history')
  * @param label - Display label for the breadcrumb
  * @param href - Full href including query params
  *

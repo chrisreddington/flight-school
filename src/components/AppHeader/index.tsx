@@ -140,10 +140,10 @@ export function AppHeader() {
                   My Habits
                   <ActionList.Description>Track and manage your habits</ActionList.Description>
                 </ActionList.LinkItem>
-                <ActionList.LinkItem href="/focus-history">
+                <ActionList.LinkItem href="/learning-history">
                   <ActionList.LeadingVisual><HistoryIcon /></ActionList.LeadingVisual>
-                  Focus History
-                  <ActionList.Description>View past focus items</ActionList.Description>
+                  Learning History
+                  <ActionList.Description>View past learning items</ActionList.Description>
                 </ActionList.LinkItem>
                 <ActionList.Divider />
                 <ActionList.LinkItem href="/profile/skills">
