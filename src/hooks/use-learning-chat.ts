@@ -33,14 +33,13 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { logger } from '@/lib/logger';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { THREAD_DATA_CHANGED_EVENT, threadStore } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
-import { useCopilotStream } from './use-copilot-stream';
 import { useThreads, type UseThreadsReturn } from './use-threads';
 
 const log = logger.withTag('useLearningChat');
@@ -179,11 +178,6 @@ export function useLearningChat(): UseLearningChatReturn {
     updateActiveThread,
     refresh: refreshThreads,
   } = useThreads();
-
-  // Streaming - use streamStore for starting jobs and stopping
-  const {
-    stopStreaming: stopStreamingBase,
-  } = useCopilotStream();
 
   // Derive streaming thread IDs from storage (threads with isStreaming: true)
   // This is the SINGLE SOURCE OF TRUTH for streaming state
@@ -326,14 +320,75 @@ export function useLearningChat(): UseLearningChatReturn {
     };
   }, [refreshThreads]);
 
-  // Stop streaming - streamStore.stopStream handles job cancellation
-  const stopStreaming = useCallback(() => {
-    if (activeThreadId) {
-      stopStreamingBase(activeThreadId);
-    } else {
-      stopStreamingBase();
+  // Stop streaming - cancel job and update storage
+  const stopStreaming = useCallback(async () => {
+    const threadId = activeThreadId;
+    if (!threadId) {
+      log.warn('No active thread to stop streaming');
+      return;
     }
-  }, [activeThreadId, stopStreamingBase]);
+    
+    log.debug('Stopping stream for thread:', threadId);
+    
+    // Remove from pending (stops showing as streaming immediately)
+    setPendingStreamThreadIds(prev => {
+      const next = new Set(prev);
+      next.delete(threadId);
+      return next;
+    });
+    
+    try {
+      // 1. Find and cancel any running jobs for this thread
+      // We need to find the job by checking jobs API
+      const jobsRes = await fetch('/api/jobs');
+      if (jobsRes.ok) {
+        const { jobs } = await jobsRes.json();
+        const runningJobs = jobs.filter((job: { status: string; input?: { threadId?: string } }) => 
+          job.status === 'running' && 
+          job.input?.threadId === threadId
+        );
+        
+        // Cancel each running job
+        for (const job of runningJobs) {
+          log.debug('Cancelling job:', job.id);
+          await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
+        }
+      }
+      
+      // 2. Update thread in storage - set isStreaming: false, finalize message
+      const thread = await threadStore.getById(threadId);
+      if (thread) {
+        // Find and finalize the streaming message
+        const updatedMessages = thread.messages.map(msg => {
+          if (msg.id.startsWith('streaming-')) {
+            // Remove cursor and add interruption note
+            const content = msg.content.replace(' ▊', '').trim();
+            return {
+              ...msg,
+              id: generateMessageId(), // Give it a permanent ID
+              content: content ? `${content}\n\n*(Response stopped)*` : '',
+            };
+          }
+          return msg;
+        }).filter(msg => msg.content); // Remove empty messages
+        
+        await threadStore.update({
+          ...thread,
+          messages: updatedMessages,
+          isStreaming: false,
+          updatedAt: now(),
+        });
+        
+        log.debug('Thread updated after stop');
+      }
+      
+      // 3. Refresh to show updated state
+      await refreshThreads();
+      
+    } catch (err) {
+      log.error('Failed to stop streaming:', err);
+    }
+  }, [activeThreadId, refreshThreads]);
 
   /**
    * Send a message and save to the active thread.

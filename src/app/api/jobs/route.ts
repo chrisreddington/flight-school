@@ -447,6 +447,14 @@ async function executeChatResponse(
       ? await createLearningStreamingSession(prompt, useGitHubTools, `Job: ${jobId}`, threadId)
       : await createStreamingChatSession(prompt, useGitHubTools, `Job: ${jobId}`, threadId);
     
+    // Register session for cancellation
+    registerSession(jobId, { 
+      destroy: async () => {
+        log.debug(`[Job ${jobId}] Destroying session via registered callback`);
+        session.cleanup();
+      }
+    });
+    
     let fullContent = '';
     const toolCalls: string[] = [];
     let hasActionableItem = false;
@@ -510,7 +518,15 @@ async function executeChatResponse(
     };
 
     // Process the stream (stream is an AsyncGenerator, not a function)
+    let wasCancelled = false;
     for await (const event of session.stream) {
+      // Check for cancellation periodically
+      if (!(await isJobStillValid(jobId))) {
+        log.info(`[Job ${jobId}] Job cancelled - breaking out of stream loop`);
+        wasCancelled = true;
+        break;
+      }
+      
       if (event.type === 'delta') {
         fullContent += event.content;
         
@@ -530,8 +546,15 @@ async function executeChatResponse(
       }
     }
     
-    // Cleanup the session
+    // Cleanup the session and unregister
     session.cleanup();
+    unregisterSession(jobId);
+    
+    if (wasCancelled) {
+      log.info(`[Job ${jobId}] Chat response cancelled after ${fullContent.length} chars`);
+      // Don't save final or mark completed - job was cancelled
+      return;
+    }
     
     // Final save
     await saveProgressToThread(true);
@@ -546,6 +569,7 @@ async function executeChatResponse(
     
     log.info(`[Job ${jobId}] Chat response completed: ${fullContent.length} chars`);
   } catch (error) {
+    unregisterSession(jobId);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     log.error(`[Job ${jobId}] Chat response failed:`, errorMessage);
     await jobStorage.markFailed(jobId, errorMessage);
