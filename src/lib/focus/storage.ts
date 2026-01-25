@@ -182,7 +182,10 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     return {
         challenge: latestChallenge.data,
         goal: latestGoal.data,
-        learningTopics: latestTopics.map(t => t.data),
+        // Filter out skipped topics - only show active ones on dashboard
+        learningTopics: latestTopics
+          .filter(t => getCurrentTopicState(t) !== 'skipped')
+          .map(t => t.data),
         calibrationNeeded: record.calibrationNeeded,
         meta: {
             generatedAt: latestGeneratedAt,

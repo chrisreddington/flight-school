@@ -46,7 +46,6 @@ import {
   Button,
   Flash,
   Link,
-  SkeletonBox,
   Spinner,
   Stack,
   TextInput,
@@ -457,9 +456,15 @@ const ItemCard = memo(function ItemCard({
 
   const timeStr = formatTime(item.timestamp);
   const isInactive = item.status === 'skipped';
+  
+  // Get item ID for scroll-to functionality
+  const itemId = item.type === 'habit' ? item.data.id : item.data.id;
 
   return (
-    <div className={`${styles.itemCard} ${isInactive ? styles.itemCardInactive : ''}`}>
+    <div 
+      className={`${styles.itemCard} ${isInactive ? styles.itemCardInactive : ''}`}
+      data-item-id={itemId}
+    >
       <div className={styles.itemCardHeader}>
         <div className={styles.itemCardMeta}>
           {statusIcon}
@@ -517,19 +522,74 @@ const ItemCard = memo(function ItemCard({
   );
 });
 
-/** Generating skeleton */
-const GeneratingSkeleton = memo(function GeneratingSkeleton({ count }: { count: number }) {
+/** Compact generating banner with jump links */
+interface GeneratingBannerProps {
+  topicIds: Set<string>;
+  challengeIds: Set<string>;
+  goalIds: Set<string>;
+}
+
+const GeneratingBanner = memo(function GeneratingBanner({ 
+  topicIds, 
+  challengeIds, 
+  goalIds 
+}: GeneratingBannerProps) {
+  const total = topicIds.size + challengeIds.size + goalIds.size;
+  if (total === 0) return null;
+  
+  const scrollToItem = (id: string) => {
+    const element = document.querySelector(`[data-item-id="${id}"]`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Brief highlight effect
+      element.classList.add(styles.highlightItem);
+      setTimeout(() => element.classList.remove(styles.highlightItem), 2000);
+    }
+  };
+  
+  // Convert Sets to arrays for rendering
+  const topicIdList = Array.from(topicIds);
+  const challengeIdList = Array.from(challengeIds);
+  const goalIdList = Array.from(goalIds);
+  
   return (
-    <div className={styles.generatingSection}>
-      <div className={styles.generatingHeader}>
-        <Spinner size="small" />
-        <span>Generating {count} new item{count > 1 ? 's' : ''}...</span>
-      </div>
-      <Stack direction="vertical" gap="condensed">
-        {Array.from({ length: count }).map((_, i) => (
-          <SkeletonBox key={i} height="120px" />
+    <div className={styles.generatingBanner}>
+      <Spinner size="small" />
+      <span className={styles.generatingText}>
+        Generating {total} item{total > 1 ? 's' : ''}...
+      </span>
+      <span className={styles.generatingJumpLinks}>
+        {topicIdList.map((id, index) => (
+          <button 
+            key={id}
+            className={styles.jumpLink} 
+            onClick={() => scrollToItem(id)}
+            type="button"
+          >
+            Topic {topicIdList.length > 1 ? index + 1 : ''}
+          </button>
         ))}
-      </Stack>
+        {challengeIdList.map((id, index) => (
+          <button 
+            key={id}
+            className={styles.jumpLink} 
+            onClick={() => scrollToItem(id)}
+            type="button"
+          >
+            Challenge {challengeIdList.length > 1 ? index + 1 : ''}
+          </button>
+        ))}
+        {goalIdList.map((id, index) => (
+          <button 
+            key={id}
+            className={styles.jumpLink} 
+            onClick={() => scrollToItem(id)}
+            type="button"
+          >
+            Goal {goalIdList.length > 1 ? index + 1 : ''}
+          </button>
+        ))}
+      </span>
     </div>
   );
 });
@@ -826,8 +886,8 @@ export const FocusHistory = memo(function FocusHistory() {
     );
   }
 
-  const activeGenerationCount = activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size;
-  const hasGenerating = activeGenerationCount > 0 && (!selectedDate || selectedDate === todayDateKey);
+  const hasGenerating = (activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size) > 0 
+    && (!selectedDate || selectedDate === todayDateKey);
 
   return (
     <div className={styles.containerV2}>
@@ -984,9 +1044,13 @@ export const FocusHistory = memo(function FocusHistory() {
                 </div>
               )}
 
-              {/* Generating skeleton at top */}
+              {/* Generating banner at top */}
               {hasGenerating && (
-                <GeneratingSkeleton count={activeGenerationCount} />
+                <GeneratingBanner 
+                  topicIds={activeTopicIds}
+                  challengeIds={activeChallengeIds}
+                  goalIds={activeGoalIds}
+                />
               )}
 
               {/* Items */}
