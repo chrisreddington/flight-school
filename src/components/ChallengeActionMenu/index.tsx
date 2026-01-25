@@ -116,9 +116,9 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
             <ActionList.Divider />
           )}
 
-          {/* AI challenge refresh */}
-          {!isCustom && onRefresh && (
-            <ActionList.Item onSelect={onRefresh} disabled={refreshDisabled}>
+          {/* AI challenge skip (use onSkip for skip-and-replace behavior) */}
+          {!isCustom && onSkip && (
+            <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
               <ActionList.LeadingVisual>
                 <SkipIcon />
               </ActionList.LeadingVisual>

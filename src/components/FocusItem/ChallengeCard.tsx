@@ -181,7 +181,7 @@ export function ChallengeCard({
               challenge={challenge}
               isCustom={isCustom}
               onEdit={isCustom ? onEdit : undefined}
-              onSkip={isCustom ? handleSkip : undefined}
+              onSkip={handleSkip}
               onRefresh={!isCustom ? onRefresh : undefined}
               onCreate={onCreate}
               onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
