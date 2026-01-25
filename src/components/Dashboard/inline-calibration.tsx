@@ -161,8 +161,8 @@ export function InlineCalibration({ items, onItemsChange, showProfileLink = true
       </Stack>
       
       {showProfileLink && (
-        <Link href="/profile/skills" className={styles.calibrationLink}>
-          Manage all skills in your profile →
+        <Link href="/skills" className={styles.calibrationLink}>
+          Manage all skills →
         </Link>
       )}
     </div>

@@ -1,4 +1,4 @@
-/* Skill Profile Page Styles */
+/* Skill Profile Page Styles - Full-width two-column layout */
 
 .root {
   min-height: 100vh;
@@ -6,16 +6,94 @@
 }
 
 .main {
-  max-width: 800px;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--base-size-24, 24px);
+  max-width: 1400px;
   margin: 0 auto;
   padding: var(--base-size-24, 24px);
+  min-height: calc(100vh - 60px);
 }
 
+@media (max-width: 900px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16, 16px);
+}
+
+.sidebarCard {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-20, 20px);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.sidebarIcon {
+  color: var(--fgColor-accent, #0969da);
+}
+
+.sidebarTitle {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.sidebarSubtitle {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+/* Stats in sidebar */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--base-size-12, 12px);
+}
+
+.statItem {
+  text-align: center;
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.statValue {
+  display: block;
+  font-size: var(--text-title-size-medium, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: 1.25;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.statLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+/* Main content area */
 .content {
   background-color: var(--bgColor-default, #ffffff);
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: var(--borderRadius-medium, 6px);
   padding: var(--base-size-24, 24px);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .loadingState {

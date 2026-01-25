@@ -12,6 +12,7 @@
 
 import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
 import { HabitHistoryCard } from '@/components/FocusItem/HabitHistoryCard';
+import { ProfileNav } from '@/components/ProfileNav';
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
 import { focusStore } from '@/lib/focus';
@@ -911,22 +912,29 @@ export const LearningHistory = memo(function LearningHistory() {
   if (!isLoading && allEntries.length === 0) {
     return (
       <div className={styles.containerV2}>
-        <div className={styles.headerV2}>
-          <CalendarIcon size={20} className={styles.headerIcon} />
-          <div className={styles.headerTitleGroup}>
-            <h2 className={styles.headerTitle}>Learning History</h2>
-            <p className={styles.headerDescription}>Your learning journey over time</p>
-          </div>
-        </div>
-        <div className={styles.emptyState}>
-          <Banner
-            title="No learning history yet"
-            description="Your daily learning will be saved here as you use the app."
-            variant="info"
-            hideTitle
-          />
-          <div className={styles.backLink}>
-            <Link href="/">← Back to Dashboard</Link>
+        <div className={styles.layoutV2}>
+          <aside className={styles.sidebar}>
+            <ProfileNav />
+            <div className={styles.sidebarHeader}>
+              <CalendarIcon size={20} className={styles.sidebarIcon} />
+              <div className={styles.sidebarTitleGroup}>
+                <h2 className={styles.sidebarTitle}>Learning History</h2>
+                <p className={styles.sidebarDescription}>Your learning journey</p>
+              </div>
+            </div>
+          </aside>
+          <div className={styles.mainContent}>
+            <div className={styles.emptyState}>
+              <Banner
+                title="No learning history yet"
+                description="Your daily learning will be saved here as you use the app."
+                variant="info"
+                hideTitle
+              />
+              <div className={styles.backLink}>
+                <Link href="/">← Back to Dashboard</Link>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -954,38 +962,46 @@ export const LearningHistory = memo(function LearningHistory() {
       <div className={styles.layoutV2}>
         {/* Sidebar */}
         <aside className={styles.sidebar}>
-          {/* Title in sidebar */}
-          <div className={styles.sidebarHeader}>
-            <CalendarIcon size={20} className={styles.sidebarIcon} />
-            <div className={styles.sidebarTitleGroup}>
-              <h2 className={styles.sidebarTitle}>Learning History</h2>
-              <p className={styles.sidebarDescription}>Your learning journey</p>
+          {/* Profile Navigation */}
+          <ProfileNav />
+
+          {/* Activity & Stats Card */}
+          <div className={styles.sidebarCard}>
+            {/* Title in sidebar */}
+            <div className={styles.sidebarHeader}>
+              <CalendarIcon size={20} className={styles.sidebarIcon} />
+              <div className={styles.sidebarTitleGroup}>
+                <h2 className={styles.sidebarTitle}>Activity</h2>
+                <p className={styles.sidebarDescription}>Your learning journey</p>
+              </div>
             </div>
-          </div>
 
-          {/* 52-week activity graph */}
-          <ActivityGraph 
-            activity={activityData}
-            selectedDate={selectedDate}
-            onSelectDate={handleSelectDate}
-          />
-
-          {/* Stats */}
-          <StatsSummary stats={stats} />
-
-          {/* Search */}
-          <div className={styles.sidebarSearch}>
-            <TextInput
-              leadingVisual={SearchIcon}
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              block
+            {/* 52-week activity graph */}
+            <ActivityGraph 
+              activity={activityData}
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
             />
+
+            {/* Stats */}
+            <StatsSummary stats={stats} />
           </div>
 
-          {/* Filters - cleaner button group style */}
-          <div className={styles.sidebarFilters}>
+          {/* Search & Filters Card */}
+          <div className={styles.sidebarCard}>
+            {/* Search */}
+            <div className={styles.sidebarSearch}>
+              <TextInput
+                leadingVisual={SearchIcon}
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                block
+              />
+            </div>
+
+            {/* Filters - cleaner button group style */}
+            <div className={styles.sidebarFilters}>
             <div className={styles.filterSection}>
               <span className={styles.filterLabel}>Type</span>
               <div className={styles.filterButtons}>
@@ -1061,19 +1077,28 @@ export const LearningHistory = memo(function LearningHistory() {
               </div>
             </div>
           </div>
+          </div>
 
           {/* Date navigation */}
-          <DateNavigation
-            groupedEntries={groupedEntries}
-            expandedMonths={expandedMonths}
-            onToggleMonth={toggleMonth}
-            selectedDate={selectedDate}
-            onSelectDate={(date) => setSelectedDate(date)}
-          />
+          <div className={styles.sidebarCard}>
+            <DateNavigation
+              groupedEntries={groupedEntries}
+              expandedMonths={expandedMonths}
+              onToggleMonth={toggleMonth}
+              selectedDate={selectedDate}
+              onSelectDate={(date) => setSelectedDate(date)}
+            />
+          </div>
         </aside>
 
         {/* Main content */}
         <main className={styles.mainContent}>
+          {/* Page header */}
+          <div className={styles.pageHeader}>
+            <h1 className={styles.pageTitle}>Learning History</h1>
+            <p className={styles.pageDescription}>Browse your learning journey over time</p>
+          </div>
+
           {isLoading ? (
             <div className={styles.loadingState}>
               <Spinner size="medium" />

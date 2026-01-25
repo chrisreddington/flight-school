@@ -11,6 +11,7 @@ import {
     CheckCircleIcon,
     CopilotIcon,
     FlameIcon,
+    HistoryIcon,
     RocketIcon,
     StopIcon,
     ZapIcon,
@@ -177,8 +178,8 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           )}
         </Stack>
         <Stack direction="horizontal" align="center" gap="condensed">
-          <Link href="/learning-history" className={styles.historyLink}>
-            View History
+          <Link href="/history" className={styles.historyLink}>
+            <HistoryIcon size={16} /> History
           </Link>
         </Stack>
       </Stack>

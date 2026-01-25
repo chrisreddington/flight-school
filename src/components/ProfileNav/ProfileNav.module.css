@@ -1,0 +1,8 @@
+/* Profile Navigation Styles */
+
+.container {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-8, 8px);
+}

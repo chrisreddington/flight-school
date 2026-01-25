@@ -1,5 +1,5 @@
 /**
- * Learning History Page
+ * History Page
  *
  * Dedicated page for browsing historical learning entries.
  * Displays the shared header with dynamic breadcrumbs based on navigation history.
@@ -10,11 +10,11 @@
 import { AppHeader } from '@/components/AppHeader';
 import { LearningHistory } from '@/components/LearningHistory';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
-import styles from './learning-history.module.css';
+import styles from './history.module.css';
 
-export default function LearningHistoryPage() {
+export default function HistoryPage() {
   // Register this page in breadcrumb history
-  useBreadcrumb('/learning-history', 'Learning History', '/learning-history');
+  useBreadcrumb('/history', 'History', '/history');
 
   return (
     <div className={styles.root}>

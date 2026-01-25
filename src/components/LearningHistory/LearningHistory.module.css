@@ -27,24 +27,28 @@
 .layoutV2 {
   display: grid;
   grid-template-columns: 320px 1fr;
-  gap: var(--base-size-16);
+  gap: var(--base-size-24);
   flex: 1;
   min-height: 0;
 }
 
 /* ============================================================================
-   Sidebar - WHITE card that stands out from gray page
+   Sidebar - Contains ProfileNav and filter cards
    ============================================================================ */
 
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: var(--base-size-16);
+  height: fit-content;
+}
+
+/* Sidebar card - for each section in sidebar */
+.sidebarCard {
   padding: var(--base-size-16);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
   border-radius: var(--borderRadius-medium);
-  height: fit-content;
 }
 
 /* Sidebar header with title */
@@ -52,8 +56,7 @@
   display: flex;
   align-items: center;
   gap: var(--base-size-12);
-  padding-bottom: var(--base-size-12);
-  border-bottom: 1px solid var(--borderColor-muted);
+  margin-bottom: var(--base-size-12);
 }
 
 .sidebarIcon {
@@ -79,7 +82,7 @@
 }
 
 .sidebarSearch {
-  /* Search input styling handled by TextInput */
+  margin-bottom: var(--base-size-12);
 }
 
 .sidebarFilters {
@@ -404,7 +407,7 @@
 
 .mainContent {
   flex: 1;
-  padding: var(--base-size-16);
+  padding: var(--base-size-24);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
   border-radius: var(--borderRadius-medium);
@@ -412,6 +415,24 @@
   flex-direction: column;
   gap: var(--base-size-16);
   /* No independent scroll - flows with page */
+}
+
+/* Page header in main content */
+.pageHeader {
+  margin-bottom: var(--base-size-8);
+}
+
+.pageTitle {
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-4, 4px) 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.pageDescription {
+  font-size: var(--text-body-size-medium, 14px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
 }
 
 .selectedDateBanner {

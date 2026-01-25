@@ -26,7 +26,7 @@ function validateSchema(data: unknown): data is SkillProfile {
     const s = skill as Record<string, unknown>;
     if (typeof s.skillId !== 'string') return false;
     if (!['beginner', 'intermediate', 'advanced'].includes(s.level as string)) return false;
-    if (!['github', 'manual'].includes(s.source as string)) return false;
+    if (!['github', 'github-confirmed', 'manual'].includes(s.source as string)) return false;
   }
   
   return true;

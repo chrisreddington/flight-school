@@ -13,7 +13,6 @@
  * - Real-time GitHub activity stats
  */
 
-import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
 import { useLearningChat } from '@/hooks/use-learning-chat';
@@ -36,9 +35,6 @@ import { WelcomeSection } from './welcome-section';
 // ============================================================================
 
 export function Dashboard() {
-  // Register homepage in breadcrumb history
-  useBreadcrumb('/', 'Dashboard', '/');
-
   // Initialize operations manager on mount (ensures cross-page state sync)
   useActiveOperations();
 
