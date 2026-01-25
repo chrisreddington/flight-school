@@ -18,7 +18,6 @@ interface BackgroundJob<T = unknown> {
   targetId?: string;
   status: JobStatus;
   input: Record<string, unknown>;
-  activeStreamId?: string;
   result?: T;
   error?: string;
   createdAt: string;

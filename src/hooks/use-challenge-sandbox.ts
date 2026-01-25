@@ -190,7 +190,7 @@ export function useChallengeSandbox(
   }, []);
 
   // Start polling for evaluation progress
-  const startPolling = useCallback((_jobId: string) => {
+  const startPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
     }
@@ -272,7 +272,7 @@ export function useChallengeSandbox(
               result: null,
               error: null,
             });
-            startPolling(progress.jobId);
+            startPolling();
           } else if (progress?.status === 'completed' && progress.result) {
             setEvaluation({
               isLoading: false,
@@ -333,7 +333,7 @@ export function useChallengeSandbox(
 
       if (response?.id) {
         evaluationJobIdRef.current = response.id;
-        startPolling(response.id);
+        startPolling();
       } else {
         throw new Error('Failed to create evaluation job');
       }

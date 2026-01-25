@@ -54,7 +54,6 @@ export interface ChatResponseResult {
   content: string;
   hasActionableItem?: boolean;
   toolCalls?: string[];
-  activeStreamId?: string;
 }
 
 /** Input for challenge evaluation background job */

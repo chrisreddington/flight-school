@@ -26,7 +26,7 @@
 'use client';
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
-import { getLanguageDisplayName, getMonacoLanguage, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
+import { getLanguageDisplayName, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
 import type { OnMount } from '@monaco-editor/react';
 import {
     BeakerIcon,
