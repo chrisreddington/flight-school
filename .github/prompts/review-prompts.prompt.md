@@ -8,7 +8,7 @@ model: Claude Sonnet 4.5 (copilot)
 
 ## Task
 
-Review all `.prompt.md` files in `.github/prompts/` against `.github/instructions/prompt-files.instructions.md`.
+Review all `.prompt.md` files in `.github/prompts/` against the `prompt-authoring` skill in `.github/skills/prompt-authoring/SKILL.md`.
 
 Skip this file (`review-prompt-files.prompt.md`) to avoid self-modification.
 

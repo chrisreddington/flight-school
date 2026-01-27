@@ -8,7 +8,7 @@ argument-hint: Agent file path or 'all' (e.g., .github/agents/specialist-test.ag
 
 ## Task
 
-Review all `.agent.md` files in `.github/agents/` against `.github/instructions/custom-agents.instructions.md`.
+Review all `.agent.md` files in `.github/agents/` against the `agent-authoring` skill in `.github/skills/agent-authoring/SKILL.md`.
 
 For each agent:
 
