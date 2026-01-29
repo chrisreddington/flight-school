@@ -81,11 +81,13 @@ export function generate52WeekActivity(entries: HistoryEntry[]): ActivityDay[] {
   const today = new Date();
   const activity: ActivityDay[] = [];
   
-  // Start from the beginning of the week, 52 weeks ago
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - (WEEKS_TO_SHOW * DAYS_IN_WEEK) + 1);
-  // Align to start of week (Sunday)
-  startDate.setDate(startDate.getDate() - startDate.getDay());
+  // Find the start of the current week (Sunday)
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
+  
+  // Go back 51 more weeks to get 52 weeks total (including current week)
+  const startDate = new Date(currentWeekStart);
+  startDate.setDate(startDate.getDate() - (WEEKS_TO_SHOW - 1) * DAYS_IN_WEEK);
   
   for (let week = 0; week < WEEKS_TO_SHOW; week++) {
     for (let day = 0; day < DAYS_IN_WEEK; day++) {
