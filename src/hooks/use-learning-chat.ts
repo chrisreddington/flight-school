@@ -460,8 +460,11 @@ export function useLearningChat(): UseLearningChatReturn {
         }
       }
       
-      // Check if THIS thread is already streaming (from storage)
-      const threadFromStorage = threads.find(t => t.id === targetThreadId);
+      // Check if THIS thread is already streaming (query storage directly to avoid race condition)
+      // We must check the actual storage, not React state, because the state may not have
+      // refreshed yet after the previous message completed. This was causing follow-up messages
+      // to be blocked when sent quickly after the first message.
+      const threadFromStorage = await threadStore.getById(targetThreadId);
       if (threadFromStorage?.isStreaming) {
         log.warn(`Thread ${targetThreadId} is already streaming`);
         return;
@@ -537,7 +540,6 @@ export function useLearningChat(): UseLearningChatReturn {
       createThread,
       updateActiveThread,
       refreshThreads,
-      threads,
     ]
   );
 
