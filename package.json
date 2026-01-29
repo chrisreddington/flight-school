@@ -32,7 +32,7 @@
     "@primer/css": "^22.1.0",
     "@primer/octicons-react": "^19.21.2",
     "@primer/react": "^38.7.1",
-    "next": "16.1.4",
+    "next": "16.1.5",
     "octokit": "^5.0.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
