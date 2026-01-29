@@ -308,7 +308,7 @@ export async function executeChatResponse(
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
-  const { threadId, prompt, learningMode = false, useGitHubTools = false } = input;
+  const { threadId, prompt, learningMode = false, useGitHubTools = false, repos } = input;
   
   try {
     log.info(`[Job ${jobId}] Starting chat response for thread ${threadId}`);
@@ -318,10 +318,19 @@ export async function executeChatResponse(
       throw new Error(`Thread ${threadId} not found`);
     }
     
+    // Build repository context if repos are provided
+    let contextualPrompt = prompt;
+    if (repos && repos.length > 0 && useGitHubTools) {
+      const repoList = repos.map(r => `- ${r}`).join('\n');
+      const repoContext = `Context: Focus on these repositories when using GitHub tools:\n${repoList}\n\n`;
+      contextualPrompt = repoContext + prompt;
+      log.debug(`[Job ${jobId}] Added repository context for ${repos.length} repos`);
+    }
+    
     // Create the appropriate streaming session
     const session = learningMode
-      ? await createLearningStreamingSession(prompt, useGitHubTools, `Job: ${jobId}`, threadId)
-      : await createStreamingChatSession(prompt, useGitHubTools, `Job: ${jobId}`, threadId);
+      ? await createLearningStreamingSession(contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId)
+      : await createStreamingChatSession(contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId);
     
     registerSession(jobId, { 
       destroy: async () => {
