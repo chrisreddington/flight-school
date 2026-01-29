@@ -33,6 +33,7 @@ import {
     ChevronDownIcon,
     ChevronRightIcon,
     CodeIcon,
+    InfoIcon,
     LightBulbIcon,
     PlayIcon,
     RocketIcon,
@@ -120,6 +121,7 @@ export function ChallengeSandbox({
   const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
   const [isEvaluationCollapsed, setIsEvaluationCollapsed] = useState(false);
   const [isHintsCollapsed, setIsHintsCollapsed] = useState(false);
+  const [isDescriptionCollapsed, setIsDescriptionCollapsed] = useState(true);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   
@@ -225,8 +227,25 @@ export function ChallengeSandbox({
             <CodeIcon size={20} />
           </span>
           <div className={styles.headerTitleGroup}>
-            <h2 className={styles.headerTitle}>{challenge.title}</h2>
-            {challenge.description && (
+            <div className={styles.headerTitleRow}>
+              <h2 className={styles.headerTitle}>{challenge.title}</h2>
+              {challenge.description && (
+                <button
+                  className={styles.descriptionToggle}
+                  onClick={() => setIsDescriptionCollapsed(!isDescriptionCollapsed)}
+                  aria-expanded={!isDescriptionCollapsed}
+                  aria-label={isDescriptionCollapsed ? 'Expand description' : 'Collapse description'}
+                  type="button"
+                >
+                  {isDescriptionCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
+                  <span className={styles.sectionIcon}>
+                    <InfoIcon size={16} />
+                  </span>
+                  <span className={styles.sectionTitle}>Description</span>
+                </button>
+              )}
+            </div>
+            {challenge.description && !isDescriptionCollapsed && (
               <div className={styles.headerDescription}>
                 <MarkdownContent content={challenge.description} />
               </div>
