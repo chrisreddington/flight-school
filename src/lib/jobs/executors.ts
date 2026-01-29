@@ -8,7 +8,6 @@
 
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
 import type { SkillProfile } from '@/lib/skills/types';
-import type { RepoReference } from '@/lib/threads';
 
 export interface TopicRegenerationInput {
   existingTopicTitles: string[];
@@ -43,7 +42,8 @@ export interface GoalRegenerationResult {
 export interface ChatResponseInput {
   threadId: string;
   prompt: string;
-  repos?: RepoReference[];
+  /** Repository full names (e.g., 'owner/repo') to focus MCP tools on */
+  repos?: string[];
   learningMode?: boolean;
   useGitHubTools?: boolean;
 }
