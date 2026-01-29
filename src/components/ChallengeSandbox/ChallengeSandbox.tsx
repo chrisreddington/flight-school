@@ -120,6 +120,7 @@ export function ChallengeSandbox({
   const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
   const [isEvaluationCollapsed, setIsEvaluationCollapsed] = useState(false);
   const [isHintsCollapsed, setIsHintsCollapsed] = useState(false);
+  const [isDescriptionCollapsed, setIsDescriptionCollapsed] = useState(false);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   
@@ -225,8 +226,20 @@ export function ChallengeSandbox({
             <CodeIcon size={20} />
           </span>
           <div className={styles.headerTitleGroup}>
-            <h2 className={styles.headerTitle}>{challenge.title}</h2>
-            {challenge.description && (
+            <div className={styles.headerTitleRow}>
+              <h2 className={styles.headerTitle}>{challenge.title}</h2>
+              {challenge.description && (
+                <IconButton
+                  icon={isDescriptionCollapsed ? ChevronRightIcon : ChevronDownIcon}
+                  aria-label={isDescriptionCollapsed ? 'Expand description' : 'Collapse description'}
+                  aria-expanded={!isDescriptionCollapsed}
+                  size="small"
+                  variant="invisible"
+                  onClick={() => setIsDescriptionCollapsed(!isDescriptionCollapsed)}
+                />
+              )}
+            </div>
+            {challenge.description && !isDescriptionCollapsed && (
               <div className={styles.headerDescription}>
                 <MarkdownContent content={challenge.description} />
               </div>

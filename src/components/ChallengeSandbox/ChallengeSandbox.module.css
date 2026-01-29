@@ -44,6 +44,12 @@
   gap: var(--base-size-4);
 }
 
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+}
+
 .headerIcon {
   color: var(--fgColor-accent);
 }
@@ -58,6 +64,19 @@
   font-size: var(--text-body-size-small);
   color: var(--fgColor-muted);
   margin: 0;
+  overflow: hidden;
+  animation: expandDescription 0.2s ease-out;
+}
+
+@keyframes expandDescription {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
 }
 
 /* Reset markdown content margins within description */
