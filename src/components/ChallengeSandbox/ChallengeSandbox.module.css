@@ -47,7 +47,43 @@
 .headerTitleRow {
   display: flex;
   align-items: center;
+  gap: var(--base-size-8);
+}
+
+.descriptionToggle {
+  display: flex;
+  align-items: center;
   gap: var(--base-size-4);
+  background: none;
+  border: none;
+  padding: var(--base-size-4) var(--base-size-8);
+  border-radius: var(--borderRadius-small);
+  cursor: pointer;
+  color: var(--fgColor-default);
+  font: inherit;
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.descriptionToggle:hover {
+  background-color: var(--bgColor-muted);
+  color: var(--fgColor-accent);
+}
+
+.descriptionToggle:focus-visible {
+  outline: 2px solid var(--focus-outlineColor);
+  outline-offset: 2px;
+}
+
+.descriptionToggle .sectionIcon {
+  color: var(--fgColor-accent);
+}
+
+.descriptionToggle .sectionTitle {
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: inherit;
 }
 
 .headerIcon {
