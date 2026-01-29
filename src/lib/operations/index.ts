@@ -52,12 +52,18 @@ operationsManager.registerCompletionHandler(
     }
     const position = await focusStore.getTopicPosition(dateKey, targetId);
 
-    // Mark the original topic as skipped (keeps it in history)
+    // Try to mark as skipped (works for 'not-explored' topics)
+    // For 'explored' topics, this will silently fail (explored is terminal state)
     await focusStore.transitionTopic(dateKey, targetId, 'skipped', 'dashboard');
 
-    // Add the new topic to the list (don't replace - keep full history)
+    // Add the new topic at the same position
     await focusStore.addTopic(dateKey, typedResult.learningTopic, position ?? undefined);
-    log.info(`Topic added via registered handler: ${typedResult.learningTopic.id} (skipped: ${targetId})`);
+    
+    // Mark explored topics as replaced (so they don't show on dashboard)
+    // This preserves "explored" state in history while hiding from dashboard
+    await focusStore.markTopicReplaced(dateKey, targetId, typedResult.learningTopic.id);
+    
+    log.info(`Topic added via registered handler: ${typedResult.learningTopic.id} (replaced: ${targetId})`);
     
     // Notify React components that focus data has changed
     notifyFocusDataChanged();

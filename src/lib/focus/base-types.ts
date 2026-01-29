@@ -64,4 +64,6 @@ export interface LearningTopic {
   exploredAt?: string;
   /** Related thread ID if user explored this topic */
   relatedThreadId?: string;
+  /** ID of the topic that replaced this one (when user clicked "New" on explored topic) */
+  replacedByTopicId?: string;
 }

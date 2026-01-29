@@ -89,6 +89,8 @@ interface FocusStoreInterface {
   markTopicExplored(dateKey: string, topicId: string, source?: string): Promise<void>;
   /** Transition topic to new state (explored or skipped) */
   transitionTopic(dateKey: string, topicId: string, newState: TopicState, source?: string): Promise<void>;
+  /** Mark an explored topic as replaced by a new topic */
+  markTopicReplaced(dateKey: string, oldTopicId: string, newTopicId: string): Promise<void>;
   /** Remove a calibration item (when confirmed or dismissed) */
   removeCalibrationItem(skillId: string): Promise<void>;
   /** Get pending calibration items for today */
@@ -179,13 +181,35 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     const timestamps = [challengeGenerated, goalGenerated, topicsGenerated].sort();
     const latestGeneratedAt = timestamps[timestamps.length - 1];
 
+    // Filter topics for dashboard display:
+    // 1. Exclude skipped topics
+    // 2. Exclude explored topics that have been replaced
+    // 3. Limit to 3 topics (prioritize non-explored over explored)
+    const displayableTopics = latestTopics.filter(t => {
+      const state = getCurrentTopicState(t);
+      // Hide skipped topics
+      if (state === 'skipped') return false;
+      // Hide explored topics that have been replaced
+      if (state === 'explored' && t.data.replacedByTopicId) return false;
+      return true;
+    });
+    
+    // Sort: non-explored first, then explored (to prioritize active topics)
+    const sortedTopics = displayableTopics.sort((a, b) => {
+      const stateA = getCurrentTopicState(a);
+      const stateB = getCurrentTopicState(b);
+      if (stateA === 'not-explored' && stateB === 'explored') return -1;
+      if (stateA === 'explored' && stateB === 'not-explored') return 1;
+      return 0; // maintain order within same state
+    });
+    
+    // Limit to 3 topics for dashboard display
+    const dashboardTopics = sortedTopics.slice(0, 3);
+
     return {
         challenge: latestChallenge.data,
         goal: latestGoal.data,
-        // Filter out skipped topics - only show active ones on dashboard
-        learningTopics: latestTopics
-          .filter(t => getCurrentTopicState(t) !== 'skipped')
-          .map(t => t.data),
+        learningTopics: dashboardTopics.map(t => t.data),
         calibrationNeeded: record.calibrationNeeded,
         meta: {
             generatedAt: latestGeneratedAt,
@@ -610,6 +634,40 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
 
     await this.setStorage(schema);
+  }
+
+  /**
+   * Mark an explored topic as replaced by a new topic.
+   * The old topic remains in "explored" state but won't show on dashboard.
+   */
+  async markTopicReplaced(
+    dateKey: string,
+    oldTopicId: string,
+    newTopicId: string
+  ): Promise<void> {
+    const schema = await this.getStorage();
+    const record = schema.history[dateKey];
+    
+    if (!record || record.learningTopics.length === 0) {
+      log.warn('Attempted to mark topic replaced for non-existent date', { dateKey, oldTopicId });
+      return;
+    }
+
+    // Find and update the old topic
+    const lastTopicsIndex = record.learningTopics.length - 1;
+    const topicArray = record.learningTopics[lastTopicsIndex];
+    const topicIndex = topicArray.findIndex(t => t.data.id === oldTopicId);
+    
+    if (topicIndex === -1) {
+      log.warn('Topic not found for replacement marking', { dateKey, oldTopicId });
+      return;
+    }
+
+    // Update the data with replacement reference
+    topicArray[topicIndex].data.replacedByTopicId = newTopicId;
+    
+    await this.setStorage(schema);
+    log.debug('Topic marked as replaced', { dateKey, oldTopicId, newTopicId });
   }
 
   /**

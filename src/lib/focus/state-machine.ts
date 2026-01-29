@@ -87,8 +87,8 @@ const VALID_GOAL_TRANSITIONS: Record<GoalState, GoalState[]> = {
  */
 const VALID_TOPIC_TRANSITIONS: Record<TopicState, TopicState[]> = {
   'not-explored': ['explored', 'skipped'],
-  'explored': [], // Terminal state
-  'skipped': [], // Terminal state
+  'explored': [], // Terminal state - positive signal, user engaged with topic
+  'skipped': [], // Terminal state - negative signal, user dismissed topic
 };
 
 /**
