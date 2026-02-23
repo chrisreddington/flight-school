@@ -133,7 +133,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     try {
       await apiPost<void>('/api/focus/storage', schema);
     } catch (error) {
-      log.error('Failed to save to storage', { error });
+      log.error('Failed to save to storage', error instanceof Error ? error.message : String(error));
       throw error;
     }
   }

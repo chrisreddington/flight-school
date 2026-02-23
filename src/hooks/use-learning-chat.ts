@@ -44,6 +44,9 @@ import { useThreads, type UseThreadsReturn } from './use-threads';
 
 const log = logger.withTag('useLearningChat');
 
+/** How long a thread can stay `isStreaming: true` without a content update before being considered stale. */
+const STALE_STREAM_THRESHOLD_MS = 5_000;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -274,28 +277,39 @@ export function useLearningChat(): UseLearningChatReturn {
   useEffect(() => {
     if (isThreadsLoading || threads.length === 0) return;
 
-    const hasActiveStreams = streamingThreadIds.length > 0;
+    const nowMs = Date.now();
     const updates = threads
       .map((thread) => {
-        // Check for streaming messages (id starts with 'streaming-')
-        const hasStreamingMessage = thread.messages.some((message) => 
-          message.id.startsWith('streaming-')
+        if (!thread.isStreaming) return null;
+
+        // Never touch streams we started in this session — they're actively handled
+        if (pendingStreamThreadIds.has(thread.id)) return null;
+
+        const hasStreamingMessage = thread.messages.some((m) =>
+          m.id.startsWith('streaming-')
         );
+        // A stream is stale when the job executor has stopped updating the thread
+        // (live jobs write every ~400ms, so 5s with no update means the job is dead)
+        const isStale =
+          nowMs - new Date(thread.updatedAt).getTime() > STALE_STREAM_THRESHOLD_MS;
+
         if (hasStreamingMessage) {
-          if (hasActiveStreams && streamingThreadIds.includes(thread.id)) {
-            return null; // Still actively streaming
-          }
-          // Finalize interrupted streaming message
+          // Wait for the staleness threshold before finalizing — avoids racing a
+          // live stream that survived a very recent server reload
+          if (!isStale) return null;
           return finalizeInterruptedMessage(thread);
         }
-        return null;
+
+        // isStreaming: true with no streaming message means the job was interrupted
+        // before it wrote any content. Clear the flag immediately.
+        return { ...thread, isStreaming: false, updatedAt: now() };
       })
       .filter((thread): thread is Thread => Boolean(thread));
 
     if (updates.length === 0) return;
 
     void Promise.all(updates.map((thread) => threadStore.update(thread)));
-  }, [isThreadsLoading, threads, streamingThreadIds]);
+  }, [isThreadsLoading, threads, pendingStreamThreadIds]);
 
   // Subscribe to thread data changes from background jobs
   useEffect(() => {
