@@ -21,7 +21,7 @@ import {
   TextInput 
 } from '@primer/react';
 import { CalendarIcon, CheckCircleIcon, ClockIcon, NumberIcon } from '@primer/octicons-react';
-import { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 
 interface HabitCreationDialogProps {
   isOpen: boolean;
@@ -77,6 +77,18 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   const [customDays, setCustomDays] = useState('');
   const [includesWeekends, setIncludesWeekends] = useState(true);
   const [error, setError] = useState('');
+  
+  // Focus management: focus first input when dialog opens
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (isOpen) {
+      // Small delay to ensure dialog is mounted
+      const timer = setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   // Get actual days value (handles custom option)
   const getActiveDays = useCallback(() => {
@@ -172,6 +184,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
         { content: 'Cancel', onClick: onClose },
         { content: 'Create Habit', onClick: handleSubmit, buttonType: 'primary' },
       ]}
+      aria-describedby={error ? 'habit-creation-error' : undefined}
     >
       <Stack direction="vertical" gap="spacious">
         {/* Basic Info Section */}
@@ -180,11 +193,13 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
             <FormControl required>
               <FormControl.Label>Habit name</FormControl.Label>
               <TextInput 
+                ref={titleInputRef}
                 block 
                 value={title} 
                 onChange={(e) => setTitle(e.target.value)} 
                 placeholder="e.g., Daily CI focus"
                 size="large"
+                aria-required="true"
               />
               <FormControl.Caption>Choose a clear, motivating name</FormControl.Caption>
             </FormControl>
@@ -198,6 +213,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
                 placeholder="e.g., Spend 20-30 min improving tests" 
                 rows={2}
                 resize="vertical"
+                aria-required="true"
               />
               <FormControl.Caption>Describe your daily commitment</FormControl.Caption>
             </FormControl>
@@ -390,7 +406,9 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
 
         {/* Error Display */}
         {error && (
-          <Banner title="Error" variant="critical" description={error} />
+          <div id="habit-creation-error" role="alert" aria-live="assertive">
+            <Banner title="Error" variant="critical" description={error} />
+          </div>
         )}
       </Stack>
     </Dialog>

@@ -107,11 +107,16 @@ export const MessageBubble = memo(function MessageBubble({
               {displayContent}
             </Banner>
           ) : isStreaming && !displayContent ? (
-            <div className={styles.loadingState}>
+            <div className={styles.loadingState} role="status" aria-live="polite" aria-label="Loading response">
               <SkeletonBox height="3em" />
             </div>
           ) : (
-            <div className={styles.messageContent}>
+            <div 
+              className={styles.messageContent}
+              role={isStreaming ? 'status' : undefined}
+              aria-live={isStreaming ? 'polite' : undefined}
+              aria-label={isStreaming ? 'Streaming response' : undefined}
+            >
               <MarkdownContent content={displayContent} isStreaming={isStreaming} />
             </div>
           )}

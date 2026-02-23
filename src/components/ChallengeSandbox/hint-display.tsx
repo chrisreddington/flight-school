@@ -60,7 +60,7 @@ export function HintDisplay({
   return (
     <>
       {/* Hint messages */}
-      <div className={styles.hintMessages}>
+      <div className={styles.hintMessages} role="log" aria-label="Hint history">
         {hints.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
@@ -76,9 +76,9 @@ export function HintDisplay({
               <div className={styles.hintQuestion}>Q: {hint.question}</div>
               <div className={styles.hintText}>{hint.response.hint}</div>
               {hint.response.concepts && hint.response.concepts.length > 0 && (
-                <div className={styles.hintConcepts}>
+                <div className={styles.hintConcepts} role="list" aria-label="Related concepts">
                   {hint.response.concepts.map((concept) => (
-                    <span key={`${hint.id}-${concept}`} className={styles.conceptTag}>
+                    <span key={`${hint.id}-${concept}`} className={styles.conceptTag} role="listitem">
                       {concept}
                     </span>
                   ))}
@@ -89,10 +89,10 @@ export function HintDisplay({
         )}
 
         {isLoading && (
-          <div className={styles.hintMessage}>
+          <div className={styles.hintMessage} role="status" aria-live="polite" aria-label="Loading hint">
             <Stack direction="horizontal" align="center" justify="space-between">
               <div className={styles.loading}>
-                <Spinner size="small" />
+                <Spinner size="small" aria-hidden="true" />
                 <span>Getting hint...</span>
               </div>
               {onStopHint && (
@@ -111,7 +111,7 @@ export function HintDisplay({
         )}
 
         {error && (
-          <div className={styles.hintMessage}>
+          <div className={styles.hintMessage} role="alert" aria-live="assertive">
             <div className={styles.hintText} style={{ color: 'var(--fgColor-danger)' }}>
               {error}
             </div>

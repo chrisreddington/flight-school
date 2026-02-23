@@ -81,7 +81,12 @@ export function EvaluationResultDisplay({
     <div className={styles.sectionBody}>
       {/* Perfect score completion message */}
       {isPerfectScore && (
-        <div className={`${styles.completionBanner} ${styles.resultReveal}`} data-delay="0">
+        <div 
+          className={`${styles.completionBanner} ${styles.resultReveal}`} 
+          data-delay="0"
+          role="status"
+          aria-live="polite"
+        >
           <CheckCircleIcon size={16} />
           <span>
             <strong>Challenge Complete!</strong> You solved this challenge with a perfect score.
@@ -93,15 +98,18 @@ export function EvaluationResultDisplay({
       <div
         className={`${styles.resultBadge} ${styles.resultReveal} ${displayResult.isCorrect ? styles.correct : styles.incorrect}`}
         data-delay="0"
+        role="status"
+        aria-live="polite"
+        aria-label={`Evaluation result: ${displayResult.isCorrect ? 'Correct' : 'Not quite'}${displayResult.score !== undefined ? `, score ${displayResult.score}%` : ''}`}
       >
         {displayResult.isCorrect ? (
           <>
-            <CheckCircleIcon size={16} />
+            <CheckCircleIcon size={16} aria-hidden="true" />
             Correct!
           </>
         ) : (
           <>
-            <XCircleIcon size={16} />
+            <XCircleIcon size={16} aria-hidden="true" />
             Not quite
           </>
         )}
@@ -110,7 +118,12 @@ export function EvaluationResultDisplay({
 
       {/* Feedback text - streams in real-time or shows final */}
       {feedbackText && (
-        <div className={`${styles.feedback} ${isStreamingFeedback ? styles.feedbackStreaming : ''}`}>
+        <div 
+          className={`${styles.feedback} ${isStreamingFeedback ? styles.feedbackStreaming : ''}`}
+          role="region"
+          aria-live="polite"
+          aria-label="Evaluation feedback"
+        >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{feedbackText}</ReactMarkdown>
         </div>
       )}

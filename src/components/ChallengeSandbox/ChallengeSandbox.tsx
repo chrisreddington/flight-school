@@ -378,6 +378,7 @@ export function ChallengeSandbox({
                 className={styles.sectionHeaderToggle}
                 onClick={() => setIsEvaluationCollapsed(!isEvaluationCollapsed)}
                 aria-expanded={!isEvaluationCollapsed}
+                aria-label={`${isEvaluationCollapsed ? 'Expand' : 'Collapse'} evaluation section`}
               >
                 {isEvaluationCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
                 <span className={styles.sectionIcon}>
@@ -392,11 +393,12 @@ export function ChallengeSandbox({
                   onClick={() => setIsResetDialogOpen(true)}
                   leadingVisual={SkipIcon}
                   disabled={isEvaluating}
+                  aria-label="Reset code and evaluation results"
                 >
                   Reset
                 </Button>
                 {isEvaluating ? (
-                  <Button variant="danger" size="small" onClick={stopEvaluation}>
+                  <Button variant="danger" size="small" onClick={stopEvaluation} aria-label="Stop evaluation">
                     Stop
                   </Button>
                 ) : (
@@ -406,6 +408,7 @@ export function ChallengeSandbox({
                     onClick={handleEvaluate}
                     leadingVisual={PlayIcon}
                     disabled={!workspace.files.some(f => f.content.trim())}
+                    aria-label="Evaluate code solution"
                   >
                     Evaluate
                   </Button>
@@ -424,6 +427,7 @@ export function ChallengeSandbox({
                 className={styles.sectionHeaderToggle}
                 onClick={() => setIsHintsCollapsed(!isHintsCollapsed)}
                 aria-expanded={!isHintsCollapsed}
+                aria-label={`${isHintsCollapsed ? 'Expand' : 'Collapse'} hints section`}
               >
                 {isHintsCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
                 <span className={styles.sectionIcon}>

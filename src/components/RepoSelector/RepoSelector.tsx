@@ -178,6 +178,10 @@ export function RepoSelector({
 
   // Inline mode: compact trigger with expandable panel
   if (inline) {
+    const contextLabel = selectedRepos.length === 0 
+      ? 'No repositories selected for context' 
+      : `Context: ${selectedRepos.length} ${selectedRepos.length === 1 ? 'repository' : 'repositories'} selected - ${selectedRepos.map(r => r.name).join(', ')}`;
+    
     return (
       <div ref={containerRef} className={styles.inlineContainer}>
         {/* Trigger button */}
@@ -187,13 +191,13 @@ export function RepoSelector({
           onClick={handleToggleExpanded}
           disabled={disabled}
           aria-expanded={isExpanded}
-          aria-label={`Context: ${selectedRepos.length} repositories selected`}
+          aria-label={contextLabel}
         >
-          <RepoIcon size={14} className={styles.inlineTriggerIcon} />
+          <RepoIcon size={14} className={styles.inlineTriggerIcon} aria-hidden="true" />
           {selectedRepos.length > 0 && (
-            <span className={styles.inlineBadge}>{selectedRepos.length}</span>
+            <span className={styles.inlineBadge} aria-hidden="true">{selectedRepos.length}</span>
           )}
-          {isExpanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+          {isExpanded ? <ChevronDownIcon size={12} aria-hidden="true" /> : <ChevronRightIcon size={12} aria-hidden="true" />}
         </button>
 
         {/* Expanded panel */}
@@ -201,7 +205,7 @@ export function RepoSelector({
           <div className={styles.inlinePanel}>
             {/* Selected repos */}
             {selectedRepos.length > 0 && (
-              <div className={styles.inlineSelectedRepos}>
+              <div className={styles.inlineSelectedRepos} role="list" aria-label="Selected repositories">
                 {selectedRepos.map((repo) => (
                   <Token
                     key={repo.fullName}
@@ -210,6 +214,7 @@ export function RepoSelector({
                     leadingVisual={() => <RepoIcon size={12} />}
                     size="small"
                     className={styles.repoToken}
+                    aria-label={`Remove ${repo.fullName}`}
                   />
                 ))}
               </div>
@@ -260,14 +265,15 @@ export function RepoSelector({
                         }`}
                         onClick={() => handleSelectRepo(repo)}
                         onMouseEnter={() => setHighlightedIndex(index)}
+                        aria-label={`${repo.fullName}${repo.language ? `, ${repo.language}` : ''}`}
                       >
-                        <RepoIcon size={14} className={styles.optionIcon} />
+                        <RepoIcon size={14} className={styles.optionIcon} aria-hidden="true" />
                         <span className={styles.optionText}>
                           <span className={styles.optionOwner}>{repo.owner}/</span>
                           <span className={styles.optionName}>{repo.name}</span>
                         </span>
                         {repo.language && (
-                          <span className={styles.optionLanguage}>{repo.language}</span>
+                          <span className={styles.optionLanguage} aria-hidden="true">{repo.language}</span>
                         )}
                       </li>
                     ))}
@@ -287,7 +293,7 @@ export function RepoSelector({
     <div ref={containerRef} className={`${styles.container} ${compact ? styles.containerCompact : ''}`}>
       {/* Selected repos as tokens */}
       {selectedRepos.length > 0 && (
-        <div className={styles.selectedRepos} role="group" aria-label="Selected repositories">
+        <div className={styles.selectedRepos} role="list" aria-label="Selected repositories">
           {selectedRepos.map((repo) => (
             <Token
               key={repo.fullName}
@@ -296,6 +302,7 @@ export function RepoSelector({
               leadingVisual={() => <RepoIcon size={12} />}
               size={compact ? 'small' : 'medium'}
               className={styles.repoToken}
+              aria-label={`Remove ${repo.fullName}`}
             />
           ))}
         </div>
@@ -346,14 +353,15 @@ export function RepoSelector({
                   }`}
                   onClick={() => handleSelectRepo(repo)}
                   onMouseEnter={() => setHighlightedIndex(index)}
+                  aria-label={`${repo.fullName}${repo.language ? `, ${repo.language}` : ''}`}
                 >
-                  <RepoIcon size={16} className={styles.optionIcon} />
+                  <RepoIcon size={16} className={styles.optionIcon} aria-hidden="true" />
                   <span className={styles.optionText}>
                     <span className={styles.optionOwner}>{repo.owner}/</span>
                     <span className={styles.optionName}>{repo.name}</span>
                   </span>
                   {repo.language && (
-                    <span className={styles.optionLanguage}>{repo.language}</span>
+                    <span className={styles.optionLanguage} aria-hidden="true">{repo.language}</span>
                   )}
                 </li>
               ))}

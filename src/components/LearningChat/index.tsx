@@ -255,11 +255,11 @@ export const LearningChat = memo(function LearningChat({
         </div>
 
         {/* Messages */}
-        <div className={styles.messagesContainer}>
+        <div className={styles.messagesContainer} role="log" aria-label="Chat messages">
           {messages.length === 0 && !isStreamingInActiveThread ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>
-                <CopilotIcon size={48} />
+                <CopilotIcon size={48} aria-hidden="true" />
               </div>
               <Heading as="h3" className={styles.emptyTitle}>
                 Start a learning conversation
@@ -286,6 +286,11 @@ export const LearningChat = memo(function LearningChat({
               })}
             </div>
           )}
+          
+          {/* Screen reader announcements for streaming status */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {isStreamingInActiveThread && 'Copilot is responding...'}
+          </div>
         </div>
 
         {/* Input Area - Single Row: Context Selector | Input | Button */}
