@@ -16,8 +16,13 @@ export async function register(): Promise<void> {
     const shouldWarm = process.env.COPILOT_WARMUP_ON_START !== 'false';
     if (shouldWarm) {
       const { warmCopilotClient, shutdownAllPools } = await import('@/lib/copilot/sessions');
-      await warmCopilotClient();
-      log.info('Copilot client warmed');
+      try {
+        await warmCopilotClient();
+        log.info('Copilot client warmed');
+      } catch (err) {
+        // Non-fatal: app works without pre-warmed client; first request will init it
+        log.warn('Copilot client warmup failed (will init on first request)', { err });
+      }
       
       // Register shutdown handler (once, for SIGINT/SIGTERM)
       const shutdown = async (signal: string) => {
