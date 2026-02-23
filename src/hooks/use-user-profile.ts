@@ -12,7 +12,7 @@ import { apiGet } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
 
-export interface UseUserProfileResult {
+interface UseUserProfileResult {
   data: ProfileResponse | null;
   isLoading: boolean;
   error: string | null;

@@ -9,7 +9,7 @@ const ACTIVE_STREAM_TTL_MS = 5 * 60 * 1000;
 
 type ActiveStreamStatus = 'streaming' | 'completed' | 'failed';
 
-export interface ActiveStreamEntry {
+interface ActiveStreamEntry {
   jobId: string;
   threadId: string;
   content: string;

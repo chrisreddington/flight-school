@@ -30,7 +30,7 @@ import {
 } from 'react';
 
 /** Single breadcrumb item */
-export interface BreadcrumbItem {
+interface BreadcrumbItem {
   /** Display label */
   label: string;
   /** Link href */

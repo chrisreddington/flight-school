@@ -105,7 +105,7 @@ export interface TemplateSelection {
 /**
  * Props for the {@link QuickTemplates} component.
  */
-export interface QuickTemplatesProps {
+interface QuickTemplatesProps {
   /** Callback when a template is selected */
   onSelect: (template: TemplateSelection) => void;
   /** Callback when templates are skipped */

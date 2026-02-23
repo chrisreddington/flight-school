@@ -22,7 +22,7 @@ type LoggerInstance = ReturnType<typeof logger.withTag>;
  * 
  * @template T - Type of storage schema
  */
-export interface StorageRouteConfig<T> {
+interface StorageRouteConfig<T> {
   /** Filename for storage (e.g., 'focus-storage.json') */
   filename: string;
   /** Default schema to return when file doesn't exist */

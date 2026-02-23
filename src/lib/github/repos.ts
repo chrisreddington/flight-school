@@ -20,7 +20,7 @@ import type {
 // Repo State
 // =============================================================================
 
-export interface RepoState {
+interface RepoState {
   exists: boolean;
   hasCommits: boolean;
 }

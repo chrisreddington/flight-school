@@ -25,7 +25,7 @@ import type { EvaluationState } from '@/hooks/use-challenge-sandbox';
 import styles from './ChallengeSandbox.module.css';
 
 /** Props for EvaluationResultDisplay */
-export interface EvaluationResultDisplayProps {
+interface EvaluationResultDisplayProps {
   /** Current evaluation state with streaming data */
   evaluation: EvaluationState;
 }

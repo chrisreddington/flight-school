@@ -123,7 +123,7 @@ interface UseChallengeSandboxActions {
 }
 
 /** Return type of the useChallengeSandbox hook */
-export type UseChallengeSandboxReturn = UseChallengeSandboxState & UseChallengeSandboxActions;
+type UseChallengeSandboxReturn = UseChallengeSandboxState & UseChallengeSandboxActions;
 
 // ============================================================================
 // Initial State

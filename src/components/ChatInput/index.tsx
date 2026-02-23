@@ -9,7 +9,7 @@ import styles from './ChatInput.module.css';
 /**
  * Props for the {@link ChatInput} component.
  */
-export interface ChatInputProps {
+interface ChatInputProps {
   /** Callback when a message is submitted */
   onSend: (message: string) => void;
   /** Whether the input is disabled (e.g., during streaming) */

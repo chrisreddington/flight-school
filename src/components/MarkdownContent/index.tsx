@@ -25,7 +25,7 @@ const ReactMarkdown = dynamic(() => import('react-markdown'), {
 /**
  * Props for the {@link MarkdownContent} component.
  */
-export interface MarkdownContentProps {
+interface MarkdownContentProps {
   /** Markdown content to render */
   content: string;
   /** Whether the content is currently streaming */

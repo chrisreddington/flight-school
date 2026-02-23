@@ -39,7 +39,7 @@ async function getSkillProfileSafe(): Promise<SkillProfile> {
   }
 }
 
-export interface UseAIFocusResult {
+interface UseAIFocusResult {
   data: FocusResponse | null;
   loadingComponents: FocusComponent[];
   error: string | null;

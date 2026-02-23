@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 /** Fallback polling interval if SSE fails */
 const FALLBACK_POLL_INTERVAL_MS = 5000;
 
-export interface UseAIActivityReturn {
+interface UseAIActivityReturn {
   /** All activity events (newest last) */
   events: AIActivityEvent[];
   /** Whether event streaming is paused */

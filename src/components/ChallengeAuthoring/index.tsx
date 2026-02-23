@@ -31,7 +31,7 @@ type AuthoringMode = 'templates' | 'chat';
 /**
  * Props for the {@link ChallengeAuthoring} component.
  */
-export interface ChallengeAuthoringProps {
+interface ChallengeAuthoringProps {
   /** Callback when a challenge is saved to the queue */
   onSaveChallenge: (challenge: DailyChallenge) => void;
   /** Initial template to use (skips template selection) */

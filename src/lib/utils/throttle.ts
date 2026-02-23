@@ -10,7 +10,7 @@ type FrameHandle = number | ReturnType<typeof globalThis.setTimeout>;
 /**
  * A throttled function with a cancel method.
  */
-export interface ThrottledFn<T extends (...args: unknown[]) => void> {
+interface ThrottledFn<T extends (...args: unknown[]) => void> {
   (...args: Parameters<T>): void;
   cancel: () => void;
 }

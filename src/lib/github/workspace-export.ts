@@ -11,14 +11,14 @@ import {
   type WorkspaceExportFileInput,
 } from './readme';
 
-export interface WorkspaceExportFilesOptions {
+interface WorkspaceExportFilesOptions {
   challenge: WorkspaceExportChallengeMetadata;
   files: WorkspaceExportFileInput[];
   evaluation?: string;
   hints?: string[];
 }
 
-export interface WorkspaceExportFile {
+interface WorkspaceExportFile {
   path: string;
   content: string;
 }

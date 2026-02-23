@@ -15,7 +15,7 @@ const log = logger.withTag('README Generator');
 // =============================================================================
 
 /** Options for README generation */
-export interface ReadmeGenerationOptions {
+interface ReadmeGenerationOptions {
   /** Repository name */
   repoName: string;
   /** Learning topic */

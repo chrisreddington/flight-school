@@ -18,7 +18,7 @@ import type { HintMessage } from '@/hooks/use-challenge-sandbox';
 import styles from './ChallengeSandbox.module.css';
 
 /** Props for HintDisplay */
-export interface HintDisplayProps {
+interface HintDisplayProps {
   /** Hint conversation history */
   hints: HintMessage[];
   /** Whether a hint request is in progress */

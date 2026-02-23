@@ -22,7 +22,7 @@ import styles from './DifficultyBadge.module.css';
 type DifficultyBadgeSize = 'small' | 'large';
 
 /** Props for the DifficultyBadge component */
-export interface DifficultyBadgeProps {
+interface DifficultyBadgeProps {
   /** The difficulty level to display */
   difficulty: SkillLevel;
   /** Badge size (defaults to 'small') */

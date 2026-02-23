@@ -118,7 +118,7 @@ const DISPLAY_NAMES: Record<string, string> = {
  * getMonacoLanguage('unknown')    // 'plaintext'
  * ```
  */
-export function getMonacoLanguage(language: string): string {
+function getMonacoLanguage(language: string): string {
   return LANGUAGE_MAP[language] ?? 'plaintext';
 }
 

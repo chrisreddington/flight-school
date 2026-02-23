@@ -28,7 +28,7 @@ interface ParseError {
 /**
  * Union type for parse results.
  */
-export type ParseResult<T> = ParseSuccess<T> | ParseError;
+type ParseResult<T> = ParseSuccess<T> | ParseError;
 
 /**
  * Safely parse JSON body from a Next.js request.

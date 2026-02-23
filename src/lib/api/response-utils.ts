@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 /**
  * Standard success response format.
  */
-export interface ApiSuccessResponse<T = unknown> {
+interface ApiSuccessResponse<T = unknown> {
   success: true;
   data: T;
   meta?: Record<string, unknown>;
@@ -21,7 +21,7 @@ export interface ApiSuccessResponse<T = unknown> {
 /**
  * Standard error response format.
  */
-export interface ApiErrorResponse {
+interface ApiErrorResponse {
   success: false;
   error: string;
   meta?: Record<string, unknown>;

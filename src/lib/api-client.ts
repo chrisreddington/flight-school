@@ -14,7 +14,7 @@
  * ```
  */
 
-export interface ApiRequestOptions extends RequestInit {
+interface ApiRequestOptions extends RequestInit {
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
   /** Number of retry attempts (default: 0) */

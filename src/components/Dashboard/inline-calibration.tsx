@@ -32,7 +32,7 @@ import { useCallback, useState } from 'react';
 import styles from './Dashboard.module.css';
 
 /** Props for the InlineCalibration component */
-export interface InlineCalibrationProps {
+interface InlineCalibrationProps {
   /** Skills that need calibration */
   items: CalibrationNeededItem[];
   /** Callback when items are updated (for parent state sync) */

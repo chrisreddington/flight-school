@@ -49,7 +49,7 @@ const log = logger.withTag('useLearningChat');
 // ============================================================================
 
 /** Options for sending a learning chat message */
-export interface SendLearningMessageOptions {
+interface SendLearningMessageOptions {
   /** Enable GitHub MCP tools for repo exploration */
   useGitHubTools?: boolean;
   /** Override repos (defaults to active thread's repos) */
@@ -97,7 +97,7 @@ interface UseLearningChatActions {
 }
 
 /** Return type of the useLearningChat hook */
-export type UseLearningChatReturn = UseLearningChatState & UseLearningChatActions;
+type UseLearningChatReturn = UseLearningChatState & UseLearningChatActions;
 
 // ============================================================================
 // Helpers

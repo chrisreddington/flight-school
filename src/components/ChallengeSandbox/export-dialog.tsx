@@ -67,7 +67,7 @@ interface ExportError {
 }
 
 /** Props for the ExportToGitHubDialog component */
-export interface ExportToGitHubDialogProps {
+interface ExportToGitHubDialogProps {
   /** Whether the dialog is open */
   isOpen: boolean;
   /** Callback to close the dialog */

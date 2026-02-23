@@ -35,7 +35,7 @@ import styles from './FileManager.module.css';
 // =============================================================================
 
 /** Props for the FileManager component */
-export interface FileManagerProps {
+interface FileManagerProps {
   /** Files in the workspace */
   files: WorkspaceFile[];
   /** ID of the currently active file */

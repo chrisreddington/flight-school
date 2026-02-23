@@ -33,7 +33,7 @@ interface CachedReadme {
 /**
  * Summary extracted from a repository README.
  */
-export interface ReadmeSummary {
+interface ReadmeSummary {
   /** First ~200 chars of README content (truncated) */
   excerpt: string;
   /** Keywords extracted from README (frameworks, tools, concepts) */

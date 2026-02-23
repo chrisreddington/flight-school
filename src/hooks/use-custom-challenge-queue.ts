@@ -37,7 +37,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 /**
  * Result type for the useCustomChallengeQueue hook.
  */
-export interface UseCustomChallengeQueueResult {
+interface UseCustomChallengeQueueResult {
   /** Current queue of custom challenges (FIFO order) */
   queue: DailyChallenge[];
   /** Number of challenges in the queue */

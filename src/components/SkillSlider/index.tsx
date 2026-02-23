@@ -34,7 +34,7 @@ import styles from './SkillSlider.module.css';
 /**
  * Props for the SkillSlider component.
  */
-export interface SkillSliderProps {
+interface SkillSliderProps {
   /** Unique identifier for the skill */
   skillId: string;
   /** Human-readable skill name */

@@ -27,7 +27,7 @@ const SSE_HEADERS: HeadersInit = {
 /**
  * SSE stream event with type discriminator.
  */
-export interface SSEStreamEvent {
+interface SSEStreamEvent {
   type: string;
   [key: string]: unknown;
 }
@@ -35,7 +35,7 @@ export interface SSEStreamEvent {
 /**
  * SSE error event structure.
  */
-export interface SSEErrorEvent {
+interface SSEErrorEvent {
   type: 'error';
   message: string;
 }
@@ -43,7 +43,7 @@ export interface SSEErrorEvent {
 /**
  * Options for creating an SSE response.
  */
-export interface CreateSSEResponseOptions<TMeta = Record<string, unknown>> {
+interface CreateSSEResponseOptions<TMeta = Record<string, unknown>> {
   /** Called when the stream ends normally (before [DONE]) */
   onComplete?: () => TMeta | void | Promise<TMeta | void>;
   /** Called when an error occurs */
