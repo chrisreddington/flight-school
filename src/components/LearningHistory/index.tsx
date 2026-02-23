@@ -22,15 +22,7 @@ import type {
   LearningTopic,
 } from '@/lib/focus/types';
 import {
-  BookIcon,
   CalendarIcon,
-  CheckCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CodeIcon,
-  SearchIcon,
-  SkipIcon,
 } from '@primer/octicons-react';
 import {
   Banner,
@@ -38,7 +30,6 @@ import {
   Link,
   Spinner,
   Stack,
-  TextInput,
 } from '@primer/react';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -48,7 +39,8 @@ import styles from './LearningHistory.module.css';
 // Import sub-components and utilities
 import { ActivityGraph } from './activity-graph';
 import { GeneratingBanner } from './generating-banner';
-import { ItemCard } from './item-card';
+import { HistoryEntryCard } from './history-entry-card';
+import { HistoryFilters } from './history-filters';
 import { DateNavigation, StatsSummary } from './sidebar-components';
 import type { HistoryEntry, HistoryItem, ItemStatus, Stats, StatusFilter, TypeFilter } from './types';
 import { formatDateForDisplay, generate52WeekActivity, getItemStatus, groupEntriesByMonth, matchesSearch } from './utils';
@@ -414,96 +406,14 @@ export const LearningHistory = memo(function LearningHistory() {
           </div>
 
           {/* Search & Filters Card */}
-          <div className={styles.sidebarCard}>
-            {/* Search */}
-            <div className={styles.sidebarSearch}>
-              <TextInput
-                leadingVisual={SearchIcon}
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                block
-              />
-            </div>
-
-            {/* Filters - cleaner button group style */}
-            <div className={styles.sidebarFilters}>
-            <div className={styles.filterSection}>
-              <span className={styles.filterLabel}>Type</span>
-              <div className={styles.filterButtons}>
-                <button 
-                  type="button"
-                  onClick={() => setTypeFilter('all')}
-                  className={`${styles.filterBtn} ${typeFilter === 'all' ? styles.filterBtnActive : ''}`}
-                >
-                  All
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setTypeFilter('challenge')}
-                  className={`${styles.filterBtn} ${typeFilter === 'challenge' ? styles.filterBtnActive : ''}`}
-                >
-                  <CodeIcon size={12} /> Challenges
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setTypeFilter('goal')}
-                  className={`${styles.filterBtn} ${typeFilter === 'goal' ? styles.filterBtnActive : ''}`}
-                >
-                  <CheckIcon size={12} /> Goals
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setTypeFilter('topic')}
-                  className={`${styles.filterBtn} ${typeFilter === 'topic' ? styles.filterBtnActive : ''}`}
-                >
-                  <BookIcon size={12} /> Topics
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setTypeFilter('habit')}
-                  className={`${styles.filterBtn} ${typeFilter === 'habit' ? styles.filterBtnActive : ''}`}
-                >
-                  <CalendarIcon size={12} /> Habits
-                </button>
-              </div>
-            </div>
-
-            <div className={styles.filterSection}>
-              <span className={styles.filterLabel}>Status</span>
-              <div className={styles.filterButtons}>
-                <button 
-                  type="button"
-                  onClick={() => setStatusFilter('all')}
-                  className={`${styles.filterBtn} ${statusFilter === 'all' ? styles.filterBtnActive : ''}`}
-                >
-                  All
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setStatusFilter('active')}
-                  className={`${styles.filterBtn} ${statusFilter === 'active' ? styles.filterBtnActive : ''}`}
-                >
-                  Active
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setStatusFilter('completed')}
-                  className={`${styles.filterBtn} ${statusFilter === 'completed' ? styles.filterBtnActive : ''}`}
-                >
-                  <CheckCircleIcon size={12} /> Done
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setStatusFilter('skipped')}
-                  className={`${styles.filterBtn} ${statusFilter === 'skipped' ? styles.filterBtnActive : ''}`}
-                >
-                  <SkipIcon size={12} /> Skipped
-                </button>
-              </div>
-            </div>
-          </div>
-          </div>
+          <HistoryFilters
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            typeFilter={typeFilter}
+            onTypeFilterChange={setTypeFilter}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+          />
 
           {/* Date navigation */}
           <div className={styles.sidebarCard}>
@@ -556,50 +466,27 @@ export const LearningHistory = memo(function LearningHistory() {
                 const isToday = entry.dateKey === todayDateKey;
                 const isDayCollapsed = collapsedDays.has(entry.dateKey);
                 return (
-                  <div key={entry.dateKey} className={styles.dateSection}>
-                    <button
-                      type="button"
-                      className={styles.dateSectionHeader}
-                      onClick={() => toggleDayCollapse(entry.dateKey)}
-                      aria-expanded={!isDayCollapsed}
-                    >
-                      <div className={styles.dateSectionLeft}>
-                        <span className={styles.dateSectionChevron}>
-                          {isDayCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
-                        </span>
-                        {isToday ? (
-                          <span className={styles.todayBadge}>Today</span>
-                        ) : (
-                          <span className={styles.dateSectionTitle}>{entry.displayDate}</span>
-                        )}
-                      </div>
-                      <span className={styles.dateSectionCount}>
-                        {entry.items.length} item{entry.items.length !== 1 ? 's' : ''}
-                      </span>
-                    </button>
-                    {!isDayCollapsed && (
-                      <Stack direction="vertical" gap="condensed">
-                        {entry.items.map((item, index) => (
-                          <ItemCard
-                            key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`}
-                            item={item}
-                            dateKey={entry.dateKey}
-                            onRefresh={forceRefresh}
-                            onSkipTopic={skipAndReplaceTopic}
-                            onSkipChallenge={skipAndReplaceChallenge}
-                            onSkipGoal={skipAndReplaceGoal}
-                            onStopSkipTopic={stopTopicSkip}
-                            onStopSkipChallenge={stopChallengeSkip}
-                            onStopSkipGoal={stopGoalSkip}
-                            onExploreTopic={handleExploreTopic}
-                            isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
-                            isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
-                            isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
-                          />
-                        ))}
-                      </Stack>
-                    )}
-                  </div>
+                  <HistoryEntryCard
+                    key={entry.dateKey}
+                    entry={entry}
+                    isToday={isToday}
+                    isCollapsed={isDayCollapsed}
+                    onToggleCollapse={() => toggleDayCollapse(entry.dateKey)}
+                    onRefresh={forceRefresh}
+                    onSkipTopic={skipAndReplaceTopic}
+                    onSkipChallenge={skipAndReplaceChallenge}
+                    onSkipGoal={skipAndReplaceGoal}
+                    onStopSkipTopic={stopTopicSkip}
+                    onStopSkipChallenge={stopChallengeSkip}
+                    onStopSkipGoal={stopGoalSkip}
+                    onExploreTopic={handleExploreTopic}
+                    skippingTopicIds={skippingTopicIds}
+                    skippingChallengeIds={skippingChallengeIds}
+                    skippingGoalIds={skippingGoalIds}
+                    activeTopicIds={activeTopicIds}
+                    activeChallengeIds={activeChallengeIds}
+                    activeGoalIds={activeGoalIds}
+                  />
                 );
               })}
 

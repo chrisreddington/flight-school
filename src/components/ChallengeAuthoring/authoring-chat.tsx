@@ -10,11 +10,8 @@
  * @see SPEC-006 S1, AC1.2, AC1.3 for authoring chat requirements
  */
 
-import { MarkdownContent } from '@/components/MarkdownContent';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import type { DailyChallenge } from '@/lib/focus/types';
-import { CheckIcon, CopilotIcon, PersonIcon } from '@primer/octicons-react';
-import { Avatar, Button, Spinner, Stack, Textarea } from '@primer/react';
 import {
   forwardRef,
   useCallback,
@@ -26,11 +23,13 @@ import {
 } from 'react';
 import styles from './ChallengeAuthoring.module.css';
 import type { TemplateSelection } from './quick-templates';
+import { AuthoringMessageList } from './authoring-message-list';
+import { AuthoringInputForm } from './authoring-input-form';
 
 /**
  * Message in the authoring conversation.
  */
-interface AuthoringMessage {
+export interface AuthoringMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
@@ -287,116 +286,27 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
 
         {/* Messages area */}
         <div className={styles.messagesArea}>
-          {messages.length === 0 && !isStreaming ? (
-            <div className={styles.emptyChat}>
-              <div className={styles.emptyChatIcon}>
-                <CopilotIcon size={48} />
-              </div>
-              <h2 className={styles.emptyChatTitle}>
-                Describe your challenge
-              </h2>
-              <p className={styles.emptyChatDescription}>
-                Tell me what kind of challenge you want to create. I&apos;ll ask
-                clarifying questions and help you design it.
-              </p>
-            </div>
-          ) : (
-            <ul className={styles.messageList} aria-label="Conversation">
-              {messages.map((message) => (
-                <li key={message.id} className={styles.message}>
-                  <div className={styles.messageAvatar}>
-                    {message.role === 'user' ? (
-                      userAvatarUrl ? (
-                        <Avatar src={userAvatarUrl} size={32} alt="You" />
-                      ) : (
-                        <div className={styles.messageAvatarUser}>
-                          <PersonIcon size={16} />
-                        </div>
-                      )
-                    ) : (
-                      <div className={styles.messageAvatarAssistant}>
-                        <CopilotIcon size={16} />
-                      </div>
-                    )}
-                  </div>
-                  <div
-                    className={`${styles.messageContent} ${
-                      message.role === 'user' ? styles.messageContentUser : ''
-                    }`}
-                  >
-                    {message.role === 'assistant' ? (
-                      <MarkdownContent content={message.content} />
-                    ) : (
-                      message.content
-                    )}
-                  </div>
-                </li>
-              ))}
-              {isStreaming && streamingContent && (
-                <li className={styles.message}>
-                  <div className={styles.messageAvatar}>
-                    <div className={styles.messageAvatarAssistant}>
-                      <CopilotIcon size={16} />
-                    </div>
-                  </div>
-                  <div className={styles.messageContent}>
-                    <MarkdownContent content={streamingContent} isStreaming />
-                  </div>
-                </li>
-              )}
-              <div ref={messagesEndRef} />
-            </ul>
-          )}
+          <AuthoringMessageList
+            messages={messages}
+            isStreaming={isStreaming}
+            streamingContent={streamingContent}
+            userAvatarUrl={userAvatarUrl}
+            messagesEndRef={messagesEndRef}
+            pendingChallenge={pendingChallenge}
+            onCreateChallenge={handleCreateChallenge}
+          />
         </div>
 
         {/* Input area */}
-        <form onSubmit={handleSubmit} className={styles.inputArea}>
-          <div className={styles.inputWrapper}>
-            <Textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Describe your challenge idea..."
-              disabled={isStreaming}
-              rows={2}
-              resize="vertical"
-              block
-              aria-label="Challenge description"
-            />
-          </div>
-          <Stack direction="vertical" gap="condensed">
-            {isStreaming ? (
-              <Button variant="danger" onClick={handleStop} aria-label="Stop generating">
-                <Spinner size="small" />
-                Stop
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={!inputValue.trim()}
-              >
-                Send
-              </Button>
-            )}
-          </Stack>
-        </form>
-
-        {/* Create Challenge button - only shown when a challenge is ready */}
-        {pendingChallenge && !isStreaming && (
-          <div className={styles.createChallengeBar}>
-            <Stack direction="horizontal" align="center" justify="space-between" gap="normal">
-              <span className={styles.challengeReadyText}>
-                ✨ Challenge ready: <strong>{pendingChallenge.title}</strong>
-              </span>
-              <Button variant="primary" onClick={handleCreateChallenge}>
-                <CheckIcon size={16} />
-                Create Challenge
-              </Button>
-            </Stack>
-          </div>
-        )}
+        <AuthoringInputForm
+          inputValue={inputValue}
+          isStreaming={isStreaming}
+          inputRef={inputRef}
+          onInputChange={setInputValue}
+          onSubmit={handleSubmit}
+          onKeyDown={handleKeyDown}
+          onStop={handleStop}
+        />
       </div>
     );
   }

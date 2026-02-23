@@ -10,40 +10,23 @@
 import { AppHeader } from '@/components/AppHeader';
 import { HabitCreationDialog } from '@/components/Habits/HabitCreationDialog';
 import { HabitEditDialog } from '@/components/Habits/HabitEditDialog';
+import { HabitStatsSection } from '@/components/Habits/habit-stats-section';
+import { HabitListSection } from '@/components/Habits/habit-list-section';
 import { ProfileNav } from '@/components/ProfileNav';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { habitStore } from '@/lib/habits';
 import {
   checkInHabit,
-  isPendingToday,
   skipHabitDay,
   undoCheckIn,
-  getRemainingSkips,
 } from '@/lib/habits/state-machine';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { logger } from '@/lib/logger';
 import {
-  CheckCircleIcon,
-  ClockIcon,
-  FlameIcon,
-  GraphIcon,
-  KebabHorizontalIcon,
   LightBulbIcon,
-  PencilIcon,
-  PlusIcon,
-  SkipIcon,
-  StopIcon,
-  TrashIcon,
-  UndoIcon,
 } from '@primer/octicons-react';
 import {
-  ActionList,
-  ActionMenu,
-  Button,
-  CounterLabel,
   Heading,
-  IconButton,
-  Label,
   Spinner,
   Stack,
   Text,
@@ -176,159 +159,6 @@ export default function HabitsPage() {
   const totalCompletions = completedHabits.length;
   const currentStreaks = activeHabits.filter((h) => h.currentDay > 0).length;
 
-  const getTrackingLabel = (mode: 'time' | 'count' | 'binary'): string => {
-    switch (mode) {
-      case 'time':
-        return 'Time-based';
-      case 'count':
-        return 'Count-based';
-      case 'binary':
-        return 'Yes/No';
-      default:
-        return mode;
-    }
-  };
-
-  const getStateLabel = (habit: HabitWithHistory) => {
-    switch (habit.state) {
-      case 'active':
-        return <Label variant="success">Active</Label>;
-      case 'not-started':
-        return <Label variant="secondary">Not Started</Label>;
-      case 'paused':
-        return <Label variant="attention">Paused</Label>;
-      case 'completed':
-        return <Label variant="done">Completed</Label>;
-      case 'abandoned':
-        return <Label variant="danger">Abandoned</Label>;
-      default:
-        return null;
-    }
-  };
-
-  const renderHabitCard = (habit: HabitWithHistory, showActions = true) => {
-    const isPending = isPendingToday(habit);
-    const hasCheckedIn = !isPending && habit.currentDay > 0;
-    const progress = (habit.currentDay / habit.totalDays) * 100;
-    const remainingSkips = getRemainingSkips(habit);
-
-    return (
-      <div key={habit.id} className={styles.habitCard}>
-        <div className={styles.habitCardHeader}>
-          <div className={styles.habitCardInfo}>
-            <div className={styles.habitTitle}>{habit.title}</div>
-            {habit.description && (
-              <div className={styles.habitDescription}>{habit.description}</div>
-            )}
-          </div>
-
-          <Stack direction="horizontal" gap="condensed" align="center">
-            {getStateLabel(habit)}
-
-            {showActions && (
-              <ActionMenu>
-                <ActionMenu.Anchor>
-                  <IconButton
-                    icon={KebabHorizontalIcon}
-                    variant="invisible"
-                    aria-label="Habit options"
-                    size="small"
-                  />
-                </ActionMenu.Anchor>
-                <ActionMenu.Overlay>
-                  <ActionList>
-                    <ActionList.Item onSelect={() => setEditingHabit(habit)}>
-                      <ActionList.LeadingVisual>
-                        <PencilIcon />
-                      </ActionList.LeadingVisual>
-                      Edit
-                    </ActionList.Item>
-                    <ActionList.Divider />
-                    <ActionList.Item onSelect={() => handleStop(habit)}>
-                      <ActionList.LeadingVisual>
-                        <StopIcon />
-                      </ActionList.LeadingVisual>
-                      Stop Habit
-                    </ActionList.Item>
-                    <ActionList.Item variant="danger" onSelect={() => handleDelete(habit)}>
-                      <ActionList.LeadingVisual>
-                        <TrashIcon />
-                      </ActionList.LeadingVisual>
-                      Delete
-                    </ActionList.Item>
-                  </ActionList>
-                </ActionMenu.Overlay>
-              </ActionMenu>
-            )}
-          </Stack>
-        </div>
-
-        <div className={styles.habitMeta}>
-          <Label size="small">
-            <ClockIcon size={12} /> {habit.totalDays} days
-          </Label>
-          <Label size="small">{getTrackingLabel(habit.tracking.mode)}</Label>
-          <Label size="small">
-            Day {habit.currentDay}/{habit.totalDays}
-          </Label>
-          {habit.allowedSkips > 0 && (
-            <Label size="small" variant={remainingSkips === 0 ? 'attention' : 'secondary'}>
-              <SkipIcon size={12} /> {remainingSkips} skip{remainingSkips !== 1 ? 's' : ''} left
-            </Label>
-          )}
-        </div>
-
-        {habit.state !== 'completed' && (
-          <div className={styles.progressBar}>
-            <div className={styles.progressFill} style={{ width: `${progress}%` }} />
-          </div>
-        )}
-
-        {showActions && habit.state === 'active' && (
-          <Stack direction="horizontal" gap="condensed" style={{ marginTop: 'var(--base-size-12)' }}>
-            {isPending && (
-              <>
-                <Button
-                  size="small"
-                  variant="primary"
-                  leadingVisual={CheckCircleIcon}
-                  onClick={() => handleCheckIn(habit, true)}
-                >
-                  Complete Today
-                </Button>
-                {remainingSkips > 0 && (
-                  <Button
-                    size="small"
-                    variant="invisible"
-                    leadingVisual={SkipIcon}
-                    onClick={() => handleSkip(habit)}
-                  >
-                    Skip
-                  </Button>
-                )}
-              </>
-            )}
-            {hasCheckedIn && (
-              <>
-                <Label variant="success">
-                  <CheckCircleIcon size={12} /> Checked in today
-                </Label>
-                <Button
-                  size="small"
-                  variant="invisible"
-                  leadingVisual={UndoIcon}
-                  onClick={() => handleUndo(habit)}
-                >
-                  Undo
-                </Button>
-              </>
-            )}
-          </Stack>
-        )}
-      </div>
-    );
-  };
-
   if (isLoading) {
     return (
       <div className={styles.root}>
@@ -360,43 +190,13 @@ export default function HabitsPage() {
         <aside className={styles.sidebar}>
           <ProfileNav />
 
-          <div className={styles.sidebarCard}>
-            <div className={styles.sidebarHeader}>
-              <FlameIcon size={20} className={styles.sidebarIcon} />
-              <h2 className={styles.sidebarTitle}>Habit Tracker</h2>
-            </div>
-            <p className={styles.sidebarSubtitle}>Build lasting habits</p>
-            
-            <div className={styles.statsGrid}>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{activeHabits.length}</span>
-                <span className={styles.statLabel}>Active</span>
-              </div>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{totalCheckIns}</span>
-                <span className={styles.statLabel}>Check-ins</span>
-              </div>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{currentStreaks}</span>
-                <span className={styles.statLabel}>Streaks</span>
-              </div>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{totalCompletions}</span>
-                <span className={styles.statLabel}>Completed</span>
-              </div>
-            </div>
-
-            {activeHabits.length > 0 && (
-              <Button
-                variant="primary"
-                leadingVisual={PlusIcon}
-                onClick={() => setIsCreateDialogOpen(true)}
-                style={{ marginTop: 'var(--base-size-16, 16px)', width: '100%' }}
-              >
-                New Habit
-              </Button>
-            )}
-          </div>
+          <HabitStatsSection
+            activeHabitsCount={activeHabits.length}
+            totalCheckIns={totalCheckIns}
+            currentStreaks={currentStreaks}
+            totalCompletions={totalCompletions}
+            onNewHabitClick={() => setIsCreateDialogOpen(true)}
+          />
 
           <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
             <h3 className={styles.tipTitle}>
@@ -418,80 +218,18 @@ export default function HabitsPage() {
             </Text>
           </div>
 
-          {/* Active Habits */}
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <Stack direction="horizontal" gap="condensed" align="center">
-                <FlameIcon size={20} />
-                <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-                  Active Habits
-                </Heading>
-                <CounterLabel>{activeHabits.length}</CounterLabel>
-              </Stack>
-              <Button
-                variant="primary"
-                size="small"
-                leadingVisual={PlusIcon}
-                onClick={() => setIsCreateDialogOpen(true)}
-              >
-                New Habit
-              </Button>
-            </div>
-
-            {activeHabits.length === 0 ? (
-              <div className={styles.emptyState}>
-                <FlameIcon size={48} className={styles.emptyIcon} />
-                <Heading as="h3" style={{ fontSize: '1.125rem', marginTop: 'var(--base-size-16)' }}>
-                  No active habits yet
-                </Heading>
-                <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: 'var(--base-size-8)' }}>
-                  Start building better habits by creating your first one.
-                </Text>
-              </div>
-            ) : (
-              <div className={styles.habitsList}>
-                {activeHabits.map((habit) => renderHabitCard(habit))}
-              </div>
-            )}
-          </section>
-
-          {/* Completed Habits */}
-          {completedHabits.length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <Stack direction="horizontal" gap="condensed" align="center">
-                  <GraphIcon size={20} />
-                  <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-                    Completed Habits
-                  </Heading>
-                  <CounterLabel>{completedHabits.length}</CounterLabel>
-                </Stack>
-              </div>
-
-              <div className={styles.habitsList}>
-                {completedHabits.map((habit) => renderHabitCard(habit, false))}
-              </div>
-            </section>
-          )}
-
-          {/* Abandoned/Stopped Habits */}
-          {abandonedHabits.length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <Stack direction="horizontal" gap="condensed" align="center">
-                  <StopIcon size={20} />
-                  <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-                    Stopped Habits
-                  </Heading>
-                  <CounterLabel>{abandonedHabits.length}</CounterLabel>
-                </Stack>
-              </div>
-
-              <div className={styles.habitsList}>
-                {abandonedHabits.map((habit) => renderHabitCard(habit, false))}
-              </div>
-            </section>
-          )}
+          <HabitListSection
+            activeHabits={activeHabits}
+            completedHabits={completedHabits}
+            abandonedHabits={abandonedHabits}
+            onCheckIn={handleCheckIn}
+            onSkip={handleSkip}
+            onUndo={handleUndo}
+            onEdit={setEditingHabit}
+            onStop={handleStop}
+            onDelete={handleDelete}
+            onNewHabitClick={() => setIsCreateDialogOpen(true)}
+          />
         </div>
       </main>
 
