@@ -125,7 +125,7 @@ export function GoalCard({
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Label size="small" variant="accent">
-            <span style={{ marginRight: '4px', display: 'inline-flex' }}><CheckIcon size={12} /></span>
+            <span className={styles.iconInline}><CheckIcon size={12} /></span>
             Goal
           </Label>
           {(isCompleted || isSkipped) && showHistoryActions && (

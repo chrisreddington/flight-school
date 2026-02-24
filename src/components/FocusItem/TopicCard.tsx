@@ -131,7 +131,7 @@ export function TopicCard({
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Label size="small" variant="accent">
-            <span style={{ marginRight: '4px', display: 'inline-flex' }}><BookIcon size={12} /></span>
+            <span className={styles.iconInline}><BookIcon size={12} /></span>
             {topic.type === 'best-practice' ? 'Best Practice' : topic.type === 'concept' ? 'Concept' : 'Pattern'}
           </Label>
           {(isExplored || isSkipped) && showHistoryActions && (
