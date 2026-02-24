@@ -29,6 +29,7 @@ import {
     getFallbackLearningTopics,
 } from '@/lib/focus/server-utils';
 import type { FocusResponse, LearningTopic } from '@/lib/focus/types';
+import type { InterleavingHint } from '@/lib/focus/interleaving';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import type { CompactDeveloperProfile } from '@/lib/github/types';
 import { logger } from '@/lib/logger';
@@ -45,13 +46,24 @@ type FocusComponent = 'challenge' | 'goal' | 'learningTopics' | 'singleTopic';
 async function generateSingleComponent(
   component: Exclude<FocusComponent, 'singleTopic'>,
   serializedContext: string,
-  skillProfile?: SkillProfile
+  skillProfile?: SkillProfile,
+  options: {
+    reviewTopics?: string[];
+    interleavingHint?: InterleavingHint;
+    debugMode?: boolean;
+  } = {}
 ): Promise<Partial<FocusResponse>> {
+  const { reviewTopics, interleavingHint, debugMode } = options;
+
   // Select the appropriate prompt builder
-  const promptBuilders = {
-    challenge: buildChallengePrompt,
-    goal: buildGoalPrompt,
-    learningTopics: buildLearningTopicsPrompt,
+  const buildPrompt = () => {
+    if (component === 'learningTopics') {
+      return buildLearningTopicsPrompt(serializedContext, skillProfile, reviewTopics);
+    }
+    if (component === 'challenge') {
+      return buildChallengePrompt(serializedContext, skillProfile, interleavingHint, { forceDebug: debugMode });
+    }
+    return buildGoalPrompt(serializedContext, skillProfile);
   };
   
   // Debug: log skill profile info
@@ -62,7 +74,7 @@ async function generateSingleComponent(
     log.info(`[${component}] No skill profile provided`);
   }
   
-  const prompt = promptBuilders[component](serializedContext, skillProfile);
+  const prompt = buildPrompt();
   
   const loggedSession = await createLoggedLightweightCoachSession(
     `Focus: ${component}`,
@@ -132,9 +144,12 @@ async function generateFocus(options: {
   component?: FocusComponent;
   skillProfile?: SkillProfile;
   existingTopicTitles?: string[];
+  reviewTopics?: string[];
+  interleavingHint?: InterleavingHint;
+  debugMode?: boolean;
 } = {}): Promise<Partial<FocusResponse> | { learningTopic: LearningTopic }> {
   const startTime = nowMs();
-  const { component, skillProfile, existingTopicTitles } = options;
+  const { component, skillProfile, existingTopicTitles, reviewTopics, interleavingHint, debugMode } = options;
 
   let serializedContext = '';
   let compactProfile: CompactDeveloperProfile | null = null;
@@ -156,7 +171,11 @@ async function generateFocus(options: {
 
     // Single component request - fast path
     if (component) {
-      const result = await generateSingleComponent(component, serializedContext, skillProfile);
+      const result = await generateSingleComponent(component, serializedContext, skillProfile, {
+        reviewTopics,
+        interleavingHint,
+        debugMode: component === 'challenge' ? debugMode : undefined,
+      });
       
       // Add calibration suggestions for challenge requests
       if (component === 'challenge' && compactProfile) {
@@ -169,9 +188,9 @@ async function generateFocus(options: {
     // Full request - generate all components in parallel
     log.info('Generating all components in parallel...');
     const [challengeResult, goalResult, topicsResult] = await Promise.allSettled([
-      generateSingleComponent('challenge', serializedContext, skillProfile),
+      generateSingleComponent('challenge', serializedContext, skillProfile, { interleavingHint }),
       generateSingleComponent('goal', serializedContext, skillProfile),
-      generateSingleComponent('learningTopics', serializedContext, skillProfile),
+      generateSingleComponent('learningTopics', serializedContext, skillProfile, { reviewTopics }),
     ]);
 
     const totalTime = nowMs() - startTime;
@@ -238,12 +257,18 @@ export async function POST(request: NextRequest) {
     component?: FocusComponent;
     skillProfile?: SkillProfile;
     existingTopicTitles?: string[];
+    reviewTopics?: string[];
+    interleavingHint?: InterleavingHint;
+    debugMode?: boolean;
   }>(request, {});
   
   const result = await generateFocus({ 
     component: body.component,
     skillProfile: body.skillProfile,
     existingTopicTitles: body.existingTopicTitles,
+    reviewTopics: body.reviewTopics,
+    interleavingHint: body.interleavingHint,
+    debugMode: body.debugMode,
   });
   return NextResponse.json(result);
 }

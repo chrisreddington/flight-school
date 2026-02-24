@@ -12,10 +12,16 @@ export interface DailyChallenge {
   id: string;
   title: string;
   description: string;
+  /** Challenge type: 'implement' = write from scratch, 'debug' = fix broken code */
+  type?: 'implement' | 'debug';
+  /** Pre-populated broken code for debug challenges (only used when type === 'debug') */
+  brokenCode?: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   language: string;
   estimatedTime: string;
   whyThisChallenge: string[];
+  /** Signal describing what inspired this challenge */
+  contextSource?: 'issue' | 'activity' | 'skills';
   /** Completion status */
   status?: 'completed' | 'skipped' | 'in-progress' | 'pending';
   /** ISO timestamp when completed/skipped */
@@ -31,6 +37,8 @@ export interface DailyChallenge {
    * and is stored in the custom queue rather than generated daily.
    */
   isCustom?: boolean;
+  /** Learner-written reflection captured after completion */
+  selfExplanation?: string;
 }
 
 export interface DailyGoal {
@@ -62,8 +70,12 @@ export interface LearningTopic {
   explored?: boolean;
   /** ISO timestamp when explored */
   exploredAt?: string;
+  /** ISO timestamp when topic was last reviewed via retrieval practice */
+  lastReviewedAt?: string;
   /** Related thread ID if user explored this topic */
   relatedThreadId?: string;
   /** ID of the topic that replaced this one (when user clicked "New" on explored topic) */
   replacedByTopicId?: string;
+  /** Learner-written reflection captured after completion */
+  selfExplanation?: string;
 }

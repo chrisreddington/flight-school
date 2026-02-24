@@ -35,6 +35,8 @@ interface Template {
   language?: string;
   /** Suggested difficulty (optional) */
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  /** Challenge type (optional) */
+  type?: 'implement' | 'debug';
 }
 
 /**
@@ -89,6 +91,16 @@ const TEMPLATES: Template[] = [
     initialPrompt: 'I want to create a performance challenge to practice optimization.',
     difficulty: 'advanced',
   },
+  {
+    id: 'debug',
+    name: '🐛 Debug Challenge',
+    description: 'Find and fix bugs in existing code',
+    icon: CodeIcon,
+    initialPrompt: 'Create a debug challenge with type: "debug". Use a description like "Find and fix the bugs in this TypeScript code" and provide brokenCode with 1-3 intentional bugs.',
+    difficulty: 'intermediate',
+    language: 'TypeScript',
+    type: 'debug',
+  },
 ];
 
 /**
@@ -100,6 +112,7 @@ export interface TemplateSelection {
   initialPrompt?: string;
   language?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  type?: 'implement' | 'debug';
 }
 
 /**
@@ -132,6 +145,7 @@ export function QuickTemplates({ onSelect, onSkip }: QuickTemplatesProps) {
         initialPrompt: template.initialPrompt,
         language: template.language,
         difficulty: template.difficulty,
+        type: template.type,
       });
     },
     [onSelect]

@@ -151,6 +151,7 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
                     template: template.name,
                     difficulty: template.difficulty,
                     language: template.language,
+                    type: template.type,
                   }
                 : undefined,
             }),

@@ -1,0 +1,63 @@
+.card {
+  padding: var(--base-size-16, 16px);
+  background: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.header {
+  margin-bottom: var(--base-size-12, 12px);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.subtitle {
+  margin: var(--base-size-4, 4px) 0 0 0;
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.topicCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-12, 12px);
+  padding: var(--base-size-12, 12px);
+  background: var(--bgColor-muted, #f6f8fa);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.topicMeta {
+  min-width: 0;
+}
+
+.topicTitle {
+  margin: 0 0 var(--base-size-4, 4px) 0;
+  font-size: var(--text-body-size-medium, 14px);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.topicAge {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+.quizOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--base-size-16, 16px);
+  background: rgba(31, 35, 40, 0.4);
+  z-index: 1000;
+}
+
+.quizPanel {
+  width: min(640px, 100%);
+}

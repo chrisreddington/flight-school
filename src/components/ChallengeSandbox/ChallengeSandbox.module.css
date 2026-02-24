@@ -38,6 +38,86 @@
   gap: var(--base-size-8);
 }
 
+.guidedPanelWrapper {
+  padding: var(--base-size-12);
+  border-bottom: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-default);
+}
+
+.guidedPanel {
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-12);
+  background-color: var(--bgColor-muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.guidedPanelLoading {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+  color: var(--fgColor-muted);
+  padding: var(--base-size-4) 0;
+}
+
+.guidedStepTitle {
+  font-size: var(--text-body-size-large);
+  font-weight: var(--base-text-weight-semibold);
+  margin: 0;
+  color: var(--fgColor-default);
+}
+
+.guidedReflectWrapper {
+  display: flex;
+}
+
+.guidedPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-8);
+}
+
+.guidedHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.guidedStepText {
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.guidedInstruction {
+  margin: 0;
+  font-size: var(--text-body-size-medium);
+  color: var(--fgColor-default);
+  line-height: 1.5;
+}
+
+.guidedElaboration {
+  background-color: var(--bgColor-accent-muted);
+  border: 1px solid var(--borderColor-accent-muted);
+  border-left: 3px solid var(--borderColor-accent-emphasis);
+  border-radius: var(--borderRadius-small);
+  padding: var(--base-size-8) var(--base-size-12);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-default);
+}
+
+.guidedNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--base-size-8);
+}
+
 .headerTitleGroup {
   display: flex;
   flex-direction: column;
@@ -337,6 +417,26 @@
 
 .sectionBody {
   padding: var(--base-size-12);
+}
+
+.relatedSuggestions {
+  margin-top: var(--base-size-12);
+  padding-top: var(--base-size-12);
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.relatedSuggestionsHeading {
+  margin: 0 0 var(--base-size-8) 0;
+  font-size: var(--text-body-size-small);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-default);
+}
+
+.relatedSuggestionCard {
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-8);
+  background-color: var(--bgColor-muted);
 }
 
 /* Evaluation result */

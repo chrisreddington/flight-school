@@ -5,6 +5,11 @@
  * Centralized location for all GitHub-related types to avoid duplication.
  */
 
+import type { OpenIssueSummary } from './issues';
+
+// Import WorkPatternSummary so it can be re-exported and used in CompactDeveloperProfile
+export type { WorkPatternSummary } from './work-patterns';
+
 // ============================================================================
 // Compact Profile Types (Token-Efficient)
 // ============================================================================
@@ -60,6 +65,9 @@ export interface ActivitySummary {
  * - `g`: identified skill gaps
  * - `rd`: README-derived keywords (from top repos)
  * - `cp`: commit pattern (conventional vs freeform)
+ * - `deps`: top-level dependencies from dependency files (F4)
+ * - `si`: starred repo interest signals — languages + topics (F5)
+ * - `wp`: work pattern summary from recent PRs/issues (F6)
  *
  * @example
  * ```typescript
@@ -89,6 +97,14 @@ export interface CompactDeveloperProfile {
   rd: string[];
   /** Commit pattern: conventional commits vs freeform */
   cp: 'conventional' | 'freeform' | 'mixed';
+  /** Top-level dependencies from dependency files (F4) */
+  deps?: string[];
+  /** Star interest signals: languages + topics from recently starred repos (F5) */
+  si?: string[];
+  /** Work patterns from recent PRs/issues: dominant activity types (F6) */
+  wp?: import('./work-patterns').WorkPatternSummary;
+  /** Recently updated open issues authored by the user */
+  openIssues?: OpenIssueSummary[];
 }
 
 // ============================================================================

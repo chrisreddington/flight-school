@@ -28,6 +28,7 @@ import styles from './Dashboard.module.css';
 import { Footer } from './footer';
 import { ProTipSection } from './pro-tip-section';
 import { ProfileActivitySection } from './profile-activity-section';
+import { ReviewDueWidget } from './review-due-widget';
 import { WelcomeSection } from './welcome-section';
 
 // ============================================================================
@@ -48,6 +49,7 @@ export function Dashboard() {
     componentTimestamps, 
     skipAndReplaceTopic, 
     skipAndReplaceChallenge,
+    requestDebugChallenge,
     skipAndReplaceGoal,
     skippingTopicIds,
     skippingChallengeIds,
@@ -168,6 +170,7 @@ export function Dashboard() {
         <div className={styles.mainContent}>
           <Stack direction="vertical" gap="spacious">
             <WelcomeSection displayName={displayName} isLoading={profileLoading} />
+            <ReviewDueWidget />
             <DailyFocusSection
               profile={profile} 
               isLoading={profileLoading}
@@ -182,6 +185,7 @@ export function Dashboard() {
               onStopComponent={stopComponent}
               skippingTopicIds={skippingTopicIds}
               onSkipChallenge={handleSkipChallenge}
+              onRequestDebugChallenge={requestDebugChallenge}
               onStopSkipChallenge={handleStopSkipChallenge}
               skippingChallengeIds={skippingChallengeIds}
               onSkipGoal={handleSkipGoal}

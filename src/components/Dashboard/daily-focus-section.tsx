@@ -58,6 +58,8 @@ interface DailyFocusSectionProps {
   skippingTopicIds?: Set<string>;
   /** Callback to skip a challenge and get a replacement */
   onSkipChallenge?: (challengeId: string, existingChallengeTitles: string[]) => void;
+  /** Callback to request a debug challenge */
+  onRequestDebugChallenge?: () => void;
   /** Callback to stop challenge regeneration (receives challenge ID) */
   onStopSkipChallenge?: (challengeId: string) => void;
   /** Set of challenge IDs currently being skipped/regenerated */
@@ -87,6 +89,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   onStopSkipTopic,
   skippingTopicIds = new Set(),
   onSkipChallenge,
+  onRequestDebugChallenge,
   onStopSkipChallenge,
   skippingChallengeIds = new Set(),
   onSkipGoal,
@@ -116,7 +119,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   }, []);
   
   // Get the daily challenge from AI focus or fallback
-  const dailyChallenge: DailyChallenge | null = aiFocus?.challenge || getDynamicChallenge(profile);
+  const dailyChallenge: DailyChallenge | null = (aiFocus?.challenge?.title ? aiFocus.challenge : null) || getDynamicChallenge(profile);
   
   // Use custom challenge queue for priority handling (S3)
   const {
@@ -232,11 +235,13 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onEdit={isCustomChallenge ? () => router.push(`/challenge/edit/${challenge.id}`) : undefined}
                   onCreate={handleCreateChallenge}
                   onSkipAndReplace={!isCustomChallenge ? onSkipChallenge : undefined}
+                  onRequestDebugChallenge={!isCustomChallenge ? onRequestDebugChallenge : undefined}
                   onStopSkip={onStopSkipChallenge}
                   isSkipping={skippingChallengeIds.has(challenge.id)}
                   refreshDisabled={isChallengeLoading}
                   timestamp={componentTimestamps.challenge}
                   queueCount={queueRemaining}
+                  showIssueContextBadge={challenge.contextSource === 'issue'}
                 />
                 {calibrationNeeded.length > 0 && (
                   <InlineCalibration items={calibrationNeeded} onItemsChange={handleCalibrationChange} />

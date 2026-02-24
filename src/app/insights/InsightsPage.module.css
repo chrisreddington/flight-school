@@ -1,0 +1,93 @@
+/* insights-page.module.css
+ * 
+ * Styling for the Learning Journey Insights page layout.
+ */
+
+.container {
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+.content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--base-size-24, 24px);
+}
+
+.header {
+  margin-bottom: var(--base-size-32, 32px);
+}
+
+.heading {
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-8, 8px) 0;
+}
+
+.subheading {
+  font-size: var(--text-body-size-large, 16px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+}
+
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--base-size-20, 20px);
+  margin-bottom: var(--base-size-20, 20px);
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  padding: var(--base-size-24, 24px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  box-shadow: var(--shadow-resting-small, 0 1px 0 rgba(31, 35, 40, 0.04));
+}
+
+.cardHeading {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.difficultyList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16, 16px);
+}
+
+.languageList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12, 12px);
+}
+
+.languageRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.languageName {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: var(--text-body-size-medium, 14px);
+}
+
+.languageCount {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+}

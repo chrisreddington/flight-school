@@ -62,6 +62,8 @@ export interface ChallengeEvaluationInput {
   challenge: {
     title: string;
     description: string;
+    type?: 'implement' | 'debug';
+    brokenCode?: string;
     language: string;
     difficulty: string;
     testCases?: string;

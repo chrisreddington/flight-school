@@ -8,6 +8,12 @@
 import { getOctokit } from './client';
 import type { CreateIssueInput, CreatedIssue } from './types';
 
+export interface OpenIssueSummary {
+  title: string;
+  repo: string;
+  labels: string[];
+}
+
 /**
  * Creates a new issue in the specified repository.
  *
@@ -93,4 +99,30 @@ ${description ? `### Description\n${description}\n` : ''}
     body,
     labels: ['learning-goal'],
   });
+}
+
+/** Fetches the user's recently updated open issues (gracefully returns [] on failure). */
+export async function getOpenIssues(
+  username: string,
+  limit = 8
+): Promise<OpenIssueSummary[]> {
+  try {
+    const octokit = await getOctokit();
+    const { data } = await octokit.rest.search.issuesAndPullRequests({
+      q: `is:open is:issue author:${username}`,
+      sort: 'updated',
+      order: 'desc',
+      per_page: limit,
+    });
+
+    return data.items.map((item) => ({
+      title: item.title,
+      repo: item.repository_url.split('/').pop() || '',
+      labels: item.labels
+        .map((label) => (typeof label === 'string' ? label : label.name))
+        .filter((label): label is string => Boolean(label)),
+    }));
+  } catch {
+    return [];
+  }
 }

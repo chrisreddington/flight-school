@@ -50,6 +50,8 @@ interface UseAIFocusResult {
   skipAndReplaceTopic: (skippedTopicId: string, existingTopicTitles: string[]) => Promise<void>;
   /** Skip a challenge and regenerate a replacement */
   skipAndReplaceChallenge: (skippedChallengeId: string, existingChallengeTitles: string[]) => Promise<void>;
+  /** Request a new debug challenge */
+  requestDebugChallenge: () => Promise<void>;
   /** Skip a goal and regenerate a replacement */
   skipAndReplaceGoal: (skippedGoalId: string, existingGoalTitles: string[]) => Promise<void>;
   /** Set of topic IDs currently being skipped/regenerated */
@@ -162,7 +164,8 @@ export function useAIFocus(): UseAIFocusResult {
   /** Fetch a single component */
   const fetchComponent = useCallback(async (
     component: FocusComponent,
-    skillProfile?: SkillProfile
+    skillProfile?: SkillProfile,
+    options?: { debugMode?: boolean }
   ): Promise<Partial<FocusResponse> | null> => {
     // Cancel any existing fetch for this component
     stopComponent(component);
@@ -176,6 +179,7 @@ export function useAIFocus(): UseAIFocusResult {
       const result = await apiPost<Partial<FocusResponse>>('/api/focus', {
         component,
         skillProfile: skillProfile?.skills.length ? skillProfile : undefined,
+        ...(options?.debugMode ? { debugMode: true } : {}),
       }, { timeout: 60000, signal: controller.signal });
       
       return result;
@@ -392,6 +396,15 @@ export function useAIFocus(): UseAIFocusResult {
     });
   }, []);
 
+  const requestDebugChallenge = useCallback(async () => {
+    const skillProfile = await getSkillProfileSafe();
+    const challengeResult = await fetchComponent('challenge', skillProfile, { debugMode: true });
+
+    if (challengeResult?.challenge) {
+      await mergeAndSave(challengeResult, 'challenge');
+    }
+  }, [fetchComponent, mergeAndSave]);
+
   /** Skip a goal and generate a replacement */
   const skipAndReplaceGoal = useCallback(async (
     skippedGoalId: string,
@@ -523,6 +536,7 @@ export function useAIFocus(): UseAIFocusResult {
     refetch,
     skipAndReplaceTopic,
     skipAndReplaceChallenge,
+    requestDebugChallenge,
     skipAndReplaceGoal,
     skippingTopicIds,
     skippingChallengeIds,

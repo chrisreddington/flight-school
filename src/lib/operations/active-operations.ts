@@ -64,7 +64,7 @@ interface JobResponse {
   id: string;
   type: string;
   targetId?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   result?: unknown;
   error?: string;
 }
@@ -332,6 +332,13 @@ class ActiveOperationsManager {
 
           // Cleanup after delay
           setTimeout(() => this.cleanup(operationId), 1000);
+          return;
+        }
+
+        if (job.status === 'cancelled') {
+          log.info(`Job ${jobId} was cancelled externally`);
+          this.stopPolling(jobId);
+          this.cleanup(operationId);
           return;
         }
 

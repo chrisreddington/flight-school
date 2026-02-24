@@ -599,6 +599,64 @@ describe('Focus Storage', () => {
   });
 
   // ===========================================================================
+  // saveSelfExplanation() tests
+  // ===========================================================================
+
+  describe('saveSelfExplanation', () => {
+    it('should save self-explanation for a challenge', async () => {
+      const schema: FocusStorageSchema = {
+        history: {
+          '2024-01-15': {
+            challenges: [
+              {
+                data: mockChallenge,
+                stateHistory: [{ state: 'completed', timestamp: '2024-01-15T12:00:00.000Z' }],
+              },
+            ],
+            goals: [],
+            learningTopics: [],
+          },
+        },
+      };
+
+      vi.mocked(apiGet).mockResolvedValue(schema);
+      vi.mocked(apiPost).mockResolvedValue(undefined);
+
+      await focusStore.saveSelfExplanation('2024-01-15', 'challenge', 'challenge-1', '  I learned CI pipelines.  ');
+
+      const savedSchema = vi.mocked(apiPost).mock.calls[0][1] as FocusStorageSchema;
+      expect(savedSchema.history['2024-01-15'].challenges[0].data.selfExplanation).toBe('I learned CI pipelines.');
+    });
+
+    it('should save self-explanation for a topic', async () => {
+      const schema: FocusStorageSchema = {
+        history: {
+          '2024-01-15': {
+            challenges: [],
+            goals: [],
+            learningTopics: [
+              [
+                {
+                  data: mockTopic,
+                  stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+                },
+              ],
+            ],
+          },
+        },
+      };
+
+      vi.mocked(apiGet).mockResolvedValue(schema);
+      vi.mocked(apiPost).mockResolvedValue(undefined);
+
+      await focusStore.saveSelfExplanation('2024-01-15', 'topic', 'topic-1', 'I should revisit GitHub workflows.');
+
+      const savedSchema = vi.mocked(apiPost).mock.calls[0][1] as FocusStorageSchema;
+      expect(savedSchema.history['2024-01-15'].learningTopics[0][0].data.selfExplanation).toBe('I should revisit GitHub workflows.');
+    });
+  });
+
+  // ===========================================================================
   // getHistory() tests
   // ===========================================================================
 

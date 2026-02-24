@@ -216,6 +216,7 @@ describe('useAIFocus interface contract', () => {
       refetch: (component?: FocusComponent) => Promise<void>;
       skipAndReplaceTopic: (skippedTopicId: string, existingTopicTitles: string[]) => Promise<void>;
       skipAndReplaceChallenge: (skippedChallengeId: string, existingChallengeTitles: string[]) => Promise<void>;
+      requestDebugChallenge: () => Promise<void>;
       skipAndReplaceGoal: (skippedGoalId: string, existingGoalTitles: string[]) => Promise<void>;
       skippingTopicIds: Set<string>;
       skippingChallengeIds: Set<string>;
@@ -239,6 +240,7 @@ describe('useAIFocus interface contract', () => {
       refetch: async () => {},
       skipAndReplaceTopic: async () => {},
       skipAndReplaceChallenge: async () => {},
+      requestDebugChallenge: async () => {},
       skipAndReplaceGoal: async () => {},
       skippingTopicIds: new Set(),
       skippingChallengeIds: new Set(),
@@ -257,4 +259,3 @@ describe('useAIFocus interface contract', () => {
     expect(mockResult.skippingTopicIds).toBeInstanceOf(Set);
   });
 });
-

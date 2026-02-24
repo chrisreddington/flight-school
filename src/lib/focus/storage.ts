@@ -27,7 +27,7 @@
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
-import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
+import { getDateKey, isTodayDateKey, now } from '@/lib/utils/date-utils';
 import {
   createStatefulChallenge,
   createStatefulGoal,
@@ -87,8 +87,12 @@ interface FocusStoreInterface {
   transitionGoal(dateKey: string, goalId: string, newState: GoalState, source?: string): Promise<void>;
   /** Mark topic as explored */
   markTopicExplored(dateKey: string, topicId: string, source?: string): Promise<void>;
+  /** Mark topic as reviewed without changing explored/skipped state */
+  markTopicReviewed(dateKey: string, topicId: string): Promise<void>;
   /** Transition topic to new state (explored or skipped) */
   transitionTopic(dateKey: string, topicId: string, newState: TopicState, source?: string): Promise<void>;
+  /** Save learner self-explanation text on a challenge or topic */
+  saveSelfExplanation(dateKey: string, itemType: 'challenge' | 'topic', itemId: string, text: string): Promise<void>;
   /** Mark an explored topic as replaced by a new topic */
   markTopicReplaced(dateKey: string, oldTopicId: string, newTopicId: string): Promise<void>;
   /** Remove a calibration item (when confirmed or dismissed) */
@@ -133,7 +137,20 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     try {
       await apiPost<void>('/api/focus/storage', schema);
     } catch (error) {
-      log.error('Failed to save to storage', error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      // Network-level failures (page navigation, body too large for keepalive, AbortError)
+      // are non-fatal — the save will succeed on the next interaction.
+      const isNetworkError =
+        error instanceof Error &&
+        (error.name === 'AbortError' ||
+          message === 'Load failed' ||
+          message === 'Failed to fetch' ||
+          message.startsWith('NetworkError'));
+      if (isNetworkError) {
+        log.warn('Storage save skipped (network unavailable)', message);
+        return;
+      }
+      log.error('Failed to save to storage', message);
       throw error;
     }
   }
@@ -495,6 +512,34 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   }
 
   /**
+   * Mark a learning topic as reviewed for spaced repetition tracking.
+   * Does not change topic state (explored/skipped).
+   */
+  async markTopicReviewed(dateKey: string, topicId: string): Promise<void> {
+    const schema = await this.getStorage();
+    const record = schema.history[dateKey];
+
+    if (!record) {
+      log.warn('Attempted to mark topic reviewed for non-existent date', { dateKey, topicId });
+      return;
+    }
+
+    for (let i = 0; i < record.learningTopics.length; i++) {
+      const topicArray = record.learningTopics[i];
+      const topicIndex = topicArray.findIndex((topic) => topic.data.id === topicId);
+
+      if (topicIndex !== -1) {
+        topicArray[topicIndex].data.lastReviewedAt = now();
+        await this.setStorage(schema);
+        log.debug('Topic marked as reviewed', { dateKey, topicId });
+        return;
+      }
+    }
+
+    log.warn('Topic not found for review tracking', { dateKey, topicId });
+  }
+
+  /**
    * Transition a topic to a new state (explored or skipped).
    * Idempotent: returns early if already in target state.
    */
@@ -550,6 +595,53 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
 
     log.warn('Topic not found in record', { dateKey, topicId });
+  }
+
+  /**
+   * Save learner self-explanation text for a challenge or topic.
+   */
+  async saveSelfExplanation(
+    dateKey: string,
+    itemType: 'challenge' | 'topic',
+    itemId: string,
+    text: string
+  ): Promise<void> {
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return;
+    }
+
+    const schema = await this.getStorage();
+    const record = schema.history[dateKey];
+
+    if (!record) {
+      log.warn('Attempted to save self-explanation for non-existent date', { dateKey, itemType, itemId });
+      return;
+    }
+
+    if (itemType === 'challenge') {
+      const challenge = record.challenges.find(c => c.data.id === itemId);
+      if (!challenge) {
+        log.warn('Challenge not found for self-explanation', { dateKey, itemId });
+        return;
+      }
+      challenge.data.selfExplanation = trimmedText;
+      await this.setStorage(schema);
+      log.debug('Saved challenge self-explanation', { dateKey, itemId });
+      return;
+    }
+
+    for (const topicArray of record.learningTopics) {
+      const topic = topicArray.find(t => t.data.id === itemId);
+      if (topic) {
+        topic.data.selfExplanation = trimmedText;
+        await this.setStorage(schema);
+        log.debug('Saved topic self-explanation', { dateKey, itemId });
+        return;
+      }
+    }
+
+    log.warn('Topic not found for self-explanation', { dateKey, itemId });
   }
 
   /**

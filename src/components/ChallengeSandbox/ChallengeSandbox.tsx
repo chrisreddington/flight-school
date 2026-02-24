@@ -26,8 +26,13 @@
 'use client';
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
+import { focusStore } from '@/lib/focus';
+import type { RunResult } from '@/lib/editor/code-runner';
+import { runCode } from '@/lib/editor/code-runner';
 import { getLanguageDisplayName, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
-import type { OnMount } from '@monaco-editor/react';
+import { getDateKey } from '@/lib/utils/date-utils';
+import { loader } from '@monaco-editor/react';
+import type { BeforeMount, OnMount } from '@monaco-editor/react';
 import {
     BeakerIcon,
     ChevronDownIcon,
@@ -41,7 +46,7 @@ import {
     ScreenNormalIcon,
     SkipIcon,
 } from '@primer/octicons-react';
-import { Banner, Button, ConfirmationDialog, IconButton, useTheme } from '@primer/react';
+import { Banner, Button, ConfirmationDialog, IconButton, Label, SegmentedControl, useTheme } from '@primer/react';
 import dynamic from 'next/dynamic';
 import React, { useCallback, useEffect, useState } from 'react';
 
@@ -78,7 +83,43 @@ import { EvaluationResultDisplay } from './evaluation-result-display';
 import { ExportToGitHubDialog } from './export-dialog';
 import { FileManager } from './file-manager';
 import { HintDisplay } from './hint-display';
+import { RelatedSuggestions } from './RelatedSuggestions';
+import { CodeOutputPanel } from './CodeOutputPanel';
+import { GuidedModePanel } from './GuidedModePanel';
 import type { ChallengeSandboxProps } from './types';
+import { SelfExplanationCard } from './self-explanation-card';
+
+/** Applies Monaco compiler defaults so top-level exports are valid in sandbox files. */
+function configureMonacoLanguageDefaults(monaco: Parameters<BeforeMount>[0]): void {
+  const compilerOptions = {
+    module: monaco.languages.typescript.ModuleKind.ESNext,
+    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    target: monaco.languages.typescript.ScriptTarget.ESNext,
+    esModuleInterop: true,
+    strict: false,
+  };
+
+  monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+    ...monaco.languages.typescript.typescriptDefaults.getCompilerOptions(),
+    ...compilerOptions,
+  });
+  monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+    ...monaco.languages.typescript.javascriptDefaults.getCompilerOptions(),
+    ...compilerOptions,
+  });
+  monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
+  monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
+}
+
+// Configure Monaco TypeScript for ES module mode as early as possible.
+// Without this, `export` is a syntax error because Monaco defaults to module: None (script mode).
+// loader.init() resolves to the same monaco instance used by all Editor components.
+// NOTE: Guard with typeof window to avoid SSR crash — Monaco requires browser APIs.
+if (typeof window !== 'undefined') {
+  loader.init().then((monaco) => {
+    configureMonacoLanguageDefaults(monaco);
+  }).catch(() => {/* ignore — beforeMount and onMount will apply the same config */});
+}
 
 // ============================================================================
 // Constants
@@ -124,6 +165,11 @@ export function ChallengeSandbox({
   const [isDescriptionCollapsed, setIsDescriptionCollapsed] = useState(true);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [mode, setMode] = useState<'free' | 'guided'>('free');
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [showSelfExplanationCard, setShowSelfExplanationCard] = useState(false);
+  const [hasPromptedSelfExplanation, setHasPromptedSelfExplanation] = useState(false);
   
   // PERF: Defer Monaco editor mount until after initial paint to prevent
   // forced reflow during page load. Monaco's measureReferenceDomElement
@@ -165,9 +211,13 @@ export function ChallengeSandbox({
   // Get active file for language detection
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
   const activeFileName = activeFile?.name ?? 'solution.ts';
+  const editorCode = activeFile?.content ?? '';
   const activeFileExtension = activeFileName.split('.').pop() ?? '';
   const activeFileLanguage = getMonacoLanguageFromExtension(activeFileExtension);
   const activeFileLanguageDisplay = getLanguageDisplayName(activeFileLanguage);
+  const canRunInBrowser = ['javascript', 'typescript'].includes(challenge.language.toLowerCase());
+  const dateKey = getDateKey();
+  const isChallengeComplete = evaluationResult?.score === 100 || evaluationResult?.isCorrect === true;
 
   // Handle reset confirmation dialog
   const handleResetDialogClose = useCallback((gesture: 'confirm' | 'close-button' | 'cancel' | 'escape') => {
@@ -177,9 +227,19 @@ export function ChallengeSandbox({
     }
   }, [reset]);
 
+  // Configure TypeScript compiler options for ES module mode before editor mounts.
+  // Without this, Monaco defaults to module:None (script mode) which treats
+  // `export` as a syntax error.
+  const handleBeforeMount = useCallback<BeforeMount>((monaco) => {
+    configureMonacoLanguageDefaults(monaco);
+  }, []);
+
   // Handle Monaco editor mount for keyboard shortcuts
   const handleEditorMount = useCallback<OnMount>(
-    (editor) => {
+    (editor, monaco) => {
+      // Belt-and-suspenders: re-apply compiler options after mount to trigger
+      // re-validation in case the TypeScript worker initialized before beforeMount fired.
+      configureMonacoLanguageDefaults(monaco);
       // Add Cmd/Ctrl+Enter keybinding to run evaluation
       editor.addCommand(
         MONACO_KEYMOD_CTRL_CMD | MONACO_KEYCODE_ENTER,
@@ -203,6 +263,14 @@ export function ChallengeSandbox({
     // Note: The result will be available in the next render
   }, [evaluate]);
 
+  const handleRunCode = useCallback(async () => {
+    setIsRunning(true);
+    setRunResult(null);
+    const result = await runCode(editorCode);
+    setRunResult(result);
+    setIsRunning(false);
+  }, [editorCode]);
+
   // Check if we should call onComplete after evaluation
   // Use useEffect to avoid calling during render
   React.useEffect(() => {
@@ -210,6 +278,25 @@ export function ChallengeSandbox({
       onComplete(evaluationResult);
     }
   }, [evaluationResult, onComplete]);
+
+  useEffect(() => {
+    if (isChallengeComplete && !hasPromptedSelfExplanation) {
+      setShowSelfExplanationCard(true);
+      setHasPromptedSelfExplanation(true);
+    }
+  }, [hasPromptedSelfExplanation, isChallengeComplete]);
+
+  const handleSaveSelfExplanation = useCallback(
+    async (text: string) => {
+      await focusStore.saveSelfExplanation(dateKey, 'challenge', challengeId, text);
+      setShowSelfExplanationCard(false);
+    },
+    [challengeId, dateKey]
+  );
+
+  const handleSkipSelfExplanation = useCallback(() => {
+    setShowSelfExplanationCard(false);
+  }, []);
   
   // Determine Monaco theme based on color mode
   const monacoTheme = colorMode === 'night' ? 'vs-dark' : 'light';
@@ -229,6 +316,11 @@ export function ChallengeSandbox({
           <div className={styles.headerTitleGroup}>
             <div className={styles.headerTitleRow}>
               <h2 className={styles.headerTitle}>{challenge.title}</h2>
+              {challenge.type === 'debug' && (
+                <Label size="small" variant="attention">
+                  🐛 Debug Mode
+                </Label>
+              )}
               {challenge.description && (
                 <button
                   className={styles.descriptionToggle}
@@ -254,6 +346,14 @@ export function ChallengeSandbox({
           <DifficultyBadge difficulty={challenge.difficulty} variant="css" />
         </div>
         <div className={styles.headerRight}>
+          <SegmentedControl aria-label="Challenge mode">
+            <SegmentedControl.Button selected={mode === 'free'} onClick={() => setMode('free')}>
+              Free Mode
+            </SegmentedControl.Button>
+            <SegmentedControl.Button selected={mode === 'guided'} onClick={() => setMode('guided')}>
+              Guided Mode
+            </SegmentedControl.Button>
+          </SegmentedControl>
           {isDebugMode && (
             <Button
               variant="invisible"
@@ -277,6 +377,12 @@ export function ChallengeSandbox({
           hideTitle
           style={{ marginBottom: 16 }}
         />
+      )}
+
+      {mode === 'guided' && (
+        <div className={styles.guidedPanelWrapper}>
+          <GuidedModePanel challenge={challenge} onClose={() => setMode('free')} />
+        </div>
       )}
 
       {/* Main content */}
@@ -322,6 +428,7 @@ export function ChallengeSandbox({
             {isEditorReady ? (
               <Editor
                 height="100%"
+                path={activeFileName}
                 language={getMonacoLanguageFromExtension(activeFileName.split('.').pop() ?? 'ts')}
                 value={activeFile?.content ?? ''}
                 onChange={(value) => {
@@ -330,6 +437,7 @@ export function ChallengeSandbox({
                   }
                 }}
                 onMount={handleEditorMount}
+                beforeMount={handleBeforeMount}
                 theme={monacoTheme}
                 options={{
                   minimap: { enabled: false },
@@ -367,6 +475,7 @@ export function ChallengeSandbox({
               </div>
             )}
           </div>
+          <CodeOutputPanel result={runResult} isRunning={isRunning} language={challenge.language} />
         </div>
 
         {/* Right panel */}
@@ -402,21 +511,54 @@ export function ChallengeSandbox({
                     Stop
                   </Button>
                 ) : (
-                  <Button
-                    variant="primary"
-                    size="small"
-                    onClick={handleEvaluate}
-                    leadingVisual={PlayIcon}
-                    disabled={!workspace.files.some(f => f.content.trim())}
-                    aria-label="Evaluate code solution"
-                  >
-                    Evaluate
-                  </Button>
+                  <>
+                    <Button
+                      variant="default"
+                      size="small"
+                      onClick={handleRunCode}
+                      disabled={!canRunInBrowser || isRunning}
+                      aria-label="Run code in browser"
+                    >
+                      {isRunning ? 'Running...' : '▷ Run'}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="small"
+                      onClick={handleEvaluate}
+                      leadingVisual={PlayIcon}
+                      disabled={!workspace.files.some(f => f.content.trim())}
+                      aria-label="Evaluate code solution"
+                    >
+                      Evaluate
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
             {!isEvaluationCollapsed && (
-              <EvaluationResultDisplay evaluation={evaluation} />
+              <>
+                <EvaluationResultDisplay evaluation={evaluation} />
+                {showSelfExplanationCard && (
+                  <SelfExplanationCard
+                    challengeId={challengeId}
+                    dateKey={dateKey}
+                    onSave={handleSaveSelfExplanation}
+                    onSkip={handleSkipSelfExplanation}
+                  />
+                )}
+                {evaluationResult?.isCorrect === true && (
+                  <RelatedSuggestions
+                    completedChallenge={{
+                      title: challenge.title,
+                      language: challenge.language,
+                      difficulty: challenge.difficulty,
+                    }}
+                    onSelectSuggestion={(suggestion) => {
+                      console.log('Selected related suggestion:', suggestion);
+                    }}
+                  />
+                )}
+              </>
             )}
           </div>
 

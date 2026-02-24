@@ -11,3 +11,10 @@
   padding: var(--base-size-24, 24px);
   min-height: calc(100vh - 60px);
 }
+
+.loadingState {
+  min-height: 60vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}

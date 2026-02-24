@@ -435,6 +435,62 @@
   margin: 0;
 }
 
+.historyTabs {
+  margin-top: var(--base-size-8);
+}
+
+.statsTabContent {
+  padding-top: var(--base-size-8);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--base-size-20, 20px);
+}
+
+.statsCard {
+  padding: var(--base-size-24, 24px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  box-shadow: var(--shadow-resting-small, 0 1px 0 rgba(31, 35, 40, 0.04));
+}
+
+.statsCardHeading {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.difficultyList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16, 16px);
+}
+
+.languageList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12, 12px);
+}
+
+.languageRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.languageName {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: var(--text-body-size-medium, 14px);
+}
+
+.languageCount {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+}
+
 .selectedDateBanner {
   display: flex;
   align-items: center;
@@ -584,6 +640,35 @@
 
 .itemCardContent {
   /* Let the inner card components handle their own padding */
+}
+
+.historyItemGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-6);
+}
+
+.selfExplanationDetails {
+  margin: 0;
+  padding: var(--base-size-6) var(--base-size-10);
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-small);
+  background-color: var(--bgColor-muted);
+}
+
+.selfExplanationSummary {
+  cursor: pointer;
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.selfExplanationText {
+  margin: var(--base-size-6) 0 0 0;
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-default);
+  line-height: 1.4;
+  white-space: pre-wrap;
 }
 
 /* ============================================================================
@@ -773,6 +858,12 @@
 @media (max-width: 600px) {
   .statsGrid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .statsGrid {
+    grid-template-columns: 1fr;
   }
 }
 

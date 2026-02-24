@@ -11,8 +11,10 @@
  */
 
 import { ProfileNav } from '@/components/ProfileNav';
+import { ActivitySummary, RecentActivityList, StreakCard } from '@/components/Insights';
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
+import { computeInsights, type LearningInsights } from '@/lib/focus/analytics';
 import { focusStore } from '@/lib/focus';
 import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
@@ -31,9 +33,11 @@ import {
   Spinner,
   Stack,
 } from '@primer/react';
+import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLearningChat } from '@/hooks/use-learning-chat';
+import insightsStyles from '@/components/Insights/Insights.module.css';
 import styles from './LearningHistory.module.css';
 
 // Import sub-components and utilities
@@ -49,7 +53,11 @@ import { formatDateForDisplay, generate52WeekActivity, getItemStatus, groupEntri
 // Main Component
 // ============================================================================
 
-export const LearningHistory = memo(function LearningHistory() {
+interface LearningHistoryProps {
+  activeTab?: 'history' | 'stats';
+}
+
+export const LearningHistory = memo(function LearningHistory({ activeTab = 'history' }: LearningHistoryProps) {
   const todayDateKey = getDateKey();
   const { activeTopicIds, activeChallengeIds, activeGoalIds } = useActiveOperations();
   const router = useRouter();
@@ -81,6 +89,8 @@ export const LearningHistory = memo(function LearningHistory() {
   const [refreshKey, setRefreshKey] = useState(0);
   const prevActiveCountRef = useRef(activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size);
   const [isLoading, setIsLoading] = useState(true);
+  const [insights, setInsights] = useState<LearningInsights | null>(null);
+  const [totalGoalsCompleted, setTotalGoalsCompleted] = useState(0);
   
   // Toast for "Explore started" notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -253,7 +263,23 @@ export const LearningHistory = memo(function LearningHistory() {
         .filter(entry => entry.items.length > 0)
         .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 
+      const computedInsights = computeInsights(rawHistory);
+      let goalsCount = 0;
+      for (const dateKey of Object.keys(rawHistory)) {
+        const record = rawHistory[dateKey];
+        for (const goal of record.goals) {
+          const wasCompleted = goal.stateHistory.some(
+            transition => transition.state === 'completed',
+          );
+          if (wasCompleted) {
+            goalsCount++;
+          }
+        }
+      }
+
       setAllEntries(entries);
+      setInsights(computedInsights);
+      setTotalGoalsCompleted(goalsCount);
       setIsLoading(false);
     };
     
@@ -326,6 +352,17 @@ export const LearningHistory = memo(function LearningHistory() {
     setSelectedDate(date);
   }, []);
 
+  const handleTabSelect = useCallback((tab: 'history' | 'stats') => {
+    if (tab === activeTab) return;
+    router.replace(`/history?tab=${tab}`);
+  }, [activeTab, router]);
+
+  const hasNoInsightsHistory = !insights || (
+    insights.totalChallengesCompleted === 0 &&
+    insights.totalTopicsExplored === 0 &&
+    totalGoalsCompleted === 0
+  );
+
   // Empty state
   if (!isLoading && allEntries.length === 0) {
     return (
@@ -342,17 +379,50 @@ export const LearningHistory = memo(function LearningHistory() {
             </div>
           </aside>
           <div className={styles.mainContent}>
-            <div className={styles.emptyState}>
-              <Banner
-                title="No learning history yet"
-                description="Your daily learning will be saved here as you use the app."
-                variant="info"
-                hideTitle
-              />
-              <div className={styles.backLink}>
-                <Link href="/">← Back to Dashboard</Link>
-              </div>
+            <div className={styles.pageHeader}>
+              <h1 className={styles.pageTitle}>Learning History</h1>
+              <p className={styles.pageDescription}>Browse your learning journey over time</p>
             </div>
+            <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
+              <UnderlinePanels.Tab
+                aria-selected={activeTab === 'history'}
+                onSelect={() => handleTabSelect('history')}
+              >
+                History
+              </UnderlinePanels.Tab>
+              <UnderlinePanels.Tab
+                aria-selected={activeTab === 'stats'}
+                onSelect={() => handleTabSelect('stats')}
+              >
+                Stats
+              </UnderlinePanels.Tab>
+              <UnderlinePanels.Panel>
+                <div className={styles.emptyState}>
+                  <Banner
+                    title="No learning history yet"
+                    description="Your daily learning will be saved here as you use the app."
+                    variant="info"
+                    hideTitle
+                  />
+                  <div className={styles.backLink}>
+                    <Link href="/">← Back to Dashboard</Link>
+                  </div>
+                </div>
+              </UnderlinePanels.Panel>
+              <UnderlinePanels.Panel>
+                <div className={styles.emptyState}>
+                  <Banner
+                    title="No learning history yet"
+                    description="Start exploring topics and completing challenges to see your stats here."
+                    variant="info"
+                    hideTitle
+                  />
+                  <div className={styles.backLink}>
+                    <Link href="/">← Back to Dashboard</Link>
+                  </div>
+                </div>
+              </UnderlinePanels.Panel>
+            </UnderlinePanels>
           </div>
         </div>
       </div>
@@ -435,74 +505,195 @@ export const LearningHistory = memo(function LearningHistory() {
             <p className={styles.pageDescription}>Browse your learning journey over time</p>
           </div>
 
-          {isLoading ? (
-            <div className={styles.loadingState}>
-              <Spinner size="medium" />
-              <span>Loading history...</span>
-            </div>
-          ) : (
-            <Stack direction="vertical" gap="normal">
-              {/* Selected date indicator */}
-              {selectedDate && (
-                <div className={styles.selectedDateBanner}>
-                  <span>Showing: {formatDateForDisplay(selectedDate)}</span>
-                  <Button variant="invisible" size="small" onClick={() => setSelectedDate(null)}>
-                    Show all
-                  </Button>
+          <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
+            <UnderlinePanels.Tab
+              aria-selected={activeTab === 'history'}
+              onSelect={() => handleTabSelect('history')}
+            >
+              History
+            </UnderlinePanels.Tab>
+            <UnderlinePanels.Tab
+              aria-selected={activeTab === 'stats'}
+              onSelect={() => handleTabSelect('stats')}
+            >
+              Stats
+            </UnderlinePanels.Tab>
+            <UnderlinePanels.Panel>
+              {isLoading ? (
+                <div className={styles.loadingState}>
+                  <Spinner size="medium" />
+                  <span>Loading history...</span>
                 </div>
+              ) : (
+                <Stack direction="vertical" gap="normal">
+                  {/* Selected date indicator */}
+                  {selectedDate && (
+                    <div className={styles.selectedDateBanner}>
+                      <span>Showing: {formatDateForDisplay(selectedDate)}</span>
+                      <Button variant="invisible" size="small" onClick={() => setSelectedDate(null)}>
+                        Show all
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Generating banner at top */}
+                  {hasGenerating && (
+                    <GeneratingBanner
+                      topicIds={activeTopicIds}
+                      challengeIds={activeChallengeIds}
+                      goalIds={activeGoalIds}
+                    />
+                  )}
+
+                  {/* Items */}
+                  {filteredEntries.map(entry => {
+                    const isToday = entry.dateKey === todayDateKey;
+                    const isDayCollapsed = collapsedDays.has(entry.dateKey);
+                    return (
+                      <HistoryEntryCard
+                        key={entry.dateKey}
+                        entry={entry}
+                        isToday={isToday}
+                        isCollapsed={isDayCollapsed}
+                        onToggleCollapse={() => toggleDayCollapse(entry.dateKey)}
+                        onRefresh={forceRefresh}
+                        onSkipTopic={skipAndReplaceTopic}
+                        onSkipChallenge={skipAndReplaceChallenge}
+                        onSkipGoal={skipAndReplaceGoal}
+                        onStopSkipTopic={stopTopicSkip}
+                        onStopSkipChallenge={stopChallengeSkip}
+                        onStopSkipGoal={stopGoalSkip}
+                        onExploreTopic={handleExploreTopic}
+                        skippingTopicIds={skippingTopicIds}
+                        skippingChallengeIds={skippingChallengeIds}
+                        skippingGoalIds={skippingGoalIds}
+                        activeTopicIds={activeTopicIds}
+                        activeChallengeIds={activeChallengeIds}
+                        activeGoalIds={activeGoalIds}
+                      />
+                    );
+                  })}
+
+                  {/* No results */}
+                  {filteredEntries.length === 0 && !hasGenerating && (
+                    <Banner
+                      title="No results"
+                      description={`No items match your filters.${searchQuery ? ' Try a different search term.' : ''}`}
+                      variant="info"
+                      hideTitle
+                    />
+                  )}
+                </Stack>
               )}
-
-              {/* Generating banner at top */}
-              {hasGenerating && (
-                <GeneratingBanner 
-                  topicIds={activeTopicIds}
-                  challengeIds={activeChallengeIds}
-                  goalIds={activeGoalIds}
-                />
-              )}
-
-              {/* Items */}
-              {filteredEntries.map(entry => {
-                const isToday = entry.dateKey === todayDateKey;
-                const isDayCollapsed = collapsedDays.has(entry.dateKey);
-                return (
-                  <HistoryEntryCard
-                    key={entry.dateKey}
-                    entry={entry}
-                    isToday={isToday}
-                    isCollapsed={isDayCollapsed}
-                    onToggleCollapse={() => toggleDayCollapse(entry.dateKey)}
-                    onRefresh={forceRefresh}
-                    onSkipTopic={skipAndReplaceTopic}
-                    onSkipChallenge={skipAndReplaceChallenge}
-                    onSkipGoal={skipAndReplaceGoal}
-                    onStopSkipTopic={stopTopicSkip}
-                    onStopSkipChallenge={stopChallengeSkip}
-                    onStopSkipGoal={stopGoalSkip}
-                    onExploreTopic={handleExploreTopic}
-                    skippingTopicIds={skippingTopicIds}
-                    skippingChallengeIds={skippingChallengeIds}
-                    skippingGoalIds={skippingGoalIds}
-                    activeTopicIds={activeTopicIds}
-                    activeChallengeIds={activeChallengeIds}
-                    activeGoalIds={activeGoalIds}
-                  />
-                );
-              })}
-
-              {/* No results */}
-              {filteredEntries.length === 0 && !hasGenerating && (
+            </UnderlinePanels.Panel>
+            <UnderlinePanels.Panel>
+              {isLoading ? (
+                <div className={styles.loadingState}>
+                  <Spinner size="medium" />
+                  <span>Loading stats...</span>
+                </div>
+              ) : hasNoInsightsHistory || !insights ? (
                 <Banner
-                  title="No results"
-                  description={`No items match your filters.${searchQuery ? ' Try a different search term.' : ''}`}
+                  title="No stats yet"
+                  description="Start exploring topics and completing challenges to see your stats here."
                   variant="info"
                   hideTitle
                 />
+              ) : (
+                <Stack direction="vertical" gap="normal" className={styles.statsTabContent}>
+                  <div className={styles.statsGrid}>
+                    <StreakCard
+                      currentStreak={insights.currentStreak}
+                      longestStreak={insights.longestStreak}
+                    />
+                    <ActivitySummary
+                      totalChallengesCompleted={insights.totalChallengesCompleted}
+                      totalTopicsExplored={insights.totalTopicsExplored}
+                      totalGoalsCompleted={totalGoalsCompleted}
+                    />
+                  </div>
+
+                  {insights.totalChallengesCompleted > 0 && (
+                    <div className={styles.statsCard}>
+                      <h2 className={styles.statsCardHeading}>Challenges by Difficulty</h2>
+                      <div className={styles.difficultyList}>
+                        <DifficultyRow
+                          difficulty="Beginner"
+                          count={insights.challengesByDifficulty.beginner}
+                          total={insights.totalChallengesCompleted}
+                        />
+                        <DifficultyRow
+                          difficulty="Intermediate"
+                          count={insights.challengesByDifficulty.intermediate}
+                          total={insights.totalChallengesCompleted}
+                        />
+                        <DifficultyRow
+                          difficulty="Advanced"
+                          count={insights.challengesByDifficulty.advanced}
+                          total={insights.totalChallengesCompleted}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {insights.totalChallengesCompleted > 0 && Object.keys(insights.challengesByLanguage).length > 0 && (
+                    <div className={styles.statsCard}>
+                      <h2 className={styles.statsCardHeading}>Challenges by Language</h2>
+                      <div className={styles.languageList}>
+                        {Object.entries(insights.challengesByLanguage)
+                          .sort(([, a], [, b]) => b - a)
+                          .slice(0, 5)
+                          .map(([language, count]) => (
+                            <div key={language} className={styles.languageRow}>
+                              <span className={styles.languageName}>{language}</span>
+                              <span className={styles.languageCount}>{count}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <RecentActivityList activities={insights.recentActivity} />
+                </Stack>
               )}
-            </Stack>
-          )}
+            </UnderlinePanels.Panel>
+          </UnderlinePanels>
         </main>
       </div>
     </div>
   );
 });
+
+function DifficultyRow({ difficulty, count, total }: { difficulty: string; count: number; total: number }) {
+  const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+
+  return (
+    <div className={insightsStyles.difficultyRow}>
+      <div className={insightsStyles.difficultyHeader}>
+        <span className={insightsStyles.difficultyName}>{difficulty}</span>
+        <span className={insightsStyles.difficultyStats}>
+          {count} ({percentage}%)
+        </span>
+      </div>
+      <div className={insightsStyles.difficultyProgressBar}>
+        <div
+          className={`${insightsStyles.difficultyProgressFill} ${getDifficultyClass(difficulty)}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function getDifficultyClass(difficulty: string): string {
+  switch (difficulty.toLowerCase()) {
+    case 'beginner':
+      return insightsStyles.difficultyProgressBeginner;
+    case 'intermediate':
+      return insightsStyles.difficultyProgressIntermediate;
+    case 'advanced':
+      return insightsStyles.difficultyProgressAdvanced;
+    default:
+      return insightsStyles.difficultyProgressBeginner;
+  }
+}

@@ -323,6 +323,8 @@ export function useChallengeSandbox(
           challenge: {
             title: challenge.title,
             description: challenge.description,
+            type: challenge.type,
+            brokenCode: challenge.brokenCode,
             language: challenge.language,
             difficulty: challenge.difficulty,
             testCases: challenge.testCases ? JSON.stringify(challenge.testCases) : undefined,

@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Shared Topic Card Component
  * 
@@ -8,6 +10,7 @@ import { focusStore } from '@/lib/focus';
 import type { TopicState } from '@/lib/focus/state-machine';
 import type { LearningTopic } from '@/lib/focus/types';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
+import { TopicQuiz } from '../TopicQuiz';
 import { BookIcon, CheckIcon, PlusIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -45,6 +48,7 @@ export function TopicCard({
   isSkipping = false,
 }: TopicCardProps) {
   const [currentState, setCurrentState] = useState<TopicState>('not-explored');
+  const [isQuizOpen, setIsQuizOpen] = useState(false);
 
   // Load current state from storage
   useEffect(() => {
@@ -165,7 +169,17 @@ export function TopicCard({
               {isExplored ? 'New' : 'Skip'}
             </Button>
           )}
+          <Button variant="invisible" onClick={() => setIsQuizOpen(true)}>
+            Practice Quiz
+          </Button>
         </Stack>
+        {isQuizOpen && (
+          <TopicQuiz
+            topicTitle={topic.title}
+            topicDescription={topic.description}
+            onClose={() => setIsQuizOpen(false)}
+          />
+        )}
       </Stack>
     </div>
   );

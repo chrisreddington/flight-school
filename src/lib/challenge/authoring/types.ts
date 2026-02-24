@@ -12,6 +12,8 @@ export interface AuthoringContext {
   language?: string;
   /** Desired difficulty level */
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  /** Challenge type preference */
+  type?: 'implement' | 'debug';
   /** Template name if using quick templates */
   template?: string;
   /** Any additional skills to focus on */

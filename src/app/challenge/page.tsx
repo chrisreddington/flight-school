@@ -28,6 +28,7 @@ const ChallengeSandbox = lazy(() =>
 const DEFAULT_CHALLENGE: ChallengeDef = {
   title: 'Practice Challenge',
   description: 'Write a solution to the coding challenge.',
+  type: 'implement',
   language: 'TypeScript',
   difficulty: 'beginner',
   testCases: [],
@@ -73,6 +74,8 @@ function ChallengePageContent() {
     const id = searchParams.get('id');
     const title = searchParams.get('title');
     const description = searchParams.get('description');
+    const type = searchParams.get('type') as ChallengeDef['type'];
+    const brokenCode = searchParams.get('brokenCode');
     const language = searchParams.get('language');
     const difficulty = searchParams.get('difficulty') as ChallengeDef['difficulty'];
 
@@ -88,12 +91,14 @@ function ChallengePageContent() {
 
     return {
       challengeId: actualId,
-      challenge: {
-        title: decodeURIComponent(title),
-        description: description ? decodeURIComponent(description) : '',
-        language: language ? decodeURIComponent(language) : 'TypeScript',
-        difficulty: difficulty || 'beginner',
-        testCases: [],
+        challenge: {
+          title,
+          description: description ?? '',
+          type: type || 'implement',
+          brokenCode: brokenCode ?? undefined,
+          language: language ?? 'TypeScript',
+          difficulty: difficulty || 'beginner',
+          testCases: [],
       },
     };
   }, [searchParams]);

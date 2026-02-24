@@ -78,22 +78,29 @@ export function HistoryEntryCard({
       {!isCollapsed && (
         <Stack direction="vertical" gap="condensed">
           {entry.items.map((item, index) => (
-            <ItemCard
-              key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`}
-              item={item}
-              dateKey={entry.dateKey}
-              onRefresh={onRefresh}
-              onSkipTopic={onSkipTopic}
-              onSkipChallenge={onSkipChallenge}
-              onSkipGoal={onSkipGoal}
-              onStopSkipTopic={onStopSkipTopic}
-              onStopSkipChallenge={onStopSkipChallenge}
-              onStopSkipGoal={onStopSkipGoal}
-              onExploreTopic={onExploreTopic}
-              isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
-              isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
-              isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
-            />
+            <div key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`} className={styles.historyItemGroup}>
+              <ItemCard
+                item={item}
+                dateKey={entry.dateKey}
+                onRefresh={onRefresh}
+                onSkipTopic={onSkipTopic}
+                onSkipChallenge={onSkipChallenge}
+                onSkipGoal={onSkipGoal}
+                onStopSkipTopic={onStopSkipTopic}
+                onStopSkipChallenge={onStopSkipChallenge}
+                onStopSkipGoal={onStopSkipGoal}
+                onExploreTopic={onExploreTopic}
+                isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
+                isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
+                isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
+              />
+              {item.type === 'challenge' && item.data.selfExplanation && (
+                <details className={styles.selfExplanationDetails}>
+                  <summary className={styles.selfExplanationSummary}>💬 Your note</summary>
+                  <p className={styles.selfExplanationText}>{item.data.selfExplanation}</p>
+                </details>
+              )}
+            </div>
           ))}
         </Stack>
       )}

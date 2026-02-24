@@ -65,7 +65,13 @@ ${currentCode}
 ${question}
 
 ## Your Task
-Provide a helpful hint that guides them toward the solution without giving it away.
+Provide a hint that guides the learner toward the solution without giving it away.
+
+Growth mindset guidelines:
+- Acknowledge their current approach before redirecting ("I can see you're trying X — good thinking!")
+- Use "not yet" framing if they're on the wrong track
+- Ask a guiding question rather than stating the answer directly when possible
+- Focus on their reasoning process, not just the outcome
 
 Return JSON:
 {

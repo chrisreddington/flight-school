@@ -44,6 +44,8 @@ interface ChallengeActionMenuProps {
   onSkip?: () => void;
   /** Callback to refresh the challenge (AI-generated only) */
   onRefresh?: () => void;
+  /** Callback to request a debug challenge (dashboard only) */
+  onRequestDebugChallenge?: () => void;
   /** Whether refresh is disabled */
   refreshDisabled?: boolean;
   /** Callback to create a new custom challenge */
@@ -68,6 +70,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
   onEdit,
   onSkip,
   onRefresh,
+  onRequestDebugChallenge,
   refreshDisabled = false,
   onCreate,
   onMarkComplete,
@@ -79,7 +82,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
   
   // Don't render if no actions are available
   const hasActions =
-    onEdit || onSkip || onRefresh || onCreate || onMarkComplete || onCreateRepo;
+    onEdit || onSkip || onRefresh || onRequestDebugChallenge || onCreate || onMarkComplete || onCreateRepo;
   if (!hasActions) return null;
 
   return (
@@ -117,6 +120,11 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
 
           {/* AI challenge skip (use onSkip for skip-and-replace behavior) */}
           {/* Only show on dashboard (not history) AND only if NOT completed */}
+          {!isCustom && onRequestDebugChallenge && !showHistoryActions && (
+            <ActionList.Item onSelect={onRequestDebugChallenge}>
+              🐛 Request Debug Challenge
+            </ActionList.Item>
+          )}
           {!isCustom && onSkip && !showHistoryActions && (
             <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
               <ActionList.LeadingVisual>

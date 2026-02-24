@@ -13,6 +13,7 @@
 
 import { AppHeader } from '@/components/AppHeader';
 import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
+import { LearningPathPanel } from '@/components/LearningPathPanel';
 import { ProfileNav } from '@/components/ProfileNav';
 import { SkillSlider } from '@/components/SkillSlider';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
@@ -140,10 +141,16 @@ export default function SkillProfilePage() {
   }, [profile]);
 
   // Handle adding a new skill
-  const handleAddSkill = useCallback(async () => {
-    if (!profile || !newSkillName.trim()) return;
-    
-    const skillId = newSkillName.toLowerCase().replace(/\s+/g, '-');
+  const handleAddSkill = useCallback(async (suggestedSkill?: { skillId: string; displayName: string }) => {
+    if (!profile) return;
+
+    const isSuggestedSkill = suggestedSkill !== undefined;
+    const displayName = isSuggestedSkill ? suggestedSkill.displayName : newSkillName.trim();
+    if (!displayName) return;
+
+    const skillId = isSuggestedSkill
+      ? suggestedSkill.skillId
+      : displayName.toLowerCase().replace(/\s+/g, '-');
     
     // Check if skill already exists
     if (profile.skills.some(s => s.skillId === skillId)) {
@@ -152,7 +159,7 @@ export default function SkillProfilePage() {
     
     const newSkill: UserSkill = {
       skillId,
-      displayName: newSkillName.trim(),
+      displayName,
       level: 'beginner',
       source: 'manual',
     };
@@ -164,8 +171,10 @@ export default function SkillProfilePage() {
     
     // Optimistic update
     setProfile(updatedProfile);
-    setNewSkillName('');
-    setShowAddForm(false);
+    if (!isSuggestedSkill) {
+      setNewSkillName('');
+      setShowAddForm(false);
+    }
     
     try {
       await skillsStore.save(updatedProfile);
@@ -175,6 +184,10 @@ export default function SkillProfilePage() {
       setProfile(profile);
     }
   }, [profile, newSkillName]);
+
+  const handleAddLearningPathSkill = useCallback((skillId: string, displayName: string) => {
+    void handleAddSkill({ skillId, displayName });
+  }, [handleAddSkill]);
 
   // Handle clearing all app data
   const handleClearAllData = useCallback(async () => {
@@ -287,6 +300,8 @@ export default function SkillProfilePage() {
             </div>
           </div>
 
+          <LearningPathPanel profile={profile} onAddSkill={handleAddLearningPathSkill} />
+
           <div className={styles.sidebarCard}>
             <div className={styles.sidebarHeader}>
               <CodeIcon size={20} className={styles.sidebarIcon} />
@@ -389,7 +404,7 @@ export default function SkillProfilePage() {
                       placeholder="e.g., TypeScript, React, Docker"
                       aria-label="New skill name"
                     />
-                    <Button onClick={handleAddSkill} disabled={!newSkillName.trim()}>
+                    <Button onClick={() => void handleAddSkill()} disabled={!newSkillName.trim()}>
                       Add
                     </Button>
                     <Button variant="invisible" onClick={() => setShowAddForm(false)}>

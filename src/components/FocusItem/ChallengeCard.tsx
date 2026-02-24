@@ -36,6 +36,8 @@ interface ChallengeCardProps {
   onStateChange?: () => void;
   /** Callback to skip this challenge and regenerate a new one (with existing titles to avoid) */
   onSkipAndReplace?: (challengeId: string, existingChallengeTitles: string[]) => void;
+  /** Callback to request a debug challenge */
+  onRequestDebugChallenge?: () => void;
   /** Callback to stop the skip/regeneration in progress (receives the challenge ID) */
   onStopSkip?: (challengeId: string) => void;
   /** Whether skip/regeneration is in progress */
@@ -46,6 +48,8 @@ interface ChallengeCardProps {
   timestamp?: string | null;
   /** Queue count indicator */
   queueCount?: number;
+  /** Shows the issue-inspired badge when challenge context source is issue */
+  showIssueContextBadge?: boolean;
 }
 
 export function ChallengeCard({
@@ -58,11 +62,13 @@ export function ChallengeCard({
   onCreate,
   onStateChange,
   onSkipAndReplace,
+  onRequestDebugChallenge,
   onStopSkip,
   isSkipping = false,
   refreshDisabled = false,
   timestamp,
   queueCount,
+  showIssueContextBadge = false,
 }: ChallengeCardProps) {
   const router = useRouter();
   const [currentState, setCurrentState] = useState<ChallengeState>('not-started');
@@ -91,13 +97,18 @@ export function ChallengeCard({
       })();
     }
     // Navigate to sandbox with full challenge details
-    const params = new URLSearchParams({
-      id: challenge.id,
-      title: challenge.title,
-      description: challenge.description,
-      language: challenge.language,
-      difficulty: challenge.difficulty,
-    });
+    const params = new URLSearchParams();
+    params.set('id', challenge.id);
+    params.set('title', challenge.title);
+    params.set('description', challenge.description);
+    params.set('language', challenge.language);
+    params.set('difficulty', challenge.difficulty);
+    if (challenge.type) {
+      params.set('type', challenge.type);
+    }
+    if (challenge.brokenCode) {
+      params.set('brokenCode', challenge.brokenCode);
+    }
     router.push(`/challenge?${params.toString()}`);
   }, [router, challenge, currentState, dateKey, onStateChange]);
 
@@ -218,6 +229,7 @@ export function ChallengeCard({
                 onEdit={isCustom ? onEdit : undefined}
                 onSkip={!isCompleted ? handleSkip : undefined}
                 onRefresh={!isCustom ? onRefresh : undefined}
+                onRequestDebugChallenge={onRequestDebugChallenge}
                 onCreate={onCreate}
                 onMarkComplete={showHistoryActions ? handleMarkComplete : undefined}
                 showHistoryActions={showHistoryActions}
@@ -227,7 +239,14 @@ export function ChallengeCard({
           </Stack>
         </Stack>
 
-        <Heading as="h3">{challenge.title}</Heading>
+        <Stack direction="horizontal" align="center" gap="condensed">
+          <Heading as="h3">{challenge.title}</Heading>
+          {showIssueContextBadge && challenge.contextSource === 'issue' && (
+            <Label size="small" variant="accent">
+              Inspired by your work 🔗
+            </Label>
+          )}
+        </Stack>
         <div className={styles.description}>
           <MarkdownContent content={challenge.description} />
         </div>

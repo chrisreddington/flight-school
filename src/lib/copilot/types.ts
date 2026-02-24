@@ -105,6 +105,10 @@ export interface ChallengeDef {
   title: string;
   /** Full challenge description/instructions */
   description: string;
+  /** Challenge type: 'implement' = write from scratch, 'debug' = fix broken code */
+  type?: 'implement' | 'debug';
+  /** Pre-populated broken code for debug challenges (only used when type === 'debug') */
+  brokenCode?: string;
   /** Programming language for the challenge */
   language: string;
   /** Difficulty level */

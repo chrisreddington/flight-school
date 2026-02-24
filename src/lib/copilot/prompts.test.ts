@@ -69,11 +69,24 @@ describe('buildChallengePrompt', () => {
     expect(prompt).toContain('"language"');
     expect(prompt).toContain('"estimatedTime"');
     expect(prompt).toContain('"whyThisChallenge"');
+    expect(prompt).toContain('"contextSource"');
   });
 
   it('should specify time constraint (15-30 min)', () => {
     const prompt = buildChallengePrompt(profileContext);
     expect(prompt).toContain('15-30 min');
+  });
+
+  it('should mention optional debug challenge generation', () => {
+    const prompt = buildChallengePrompt(profileContext);
+    expect(prompt).toContain('type: "debug"');
+    expect(prompt).toContain('Otherwise use type: "implement".');
+  });
+
+  it('should require a debug challenge when forceDebug is enabled', () => {
+    const prompt = buildChallengePrompt(profileContext, undefined, undefined, { forceDebug: true });
+    expect(prompt).toContain('REQUIRED: Generate a debug challenge');
+    expect(prompt).not.toContain('Otherwise use type: "implement".');
   });
 
   describe('with skill profile', () => {

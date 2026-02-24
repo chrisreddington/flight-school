@@ -15,6 +15,8 @@ import { extractJSON } from '@/lib/utils/json-utils';
 interface RawChallenge {
   title?: string;
   description?: string;
+  type?: 'implement' | 'debug';
+  brokenCode?: string;
   difficulty?: string;
   language?: string;
   estimatedTime?: string;
@@ -66,6 +68,10 @@ function validateChallenge(raw: unknown): DailyChallenge | null {
 
   // Normalize estimatedTime
   const estimatedTime = challenge.estimatedTime || '30 minutes';
+  const type = challenge.type === 'debug' ? 'debug' : 'implement';
+  const brokenCode = type === 'debug' && typeof challenge.brokenCode === 'string'
+    ? challenge.brokenCode
+    : undefined;
 
   // Normalize whyThisChallenge
   let whyThisChallenge: string[] = [];
@@ -79,6 +85,8 @@ function validateChallenge(raw: unknown): DailyChallenge | null {
     id: `custom-${nowMs()}-${Math.random().toString(36).substring(7)}`,
     title: challenge.title.trim(),
     description: challenge.description.trim(),
+    type,
+    brokenCode,
     difficulty,
     language: challenge.language.toLowerCase().trim(),
     estimatedTime,
@@ -111,5 +119,4 @@ export function parseGeneratedChallenge(content: string): DailyChallenge | null 
 
   return validateChallenge(parsed);
 }
-
 

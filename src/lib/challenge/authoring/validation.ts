@@ -56,6 +56,10 @@ export function validateAuthoringRequest(body: unknown): string | null {
       }
     }
 
+    if (ctx.type !== undefined && ctx.type !== 'implement' && ctx.type !== 'debug') {
+      return 'context.type must be implement or debug';
+    }
+
     if (ctx.template !== undefined && typeof ctx.template !== 'string') {
       return 'context.template must be a string';
     }

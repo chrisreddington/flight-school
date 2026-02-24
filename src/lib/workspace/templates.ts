@@ -177,6 +177,10 @@ function isTddChallenge(description: string): boolean {
  * @returns Starter code string
  */
 function generateStarterCode(challenge: ChallengeDef): string {
+  if (challenge.type === 'debug' && challenge.brokenCode) {
+    return challenge.brokenCode;
+  }
+
   const extension = getLanguageExtension(challenge.language);
   
   // Language-specific starters

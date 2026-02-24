@@ -51,6 +51,17 @@ describe('buildEvaluationPrompt', () => {
     expect(prompt).toContain('Write a function that sums all numbers in an array.');
   });
 
+  it('should include debug-specific guidance for debug challenges', () => {
+    const debugChallenge: ChallengeDef = {
+      ...mockChallenge,
+      type: 'debug',
+      brokenCode: 'export const sum = (arr) => arr.reduce((a, b) => a - b, 0);',
+    };
+    const prompt = buildEvaluationPrompt(debugChallenge, mockFiles);
+    expect(prompt).toContain('### Debug Mode Evaluation');
+    expect(prompt).toContain('which bugs were correctly identified and fixed');
+  });
+
   it('should include expected patterns when provided', () => {
     const prompt = buildEvaluationPrompt(mockChallenge, mockFiles);
     expect(prompt).toContain('### Expected Patterns');

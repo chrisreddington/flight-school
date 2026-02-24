@@ -7,8 +7,12 @@
 
 import { analyzeCommitPatterns, identifySkillGaps } from '@/lib/expertise';
 import { calculateActivityMetrics, getUserEvents } from './activity';
+import { getRepoDependencies } from './dependencies';
+import { getOpenIssues } from './issues';
 import { getRepoReadmeSummary } from './readme';
 import { getRepoLanguageBytes, getUserRepositories } from './repos';
+import { getStarredInterests } from './starred';
+import { analyzeWorkPatterns } from './work-patterns';
 import type {
     ActivitySummary,
     CompactDeveloperProfile,
@@ -66,16 +70,36 @@ export async function buildCompactContext(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    // Phase 1: Fetch base data in parallel
-    const [userResult, reposResult, eventsResult] = await Promise.allSettled([
+    // Phase 1: Fetch base data in parallel (including new interest/pattern signals)
+    const [userResult, reposResult, eventsResult, starredResult, workPatternsResult] = await Promise.allSettled([
       getAuthenticatedUser(),
       getUserRepositories(),
       getAuthenticatedUserEvents(),
+      // Starred interests and work patterns use username — resolved after user fetch
+      // We kick them off after user is known; handled in Phase 1b below
+      Promise.resolve(null), // placeholder
+      Promise.resolve(null), // placeholder
     ]);
 
     const user = userResult.status === 'fulfilled' ? userResult.value : null;
     const repos = reposResult.status === 'fulfilled' ? reposResult.value : [];
     const events = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
+
+    // Phase 1b: Fetch username-dependent signals in parallel
+    const username = user?.login;
+    const [starredResult2, workPatternsResult2, openIssuesResult] = await Promise.allSettled([
+      username ? getStarredInterests(username) : Promise.resolve([]),
+      username ? analyzeWorkPatterns(username) : Promise.resolve({ patterns: [], bugRatio: 0 }),
+      username ? getOpenIssues(username) : Promise.resolve([]),
+    ]);
+
+    // Suppress unused variable warnings from the placeholders
+    void starredResult;
+    void workPatternsResult;
+
+    const starredInterests = starredResult2.status === 'fulfilled' ? starredResult2.value : [];
+    const workPatterns = workPatternsResult2.status === 'fulfilled' ? workPatternsResult2.value : { patterns: [], bugRatio: 0 };
+    const openIssues = openIssuesResult.status === 'fulfilled' ? openIssuesResult.value.slice(0, 5) : [];
 
     // Calculate metrics from base data
     const activityMetrics = calculateActivityMetrics(events, 7);
@@ -86,18 +110,20 @@ export async function buildCompactContext(
     // Phase 2: Pick top 2 repos for deep inspection
     const topRepos = repos.slice(0, MAX_DEEP_INSPECT_REPOS);
 
-    // Phase 3: Fetch deep data for top repos in parallel
+    // Phase 3: Fetch deep data for top repos in parallel (language bytes, README, deps)
     const deepDataPromises = topRepos.map(async (repo) => {
       const [owner, repoName] = repo.fullName.split('/');
-      const [langResult, readmeResult] = await Promise.allSettled([
+      const [langResult, readmeResult, depsResult] = await Promise.allSettled([
         getRepoLanguageBytes(owner, repoName),
         getRepoReadmeSummary(owner, repoName),
+        getRepoDependencies(owner, repoName),
       ]);
 
       return {
         repoName: repo.fullName,
         languages: langResult.status === 'fulfilled' ? langResult.value : {},
         readme: readmeResult.status === 'fulfilled' ? readmeResult.value : null,
+        deps: depsResult.status === 'fulfilled' ? depsResult.value : [],
       };
     });
 
@@ -131,6 +157,10 @@ export async function buildCompactContext(
       g: skillGaps.slice(0, 5),
       rd: readmeKeywords.slice(0, 10),
       cp: commitPattern,
+      deps: aggregateDeps(deepData).slice(0, 20),
+      si: starredInterests,
+      wp: workPatterns.patterns.length > 0 ? workPatterns : undefined,
+      openIssues: username && openIssues.length > 0 ? openIssues : undefined,
     };
   } finally {
     clearTimeout(timeoutId);
@@ -173,6 +203,14 @@ export function serializeContext(profile: CompactDeveloperProfile): string {
     parts.push(`t:${profile.t.map(escapeDelimiters).join(ARRAY_DELIMITER)}`);
   }
 
+  // Open issues (title-only context)
+  if (profile.openIssues && profile.openIssues.length > 0) {
+    const issueTitles = profile.openIssues
+      .map((issue) => escapeDelimiters(issue.title))
+      .join(FIELD_DELIMITER);
+    parts.push(`issues:[${issueTitles}]`);
+  }
+
   // Activity
   parts.push(
     `a:${profile.a.c}:${profile.a.pr}:${profile.a.d}:${profile.a.r.map(escapeDelimiters).join(ARRAY_DELIMITER)}`
@@ -190,6 +228,22 @@ export function serializeContext(profile: CompactDeveloperProfile): string {
 
   // Commit pattern
   parts.push(`cp:${profile.cp}`);
+
+  // Dependencies (F4)
+  if (profile.deps && profile.deps.length > 0) {
+    parts.push(`dep:${profile.deps.map(escapeDelimiters).join(ARRAY_DELIMITER)}`);
+  }
+
+  // Star interests (F5)
+  if (profile.si && profile.si.length > 0) {
+    parts.push(`si:${profile.si.map(escapeDelimiters).join(ARRAY_DELIMITER)}`);
+  }
+
+  // Work patterns (F6)
+  if (profile.wp && profile.wp.patterns.length > 0) {
+    const patterns = profile.wp.patterns.map(escapeDelimiters).join(ARRAY_DELIMITER);
+    parts.push(`wp:${patterns}:${profile.wp.bugRatio}`);
+  }
 
   return parts.join(FIELD_DELIMITER);
 }
@@ -294,4 +348,17 @@ function extractReadmeKeywords(
 function shortenRepoName(repoName: string): string {
   const parts = repoName.split('/');
   return parts.length > 1 ? parts[1] : repoName;
+}
+
+/** Aggregates unique dependencies across all deep-inspected repos. */
+function aggregateDeps(
+  deepData: Array<{ deps: string[] }>
+): string[] {
+  const seen = new Set<string>();
+  for (const data of deepData) {
+    for (const dep of data.deps) {
+      seen.add(dep);
+    }
+  }
+  return Array.from(seen);
 }

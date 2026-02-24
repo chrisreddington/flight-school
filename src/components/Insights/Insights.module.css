@@ -1,0 +1,280 @@
+/* Insights.module.css
+ * 
+ * Styling for the Learning Journey Insights page using Primer CSS custom properties.
+ */
+
+/* ============================================================================
+   Cards
+   ============================================================================ */
+
+.card {
+  padding: var(--base-size-24, 24px);
+  background-color: var(--bgColor-default, #ffffff);
+  border-radius: var(--borderRadius-medium, 6px);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  box-shadow: var(--shadow-resting-small, 0 1px 0 rgba(31, 35, 40, 0.04));
+}
+
+/* ============================================================================
+   Streak Card
+   ============================================================================ */
+
+.streakHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.streakIcon {
+  color: var(--fgColor-attention, #9a6700);
+}
+
+.streakHeading {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+}
+
+.streakMetrics {
+  display: flex;
+  gap: var(--base-size-32, 32px);
+}
+
+.streakMetric {
+  flex: 1;
+}
+
+.streakValue {
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-bold, 700);
+  display: block;
+  line-height: 1.2;
+}
+
+.streakValueActive {
+  color: var(--fgColor-success, #1a7f37);
+}
+
+.streakValueInactive {
+  color: var(--fgColor-muted, #656d76);
+}
+
+.streakLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin-top: var(--base-size-4, 4px);
+  display: block;
+}
+
+.streakMessage {
+  margin-top: var(--base-size-16, 16px);
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+/* ============================================================================
+   Activity Summary
+   ============================================================================ */
+
+.summaryHeading {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.summaryList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-16, 16px);
+}
+
+.summaryItem {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-12, 12px);
+}
+
+.summaryIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.iconWrapperSuccess {
+  background-color: var(--bgColor-success-muted, #dafbe1);
+}
+
+.iconWrapperAccent {
+  background-color: var(--bgColor-accent-muted, #ddf4ff);
+}
+
+.iconWrapperAttention {
+  background-color: var(--bgColor-attention-muted, #fff8c5);
+}
+
+.summaryContent {
+  flex: 1;
+}
+
+.summaryValue {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: var(--text-body-size-medium, 14px);
+  display: block;
+}
+
+.summaryLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+/* ============================================================================
+   Recent Activity List
+   ============================================================================ */
+
+.activityHeading {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.activityRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--base-size-12, 12px);
+  padding: var(--base-size-12, 12px) 0;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+.activityRow:last-child {
+  border-bottom: none;
+}
+
+.activityIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.activityContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.activityTitle {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: var(--text-body-size-medium, 14px);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activityMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  margin-top: var(--base-size-4, 4px);
+}
+
+.activityDate {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.emptyMessage {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+}
+
+/* ============================================================================
+   Difficulty Progress Bars
+   ============================================================================ */
+
+.difficultyRow {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
+.difficultyRow:last-child {
+  margin-bottom: 0;
+}
+
+.difficultyHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.difficultyName {
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.difficultyStats {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.difficultyProgressBar {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bgColor-neutral-muted, #afb8c133);
+  border-radius: var(--borderRadius-small, 4px);
+  overflow: hidden;
+}
+
+.difficultyProgressFill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.difficultyProgressBeginner {
+  background-color: var(--bgColor-success-emphasis, #2da44e);
+}
+
+.difficultyProgressIntermediate {
+  background-color: var(--bgColor-attention-emphasis, #bf8700);
+}
+
+.difficultyProgressAdvanced {
+  background-color: var(--bgColor-danger-emphasis, #cf222e);
+}
+
+/* ============================================================================
+   Language List
+   ============================================================================ */
+
+.languageList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12, 12px);
+}
+
+.languageRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.languageName {
+  font-weight: var(--base-text-weight-semibold, 600);
+  font-size: var(--text-body-size-medium, 14px);
+}
+
+.languageCount {
+  color: var(--fgColor-muted, #656d76);
+  font-size: var(--text-body-size-medium, 14px);
+}

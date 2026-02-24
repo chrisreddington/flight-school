@@ -481,6 +481,8 @@ export async function executeChallengeEvaluation(
       {
         title: challenge.title,
         description: challenge.description,
+        type: challenge.type,
+        brokenCode: challenge.brokenCode,
         language: challenge.language,
         difficulty: challenge.difficulty as 'beginner' | 'intermediate' | 'advanced',
         testCases: challenge.testCases ? JSON.parse(challenge.testCases) : undefined,

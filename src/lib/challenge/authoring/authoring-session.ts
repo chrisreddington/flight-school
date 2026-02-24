@@ -57,6 +57,8 @@ When you have enough information, generate a challenge in this EXACT JSON format
 {
   "title": "Challenge Title",
   "description": "Detailed description of what to build. Include requirements, expected inputs/outputs, and constraints.",
+  "type": "implement" | "debug",
+  "brokenCode": "Required when type is debug. Include a short snippet with intentional bugs.",
   "difficulty": "beginner" | "intermediate" | "advanced",
   "language": "typescript" | "python" | "javascript" | etc,
   "estimatedTime": "15 minutes" | "30 minutes" | "1 hour",
@@ -116,6 +118,9 @@ function buildAuthoringPrompt(config: AuthoringSessionConfig): string {
     }
     if (context.difficulty) {
       contextParts.push(`Difficulty: ${context.difficulty}`);
+    }
+    if (context.type) {
+      contextParts.push(`Type: ${context.type}`);
     }
     if (context.template) {
       contextParts.push(`Template: ${context.template}`);

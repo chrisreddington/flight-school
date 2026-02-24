@@ -60,6 +60,17 @@ describe('Workspace Templates', () => {
       expect(files[1].name).toBe('solution.test.ts');
     });
 
+    it('should use broken code as starter for debug challenges', () => {
+      const files = getWorkspaceTemplate({
+        ...baseChallenge,
+        type: 'debug',
+        brokenCode: 'export function solution() { return "broken"; }',
+      });
+
+      expect(files).toHaveLength(1);
+      expect(files[0].content).toBe('export function solution() { return "broken"; }');
+    });
+
     it('should set timestamps on files', () => {
       const files = getWorkspaceTemplate({ ...baseChallenge, language: 'TypeScript' });
 

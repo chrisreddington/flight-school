@@ -1,0 +1,55 @@
+.panel {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-20, 20px);
+}
+
+.header {
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.title {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.subtitle {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.message {
+  margin: 0;
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-12, 12px);
+}
+
+.item {
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+
+.skillName {
+  margin: 0;
+  font-size: var(--text-body-size-medium, 14px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  color: var(--fgColor-default, #1f2328);
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
