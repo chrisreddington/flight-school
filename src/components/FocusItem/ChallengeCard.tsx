@@ -181,7 +181,7 @@ export function ChallengeCard({
             <Label size="small">{challenge.language}</Label>
             {challenge.estimatedTime && (
               <Label size="small" variant="secondary">
-                <span style={{ marginRight: 4, display: 'inline-flex' }}><ClockIcon size={12} /></span>
+                <span className={styles.iconInline}><ClockIcon size={12} /></span>
                 {challenge.estimatedTime}
               </Label>
             )}

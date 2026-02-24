@@ -77,3 +77,8 @@
   font-size: 14px;
   color: var(--fgColor-muted);
 }
+
+.iconInline {
+  margin-right: var(--base-size-4);
+  display: inline-flex;
+}
