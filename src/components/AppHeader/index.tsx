@@ -35,7 +35,6 @@ import {
     ActionList,
     ActionMenu,
     Avatar,
-    Heading,
     Label,
     Spinner,
     Stack,
@@ -69,9 +68,9 @@ export function AppHeader() {
               <span className={styles.logoIcon}>
                 <RocketIcon size={28} />
               </span>
-              <Heading as="h1" className={styles.logoText}>
+              <span className={styles.logoText}>
                 Flight School
-              </Heading>
+              </span>
             </Stack>
           </Link>
           
