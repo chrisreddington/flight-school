@@ -82,3 +82,29 @@
   margin-right: var(--base-size-4);
   display: inline-flex;
 }
+
+.cardCompact {
+  padding: var(--base-size-12) var(--base-size-16);
+}
+
+.iconWrapper {
+  display: inline-flex;
+}
+
+.valueDisplay {
+  margin-left: var(--base-size-8);
+  color: var(--fgColor-muted);
+  font-size: 14px;
+}
+
+.smallMuted {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+}
+
+.manageLink {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+}
