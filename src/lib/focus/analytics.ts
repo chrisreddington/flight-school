@@ -194,7 +194,7 @@ function calculateStreaks(
   
   // Calculate current streak (counting backwards from today)
   let currentStreak = 0;
-  let checkDate = new Date(today);
+  const checkDate = new Date(today);
   
   while (true) {
     const dateKey = checkDate.toISOString().split('T')[0];
