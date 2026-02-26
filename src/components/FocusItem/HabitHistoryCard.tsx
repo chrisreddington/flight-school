@@ -207,13 +207,13 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
           {/* Header with day progress */}
           <Stack direction="horizontal" justify="space-between" align="center">
             <Label size="small" variant="accent">
-              <span style={{ marginRight: '4px', display: 'inline-flex' }}>
+              <span className={styles.iconInline}>
                 <FlameIcon size={12} />
               </span>
               Day {habit.currentDay} of {habit.totalDays}
               {remainingSkips > 0 && ` • ${remainingSkips} skip${remainingSkips === 1 ? '' : 's'} remaining`}
             </Label>
-            <Link href="/habits" style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Link href="/habits" className={styles.manageLink}>
               <LinkExternalIcon size={12} />
               Manage Habit
             </Link>
@@ -221,9 +221,9 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
 
           {/* Title and description */}
           <div>
-            <strong style={{ fontSize: '16px' }}>{habit.title}</strong>
+            <strong className={styles.habitTitle}>{habit.title}</strong>
             {habit.description && (
-              <p className={styles.description} style={{ marginTop: '4px' }}>{habit.description}</p>
+              <p className={`${styles.description} ${styles.descriptionSpaced}`}>{habit.description}</p>
             )}
           </div>
 

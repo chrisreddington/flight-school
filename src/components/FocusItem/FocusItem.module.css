@@ -82,3 +82,37 @@
   margin-right: var(--base-size-4);
   display: inline-flex;
 }
+
+.streakGrid {
+  display: flex;
+  gap: var(--base-size-4);
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.manageLink {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+}
+
+.habitTitle {
+  font-size: 16px;
+}
+
+.textSuccess {
+  color: var(--fgColor-success);
+}
+
+.streakDayFilled {
+  opacity: 1;
+}
+
+.streakDayEmpty {
+  opacity: 0.3;
+}
+
+.descriptionSpaced {
+  margin-top: var(--base-size-4);
+}
