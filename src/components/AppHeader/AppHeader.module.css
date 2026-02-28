@@ -71,13 +71,21 @@
 }
 
 /* Avatar */
-.avatar {
+.avatarButton {
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
+  line-height: 0;
+  border-radius: 50%;
+}
+
+.avatar {
   border: 2px solid transparent;
   transition: border-color 0.2s;
 }
 
-.avatar:hover {
+.avatarButton:hover .avatar {
   border-color: var(--borderColor-accent-emphasis, #0969da);
 }
 
