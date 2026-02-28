@@ -22,6 +22,7 @@ import {
 } from '@primer/react';
 import { CalendarIcon, CheckCircleIcon, ClockIcon, NumberIcon } from '@primer/octicons-react';
 import React, { useCallback, useState } from 'react';
+import styles from './HabitCreationDialog.module.css';
 
 interface HabitCreationDialogProps {
   isOpen: boolean;
@@ -221,14 +222,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
         </div>
 
         {/* Tracking Mode Section */}
-        <div
-          style={{
-            padding: 'var(--base-size-16)',
-            borderRadius: 'var(--borderRadius-medium)',
-            border: '1px solid var(--borderColor-default)',
-            backgroundColor: 'var(--bgColor-muted)',
-          }}
-        >
+        <div className={styles.sectionCard}>
           <Stack direction="vertical" gap="normal">
             <Heading as="h4" className="f6">
               How do you want to track progress?
@@ -261,7 +255,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
 
             {/* Time-based options */}
             {trackingMode === 'time' && (
-              <div style={{ paddingTop: 'var(--base-size-8)' }}>
+              <div className={styles.trackingOptions}>
                 <Stack direction="horizontal" gap="normal">
                   <FormControl>
                     <FormControl.Label>Min minutes/day</FormControl.Label>
@@ -271,7 +265,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
                       onChange={(e) => setMinMinutes(e.target.value)}
                       leadingVisual={ClockIcon}
                       trailingVisual={() => <span className="fgColor-muted f6">min</span>}
-                      style={{ width: '140px' }}
+                      className={styles.widthLarge}
                     />
                   </FormControl>
                   <FormControl>
@@ -281,11 +275,11 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
                       value={maxMinutes} 
                       onChange={(e) => setMaxMinutes(e.target.value)}
                       trailingVisual={() => <span className="fgColor-muted f6">min</span>}
-                      style={{ width: '140px' }}
+                      className={styles.widthLarge}
                     />
                   </FormControl>
                 </Stack>
-                <p className="fgColor-muted f6" style={{ marginTop: 'var(--base-size-8)' }}>
+                <p className={`fgColor-muted f6 ${styles.optionsHint}`}>
                   Set a range to give yourself flexibility
                 </p>
               </div>
@@ -293,7 +287,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
 
             {/* Count-based options */}
             {trackingMode === 'count' && (
-              <div style={{ paddingTop: 'var(--base-size-8)' }}>
+              <div className={styles.trackingOptions}>
                 <Stack direction="horizontal" gap="normal" align="end">
                   <FormControl>
                     <FormControl.Label>Daily target</FormControl.Label>
@@ -302,7 +296,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
                       value={countTarget} 
                       onChange={(e) => setCountTarget(e.target.value)}
                       leadingVisual={NumberIcon}
-                      style={{ width: '100px' }}
+                      className={styles.widthMedium}
                     />
                   </FormControl>
                   <FormControl>
@@ -311,11 +305,11 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
                       value={countUnit} 
                       onChange={(e) => setCountUnit(e.target.value)} 
                       placeholder="tests"
-                      style={{ width: '140px' }}
+                      className={styles.widthLarge}
                     />
                   </FormControl>
                 </Stack>
-                <p className="fgColor-muted f6" style={{ marginTop: 'var(--base-size-8)' }}>
+                <p className={`fgColor-muted f6 ${styles.optionsHint}`}>
                   Example: 3 tests, 5 commits, 2 reviews
                 </p>
               </div>
@@ -323,7 +317,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
 
             {/* Binary options */}
             {trackingMode === 'binary' && (
-              <div style={{ paddingTop: 'var(--base-size-8)' }}>
+              <div className={styles.trackingOptions}>
                 <p className="fgColor-muted">
                   Simply check in each day to mark your habit complete. 
                   Perfect for habits like &quot;Read documentation&quot; or &quot;Review PRs&quot;.
@@ -334,14 +328,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
         </div>
 
         {/* Schedule & Duration Section */}
-        <div
-          style={{
-            padding: 'var(--base-size-16)',
-            borderRadius: 'var(--borderRadius-medium)',
-            border: '1px solid var(--borderColor-default)',
-            backgroundColor: 'var(--bgColor-muted)',
-          }}
-        >
+        <div className={styles.sectionCard}>
           <Stack direction="vertical" gap="normal">
             <Heading as="h4" className="f6">
               <Stack direction="horizontal" gap="condensed" align="center">
@@ -378,7 +365,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
                       placeholder="30"
                       min={1}
                       max={365}
-                      style={{ width: '80px' }}
+                      className={styles.widthNarrow}
                       aria-label="Custom number of days"
                     />
                   )}
@@ -388,15 +375,8 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
 
             {/* Dynamic summary showing real commitment */}
             {getActiveDays() > 0 && (
-              <div 
-                style={{ 
-                  padding: 'var(--base-size-12)',
-                  borderRadius: 'var(--borderRadius-small)',
-                  backgroundColor: 'var(--bgColor-accent-muted)',
-                  border: '1px solid var(--borderColor-accent-muted)',
-                }}
-              >
-                <p style={{ margin: 0, color: 'var(--fgColor-default)' }}>
+              <div className={styles.commitmentBox}>
+                <p className={styles.commitmentText}>
                   <strong>Your commitment:</strong> {getActiveDays()} {includesWeekends ? 'consecutive' : 'weekday'} check-ins over {getCalendarDuration(getActiveDays(), includesWeekends)}
                 </p>
               </div>
