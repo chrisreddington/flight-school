@@ -103,7 +103,18 @@ export async function POST(
   const req = parseResult.data;
 
   try {
-    // Create the repository
+    // Start README generation immediately if a topic was provided — it only needs
+    // request data so it can run concurrently with repository creation.
+    const readmePromise = req.topic
+      ? (log.info(`Generating README for topic: ${req.topic}`),
+         generateLearningReadme({
+           repoName: req.name,
+           topic: req.topic,
+           description: req.description,
+         }))
+      : null;
+
+    // Create the repository (runs in parallel with README generation above)
     log.info(`Creating repository: ${req.name}`);
     const repo = await createRepository({
       name: req.name,
@@ -115,7 +126,7 @@ export async function POST(
     log.info(`Repository created: ${repo.fullName}`);
 
     // Early return if no README generation requested
-    if (!req.topic) {
+    if (!req.topic || !readmePromise) {
       const totalTime = nowMs() - startTime;
       log.info(`Repository setup complete in ${totalTime}ms`);
 
@@ -139,13 +150,8 @@ export async function POST(
       } satisfies RepoResponse);
     }
 
-    // Generate and update README
-    log.info(`Generating README for topic: ${req.topic}`);
-    const readmeContent = await generateLearningReadme({
-      repoName: req.name,
-      topic: req.topic,
-      description: req.description,
-    });
+    // Await README content (may already be resolved if AI was faster than repo creation)
+    const readmeContent = await readmePromise;
 
     // Get the SHA of the existing README (created by auto_init)
     const [owner, repoName] = repo.fullName.split('/');

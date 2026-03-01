@@ -115,18 +115,24 @@ export function AppHeader() {
         <Stack direction="horizontal" align="center" gap="condensed">
           <ActionMenu>
             <ActionMenu.Anchor>
-              {isLoading ? (
-                <div className={styles.avatarPlaceholder}>
-                  <Spinner size="small" />
-                </div>
-              ) : (
-                <Avatar
-                  src={avatarUrl}
-                  size={32}
-                  alt={`@${username}`}
-                  className={styles.avatar}
-                />
-              )}
+              <button
+                type="button"
+                className={styles.avatarButton}
+                aria-label={isLoading ? 'Open user menu' : `Open user menu for @${username}`}
+              >
+                {isLoading ? (
+                  <div className={styles.avatarPlaceholder}>
+                    <Spinner size="small" />
+                  </div>
+                ) : (
+                  <Avatar
+                    src={avatarUrl}
+                    size={32}
+                    alt=""
+                    className={styles.avatar}
+                  />
+                )}
+              </button>
             </ActionMenu.Anchor>
             <ActionMenu.Overlay width="medium">
               <ActionList>
