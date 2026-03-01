@@ -1,0 +1,44 @@
+/* HabitCreationDialog CSS Module
+ *
+ * Replaces static inline style objects in HabitCreationDialog.tsx
+ * to avoid per-render object allocation.
+ */
+
+.sectionCard {
+  padding: var(--base-size-16);
+  border-radius: var(--borderRadius-medium);
+  border: 1px solid var(--borderColor-default);
+  background-color: var(--bgColor-muted);
+}
+
+.trackingOptions {
+  padding-top: var(--base-size-8);
+}
+
+.optionsHint {
+  margin-top: var(--base-size-8);
+}
+
+.widthLarge {
+  width: 140px;
+}
+
+.widthMedium {
+  width: 100px;
+}
+
+.widthNarrow {
+  width: 80px;
+}
+
+.commitmentBox {
+  padding: var(--base-size-12);
+  border-radius: var(--borderRadius-small);
+  background-color: var(--bgColor-accent-muted);
+  border: 1px solid var(--borderColor-accent-muted);
+}
+
+.commitmentText {
+  margin: 0;
+  color: var(--fgColor-default);
+}
