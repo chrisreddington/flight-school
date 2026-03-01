@@ -174,7 +174,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
             </span>
             <span className={styles.progressValue}>
               {isGoalReached ? (
-                <span style={{ color: 'var(--fgColor-success)' }}>
+                <span className={styles.textSuccess}>
                   {formatTime(elapsedTime)} / {config.minMinutes} min ✓
                 </span>
               ) : (
@@ -182,7 +182,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
                   {formatTime(elapsedTime)} / {config.minMinutes} min
                 </>
               )}
-              {isPaused && <span style={{ color: 'var(--fgColor-muted)' }}> (Paused)</span>}
+              {isPaused && <span className="fgColor-muted"> (Paused)</span>}
             </span>
           </Stack>
           <ProgressBar
@@ -306,9 +306,9 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
     });
 
     return (
-      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', fontSize: '14px' }}>
+      <div className={styles.streakGrid}>
         {days.map((day, dayIndex) => (
-          <span key={`${habit.id}-day-${dayIndex}`} style={{ opacity: day.filled ? 1 : 0.3 }}>
+          <span key={`${habit.id}-day-${dayIndex}`} className={day.filled ? styles.streakDayFilled : styles.streakDayEmpty}>
             {day.symbol}
           </span>
         ))}
@@ -321,7 +321,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Label size="small" variant="accent">
-            <span style={{ marginRight: '4px', display: 'inline-flex' }}>
+            <span className={styles.iconInline}>
               <FlameIcon size={12} />
             </span>
             Day {habit.currentDay} of {habit.totalDays}

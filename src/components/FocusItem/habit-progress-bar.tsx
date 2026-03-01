@@ -43,7 +43,7 @@ export function HabitProgressBar({ habit, currentValue, elapsedTime, isPaused }:
           </span>
           <span className={styles.progressValue}>
             {isGoalReached ? (
-              <span style={{ color: 'var(--fgColor-success)' }}>
+              <span className={styles.textSuccess}>
                 {formatTime(elapsedTime)} / {config.minMinutes} min ✓
               </span>
             ) : (
@@ -51,7 +51,7 @@ export function HabitProgressBar({ habit, currentValue, elapsedTime, isPaused }:
                 {formatTime(elapsedTime)} / {config.minMinutes} min
               </>
             )}
-            {isPaused && <span style={{ color: 'var(--fgColor-muted)' }}> (Paused)</span>}
+            {isPaused && <span className="fgColor-muted"> (Paused)</span>}
           </span>
         </Stack>
         <ProgressBar
