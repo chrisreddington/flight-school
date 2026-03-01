@@ -168,7 +168,6 @@ export function ChallengeSandbox({
   const [mode, setMode] = useState<'free' | 'guided'>('free');
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [showSelfExplanationCard, setShowSelfExplanationCard] = useState(false);
   const [hasPromptedSelfExplanation, setHasPromptedSelfExplanation] = useState(false);
   
   // PERF: Defer Monaco editor mount until after initial paint to prevent
@@ -218,6 +217,7 @@ export function ChallengeSandbox({
   const canRunInBrowser = ['javascript', 'typescript'].includes(challenge.language.toLowerCase());
   const dateKey = getDateKey();
   const isChallengeComplete = evaluationResult?.score === 100 || evaluationResult?.isCorrect === true;
+  const showSelfExplanationCard = isChallengeComplete && !hasPromptedSelfExplanation;
 
   // Handle reset confirmation dialog
   const handleResetDialogClose = useCallback((gesture: 'confirm' | 'close-button' | 'cancel' | 'escape') => {
@@ -279,23 +279,16 @@ export function ChallengeSandbox({
     }
   }, [evaluationResult, onComplete]);
 
-  useEffect(() => {
-    if (isChallengeComplete && !hasPromptedSelfExplanation) {
-      setShowSelfExplanationCard(true);
-      setHasPromptedSelfExplanation(true);
-    }
-  }, [hasPromptedSelfExplanation, isChallengeComplete]);
-
   const handleSaveSelfExplanation = useCallback(
     async (text: string) => {
       await focusStore.saveSelfExplanation(dateKey, 'challenge', challengeId, text);
-      setShowSelfExplanationCard(false);
+      setHasPromptedSelfExplanation(true);
     },
     [challengeId, dateKey]
   );
 
   const handleSkipSelfExplanation = useCallback(() => {
-    setShowSelfExplanationCard(false);
+    setHasPromptedSelfExplanation(true);
   }, []);
   
   // Determine Monaco theme based on color mode
