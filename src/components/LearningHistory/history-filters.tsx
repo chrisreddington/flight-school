@@ -42,6 +42,7 @@ export function HistoryFilters({
         <TextInput
           leadingVisual={SearchIcon}
           placeholder="Search..."
+          aria-label="Search learning history"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           block
