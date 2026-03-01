@@ -624,7 +624,7 @@ describe('useCustomChallengeQueue core logic', () => {
     });
 
     it('should return loading state during initial fetch', () => {
-      let isLoading = true;
+      const isLoading = true;
 
       const activeResult = isLoading
         ? { challenge: null, source: 'daily' as const, queueRemaining: 0 }
