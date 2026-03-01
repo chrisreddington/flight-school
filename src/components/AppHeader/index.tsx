@@ -116,8 +116,9 @@ export function AppHeader() {
           <ActionMenu>
             <ActionMenu.Anchor>
               <button
+                type="button"
                 className={styles.avatarButton}
-                aria-label={isLoading ? 'Profile menu (loading)' : `Profile menu for @${username}`}
+                aria-label={isLoading ? 'Open user menu' : `Open user menu for @${username}`}
               >
                 {isLoading ? (
                   <div className={styles.avatarPlaceholder}>
