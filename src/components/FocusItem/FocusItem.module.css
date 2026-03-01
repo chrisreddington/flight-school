@@ -82,3 +82,34 @@
   margin-right: var(--base-size-4);
   display: inline-flex;
 }
+
+/* Compact card variant with reduced vertical padding */
+.cardCompact {
+  padding: 12px var(--base-size-16);
+}
+
+/* Inline value detail (e.g. "30 min 🎉") shown next to a habit title */
+.valueDetail {
+  margin-left: var(--base-size-8);
+  color: var(--fgColor-muted);
+  font-size: 14px;
+}
+
+/* Small muted text for day counters / metadata */
+.dayDetail {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+}
+
+/* Small flex link used for "Manage Habit" external links */
+.externalLink {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-4);
+}
+
+/* Reduced opacity for unavailable / not-checked-in state */
+.dimmed {
+  opacity: 0.5;
+}

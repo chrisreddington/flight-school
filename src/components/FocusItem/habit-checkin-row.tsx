@@ -58,17 +58,17 @@ export function HabitCheckInRow({ habit, checkIn, isToday, isPending, onUndo }: 
   // Today's completed card
   if (isToday && !isPending) {
     return (
-      <div className={styles.card} style={{ padding: '12px 16px' }}>
+      <div className={`${styles.card} ${styles.cardCompact}`}>
         <Stack direction="vertical" gap="condensed">
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack direction="horizontal" gap="condensed" align="center">
-              <span style={{ display: 'inline-flex' }}>
+              <span className="d-inline-flex">
                 {icon}
               </span>
               <div>
                 <strong>{habit.title}</strong>
                 {showProgress && valueDisplay && (
-                  <span style={{ marginLeft: '8px', color: 'var(--fgColor-muted)', fontSize: '14px' }}>
+                  <span className={styles.valueDetail}>
                     {valueDisplay}
                     {checkIn?.completed && ' 🎉'}
                   </span>
@@ -87,10 +87,10 @@ export function HabitCheckInRow({ habit, checkIn, isToday, isPending, onUndo }: 
             </Stack>
           </Stack>
           <Stack direction="horizontal" justify="space-between" align="center">
-            <span style={{ fontSize: '12px', color: 'var(--fgColor-muted)' }}>
+            <span className={styles.dayDetail}>
               Day {habit.currentDay} of {habit.totalDays}
             </span>
-            <Link href="/habits" style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Link href="/habits" className={styles.externalLink}>
               <LinkExternalIcon size={12} />
               Manage Habit
             </Link>
@@ -102,16 +102,16 @@ export function HabitCheckInRow({ habit, checkIn, isToday, isPending, onUndo }: 
 
   // Historical card - read-only
   return (
-    <div className={styles.card} style={{ padding: '12px 16px' }}>
+    <div className={`${styles.card} ${styles.cardCompact}`}>
       <Stack direction="horizontal" justify="space-between" align="center">
         <Stack direction="horizontal" gap="condensed" align="center">
-          <span style={{ display: 'inline-flex', opacity: !checkIn ? 0.5 : 1 }}>
+          <span className={`d-inline-flex${!checkIn ? ` ${styles.dimmed}` : ''}`}>
             {icon}
           </span>
           <div>
             <strong>{habit.title}</strong>
             {showProgress && valueDisplay && (
-              <span style={{ marginLeft: '8px', color: 'var(--fgColor-muted)', fontSize: '14px' }}>
+              <span className={styles.valueDetail}>
                 {valueDisplay}
                 {checkIn?.completed && ' 🎉'}
               </span>
