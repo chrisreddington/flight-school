@@ -10,7 +10,7 @@
  */
 
 import type { CopilotSession } from '@github/copilot-sdk';
-import { CopilotClient } from '@github/copilot-sdk';
+import { approveAll, CopilotClient } from '@github/copilot-sdk';
 
 import { getMcpServerConfig } from './mcp';
 import type {
@@ -130,12 +130,13 @@ export async function createSessionWithMetrics(
   const startTime = Date.now();
   const copilot = await getCopilotClient();
   const includeMcp = options?.includeMcpTools === true; // Default to false for speed
-  const mcpConfig = includeMcp ? await getMcpServerConfig(options?.tools) : null;
+  const mcpConfig = includeMcp ? getMcpServerConfig(options?.tools) : null;
   const model = options?.model ?? MODEL_TIERS.standard;
 
   const session = await copilot.createSession({
     model,
     streaming: true, // Enable streaming for delta events
+    onPermissionRequest: approveAll,
     // Disable built-in shell/write/url tools — Flight School is read-only
     excludedTools: ['shell', 'editFile', 'createFile', 'deleteFile', 'runCommand', 'bash', 'terminal'],
     ...(mcpConfig && {
