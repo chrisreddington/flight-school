@@ -31,7 +31,7 @@ import { workspaceStore } from '@/lib/workspace/storage';
 import { AlertIcon, CodeIcon, InfoIcon, MortarBoardIcon, PlusIcon, TrashIcon } from '@primer/octicons-react';
 import {
     Button,
-    Flash,
+    Banner,
     FormControl,
     Heading,
     Link,
@@ -48,10 +48,12 @@ import styles from './profile-skills.module.css';
 export default function SkillProfilePage() {
   const [profile, setProfile] = useState<SkillProfile>(DEFAULT_SKILL_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [newSkillName, setNewSkillName] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Register this page in breadcrumb history
   useBreadcrumb('/skills', 'Skills', '/skills');
@@ -60,6 +62,7 @@ export default function SkillProfilePage() {
   useEffect(() => {
     (async () => {
       try {
+        setLoadError(null);
         const [loaded, calibration] = await Promise.all([
           skillsStore.get(),
           focusStore.getCalibrationNeeded(),
@@ -68,6 +71,7 @@ export default function SkillProfilePage() {
         setCalibrationItems(calibration);
       } catch (error) {
         logger.error('Failed to load skill profile', { error }, 'SkillsPage');
+        setLoadError('Failed to load skill profile. Please try refreshing the page.');
       } finally {
         setIsLoading(false);
       }
@@ -90,6 +94,7 @@ export default function SkillProfilePage() {
   // Handle skill level and interest change
   const handleSkillChange = useCallback(async (skillId: string, level: SkillLevel, notInterested: boolean) => {
     if (!profile) return;
+    setActionError(null);
     
     const updatedSkills = profile.skills.map(skill => {
       if (skill.skillId !== skillId) return skill;
@@ -114,12 +119,14 @@ export default function SkillProfilePage() {
       logger.error('Failed to save skill profile', { error }, 'SkillsPage');
       // Revert on error
       setProfile(profile);
+      setActionError(error instanceof Error ? error.message : 'Failed to save changes. Please try again.');
     }
   }, [profile]);
 
   // Handle removing a skill
   const handleRemoveSkill = useCallback(async (skillId: string) => {
     if (!profile) return;
+    setActionError(null);
     
     const updatedSkills = profile.skills.filter(skill => skill.skillId !== skillId);
     
@@ -137,12 +144,14 @@ export default function SkillProfilePage() {
       logger.error('Failed to remove skill', { error }, 'SkillsPage');
       // Revert on error
       setProfile(profile);
+      setActionError(error instanceof Error ? error.message : 'Failed to save changes. Please try again.');
     }
   }, [profile]);
 
   // Handle adding a new skill
   const handleAddSkill = useCallback(async (suggestedSkill?: { skillId: string; displayName: string }) => {
     if (!profile) return;
+    setActionError(null);
 
     const isSuggestedSkill = suggestedSkill !== undefined;
     const displayName = isSuggestedSkill ? suggestedSkill.displayName : newSkillName.trim();
@@ -182,6 +191,7 @@ export default function SkillProfilePage() {
       logger.error('Failed to add skill', { error }, 'SkillsPage');
       // Revert on error
       setProfile(profile);
+      setActionError(error instanceof Error ? error.message : 'Failed to save changes. Please try again.');
     }
   }, [profile, newSkillName]);
 
@@ -331,19 +341,21 @@ export default function SkillProfilePage() {
               chat threads, and challenge history.
             </p>
             {showResetConfirm ? (
-              <Flash variant="danger">
-                <Stack direction="vertical" gap="condensed">
-                  <span>Are you sure? This cannot be undone.</span>
-                  <Stack direction="horizontal" gap="condensed">
-                    <Button variant="danger" size="small" onClick={handleClearAllData}>
-                      Yes, Reset
-                    </Button>
-                    <Button variant="invisible" size="small" onClick={() => setShowResetConfirm(false)}>
-                      Cancel
-                    </Button>
-                  </Stack>
-                </Stack>
-              </Flash>
+              <Banner
+                variant="critical"
+                title="Are you sure?"
+                description="This cannot be undone."
+                primaryAction={
+                  <Banner.PrimaryAction onClick={handleClearAllData}>
+                    Yes, Reset
+                  </Banner.PrimaryAction>
+                }
+                secondaryAction={
+                  <Banner.SecondaryAction onClick={() => setShowResetConfirm(false)}>
+                    Cancel
+                  </Banner.SecondaryAction>
+                }
+              />
             ) : (
               <Button variant="danger" size="small" onClick={() => setShowResetConfirm(true)}>
                 Clear All Data
@@ -354,6 +366,13 @@ export default function SkillProfilePage() {
 
         {/* Main Content */}
         <div className={styles.content}>
+          {loadError && (
+            <Banner
+              title="Failed to load skill profile"
+              description={loadError}
+              variant="critical"
+            />
+          )}
           <Stack direction="vertical" gap="normal">
             <div className={styles.pageHeader}>
               <Stack direction="horizontal" align="center" justify="space-between">
@@ -374,6 +393,14 @@ export default function SkillProfilePage() {
                 </Button>
               </Stack>
             </div>
+            {actionError && (
+              <Banner
+                title="Failed to save"
+                description={actionError}
+                variant="critical"
+                onDismiss={() => setActionError(null)}
+              />
+            )}
 
             <div className={styles.infoBox}>
               <Stack direction="horizontal" align="start" gap="condensed">

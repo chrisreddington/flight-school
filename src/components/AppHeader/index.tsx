@@ -182,14 +182,18 @@ export function AppHeader() {
                   Copilot SDK
                   <ActionList.Description>Build your own AI apps</ActionList.Description>
                 </ActionList.LinkItem>
-                <ActionList.Divider />
-                <ActionList.Item onSelect={toggleDebugMode}>
-                  <ActionList.LeadingVisual><BugIcon /></ActionList.LeadingVisual>
-                  Debug Mode
-                  <ActionList.TrailingVisual>
-                    {isDebugMode ? 'On' : 'Off'}
-                  </ActionList.TrailingVisual>
-                </ActionList.Item>
+                {process.env.NODE_ENV === 'development' && (
+                  <>
+                    <ActionList.Divider />
+                    <ActionList.Item onSelect={toggleDebugMode}>
+                      <ActionList.LeadingVisual><BugIcon /></ActionList.LeadingVisual>
+                      Debug Mode
+                      <ActionList.TrailingVisual>
+                        {isDebugMode ? 'On' : 'Off'}
+                      </ActionList.TrailingVisual>
+                    </ActionList.Item>
+                  </>
+                )}
                 <ActionList.Divider />
                 <ActionList.Item disabled>
                   {profile?.meta?.authMethod === 'github-token' && 'Logged in via GITHUB_TOKEN'}
@@ -209,4 +213,3 @@ export function AppHeader() {
     </header>
   );
 }
-

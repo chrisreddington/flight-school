@@ -201,7 +201,7 @@
 
 .progressBar {
   height: 8px;
-  background-color: var(--bgColor-default, #ffffff);
+  background-color: var(--bgColor-muted, #f6f8fa);
   border-radius: var(--borderRadius-small, 4px);
   overflow: hidden;
   margin-top: var(--base-size-12, 12px);

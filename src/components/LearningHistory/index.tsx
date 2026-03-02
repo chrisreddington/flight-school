@@ -37,6 +37,7 @@ import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLearningChat } from '@/hooks/use-learning-chat';
+import { logger } from '@/lib/logger';
 import insightsStyles from '@/components/Insights/Insights.module.css';
 import styles from './LearningHistory.module.css';
 
@@ -89,6 +90,7 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
   const [refreshKey, setRefreshKey] = useState(0);
   const prevActiveCountRef = useRef(activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [insights, setInsights] = useState<LearningInsights | null>(null);
   const [totalGoalsCompleted, setTotalGoalsCompleted] = useState(0);
   
@@ -111,28 +113,32 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
   
   // Handle "Explore" from history - creates thread, starts streaming, navigates
   const handleExploreTopic = useCallback(async (topic: LearningTopic) => {
-    // Create a new thread for this topic
-    const thread = await createThread({ 
-      title: `Learning: ${topic.title}`,
-      context: {
-        learningFocus: topic.title,
-      },
-    }, true);
-    
-    // Prepare the initial explore message
-    const exploreMessage = `I'd like to learn about "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
-    
-    // Start the chat (this will stream in the background)
-    await sendMessage(exploreMessage, { threadId: thread.id, useGitHubTools: true });
-    
-    // Show toast notification
-    setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
-    
-    // Auto-dismiss toast after 3 seconds
-    setTimeout(() => setToastMessage(null), 3000);
-    
-    // Navigate to dashboard after a short delay to let the stream start
-    setTimeout(() => router.push('/'), 500);
+    try {
+      // Create a new thread for this topic
+      const thread = await createThread({ 
+        title: `Learning: ${topic.title}`,
+        context: {
+          learningFocus: topic.title,
+        },
+      }, true);
+      
+      // Prepare the initial explore message
+      const exploreMessage = `I'd like to learn about "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
+      
+      // Start the chat (this will stream in the background)
+      await sendMessage(exploreMessage, { threadId: thread.id, useGitHubTools: true });
+      
+      // Show toast notification
+      setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
+      
+      // Auto-dismiss toast after 3 seconds
+      setTimeout(() => setToastMessage(null), 3000);
+      
+      // Navigate to dashboard after a short delay to let the stream start
+      setTimeout(() => router.push('/'), 500);
+    } catch {
+      setToastMessage('Failed to start chat. Please try again.');
+    }
   }, [createThread, sendMessage, router]);
 
   // Auto-expand current month on load
@@ -157,130 +163,137 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     let cancelled = false;
     
     const loadData = async () => {
-      const rawHistory = await focusStore.getHistory();
-      const habitsCollection = await habitStore.load();
-      
-      if (cancelled) return;
+      try {
+        setLoadError(null);
+        const rawHistory = await focusStore.getHistory();
+        const habitsCollection = await habitStore.load();
+        
+        if (cancelled) return;
 
-      const entries = Object.entries(rawHistory)
-        .map(([dateKey, record]) => {
-          const items: HistoryItem[] = [];
-          const r = record as DailyFocusRecord;
-          let completedCount = 0;
-          let skippedCount = 0;
+        const entries = Object.entries(rawHistory)
+          .map(([dateKey, record]) => {
+            const items: HistoryItem[] = [];
+            const r = record as DailyFocusRecord;
+            let completedCount = 0;
+            let skippedCount = 0;
 
-          // Challenges
-          if (r.challenges) {
-            r.challenges.forEach(c => {
-              if (c.stateHistory && c.stateHistory.length > 0) {
-                const status = getItemStatus(c.stateHistory);
-                items.push({
-                  type: 'challenge',
-                  data: c.data,
-                  timestamp: c.stateHistory[0].timestamp,
-                  status,
-                  stateHistory: c.stateHistory,
-                });
-                if (status === 'completed') completedCount++;
-                if (status === 'skipped') skippedCount++;
-              }
-            });
-          }
-
-          // Goals
-          if (r.goals) {
-            r.goals.forEach(g => {
-              if (g.stateHistory && g.stateHistory.length > 0) {
-                const status = getItemStatus(g.stateHistory);
-                items.push({
-                  type: 'goal',
-                  data: g.data,
-                  timestamp: g.stateHistory[0].timestamp,
-                  status,
-                  stateHistory: g.stateHistory,
-                });
-                if (status === 'completed') completedCount++;
-                if (status === 'skipped') skippedCount++;
-              }
-            });
-          }
-
-          // Topics
-          if (r.learningTopics) {
-            r.learningTopics.forEach(topicArray => {
-              topicArray.forEach(t => {
-                if (t.stateHistory && t.stateHistory.length > 0) {
-                  const status = getItemStatus(t.stateHistory);
+            // Challenges
+            if (r.challenges) {
+              r.challenges.forEach(c => {
+                if (c.stateHistory && c.stateHistory.length > 0) {
+                  const status = getItemStatus(c.stateHistory);
                   items.push({
-                    type: 'topic',
-                    data: t.data,
-                    timestamp: t.stateHistory[0].timestamp,
+                    type: 'challenge',
+                    data: c.data,
+                    timestamp: c.stateHistory[0].timestamp,
                     status,
-                    stateHistory: t.stateHistory,
+                    stateHistory: c.stateHistory,
                   });
                   if (status === 'completed') completedCount++;
                   if (status === 'skipped') skippedCount++;
                 }
               });
-            });
-          }
+            }
 
-          // Habits
-          habitsCollection.habits.forEach((habit: HabitWithHistory) => {
-            const checkInForDate = habit.checkIns.find((c: DailyCheckIn) => c.date === dateKey);
-            const isActiveHabit = habit.state === 'active' || habit.state === 'not-started';
-
-            if (checkInForDate) {
-              const status: ItemStatus = checkInForDate.completed ? 'completed' : 'active';
-              items.push({
-                type: 'habit',
-                data: habit,
-                timestamp: checkInForDate.timestamp,
-                status,
-              });
-              if (status === 'completed') completedCount++;
-            } else if (dateKey === todayDateKey && isActiveHabit) {
-              items.push({
-                type: 'habit',
-                data: habit,
-                timestamp: new Date().toISOString(),
-                status: 'active',
+            // Goals
+            if (r.goals) {
+              r.goals.forEach(g => {
+                if (g.stateHistory && g.stateHistory.length > 0) {
+                  const status = getItemStatus(g.stateHistory);
+                  items.push({
+                    type: 'goal',
+                    data: g.data,
+                    timestamp: g.stateHistory[0].timestamp,
+                    status,
+                    stateHistory: g.stateHistory,
+                  });
+                  if (status === 'completed') completedCount++;
+                  if (status === 'skipped') skippedCount++;
+                }
               });
             }
-          });
 
-          items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            // Topics
+            if (r.learningTopics) {
+              r.learningTopics.forEach(topicArray => {
+                topicArray.forEach(t => {
+                  if (t.stateHistory && t.stateHistory.length > 0) {
+                    const status = getItemStatus(t.stateHistory);
+                    items.push({
+                      type: 'topic',
+                      data: t.data,
+                      timestamp: t.stateHistory[0].timestamp,
+                      status,
+                      stateHistory: t.stateHistory,
+                    });
+                    if (status === 'completed') completedCount++;
+                    if (status === 'skipped') skippedCount++;
+                  }
+                });
+              });
+            }
 
-          return {
-            dateKey,
-            displayDate: formatDateForDisplay(dateKey),
-            items,
-            totalCount: items.length,
-            completedCount,
-            skippedCount,
-          };
-        })
-        .filter(entry => entry.items.length > 0)
-        .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+            // Habits
+            habitsCollection.habits.forEach((habit: HabitWithHistory) => {
+              const checkInForDate = habit.checkIns.find((c: DailyCheckIn) => c.date === dateKey);
+              const isActiveHabit = habit.state === 'active' || habit.state === 'not-started';
 
-      const computedInsights = computeInsights(rawHistory);
-      let goalsCount = 0;
-      for (const dateKey of Object.keys(rawHistory)) {
-        const record = rawHistory[dateKey];
-        for (const goal of record.goals) {
-          const wasCompleted = goal.stateHistory.some(
-            transition => transition.state === 'completed',
-          );
-          if (wasCompleted) {
-            goalsCount++;
+              if (checkInForDate) {
+                const status: ItemStatus = checkInForDate.completed ? 'completed' : 'active';
+                items.push({
+                  type: 'habit',
+                  data: habit,
+                  timestamp: checkInForDate.timestamp,
+                  status,
+                });
+                if (status === 'completed') completedCount++;
+              } else if (dateKey === todayDateKey && isActiveHabit) {
+                items.push({
+                  type: 'habit',
+                  data: habit,
+                  timestamp: new Date().toISOString(),
+                  status: 'active',
+                });
+              }
+            });
+
+            items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+            return {
+              dateKey,
+              displayDate: formatDateForDisplay(dateKey),
+              items,
+              totalCount: items.length,
+              completedCount,
+              skippedCount,
+            };
+          })
+          .filter(entry => entry.items.length > 0)
+          .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+        const computedInsights = computeInsights(rawHistory);
+        let goalsCount = 0;
+        for (const dateKey of Object.keys(rawHistory)) {
+          const record = rawHistory[dateKey];
+          for (const goal of record.goals) {
+            const wasCompleted = goal.stateHistory.some(
+              transition => transition.state === 'completed',
+            );
+            if (wasCompleted) {
+              goalsCount++;
+            }
           }
         }
-      }
 
-      setAllEntries(entries);
-      setInsights(computedInsights);
-      setTotalGoalsCompleted(goalsCount);
-      setIsLoading(false);
+        setAllEntries(entries);
+        setInsights(computedInsights);
+        setTotalGoalsCompleted(goalsCount);
+      } catch (error) {
+        logger.error('Failed to load learning history', { error });
+        setLoadError('Failed to load your learning history. Please refresh to try again.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     };
     
     loadData();
@@ -397,6 +410,13 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
                 Stats
               </UnderlinePanels.Tab>
               <UnderlinePanels.Panel>
+                {loadError && (
+                  <Banner
+                    title="Failed to load history"
+                    description={loadError}
+                    variant="critical"
+                  />
+                )}
                 <div className={styles.emptyState}>
                   <Banner
                     title="No learning history yet"
@@ -410,6 +430,13 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
                 </div>
               </UnderlinePanels.Panel>
               <UnderlinePanels.Panel>
+                {loadError && (
+                  <Banner
+                    title="Failed to load history"
+                    description={loadError}
+                    variant="critical"
+                  />
+                )}
                 <div className={styles.emptyState}>
                   <Banner
                     title="No learning history yet"
@@ -519,6 +546,13 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
               Stats
             </UnderlinePanels.Tab>
             <UnderlinePanels.Panel>
+              {loadError && (
+                <Banner
+                  title="Failed to load history"
+                  description={loadError}
+                  variant="critical"
+                />
+              )}
               {isLoading ? (
                 <div className={styles.loadingState}>
                   <Spinner size="medium" />
@@ -587,6 +621,13 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
               )}
             </UnderlinePanels.Panel>
             <UnderlinePanels.Panel>
+              {loadError && (
+                <Banner
+                  title="Failed to load history"
+                  description={loadError}
+                  variant="critical"
+                />
+              )}
               {isLoading ? (
                 <div className={styles.loadingState}>
                   <Spinner size="medium" />

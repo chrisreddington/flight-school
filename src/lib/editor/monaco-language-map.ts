@@ -8,48 +8,6 @@
  */
 
 /**
- * Language mapping table from display names to Monaco identifiers.
- */
-const LANGUAGE_MAP: Record<string, string> = {
-  'typescript': 'typescript',
-  'TypeScript': 'typescript',
-  'javascript': 'javascript',
-  'JavaScript': 'javascript',
-  'python': 'python',
-  'Python': 'python',
-  'java': 'java',
-  'Java': 'java',
-  'c#': 'csharp',
-  'C#': 'csharp',
-  'csharp': 'csharp',
-  'go': 'go',
-  'Go': 'go',
-  'rust': 'rust',
-  'Rust': 'rust',
-  'ruby': 'ruby',
-  'Ruby': 'ruby',
-  'php': 'php',
-  'PHP': 'php',
-  'html': 'html',
-  'HTML': 'html',
-  'css': 'css',
-  'CSS': 'css',
-  'json': 'json',
-  'JSON': 'json',
-  'sql': 'sql',
-  'SQL': 'sql',
-  'shell': 'shell',
-  'bash': 'shell',
-  'Bash': 'shell',
-  'yaml': 'yaml',
-  'YAML': 'yaml',
-  'yml': 'yaml',
-  'markdown': 'markdown',
-  'Markdown': 'markdown',
-  'md': 'markdown',
-};
-
-/**
  * Extension to Monaco language identifier mapping.
  */
 const EXTENSION_MAP: Record<string, string> = {
@@ -104,23 +62,6 @@ const DISPLAY_NAMES: Record<string, string> = {
   'markdown': 'Markdown',
   'plaintext': 'Plain Text',
 };
-
-/**
- * Maps a challenge language name to Monaco editor language identifier.
- * 
- * @param language - Language name from challenge definition
- * @returns Monaco editor language identifier, defaults to 'plaintext'
- * 
- * @example
- * ```typescript
- * getMonacoLanguage('TypeScript') // 'typescript'
- * getMonacoLanguage('Python')     // 'python'
- * getMonacoLanguage('unknown')    // 'plaintext'
- * ```
- */
-function getMonacoLanguage(language: string): string {
-  return LANGUAGE_MAP[language] ?? 'plaintext';
-}
 
 /**
  * Maps a file extension to Monaco editor language identifier.

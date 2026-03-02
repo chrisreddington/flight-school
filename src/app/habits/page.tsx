@@ -26,6 +26,7 @@ import {
   LightBulbIcon,
 } from '@primer/octicons-react';
 import {
+  Banner,
   Heading,
   Spinner,
   Stack,
@@ -39,15 +40,18 @@ export default function HabitsPage() {
   useBreadcrumb('/habits', 'Habits', '/habits');
 
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeHabits, setActiveHabits] = useState<HabitWithHistory[]>([]);
   const [completedHabits, setCompletedHabits] = useState<HabitWithHistory[]>([]);
   const [abandonedHabits, setAbandonedHabits] = useState<HabitWithHistory[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<HabitWithHistory | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const confirm = useConfirm();
 
   const loadHabits = useCallback(async () => {
     try {
+      setLoadError(null);
       const [active, completed, abandoned] = await Promise.all([
         habitStore.getActive(),
         habitStore.getCompleted(),
@@ -58,6 +62,7 @@ export default function HabitsPage() {
       setAbandonedHabits(abandoned);
     } catch (error) {
       logger.error('Failed to load habits', { error }, 'HabitsPage');
+      setLoadError('Failed to load habits. Please try refreshing the page.');
     } finally {
       setIsLoading(false);
     }
@@ -69,12 +74,14 @@ export default function HabitsPage() {
 
   const handleCheckIn = useCallback(
     async (habit: HabitWithHistory, value: number | boolean) => {
+      setActionError(null);
       try {
         const updated = checkInHabit(habit, value);
         await habitStore.update(updated);
         await loadHabits();
       } catch (error) {
         logger.error('Failed to check in', { error, habitId: habit.id }, 'HabitsPage');
+        setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
       }
     },
     [loadHabits]
@@ -82,12 +89,14 @@ export default function HabitsPage() {
 
   const handleSkip = useCallback(
     async (habit: HabitWithHistory) => {
+      setActionError(null);
       try {
         const updated = skipHabitDay(habit);
         await habitStore.update(updated);
         await loadHabits();
       } catch (error) {
         logger.error('Failed to skip', { error, habitId: habit.id }, 'HabitsPage');
+        setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
       }
     },
     [loadHabits]
@@ -95,12 +104,14 @@ export default function HabitsPage() {
 
   const handleUndo = useCallback(
     async (habit: HabitWithHistory) => {
+      setActionError(null);
       try {
         const updated = undoCheckIn(habit);
         await habitStore.update(updated);
         await loadHabits();
       } catch (error) {
         logger.error('Failed to undo check-in', { error, habitId: habit.id }, 'HabitsPage');
+        setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
       }
     },
     [loadHabits]
@@ -108,6 +119,7 @@ export default function HabitsPage() {
 
   const handleDelete = useCallback(
     async (habit: HabitWithHistory) => {
+      setActionError(null);
       const confirmed = await confirm({
         title: 'Delete Habit',
         content: `Are you sure you want to delete "${habit.title}"? This action cannot be undone.`,
@@ -122,6 +134,7 @@ export default function HabitsPage() {
           logger.info('Habit deleted', { habitId: habit.id }, 'HabitsPage');
         } catch (error) {
           logger.error('Failed to delete habit', { error, habitId: habit.id }, 'HabitsPage');
+          setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
         }
       }
     },
@@ -130,6 +143,7 @@ export default function HabitsPage() {
 
   const handleStop = useCallback(
     async (habit: HabitWithHistory) => {
+      setActionError(null);
       const confirmed = await confirm({
         title: 'Stop Habit',
         content: `Are you sure you want to stop "${habit.title}"? You can always view it in the Stopped Habits section.`,
@@ -145,6 +159,7 @@ export default function HabitsPage() {
           logger.info('Habit stopped', { habitId: habit.id }, 'HabitsPage');
         } catch (error) {
           logger.error('Failed to stop habit', { error, habitId: habit.id }, 'HabitsPage');
+          setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
         }
       }
     },
@@ -217,6 +232,22 @@ export default function HabitsPage() {
               Track your progress and build lasting habits
             </Text>
           </div>
+
+          {loadError && (
+            <Banner
+              title="Failed to load habits"
+              description={loadError}
+              variant="critical"
+            />
+          )}
+          {actionError && (
+            <Banner
+              title="Action failed"
+              description={actionError}
+              variant="critical"
+              onDismiss={() => setActionError(null)}
+            />
+          )}
 
           <HabitListSection
             activeHabits={activeHabits}

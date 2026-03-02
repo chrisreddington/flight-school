@@ -4,7 +4,7 @@ import { HabitCard } from '@/components/FocusItem/HabitCard';
 import { HabitCreationDialog } from '@/components/Habits/HabitCreationDialog';
 import { habitStore } from '@/lib/habits';
 import { logger } from '@/lib/logger';
-import { Button, Stack } from '@primer/react';
+import { Banner, Button, Stack } from '@primer/react';
 import { PlusIcon } from '@primer/octicons-react';
 import { useEffect, useState } from 'react';
 import type { HabitWithHistory } from '@/lib/habits/types';
@@ -14,13 +14,16 @@ export function HabitsSection() {
   const [habits, setHabits] = useState<HabitWithHistory[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadHabits = async () => {
+    setLoadError(null);
     try {
       const active = await habitStore.getActive();
       setHabits(active);
     } catch (error) {
       logger.error('Failed to load habits', { error }, 'HabitsSection');
+      setLoadError('Failed to load habits. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +53,13 @@ export function HabitsSection() {
 
   return (
     <>
+      {loadError && (
+        <Banner
+          title="Failed to load habits"
+          description={loadError}
+          variant="critical"
+        />
+      )}
       {habits.length === 0 ? (
         <div className={styles.habitsCard}>
           <Stack direction="vertical" align="center" gap="normal">

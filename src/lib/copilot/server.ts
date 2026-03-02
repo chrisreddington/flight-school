@@ -238,13 +238,14 @@ export async function createLoggedLightweightCoachSession(
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
   const { session, metrics } = await createSessionWithMetrics({
     includeMcpTools: false,
+    model: MODEL_TIERS.fastChat,
     systemMessage: COACH_LIGHTWEIGHT_PROMPT,
   }, 'coach:lightweight');
   return wrapSessionWithLogging(
     session,
     operationName,
     inputPrompt,
-    MODEL_TIERS.standard,
+    MODEL_TIERS.fastChat,
     undefined, // No pool replenishment
     metrics
   );

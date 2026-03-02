@@ -34,5 +34,21 @@ export async function register(): Promise<void> {
       process.once('SIGINT', () => shutdown('SIGINT'));
       process.once('SIGTERM', () => shutdown('SIGTERM'));
     }
+
+    try {
+      const { jobStorage } = await import('@/lib/jobs');
+      const jobs = await jobStorage.getAll();
+      const staleJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running');
+
+      await Promise.all(
+        staleJobs.map((job) => jobStorage.markFailed(job.id, 'Server process restarted'))
+      );
+
+      if (staleJobs.length > 0) {
+        log.info(`Marked ${staleJobs.length} stale jobs as failed on startup`);
+      }
+    } catch (err) {
+      log.warn('Failed to mark stale jobs on startup', { err });
+    }
   }
 }

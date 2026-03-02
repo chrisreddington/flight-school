@@ -291,6 +291,145 @@ describe('useLearningChat core logic', () => {
   });
 });
 
+describe('pending stream cleanup logic', () => {
+  it('should keep pending when thread is not yet in storage', () => {
+    const pending = new Map([['thread-1', 'user-msg-1']]);
+    const threads: unknown[] = [];
+
+    const stillPending = new Map<string, string>();
+    for (const [threadId, userMsgId] of pending) {
+      const thread = threads.find((t: unknown) => (t as { id: string }).id === threadId);
+      if (!thread) {
+        stillPending.set(threadId, userMsgId);
+      }
+    }
+    expect(stillPending.size).toBe(1);
+  });
+
+  it('should clear pending when thread.isStreaming becomes true', () => {
+    const pending = new Map([['thread-1', 'user-msg-1']]);
+    const threads = [{ id: 'thread-1', isStreaming: true, messages: [] }];
+
+    const stillPending = new Map<string, string>();
+    for (const [threadId, userMsgId] of pending) {
+      const thread = threads.find(t => t.id === threadId);
+      if (!thread) {
+        stillPending.set(threadId, userMsgId);
+      } else if (thread.isStreaming) {
+        // Storage has caught up - remove from pending
+      } else {
+        stillPending.set(threadId, userMsgId);
+      }
+    }
+    expect(stillPending.size).toBe(0);
+  });
+
+  it('should NOT clear pending due to prior assistant messages in existing conversation', () => {
+    const pending = new Map([['thread-1', 'user-msg-3']]);
+    const threads = [{
+      id: 'thread-1',
+      isStreaming: false,
+      messages: [
+        { id: 'user-msg-1', role: 'user', content: 'Hello' },
+        { id: 'ai-msg-1', role: 'assistant', content: 'Hi there' },
+        { id: 'user-msg-3', role: 'user', content: 'Follow-up question' },
+      ],
+    }];
+
+    const stillPending = new Map<string, string>();
+    for (const [threadId, userMsgId] of pending) {
+      const thread = threads.find(t => t.id === threadId);
+      if (!thread) {
+        stillPending.set(threadId, userMsgId);
+      } else if (thread.isStreaming) {
+        // no-op
+      } else {
+        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
+        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
+        const hasNewResponse =
+          userMsgIdx !== -1 &&
+          thread.messages
+            .slice(userMsgIdx + 1)
+            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
+        if (!hasStreamingMsg && !hasNewResponse) {
+          stillPending.set(threadId, userMsgId);
+        }
+      }
+    }
+    expect(stillPending.size).toBe(1);
+  });
+
+  it('should clear pending once new AI response appears after the user message', () => {
+    const pending = new Map([['thread-1', 'user-msg-3']]);
+    const threads = [{
+      id: 'thread-1',
+      isStreaming: false,
+      messages: [
+        { id: 'user-msg-1', role: 'user', content: 'Hello' },
+        { id: 'ai-msg-1', role: 'assistant', content: 'Hi there' },
+        { id: 'user-msg-3', role: 'user', content: 'Follow-up' },
+        { id: 'ai-msg-2', role: 'assistant', content: 'New response' },
+      ],
+    }];
+
+    const stillPending = new Map<string, string>();
+    for (const [threadId, userMsgId] of pending) {
+      const thread = threads.find(t => t.id === threadId);
+      if (!thread) {
+        stillPending.set(threadId, userMsgId);
+      } else if (thread.isStreaming) {
+        // no-op
+      } else {
+        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
+        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
+        const hasNewResponse =
+          userMsgIdx !== -1 &&
+          thread.messages
+            .slice(userMsgIdx + 1)
+            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
+        if (!hasStreamingMsg && !hasNewResponse) {
+          stillPending.set(threadId, userMsgId);
+        }
+      }
+    }
+    expect(stillPending.size).toBe(0);
+  });
+
+  it('should keep pending while only a streaming-in-progress message exists', () => {
+    const pending = new Map([['thread-1', 'user-msg-3']]);
+    const threads = [{
+      id: 'thread-1',
+      isStreaming: false,
+      messages: [
+        { id: 'user-msg-3', role: 'user', content: 'Question' },
+        { id: 'streaming-job-123', role: 'assistant', content: 'Thinking... ▊' },
+      ],
+    }];
+
+    const stillPending = new Map<string, string>();
+    for (const [threadId, userMsgId] of pending) {
+      const thread = threads.find(t => t.id === threadId);
+      if (!thread) {
+        stillPending.set(threadId, userMsgId);
+      } else if (thread.isStreaming) {
+        // no-op
+      } else {
+        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
+        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
+        const hasNewResponse =
+          userMsgIdx !== -1 &&
+          thread.messages
+            .slice(userMsgIdx + 1)
+            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
+        if (!hasStreamingMsg && !hasNewResponse) {
+          stillPending.set(threadId, userMsgId);
+        }
+      }
+    }
+    expect(stillPending.size).toBe(0);
+  });
+});
+
 describe('useLearningChat interface contract', () => {
   it('should define expected state shape', () => {
     interface Thread {

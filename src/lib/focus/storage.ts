@@ -453,7 +453,13 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       await this.setStorage(schema);
       log.debug('Goal state transitioned', { dateKey, goalId, from: currentState, to: newState, source });
     } catch (error) {
-      log.error('Goal state transition failed', { dateKey, goalId, currentState, newState, error });
+      log.error('Goal state transition failed', {
+        dateKey,
+        goalId,
+        currentState,
+        newState,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -502,7 +508,13 @@ class LocalStorageFocusStore implements FocusStoreInterface {
           await this.setStorage(schema);
           log.debug('Topic marked as explored', { dateKey, topicId, from: currentState, source });
         } catch (error) {
-          log.error('Topic state transition failed', { dateKey, topicId, currentState, targetState: 'explored', error });
+          log.error('Topic state transition failed', {
+            dateKey,
+            topicId,
+            currentState,
+            targetState: 'explored',
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
         return;
       }
@@ -588,7 +600,13 @@ class LocalStorageFocusStore implements FocusStoreInterface {
           await this.setStorage(schema);
           log.debug('Topic transitioned', { dateKey, topicId, from: currentState, to: newState, source });
         } catch (error) {
-          log.error('Topic state transition failed', { dateKey, topicId, currentState, newState, error });
+          log.error('Topic state transition failed', {
+            dateKey,
+            topicId,
+            currentState,
+            newState,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
         return;
       }
@@ -795,7 +813,10 @@ class LocalStorageFocusStore implements FocusStoreInterface {
 
   /**
    * Add a new challenge to the current day's challenges.
-   * Used when regenerating a challenge after skip.
+   * Idempotent: no-op if the challenge already exists in today's record.
+   * Creates the daily record if it doesn't exist yet.
+   * Used when regenerating a challenge after skip, or registering a custom
+   * challenge that was opened directly via URL (not pre-loaded from focus plan).
    */
   async addChallenge(
     dateKey: string,
@@ -806,10 +827,17 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       return;
     }
     const schema = await this.getStorage();
+
+    // Create the daily record if it doesn't exist yet (e.g., user opened
+    // a challenge URL directly without visiting the dashboard first)
+    if (!schema.history[dateKey]) {
+      schema.history[dateKey] = { challenges: [], goals: [], learningTopics: [] };
+    }
     const record = schema.history[dateKey];
-    
-    if (!record) {
-      log.warn('Attempted to add challenge for non-existent date', { dateKey });
+
+    // Idempotent: skip if challenge is already registered
+    if (record.challenges.some(c => c.data.id === newChallenge.id)) {
+      log.debug('Challenge already registered (idempotent)', { dateKey, challengeId: newChallenge.id });
       return;
     }
 

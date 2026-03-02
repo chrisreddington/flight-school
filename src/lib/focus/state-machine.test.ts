@@ -140,6 +140,7 @@ describe('transitionChallengeState', () => {
     it.each([
       { from: 'not-started', to: 'in-progress' },
       { from: 'not-started', to: 'skipped' },
+      { from: 'not-started', to: 'completed' },
       { from: 'in-progress', to: 'completed' },
       { from: 'in-progress', to: 'skipped' },
     ] as const)(
@@ -156,7 +157,6 @@ describe('transitionChallengeState', () => {
 
   describe('invalid transitions', () => {
     it.each([
-      { from: 'not-started', to: 'completed' },
       { from: 'completed', to: 'in-progress' },
       { from: 'completed', to: 'not-started' },
       { from: 'skipped', to: 'in-progress' },

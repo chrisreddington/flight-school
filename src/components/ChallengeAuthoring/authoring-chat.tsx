@@ -27,6 +27,19 @@ import { AuthoringMessageList } from './authoring-message-list';
 import { AuthoringInputForm } from './authoring-input-form';
 
 /**
+ * Removes JSON code blocks and raw JSON objects from AI chat content.
+ * Called when a challenge was parsed, so the raw JSON doesn't pollute the chat bubble.
+ */
+function stripJsonFromChatContent(content: string): string {
+  let stripped = content.replace(/```json[\s\S]*?```/g, '');
+  stripped = stripped.replace(/```[\s\S]*?```/g, (match) => {
+    const inner = match.slice(3, -3).trim();
+    return inner.startsWith('{') || inner.startsWith('[') ? '' : match;
+  });
+  return stripped.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
  * Message in the authoring conversation.
  */
 export interface AuthoringMessage {
@@ -91,6 +104,7 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const challengeReceivedRef = useRef(false);
     // Ref to track if template prompt was already sent (prevents React StrictMode double-execution)
     const templateSentRef: MutableRefObject<boolean> = useRef(false);
 
@@ -122,6 +136,7 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
     const sendMessage = useCallback(
       async (content: string) => {
         if (!content.trim() || isStreaming) return;
+        challengeReceivedRef.current = false;
 
         // Add user message
         const userMessage: AuthoringMessage = {
@@ -187,6 +202,7 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
                   fullContent += event.content;
                   setStreamingContent(fullContent);
                 } else if (event.type === 'challenge' && event.challenge) {
+                  challengeReceivedRef.current = true;
                   // Store the parsed challenge - don't auto-create, let user confirm
                   setPendingChallenge(event.challenge);
                 } else if (event.type === 'meta' && event.conversationId) {
@@ -202,10 +218,14 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
 
           // Add assistant message
           if (fullContent) {
+            const displayContent = challengeReceivedRef.current
+              ? stripJsonFromChatContent(fullContent)
+              : fullContent;
+            const finalContent = displayContent || "Here's your challenge! Click **Create Challenge** below to add it.";
             const assistantMessage: AuthoringMessage = {
               id: `assistant-${nowMs()}`,
               role: 'assistant',
-              content: fullContent,
+              content: finalContent,
               timestamp: now(),
             };
             setMessages((prev) => [...prev, assistantMessage]);

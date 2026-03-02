@@ -14,7 +14,6 @@
  * ```
  */
 
-import { getCurrentChallengeState, getCurrentGoalState, getCurrentTopicState } from './state-machine';
 import type { FocusHistory } from './types';
 
 /**
@@ -68,7 +67,6 @@ export function computeInsights(history: FocusHistory): LearningInsights {
   
   // Get sorted date keys (newest first for recent activity, oldest first for streaks)
   const dateKeys = Object.keys(history).sort();
-  const dateKeysDescending = [...dateKeys].reverse();
   
   // Track dates with activity for streak calculation
   const datesWithActivity = new Set<string>();
@@ -80,8 +78,6 @@ export function computeInsights(history: FocusHistory): LearningInsights {
 
     // Process challenges
     for (const statefulChallenge of record.challenges) {
-      const currentState = getCurrentChallengeState(statefulChallenge);
-      
       // Check if this challenge was completed
       const wasCompleted = statefulChallenge.stateHistory.some(
         transition => transition.state === 'completed'
@@ -154,7 +150,7 @@ export function computeInsights(history: FocusHistory): LearningInsights {
   }
 
   // Calculate streaks
-  const { currentStreak, longestStreak } = calculateStreaks(datesWithActivity, dateKeys);
+  const { currentStreak, longestStreak } = calculateStreaks(datesWithActivity);
 
   // Get recent activity (last 7 items, newest first)
   const sortedRecentActivity = recentActivity
@@ -177,12 +173,10 @@ export function computeInsights(history: FocusHistory): LearningInsights {
  * Calculate current and longest streaks from dates with activity.
  * 
  * @param datesWithActivity - Set of date keys that had activity
- * @param dateKeys - Sorted array of all date keys (oldest first)
  * @returns Current and longest streaks
  */
 function calculateStreaks(
-  datesWithActivity: Set<string>,
-  dateKeys: string[]
+  datesWithActivity: Set<string>
 ): { currentStreak: number; longestStreak: number } {
   if (datesWithActivity.size === 0) {
     return { currentStreak: 0, longestStreak: 0 };
@@ -190,7 +184,6 @@ function calculateStreaks(
 
   // Get today's date key
   const today = new Date();
-  const todayKey = today.toISOString().split('T')[0];
   
   // Calculate current streak (counting backwards from today)
   let currentStreak = 0;

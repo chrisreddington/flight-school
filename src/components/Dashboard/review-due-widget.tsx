@@ -1,12 +1,13 @@
 'use client';
 
-import { Button, Label, Stack } from '@primer/react';
+import { Banner, Button, Label, Stack } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { TopicQuiz } from '@/components/TopicQuiz';
 import { useSpacedRepCandidates } from '@/hooks/use-spaced-rep-candidates';
 import { focusStore } from '@/lib/focus';
 import type { FocusHistory } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { SpacedRepCandidate } from '@/lib/focus/spaced-repetition';
 import styles from './review-due-widget.module.css';
@@ -43,6 +44,7 @@ export function ReviewDueWidget() {
   const { candidates, isLoading } = useSpacedRepCandidates();
   const [selectedTopic, setSelectedTopic] = useState<SelectedTopic | null>(null);
   const [hasHistory, setHasHistory] = useState<boolean>(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -64,15 +66,21 @@ export function ReviewDueWidget() {
   }, []);
 
   const handleStartQuiz = useCallback(async (candidate: SpacedRepCandidate) => {
-    const history = await focusStore.getHistory();
-    const topicRecord = findLatestTopicRecord(history, candidate.topicId);
+    try {
+      setQuizError(null);
+      const history = await focusStore.getHistory();
+      const topicRecord = findLatestTopicRecord(history, candidate.topicId);
 
-    setSelectedTopic({
-      topicId: candidate.topicId,
-      topicTitle: candidate.title,
-      topicDescription: topicRecord?.description ?? `Review key concepts for ${candidate.title}.`,
-      dateKey: topicRecord?.dateKey ?? getDateKey(),
-    });
+      setSelectedTopic({
+        topicId: candidate.topicId,
+        topicTitle: candidate.title,
+        topicDescription: topicRecord?.description ?? `Review key concepts for ${candidate.title}.`,
+        dateKey: topicRecord?.dateKey ?? getDateKey(),
+      });
+    } catch (error) {
+      setQuizError(error instanceof Error ? error.message : 'Failed to load quiz. Please try again.');
+      logger.error('Failed to start quiz', { error }, 'ReviewDueWidget');
+    }
   }, []);
 
   const handleQuizClose = useCallback(() => {
@@ -80,7 +88,9 @@ export function ReviewDueWidget() {
 
     const topicToMarkReviewed = selectedTopic;
     setSelectedTopic(null);
-    void focusStore.markTopicReviewed(topicToMarkReviewed.dateKey, topicToMarkReviewed.topicId);
+    focusStore.markTopicReviewed(topicToMarkReviewed.dateKey, topicToMarkReviewed.topicId).catch((error) => {
+      logger.error('Failed to mark topic reviewed', { error }, 'ReviewDueWidget');
+    });
   }, [selectedTopic]);
 
   if (isLoading) {
@@ -109,6 +119,15 @@ export function ReviewDueWidget() {
           <h3 className={styles.title}>📚 Review Due</h3>
           <p className={styles.subtitle}>Topics to revisit for better retention</p>
         </header>
+
+        {quizError && (
+          <Banner
+            title="Quiz Error"
+            description={quizError}
+            variant="critical"
+            onDismiss={() => setQuizError(null)}
+          />
+        )}
 
         <Stack direction="vertical" gap="condensed">
           {candidates.map((candidate) => (

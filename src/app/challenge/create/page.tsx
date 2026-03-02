@@ -14,8 +14,9 @@ import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import type { DailyChallenge } from '@/lib/focus/types';
+import { Banner } from '@primer/react';
 import { useRouter } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import styles from '../challenge.module.css';
 
 /**
@@ -28,6 +29,7 @@ export default function CreateChallengePage() {
   const router = useRouter();
   const { addChallenge, isQueueFull, maxQueueSize } = useCustomChallengeQueue(null);
   const { data: profile } = useUserProfile();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Register this page in breadcrumb history
   useBreadcrumb('/challenge/create', 'Create Challenge', '/challenge/create');
@@ -38,17 +40,19 @@ export default function CreateChallengePage() {
   const handleSaveChallenge = useCallback(
     async (challenge: DailyChallenge) => {
       if (isQueueFull) {
-        // Show error - queue is full
-        alert(`Queue is full (${maxQueueSize} challenges max). Complete or remove some challenges first.`);
+        setErrorMessage(
+          `Queue is full (${maxQueueSize} challenges max). Complete or remove some challenges first.`
+        );
         return;
       }
 
       const success = await addChallenge(challenge);
       if (success) {
-        // Navigate back to dashboard
-        router.push('/');
+        // Navigate back to dashboard with success indicator
+        router.push('/?challengeAdded=1');
       } else {
-        alert('Failed to add challenge to queue. Please try again.');
+        setErrorMessage('Failed to add challenge to queue. Please try again.');
+        return;
       }
     },
     [addChallenge, isQueueFull, maxQueueSize, router]
@@ -57,6 +61,14 @@ export default function CreateChallengePage() {
   return (
     <div className={styles.root}>
       <AppHeader />
+      {errorMessage && (
+        <Banner
+          title="Error"
+          description={errorMessage}
+          variant="critical"
+          onDismiss={() => setErrorMessage(null)}
+        />
+      )}
 
       <main className={styles.main}>
         <div style={{ flex: 1, overflow: 'hidden' }}>

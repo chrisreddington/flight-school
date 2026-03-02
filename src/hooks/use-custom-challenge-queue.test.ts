@@ -14,8 +14,10 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { DailyChallenge } from '@/lib/focus/types';
 import { determineActiveChallenge, MAX_CUSTOM_QUEUE_SIZE } from '@/lib/challenge/custom-queue';
+import { useCustomChallengeQueue } from './use-custom-challenge-queue';
 
 // Mock the challengeQueueStore
 vi.mock('@/lib/challenge/custom-queue', async () => {
@@ -37,7 +39,19 @@ vi.mock('@/lib/challenge/custom-queue', async () => {
   };
 });
 
+vi.mock('@/lib/focus', () => ({
+  focusStore: {
+    addChallenge: vi.fn(),
+  },
+}));
+
+vi.mock('@/lib/utils/date-utils', () => ({
+  getDateKey: vi.fn(() => '2024-01-01'),
+}));
+
 import { challengeQueueStore } from '@/lib/challenge/custom-queue';
+import { focusStore } from '@/lib/focus';
+import { getDateKey } from '@/lib/utils/date-utils';
 
 describe('useCustomChallengeQueue core logic', () => {
   beforeEach(() => {
@@ -688,5 +702,106 @@ describe('useCustomChallengeQueue interface contract', () => {
     expect(typeof mockResult.clearQueue).toBe('function');
     expect(typeof mockResult.getById).toBe('function');
     expect(typeof mockResult.isLoading).toBe('boolean');
+  });
+});
+
+describe('useCustomChallengeQueue addChallenge history registration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (challengeQueueStore.getAll as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (getDateKey as ReturnType<typeof vi.fn>).mockReturnValue('2024-01-01');
+  });
+
+  it('registers existing queued challenges in focusStore on initial load', async () => {
+    const existingQueue: DailyChallenge[] = [
+      {
+        id: 'legacy-1',
+        title: 'Legacy Challenge 1',
+        description: 'Description 1',
+        difficulty: 'beginner',
+        estimatedMinutes: 15,
+        category: 'frontend',
+        isCustom: true,
+      },
+      {
+        id: 'legacy-2',
+        title: 'Legacy Challenge 2',
+        description: 'Description 2',
+        difficulty: 'intermediate',
+        estimatedMinutes: 30,
+        category: 'api',
+        isCustom: true,
+      },
+    ];
+    (challengeQueueStore.getAll as ReturnType<typeof vi.fn>).mockResolvedValue(existingQueue);
+
+    const { result } = renderHook(() => useCustomChallengeQueue(null));
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    await waitFor(() => {
+      expect(focusStore.addChallenge).toHaveBeenCalledWith('2024-01-01', {
+        ...existingQueue[0],
+        isCustom: true,
+      });
+      expect(focusStore.addChallenge).toHaveBeenCalledWith('2024-01-01', {
+        ...existingQueue[1],
+        isCustom: true,
+      });
+    });
+  });
+
+  it('should register challenge in focusStore when addChallenge succeeds', async () => {
+    const challenge: DailyChallenge = {
+      id: 'challenge-new',
+      title: 'New Challenge',
+      description: 'Description',
+      difficulty: 'beginner',
+      estimatedMinutes: 15,
+      category: 'frontend',
+    };
+    (challengeQueueStore.addChallenge as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+    const { result } = renderHook(() => useCustomChallengeQueue(null));
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    let added = false;
+    await act(async () => {
+      added = await result.current.addChallenge(challenge);
+    });
+
+    expect(added).toBe(true);
+    expect(focusStore.addChallenge).toHaveBeenCalledWith('2024-01-01', {
+      ...challenge,
+      isCustom: true,
+    });
+  });
+
+  it('should NOT register in focusStore when queue is full (addChallenge returns false)', async () => {
+    const challenge: DailyChallenge = {
+      id: 'challenge-new',
+      title: 'New Challenge',
+      description: 'Description',
+      difficulty: 'beginner',
+      estimatedMinutes: 15,
+      category: 'frontend',
+    };
+    (challengeQueueStore.addChallenge as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    const { result } = renderHook(() => useCustomChallengeQueue(null));
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    let added = true;
+    await act(async () => {
+      added = await result.current.addChallenge(challenge);
+    });
+
+    expect(added).toBe(false);
+    expect(focusStore.addChallenge).not.toHaveBeenCalled();
   });
 });

@@ -436,7 +436,7 @@ describe('Workspace Templates', () => {
       const files = getWorkspaceTemplate({ ...baseChallenge, language: 'TypeScript' });
       const lines = files[0].content.split('\n');
 
-      lines.forEach((line, index) => {
+      lines.forEach((line) => {
         if (line.trim() !== '') {
           expect(line).not.toMatch(/\s+$/);
         }

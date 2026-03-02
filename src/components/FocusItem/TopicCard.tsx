@@ -9,10 +9,12 @@
 import { focusStore } from '@/lib/focus';
 import type { TopicState } from '@/lib/focus/state-machine';
 import type { LearningTopic } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 import { TopicQuiz } from '../TopicQuiz';
 import { BookIcon, CheckIcon, PlusIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
 
@@ -49,30 +51,41 @@ export function TopicCard({
 }: TopicCardProps) {
   const [currentState, setCurrentState] = useState<TopicState>('not-explored');
   const [isQuizOpen, setIsQuizOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Load current state from storage
   useEffect(() => {
     (async () => {
-      const history = await focusStore.getHistory();
-      const record = history[dateKey];
-      if (record?.learningTopics) {
-        // Topics are arrays of arrays
-        for (const topicArray of record.learningTopics) {
-          const item = topicArray.find(t => t.data.id === topic.id);
-          if (item && item.stateHistory.length > 0) {
-            setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
-            break;
+      try {
+        const history = await focusStore.getHistory();
+        const record = history[dateKey];
+        if (record?.learningTopics) {
+          // Topics are arrays of arrays
+          for (const topicArray of record.learningTopics) {
+            const item = topicArray.find(t => t.data.id === topic.id);
+            if (item && item.stateHistory.length > 0) {
+              setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
+              break;
+            }
           }
         }
+      } catch (error) {
+        logger.error('Failed to load topic state', { error }, 'TopicCard');
       }
     })();
   }, [dateKey, topic.id]);
 
   const handleExplore = useCallback(async () => {
-    await focusStore.transitionTopic(dateKey, topic.id, 'explored', showHistoryActions ? 'history' : 'dashboard');
-    setCurrentState('explored');
-    if (onStateChange) onStateChange();
-    if (onExplore) onExplore(topic);
+    try {
+      setActionError(null);
+      await focusStore.transitionTopic(dateKey, topic.id, 'explored', showHistoryActions ? 'history' : 'dashboard');
+      setCurrentState('explored');
+      if (onStateChange) onStateChange();
+      if (onExplore) onExplore(topic);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      logger.error('Failed to explore topic', { error }, 'TopicCard');
+    }
   }, [dateKey, topic, showHistoryActions, onStateChange, onExplore]);
 
   const handleSkip = useCallback(async () => {
@@ -149,6 +162,8 @@ export function TopicCard({
             <strong>Related to:</strong> {topic.relatedTo}
           </p>
         )}
+
+        {actionError && <InlineMessage variant="critical">{actionError}</InlineMessage>}
 
         <Stack direction="horizontal" gap="condensed">
           <Button

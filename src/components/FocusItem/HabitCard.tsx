@@ -12,6 +12,7 @@ import { getDateKey } from '@/lib/utils/date-utils';
 import { logger } from '@/lib/logger';
 import { CheckIcon, FlameIcon, KebabHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, SkipIcon, StopIcon, TrashIcon, UndoIcon } from '@primer/octicons-react';
 import { ActionList, ActionMenu, Button, Heading, IconButton, Label, ProgressBar, Stack, useConfirm } from '@primer/react';
+import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import { HabitEditDialog } from '../Habits/HabitEditDialog';
 import styles from './FocusItem.module.css';
@@ -28,6 +29,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   
   const confirm = useConfirm();
 
@@ -56,6 +58,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
 
   const handleCheckIn = useCallback(async () => {
     try {
+      setActionError(null);
       let value: number | boolean;
 
       if (habit.tracking.mode === 'time') {
@@ -68,7 +71,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
       }
 
       const updated = checkInHabit(habit, value, dateKey);
-      habitStore.update(updated);
+      await habitStore.update(updated);
       
       // Reset UI
       setStartTime(null);
@@ -78,26 +81,31 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
 
       if (onUpdate) onUpdate();
     } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
       logger.error('Check-in failed', { error }, 'HabitCard');
     }
   }, [habit, elapsedTime, currentValue, dateKey, onUpdate]);
 
   const handleSkip = useCallback(async () => {
     try {
+      setActionError(null);
       const updated = skipHabitDay(habit, dateKey);
-      habitStore.update(updated);
+      await habitStore.update(updated);
       if (onUpdate) onUpdate();
     } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
       logger.error('Skip failed', { error }, 'HabitCard');
     }
   }, [habit, dateKey, onUpdate]);
 
   const handleUndo = useCallback(async () => {
     try {
+      setActionError(null);
       const updated = undoCheckIn(habit, dateKey);
-      habitStore.update(updated);
+      await habitStore.update(updated);
       if (onUpdate) onUpdate();
     } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
       logger.error('Undo failed', { error }, 'HabitCard');
     }
   }, [habit, dateKey, onUpdate]);
@@ -112,11 +120,13 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
 
     if (confirmed) {
       try {
+        setActionError(null);
         await habitStore.delete(habit.id);
         logger.info('Habit deleted', { habitId: habit.id }, 'HabitCard');
         if (onDelete) onDelete();
         if (onUpdate) onUpdate();
       } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
         logger.error('Delete failed', { error }, 'HabitCard');
       }
     }
@@ -132,11 +142,13 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
 
     if (confirmed) {
       try {
+        setActionError(null);
         const updated: HabitWithHistory = { ...habit, state: 'abandoned' };
         await habitStore.update(updated);
         logger.info('Habit stopped', { habitId: habit.id }, 'HabitCard');
         if (onUpdate) onUpdate();
       } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
         logger.error('Stop failed', { error }, 'HabitCard');
       }
     }
@@ -360,6 +372,8 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
           <span className={styles.progressLabel}>Streak:</span>
           {renderStreak()}
         </div>
+
+        {actionError && <InlineMessage variant="critical">{actionError}</InlineMessage>}
 
         <Stack direction="horizontal" gap="condensed">
           {renderActions()}

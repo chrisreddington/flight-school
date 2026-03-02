@@ -12,6 +12,7 @@ import type { HabitWithHistory } from '@/lib/habits/types';
 import { logger } from '@/lib/logger';
 import { CheckIcon, SkipIcon, FlameIcon, PlayIcon, PauseIcon, LinkExternalIcon } from '@primer/octicons-react';
 import { Button, Label, Link, Stack } from '@primer/react';
+import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import { HabitCheckInRow } from './habit-checkin-row';
 import { HabitProgressBar } from './habit-progress-bar';
@@ -39,6 +40,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Timer effect for time-based tracking
   useEffect(() => {
@@ -61,6 +63,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
 
   const handleCheckIn = useCallback(async () => {
     if (!isToday) return;
+    setActionError(null);
     try {
       let value: number | boolean;
 
@@ -74,7 +77,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
       }
 
       const updated = checkInHabit(habit, value, dateKey);
-      habitStore.update(updated);
+      await habitStore.update(updated);
       
       // Reset UI
       setStartTime(null);
@@ -85,28 +88,33 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
       if (onUpdate) onUpdate();
     } catch (error) {
       logger.error('Check-in failed', { error }, 'HabitHistoryCard');
+      setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
     }
   }, [habit, dateKey, isToday, elapsedTime, currentValue, onUpdate]);
 
   const handleSkip = useCallback(async () => {
     if (!isToday) return;
+    setActionError(null);
     try {
       const updated = skipHabitDay(habit, dateKey);
-      habitStore.update(updated);
+      await habitStore.update(updated);
       if (onUpdate) onUpdate();
     } catch (error) {
       logger.error('Skip failed', { error }, 'HabitHistoryCard');
+      setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
     }
   }, [habit, dateKey, isToday, onUpdate]);
 
   const handleUndo = useCallback(async () => {
     if (!isToday) return;
+    setActionError(null);
     try {
       const updated = undoCheckIn(habit, dateKey);
-      habitStore.update(updated);
+      await habitStore.update(updated);
       if (onUpdate) onUpdate();
     } catch (error) {
       logger.error('Undo failed', { error }, 'HabitHistoryCard');
+      setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
     }
   }, [habit, dateKey, isToday, onUpdate]);
 
@@ -241,6 +249,9 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
           <Stack direction="horizontal" gap="condensed">
             {renderTodayActions()}
           </Stack>
+          {actionError && (
+            <InlineMessage variant="critical" size="small">{actionError}</InlineMessage>
+          )}
         </Stack>
       </div>
     );
@@ -248,12 +259,17 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
 
   // Today's card - already completed or historical card
   return (
-    <HabitCheckInRow
-      habit={habit}
-      checkIn={checkIn}
-      isToday={isToday}
-      isPending={isPending}
-      onUndo={isToday && !isPending ? handleUndo : undefined}
-    />
+    <>
+      <HabitCheckInRow
+        habit={habit}
+        checkIn={checkIn}
+        isToday={isToday}
+        isPending={isPending}
+        onUndo={isToday && !isPending ? handleUndo : undefined}
+      />
+      {actionError && (
+        <InlineMessage variant="critical" size="small">{actionError}</InlineMessage>
+      )}
+    </>
   );
 }

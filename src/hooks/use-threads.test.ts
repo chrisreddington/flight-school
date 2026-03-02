@@ -13,7 +13,24 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
 import type { Thread, CreateThreadOptions, Message, ThreadContext } from '@/lib/threads';
+import { useThreads } from './use-threads';
+
+const { errorSpy } = vi.hoisted(() => ({
+  errorSpy: vi.fn(),
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    withTag: vi.fn(() => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: errorSpy,
+    })),
+  },
+}));
 
 // Mock the threadStore module
 vi.mock('@/lib/threads', async () => {
@@ -717,5 +734,51 @@ describe('useThreads interface contract', () => {
     expect(typeof mockActions.addMessage).toBe('function');
     expect(typeof mockActions.updateActiveThread).toBe('function');
     expect(typeof mockActions.refresh).toBe('function');
+  });
+});
+
+describe('useThreads error handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (threadStore.getAll as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  });
+
+  it('should log and re-throw when createThread fails', async () => {
+    const createError = new Error('create failed');
+    (threadStore.create as ReturnType<typeof vi.fn>).mockRejectedValueOnce(createError);
+    const { result } = renderHook(() => useThreads());
+
+    await waitFor(() => {
+      expect(threadStore.getAll).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(result.current.createThread({ title: 'New Thread' })).rejects.toThrow('create failed');
+    expect(errorSpy).toHaveBeenCalledWith('Failed to create thread', { error: createError });
+  });
+
+  it('should log and swallow when deleteThread fails', async () => {
+    const deleteError = new Error('delete failed');
+    (threadStore.delete as ReturnType<typeof vi.fn>).mockRejectedValueOnce(deleteError);
+    const { result } = renderHook(() => useThreads());
+
+    await waitFor(() => {
+      expect(threadStore.getAll).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(result.current.deleteThread('thread-1')).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith('Failed to delete thread', { error: deleteError });
+  });
+
+  it('should log and swallow when renameThread fails', async () => {
+    const renameError = new Error('rename failed');
+    (threadStore.rename as ReturnType<typeof vi.fn>).mockRejectedValueOnce(renameError);
+    const { result } = renderHook(() => useThreads());
+
+    await waitFor(() => {
+      expect(threadStore.getAll).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(result.current.renameThread('thread-1', 'Updated')).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith('Failed to rename thread', { error: renameError });
   });
 });

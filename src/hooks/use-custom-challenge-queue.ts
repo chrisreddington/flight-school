@@ -31,8 +31,13 @@ import {
   determineActiveChallenge,
   MAX_CUSTOM_QUEUE_SIZE,
 } from '@/lib/challenge/custom-queue';
+import { focusStore } from '@/lib/focus';
 import type { DailyChallenge } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
+import { getDateKey } from '@/lib/utils/date-utils';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+const log = logger.withTag('useCustomChallengeQueue');
 
 /**
  * Result type for the useCustomChallengeQueue hook.
@@ -83,12 +88,29 @@ export function useCustomChallengeQueue(
   const [queue, setQueue] = useState<DailyChallenge[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const registerQueuedChallenges = useCallback(async (challenges: DailyChallenge[]) => {
+    if (challenges.length === 0) return;
+
+    const dateKey = getDateKey();
+    for (const queuedChallenge of challenges) {
+      try {
+        await focusStore.addChallenge(dateKey, { ...queuedChallenge, isCustom: true });
+      } catch (error) {
+        log.error('Failed to register queued challenge in history', {
+          error,
+          challengeId: queuedChallenge.id,
+        });
+      }
+    }
+  }, []);
+
   // Load queue from server on mount
   useEffect(() => {
     (async () => {
       try {
         const stored = await challengeQueueStore.getAll();
         setQueue(stored);
+        await registerQueuedChallenges(stored);
       } catch {
         // Best effort - use empty queue
         setQueue([]);
@@ -96,18 +118,21 @@ export function useCustomChallengeQueue(
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [registerQueuedChallenges]);
 
   // Refresh state from storage
   const refreshFromStorage = useCallback(async () => {
     const stored = await challengeQueueStore.getAll();
     setQueue(stored);
-  }, []);
+    await registerQueuedChallenges(stored);
+  }, [registerQueuedChallenges]);
 
   // Add a challenge
   const addChallenge = useCallback(async (challenge: DailyChallenge): Promise<boolean> => {
     const result = await challengeQueueStore.addChallenge(challenge);
     if (result) {
+      const dateKey = getDateKey();
+      await focusStore.addChallenge(dateKey, { ...challenge, isCustom: true });
       await refreshFromStorage();
     }
     return result;

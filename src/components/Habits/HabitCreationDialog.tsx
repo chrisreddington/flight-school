@@ -100,7 +100,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
     return parseInt(totalDays, 10);
   }, [totalDays, customDays]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -155,7 +155,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
       }
 
       const habit = createHabit(title.trim(), description.trim(), tracking, days, includesWeekends);
-      habitStore.create(habit);
+      await habitStore.create(habit);
 
       setTitle('');
       setDescription('');

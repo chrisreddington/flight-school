@@ -8,9 +8,11 @@
 import { focusStore } from '@/lib/focus';
 import type { GoalState } from '@/lib/focus/state-machine';
 import type { DailyGoal } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 import { CheckCircleIcon, CheckIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
 
@@ -46,28 +48,40 @@ export function GoalCard({
   refreshDisabled = false,
 }: GoalCardProps) {
   const [currentState, setCurrentState] = useState<GoalState>('not-started');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Load current state from storage
   useEffect(() => {
     (async () => {
-      const history = await focusStore.getHistory();
-      const record = history[dateKey];
-      if (record?.goals) {
-        const item = record.goals.find(g => g.data.id === goal.id);
-        if (item && item.stateHistory.length > 0) {
-          setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
+      try {
+        const history = await focusStore.getHistory();
+        const record = history[dateKey];
+        if (record?.goals) {
+          const item = record.goals.find(g => g.data.id === goal.id);
+          if (item && item.stateHistory.length > 0) {
+            setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
+          }
         }
+      } catch (error) {
+        logger.error('Failed to load goal state', { error }, 'GoalCard');
       }
     })();
   }, [dateKey, goal.id]);
 
   const handleMarkComplete = useCallback(async () => {
-    await focusStore.transitionGoal(dateKey, goal.id, 'completed', 'dashboard');
-    setCurrentState('completed');
-    if (onStateChange) onStateChange();
+    setActionError(null);
+    try {
+      await focusStore.transitionGoal(dateKey, goal.id, 'completed', 'dashboard');
+      setCurrentState('completed');
+      if (onStateChange) onStateChange();
+    } catch (error) {
+      logger.error('Failed to mark goal complete', { error }, 'GoalCard');
+      setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
+    }
   }, [dateKey, goal.id, onStateChange]);
 
   const handleSkip = useCallback(async () => {
+    setActionError(null);
     // If we have skip-and-replace handler, use it for background regeneration
     // Don't mark as skipped yet - that happens after replacement succeeds
     if (onSkipAndReplace) {
@@ -76,10 +90,15 @@ export function GoalCard({
     }
     
     // Fallback: just mark as skipped and refresh
-    await focusStore.transitionGoal(dateKey, goal.id, 'skipped', 'dashboard');
-    setCurrentState('skipped');
-    if (onStateChange) onStateChange();
-    if (onRefresh) onRefresh();
+    try {
+      await focusStore.transitionGoal(dateKey, goal.id, 'skipped', 'dashboard');
+      setCurrentState('skipped');
+      if (onStateChange) onStateChange();
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      logger.error('Failed to skip goal', { error }, 'GoalCard');
+      setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
+    }
   }, [dateKey, goal.id, goal.title, onStateChange, onRefresh, onSkipAndReplace]);
 
   const isCompleted = currentState === 'completed';
@@ -191,6 +210,9 @@ export function GoalCard({
             </>
           )}
         </Stack>
+        {actionError && (
+          <InlineMessage variant="critical" size="small">{actionError}</InlineMessage>
+        )}
       </Stack>
     </div>
   );

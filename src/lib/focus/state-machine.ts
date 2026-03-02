@@ -66,7 +66,7 @@ export type StatefulTopic = StatefulItem<LearningTopic, TopicState>;
  * Key is current state, value is array of valid next states.
  */
 const VALID_CHALLENGE_TRANSITIONS: Record<ChallengeState, ChallengeState[]> = {
-  'not-started': ['in-progress', 'skipped'],
+  'not-started': ['in-progress', 'completed', 'skipped'],
   'in-progress': ['completed', 'skipped'],
   'completed': [], // Terminal state
   'skipped': [], // Terminal state
@@ -317,5 +317,4 @@ export function createStatefulTopic(
     ],
   };
 }
-
 

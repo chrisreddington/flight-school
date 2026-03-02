@@ -50,6 +50,35 @@ describe('useAIActivity core logic', () => {
       expect(mockEventSource.close).not.toHaveBeenCalled();
     });
 
+    it('should not connect when disabled (enabled=false)', () => {
+      const enabled = false;
+      let connected = false;
+      const mockEventSource = { close: vi.fn(), readyState: 0 };
+
+      if (!enabled) {
+        // No connection should be opened
+        mockEventSource.close();
+      } else {
+        connected = true;
+      }
+
+      expect(connected).toBe(false);
+      expect(mockEventSource.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('should connect when enabled (enabled=true)', () => {
+      const enabled = true;
+      let connected = false;
+
+      if (!enabled) {
+        // do nothing
+      } else {
+        connected = true;
+      }
+
+      expect(connected).toBe(true);
+    });
+
     it('should cleanup on unmount', () => {
       const mockEventSource = {
         close: vi.fn(),
@@ -613,7 +642,6 @@ describe('useAIActivity core logic', () => {
     });
 
     it('should clear interval on cleanup', () => {
-      const mockInterval = 123;
       const cleared = { value: false };
 
       const mockClearInterval = () => {

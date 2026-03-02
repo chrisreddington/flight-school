@@ -117,14 +117,33 @@ function ChallengePageContent() {
 
   /**
    * Handle challenge completion when evaluation returns 100%.
-   * Marks challenge as completed in focus storage.
+   * Registers the challenge in the focus store if not already present
+   * (custom challenges from the dashboard are passed via URL params and may
+   * not be pre-registered), then marks it as completed.
    * Does NOT redirect - user may want to export to GitHub.
    */
   const handleComplete = useCallback(async () => {
     try {
       const dateKey = getDateKey();
       log.info('Marking challenge as completed', { challengeId, dateKey });
-      
+
+      // Ensure the challenge is registered in the focus store.
+      // Custom challenges generated on-the-fly are passed via URL params and
+      // are not pre-loaded into the daily history, so transitionChallenge would
+      // fail with "not found". addChallenge is idempotent — safe to call always.
+      await focusStore.addChallenge(dateKey, {
+        id: challengeId,
+        title: challenge.title,
+        description: challenge.description,
+        type: challenge.type,
+        brokenCode: challenge.brokenCode,
+        difficulty: challenge.difficulty,
+        language: challenge.language ?? 'TypeScript',
+        estimatedTime: '30 minutes',
+        whyThisChallenge: [],
+        isCustom: challengeId.startsWith('custom-'),
+      });
+
       await focusStore.transitionChallenge(
         dateKey,
         challengeId,
@@ -136,7 +155,7 @@ function ChallengePageContent() {
     } catch (error) {
       log.error('Failed to mark challenge as completed', { challengeId, error });
     }
-  }, [challengeId]);
+  }, [challengeId, challenge]);
 
   return (
     <div className={styles.root}>

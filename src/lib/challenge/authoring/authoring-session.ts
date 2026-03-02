@@ -169,7 +169,7 @@ export async function createGenericStreamingSession(
 
   // Get or create session (reuses session for same conversation)
   const { session, metrics } = await getConversationSession(
-    conversationId,
+    newConversationId,
     poolKey,
     {
       includeMcpTools: false, // Authoring doesn't need GitHub tools
@@ -300,12 +300,7 @@ export async function createGenericStreamingSession(
   return {
     stream: generateStream(),
     cleanup: () => {
-      // Don't destroy session if reusing conversation
-      if (!conversationId) {
-        session.destroy().catch((err) => {
-          log.warn('Session destroy warning:', err);
-        });
-      }
+      // Session kept in pool; LRU cache manages lifecycle
     },
     model,
     newConversationId,

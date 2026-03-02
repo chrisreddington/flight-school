@@ -5,7 +5,9 @@ import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
 import { HabitsSection } from './habits-section';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
+import { focusStore } from '@/lib/focus';
 import type { CalibrationNeededItem, DailyChallenge, FocusResponse, LearningTopic } from '@/lib/focus/types';
+import { getDateKey } from '@/lib/utils/date-utils';
 import {
     BookIcon,
     CheckIcon,
@@ -126,11 +128,28 @@ export const DailyFocusSection = memo(function DailyFocusSection({
     activeChallenge,
     activeSource,
     queueRemaining,
+    advanceQueue,
   } = useCustomChallengeQueue(dailyChallenge);
   
   // Use active challenge (custom takes priority over daily)
   const challenge = activeChallenge || dailyChallenge || getDynamicChallenge(profile);
   const isCustomChallenge = challenge?.isCustom || activeSource === 'custom-queue';
+
+  const handleAdvanceQueue = useCallback(async () => {
+    const dateKey = getDateKey();
+    await focusStore.addChallenge(dateKey, challenge);
+    await focusStore.transitionChallenge(dateKey, challenge.id, 'completed', 'advance-queue');
+    await advanceQueue();
+  }, [challenge, advanceQueue]);
+
+  const handleSkipCustomChallenge = useCallback(async (challengeId: string) => {
+    if (challenge.id !== challengeId) return;
+
+    const dateKey = getDateKey();
+    await focusStore.addChallenge(dateKey, challenge);
+    await focusStore.transitionChallenge(dateKey, challenge.id, 'skipped', 'skip-queue');
+    await advanceQueue();
+  }, [challenge, advanceQueue]);
   
   const goal = aiFocus?.goal || getDynamicGoal(profile);
   const learningTopics = aiFocus?.learningTopics?.length ? aiFocus.learningTopics : getDynamicLearningTopics(profile);
@@ -234,7 +253,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onRefresh={!isCustomChallenge ? () => onRefresh(['challenge']) : undefined}
                   onEdit={isCustomChallenge ? () => router.push(`/challenge/edit/${challenge.id}`) : undefined}
                   onCreate={handleCreateChallenge}
-                  onSkipAndReplace={!isCustomChallenge ? onSkipChallenge : undefined}
+                  onSkipAndReplace={isCustomChallenge ? handleSkipCustomChallenge : onSkipChallenge}
                   onRequestDebugChallenge={!isCustomChallenge ? onRequestDebugChallenge : undefined}
                   onStopSkip={onStopSkipChallenge}
                   isSkipping={skippingChallengeIds.has(challenge.id)}
@@ -242,6 +261,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   timestamp={componentTimestamps.challenge}
                   queueCount={queueRemaining}
                   showIssueContextBadge={challenge.contextSource === 'issue'}
+                  onAdvanceQueue={isCustomChallenge ? handleAdvanceQueue : undefined}
                 />
                 {calibrationNeeded.length > 0 && (
                   <InlineCalibration items={calibrationNeeded} onItemsChange={handleCalibrationChange} />

@@ -3,7 +3,35 @@
 import type { QuizQuestion, QuizResult } from '@/lib/copilot/quiz';
 import { CheckCircleIcon } from '@primer/octicons-react';
 import { Button, FormControl, Heading, Radio, RadioGroup, Spinner, Stack, Text } from '@primer/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+const QUIZ_CACHE_PREFIX = 'quiz:';
+const QUIZ_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface CachedQuiz {
+  quiz: QuizResult;
+  cachedAt: number;
+}
+
+function readQuizCache(topicTitle: string): QuizResult | null {
+  try {
+    const raw = localStorage.getItem(`${QUIZ_CACHE_PREFIX}${topicTitle}`);
+    if (!raw) return null;
+    const cached: CachedQuiz = JSON.parse(raw);
+    if (Date.now() - cached.cachedAt < QUIZ_CACHE_TTL_MS) return cached.quiz;
+  } catch {
+    // localStorage unavailable or corrupted
+  }
+  return null;
+}
+
+function writeQuizCache(topicTitle: string, quiz: QuizResult): void {
+  try {
+    localStorage.setItem(`${QUIZ_CACHE_PREFIX}${topicTitle}`, JSON.stringify({ quiz, cachedAt: Date.now() }));
+  } catch {
+    // Quota exceeded or unavailable — silently skip
+  }
+}
 
 interface TopicQuizProps {
   topicTitle: string;
@@ -19,6 +47,17 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Load cached quiz on mount — skip the generation step if available
+  useEffect(() => {
+    const cached = readQuizCache(topicTitle);
+    if (cached) {
+      setQuiz(cached);
+      setCurrentIndex(0);
+      setSelectedIndex(null);
+      setViewState('question');
+    }
+  }, [topicTitle]);
 
   const currentQuestion: QuizQuestion | null = quiz?.questions[currentIndex] ?? null;
   const reinforcedConcepts = useMemo(() => {
@@ -49,6 +88,7 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
       }
 
       const data = (await response.json()) as QuizResult;
+      writeQuizCache(topicTitle, data);
       setQuiz(data);
       setViewState('question');
     } catch {
@@ -185,9 +225,14 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
               <Text key={concept}>• {concept}</Text>
             ))}
           </Stack>
-          <Button variant="primary" onClick={onClose}>
-            Done
-          </Button>
+          <Stack direction="horizontal" gap="condensed">
+            <Button variant="primary" onClick={onClose}>
+              Done
+            </Button>
+            <Button variant="default" onClick={startQuiz}>
+              New Quiz
+            </Button>
+          </Stack>
         </Stack>
       )}
     </Stack>

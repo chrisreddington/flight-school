@@ -26,10 +26,12 @@
 'use client';
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
+import { useGuidedPlan } from '@/hooks/use-guided-plan';
 import { focusStore } from '@/lib/focus';
 import type { RunResult } from '@/lib/editor/code-runner';
 import { runCode } from '@/lib/editor/code-runner';
 import { getLanguageDisplayName, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
+import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
 import { loader } from '@monaco-editor/react';
 import type { BeforeMount, OnMount } from '@monaco-editor/react';
@@ -207,6 +209,9 @@ export function ChallengeSandbox({
     solveError,
   } = useChallengeSandbox(challengeId, challenge);
 
+  // Pre-fetch guided plan in background so it's ready when user opens Guided Mode
+  const { plan: guidedPlan, loading: isGuidedPlanLoading } = useGuidedPlan(challengeId, challenge);
+
   // Get active file for language detection
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
   const activeFileName = activeFile?.name ?? 'solution.ts';
@@ -281,8 +286,12 @@ export function ChallengeSandbox({
 
   const handleSaveSelfExplanation = useCallback(
     async (text: string) => {
-      await focusStore.saveSelfExplanation(dateKey, 'challenge', challengeId, text);
-      setHasPromptedSelfExplanation(true);
+      try {
+        await focusStore.saveSelfExplanation(dateKey, 'challenge', challengeId, text);
+        setHasPromptedSelfExplanation(true);
+      } catch (error) {
+        logger.error('Failed to save self-explanation', { error }, 'ChallengeSandbox');
+      }
     },
     [challengeId, dateKey]
   );
@@ -292,7 +301,7 @@ export function ChallengeSandbox({
   }, []);
   
   // Determine Monaco theme based on color mode
-  const monacoTheme = colorMode === 'night' ? 'vs-dark' : 'light';
+  const monacoTheme = colorMode === 'night' || colorMode === 'dark' ? 'vs-dark' : 'vs';
 
   return (
     <div
@@ -374,7 +383,7 @@ export function ChallengeSandbox({
 
       {mode === 'guided' && (
         <div className={styles.guidedPanelWrapper}>
-          <GuidedModePanel challenge={challenge} onClose={() => setMode('free')} />
+          <GuidedModePanel plan={guidedPlan} isLoading={isGuidedPlanLoading} onClose={() => setMode('free')} />
         </div>
       )}
 

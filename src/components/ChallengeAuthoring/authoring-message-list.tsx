@@ -86,6 +86,22 @@ export function AuthoringMessageList({
             </div>
           </li>
         ))}
+        {isStreaming && !streamingContent && (
+          <li className={styles.message}>
+            <div className={styles.messageAvatar}>
+              <div className={styles.messageAvatarAssistant}>
+                <CopilotIcon size={16} />
+              </div>
+            </div>
+            <div className={styles.messageContent}>
+              <div className={styles.typingIndicator} aria-label="Copilot is thinking" role="status">
+                <span className={styles.typingDot} />
+                <span className={styles.typingDot} />
+                <span className={styles.typingDot} />
+              </div>
+            </div>
+          </li>
+        )}
         {isStreaming && streamingContent && (
           <li className={styles.message}>
             <div className={styles.messageAvatar}>

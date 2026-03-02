@@ -11,9 +11,11 @@ import { MarkdownContent } from '@/components/MarkdownContent';
 import { focusStore } from '@/lib/focus';
 import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { ClockIcon, StopIcon } from '@primer/octicons-react';
+import { ArrowRightIcon, ClockIcon, StopIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { InlineMessage } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
@@ -50,6 +52,8 @@ interface ChallengeCardProps {
   queueCount?: number;
   /** Shows the issue-inspired badge when challenge context source is issue */
   showIssueContextBadge?: boolean;
+  /** Advance to next challenge in custom queue */
+  onAdvanceQueue?: () => void;
 }
 
 export function ChallengeCard({
@@ -69,20 +73,26 @@ export function ChallengeCard({
   timestamp,
   queueCount,
   showIssueContextBadge = false,
+  onAdvanceQueue,
 }: ChallengeCardProps) {
   const router = useRouter();
   const [currentState, setCurrentState] = useState<ChallengeState>('not-started');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Load current state from storage
   useEffect(() => {
     (async () => {
-      const history = await focusStore.getHistory();
-      const record = history[dateKey];
-      if (record?.challenges) {
-        const item = record.challenges.find(c => c.data.id === challenge.id);
-        if (item && item.stateHistory.length > 0) {
-          setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
+      try {
+        const history = await focusStore.getHistory();
+        const record = history[dateKey];
+        if (record?.challenges) {
+          const item = record.challenges.find(c => c.data.id === challenge.id);
+          if (item && item.stateHistory.length > 0) {
+            setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
+          }
         }
+      } catch (error) {
+        logger.error('Failed to load challenge state', { error }, 'ChallengeCard');
       }
     })();
   }, [dateKey, challenge.id]);
@@ -91,9 +101,16 @@ export function ChallengeCard({
     if (currentState === 'not-started') {
       // Transition to in-progress when starting
       (async () => {
-        await focusStore.transitionChallenge(dateKey, challenge.id, 'in-progress', 'dashboard');
-        setCurrentState('in-progress');
-        if (onStateChange) onStateChange();
+        try {
+          setActionError(null);
+          await focusStore.addChallenge(dateKey, challenge);
+          await focusStore.transitionChallenge(dateKey, challenge.id, 'in-progress', 'dashboard');
+          setCurrentState('in-progress');
+          if (onStateChange) onStateChange();
+        } catch (error) {
+          setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+          logger.error('Failed to start challenge', { error }, 'ChallengeCard');
+        }
       })();
     }
     // Navigate to sandbox with full challenge details
@@ -113,10 +130,17 @@ export function ChallengeCard({
   }, [router, challenge, currentState, dateKey, onStateChange]);
 
   const handleMarkComplete = useCallback(async () => {
-    await focusStore.transitionChallenge(dateKey, challenge.id, 'completed', 'history');
-    setCurrentState('completed');
-    if (onStateChange) onStateChange();
-  }, [dateKey, challenge.id, onStateChange]);
+    try {
+      setActionError(null);
+      await focusStore.addChallenge(dateKey, challenge);
+      await focusStore.transitionChallenge(dateKey, challenge.id, 'completed', 'history');
+      setCurrentState('completed');
+      if (onStateChange) onStateChange();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      logger.error('Failed to mark challenge complete', { error }, 'ChallengeCard');
+    }
+  }, [dateKey, challenge, onStateChange]);
 
   const handleSkip = useCallback(async () => {
     // If we have skip-and-replace handler, use it for background regeneration
@@ -127,10 +151,16 @@ export function ChallengeCard({
     }
     
     // Fallback: just mark as skipped and refresh
-    await focusStore.transitionChallenge(dateKey, challenge.id, 'skipped', 'history');
-    setCurrentState('skipped');
-    if (onStateChange) onStateChange();
-    if (onRefresh) onRefresh();
+    try {
+      setActionError(null);
+      await focusStore.transitionChallenge(dateKey, challenge.id, 'skipped', 'history');
+      setCurrentState('skipped');
+      if (onStateChange) onStateChange();
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      logger.error('Failed to skip challenge', { error }, 'ChallengeCard');
+    }
   }, [dateKey, challenge.id, challenge.title, onStateChange, onRefresh, onSkipAndReplace]);
 
   const isCompleted = currentState === 'completed';
@@ -262,14 +292,37 @@ export function ChallengeCard({
           </div>
         )}
 
+        {actionError && <InlineMessage variant="critical">{actionError}</InlineMessage>}
+
         <Stack direction="horizontal" gap="condensed">
-          <Button
-            variant="primary"
-            onClick={handleStartChallenge}
-            disabled={isSkipped}
-          >
-            {isCompleted ? 'View Challenge' : isInProgress ? 'Continue Challenge' : 'Start Challenge'}
-          </Button>
+          {isCompleted ? (
+            <>
+              <Button
+                variant="default"
+                onClick={handleStartChallenge}
+                disabled={isSkipped}
+              >
+                View Challenge
+              </Button>
+              {onAdvanceQueue && queueCount && queueCount > 1 && (
+                <Button
+                  variant="primary"
+                  onClick={onAdvanceQueue}
+                  leadingVisual={ArrowRightIcon}
+                >
+                  Next Challenge
+                </Button>
+              )}
+            </>
+          ) : (
+            <Button
+              variant="primary"
+              onClick={handleStartChallenge}
+              disabled={isSkipped}
+            >
+              {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
+            </Button>
+          )}
         </Stack>
       </Stack>
     </div>

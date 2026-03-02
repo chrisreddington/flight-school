@@ -92,8 +92,6 @@ describe('Focus Storage', () => {
     },
   };
 
-  const emptySchema: FocusStorageSchema = { history: {} };
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks(); // Also reset mock implementations
@@ -887,6 +885,81 @@ describe('Focus Storage', () => {
       const result = await focusStore.getCalibrationNeeded();
 
       expect(result).toEqual([]);
+    });
+  });
+
+  // ===========================================================================
+  // addChallenge() tests
+  // ===========================================================================
+
+  describe('addChallenge', () => {
+    const customChallenge: DailyChallenge = {
+      id: 'custom-1234567890-abc',
+      title: 'Custom Challenge',
+      description: 'A challenge generated on the fly',
+      difficulty: 'intermediate',
+      language: 'TypeScript',
+      estimatedTime: '30 minutes',
+      whyThisChallenge: [],
+      isCustom: true,
+    };
+
+    it('should add a challenge when daily record exists', async () => {
+      vi.mocked(apiGet).mockResolvedValue({
+        history: {
+          '2024-01-15': { challenges: [], goals: [], learningTopics: [] },
+        },
+      });
+      vi.mocked(apiPost).mockResolvedValue(undefined);
+
+      await focusStore.addChallenge('2024-01-15', customChallenge);
+
+      const savedSchema = vi.mocked(apiPost).mock.calls[0][1] as FocusStorageSchema;
+      expect(savedSchema.history['2024-01-15'].challenges).toHaveLength(1);
+      expect(savedSchema.history['2024-01-15'].challenges[0].data.id).toBe('custom-1234567890-abc');
+    });
+
+    it('should create the daily record if it does not exist yet', async () => {
+      // Simulates user opening a challenge URL directly without visiting dashboard
+      vi.mocked(apiGet).mockResolvedValue({ history: {} });
+      vi.mocked(apiPost).mockResolvedValue(undefined);
+
+      await focusStore.addChallenge('2024-01-15', customChallenge);
+
+      const savedSchema = vi.mocked(apiPost).mock.calls[0][1] as FocusStorageSchema;
+      expect(savedSchema.history['2024-01-15']).toBeDefined();
+      expect(savedSchema.history['2024-01-15'].challenges).toHaveLength(1);
+    });
+
+    it('should be idempotent — skip if challenge already exists', async () => {
+      vi.mocked(apiGet).mockResolvedValue({
+        history: {
+          '2024-01-15': {
+            challenges: [
+              {
+                data: customChallenge,
+                stateHistory: [{ state: 'not-started', timestamp: '2024-01-15T12:00:00.000Z' }],
+              },
+            ],
+            goals: [],
+            learningTopics: [],
+          },
+        },
+      });
+      vi.mocked(apiPost).mockResolvedValue(undefined);
+
+      await focusStore.addChallenge('2024-01-15', customChallenge);
+
+      // Should not have written to storage (no duplicates added)
+      expect(apiPost).not.toHaveBeenCalled();
+    });
+
+    it('should reject past dates', async () => {
+      vi.mocked(apiPost).mockResolvedValue(undefined);
+
+      await focusStore.addChallenge('2024-01-14', customChallenge);
+
+      expect(apiPost).not.toHaveBeenCalled();
     });
   });
 });

@@ -17,8 +17,6 @@ interface MessageBubbleProps {
   message: Message;
   /** Whether this is the currently streaming message */
   isStreaming?: boolean;
-  /** The current streaming content (for streaming messages) */
-  streamingContent?: string;
   /** User's avatar URL (for user messages) */
   userAvatarUrl?: string;
   /** Whether to show the smart action indicator */
@@ -48,7 +46,6 @@ interface MessageBubbleProps {
 export const MessageBubble = memo(function MessageBubble({
   message,
   isStreaming = false,
-  streamingContent,
   userAvatarUrl,
   showSmartActionIndicator,
   isError = false,
@@ -58,10 +55,7 @@ export const MessageBubble = memo(function MessageBubble({
   const isAssistant = message.role === 'assistant';
   const hasActionable = showSmartActionIndicator ?? message.hasActionableItem;
   
-  // Content to display (streaming content overrides stored content)
-  const displayContent = isStreaming && streamingContent 
-    ? streamingContent 
-    : message.content;
+  const displayContent = message.content;
 
   return (
     <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.assistantBubble}`}>
@@ -165,4 +159,3 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   );
 });
-

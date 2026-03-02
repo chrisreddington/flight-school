@@ -93,7 +93,7 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'debug',
-    name: '🐛 Debug Challenge',
+    name: 'Debug Challenge',
     description: 'Find and fix bugs in existing code',
     icon: CodeIcon,
     initialPrompt: 'Create a debug challenge with type: "debug". Use a description like "Find and fix the bugs in this TypeScript code" and provide brokenCode with 1-3 intentional bugs.',

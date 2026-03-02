@@ -3,56 +3,18 @@
 import type { GuidedPlan } from '@/lib/copilot/guided-mode';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button, Label, Spinner } from '@primer/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import styles from './ChallengeSandbox.module.css';
 
 interface GuidedModePanelProps {
-  challenge: { title: string; description: string; language: string; difficulty: string };
   onClose: () => void;
+  plan: GuidedPlan | null;
+  isLoading: boolean;
 }
 
-const fallbackPlan: GuidedPlan = {
-  steps: [
-    { stepNumber: 1, title: 'Understand the problem', instruction: 'Identify inputs, outputs, and one edge case before coding.', scaffoldLevel: 'full', elaborationPrompt: 'Why does identifying constraints early improve solution quality?' },
-    { stepNumber: 2, title: 'Outline your approach', instruction: 'Write a short approach in plain language, then convert it into code steps.', scaffoldLevel: 'outline', elaborationPrompt: 'Why does turning ideas into an outline reduce cognitive load while coding?' },
-    { stepNumber: 3, title: 'Implement and test', instruction: 'Code your solution, then verify with a normal case and an edge case.', scaffoldLevel: 'goal', elaborationPrompt: 'Why do targeted tests reveal whether your reasoning actually works?' },
-  ],
-  totalSteps: 3,
-};
-
-export function GuidedModePanel({ challenge, onClose }: GuidedModePanelProps) {
-  const [plan, setPlan] = useState<GuidedPlan | null>(null);
-  const [loading, setLoading] = useState(true);
+export function GuidedModePanel({ onClose, plan, isLoading }: GuidedModePanelProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showElaboration, setShowElaboration] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const response = await fetch('/api/guided-plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            challengeTitle: challenge.title,
-            challengeDescription: challenge.description,
-            challengeLanguage: challenge.language,
-            challengeDifficulty: challenge.difficulty,
-          }),
-        });
-        const data = (await response.json()) as GuidedPlan;
-        if (mounted) setPlan(response.ok ? data : fallbackPlan);
-      } catch {
-        if (mounted) setPlan(fallbackPlan);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [challenge]);
 
   const step = plan?.steps[currentStep];
   const badge = useMemo(() => {
@@ -60,7 +22,7 @@ export function GuidedModePanel({ challenge, onClose }: GuidedModePanelProps) {
     return step.scaffoldLevel === 'full' ? 'Guided' : step.scaffoldLevel === 'outline' ? 'Outline' : 'Independent';
   }, [step]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={styles.guidedPanel}>
         <div className={styles.guidedPanelLoading}><Spinner size="small" /> Building your guided plan...</div>
@@ -97,3 +59,4 @@ export function GuidedModePanel({ challenge, onClose }: GuidedModePanelProps) {
     </section>
   );
 }
+

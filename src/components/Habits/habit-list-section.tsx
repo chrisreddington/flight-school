@@ -161,10 +161,12 @@ function HabitCard({
           <ClockIcon size={12} /> {habit.totalDays} days
         </Label>
         <Label size="small">{getTrackingLabel(habit.tracking.mode)}</Label>
-        <Label size="small">
-          Day {habit.currentDay}/{habit.totalDays}
-        </Label>
-        {habit.allowedSkips > 0 && (
+        {habit.currentDay > 0 && (
+          <Label size="small">
+            Day {habit.currentDay}/{habit.totalDays}
+          </Label>
+        )}
+        {habit.allowedSkips > 0 && habit.state !== 'not-started' && (
           <Label size="small" variant={remainingSkips === 0 ? 'attention' : 'secondary'}>
             <SkipIcon size={12} /> {remainingSkips} skip{remainingSkips !== 1 ? 's' : ''} left
           </Label>

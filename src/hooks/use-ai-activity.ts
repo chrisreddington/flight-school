@@ -39,7 +39,8 @@ interface UseAIActivityReturn {
   pendingCount: number;
 }
 
-export function useAIActivity(): UseAIActivityReturn {
+export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivityReturn {
+  const { enabled = true } = options;
   const [events, setEvents] = useState<AIActivityEvent[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -47,8 +48,8 @@ export function useAIActivity(): UseAIActivityReturn {
 
   // Use SSE for real-time updates, with polling fallback
   useEffect(() => {
-    if (isPaused) {
-      // Close SSE connection when paused
+    if (!enabled || isPaused) {
+      // Close any open connection when disabled or paused
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       return;
@@ -142,7 +143,7 @@ export function useAIActivity(): UseAIActivityReturn {
         fallbackIntervalRef.current = null;
       }
     };
-  }, [isPaused]);
+  }, [isPaused, enabled]);
 
   const clear = useCallback(async () => {
     try {
