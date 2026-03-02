@@ -1,0 +1,16 @@
+.container {
+  background: var(--bgColor-inset);
+  padding: 12px;
+  border-top: 1px solid var(--borderColor-muted);
+}
+
+.outputLine {
+  margin: 0;
+  font-family: var(--fontStack-monospace);
+}
+
+.errorLine {
+  margin: 0;
+  font-family: var(--fontStack-monospace);
+  color: var(--fgColor-danger);
+}
