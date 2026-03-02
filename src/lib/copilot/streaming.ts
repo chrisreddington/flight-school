@@ -342,12 +342,19 @@ export async function createLearningStreamingSession(
   operationName = 'Learning Chat',
   conversationId?: string
 ): Promise<StreamingSession> {
+  // When GitHub tools are available, extend the system prompt to instruct the AI to use them
+  const systemMessage = useGitHubTools
+    ? `${LEARNING_LENS_SYSTEM_PROMPT}
+
+You have access to GitHub tools. When the user asks about repositories, use the available tools to explore them — search code, read files, get repo details. Always use tools to look up real information rather than guessing.`
+    : LEARNING_LENS_SYSTEM_PROMPT;
+
   return createGenericStreamingSession({
     prompt,
     useGitHubTools,
     operationName,
     conversationId,
-    systemMessage: LEARNING_LENS_SYSTEM_PROMPT,
+    systemMessage,
     poolKeyPrefix: 'learning',
     logPrefix: 'Copilot Learning',
   });

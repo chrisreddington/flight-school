@@ -21,7 +21,14 @@ const log = logger.withTag('Copilot SDK');
 /** Cached MCP server configs keyed by tool list */
 const cachedMcpConfigs = new Map<string, MCPRemoteServerConfig>();
 
-/** Default MCP tool set (full access) */
+/**
+ * Default MCP tool set.
+ *
+ * Uses wildcard to include all tools from the Remote GitHub MCP Server.
+ * These are all read-only GitHub exploration tools (search, read files, etc.).
+ * Built-in SDK tools (shell, write) are blocked separately via excludedTools
+ * in session creation.
+ */
 const DEFAULT_MCP_TOOLS = ['*'] as const;
 
 /**

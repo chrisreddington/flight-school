@@ -136,6 +136,8 @@ export async function createSessionWithMetrics(
   const session = await copilot.createSession({
     model,
     streaming: true, // Enable streaming for delta events
+    // Disable built-in shell/write/url tools — Flight School is read-only
+    excludedTools: ['shell', 'editFile', 'createFile', 'deleteFile', 'runCommand', 'bash', 'terminal'],
     ...(mcpConfig && {
       mcpServers: {
         github: mcpConfig,
