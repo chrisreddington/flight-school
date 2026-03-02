@@ -232,8 +232,9 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
       {showFilters && (
         <div className={styles.filtersPanel}>
           <div className={styles.filterGroup}>
-            <label className="color-fg-muted">Operation:</label>
+            <label htmlFor="ai-activity-operation-filter" className="color-fg-muted">Operation:</label>
             <select
+              id="ai-activity-operation-filter"
               value={operationFilter}
               onChange={(e) => setOperationFilter(e.target.value)}
               className={styles.filterSelect}
@@ -246,8 +247,9 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
           </div>
           
           <div className={styles.filterGroup}>
-            <label className="color-fg-muted">Model:</label>
+            <label htmlFor="ai-activity-model-filter" className="color-fg-muted">Model:</label>
             <select
+              id="ai-activity-model-filter"
               value={modelFilter}
               onChange={(e) => setModelFilter(e.target.value)}
               className={styles.filterSelect}
@@ -260,8 +262,9 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
           </div>
 
           <div className={styles.filterGroup}>
-            <label className="color-fg-muted">Sort by:</label>
+            <label htmlFor="ai-activity-sort-filter" className="color-fg-muted">Sort by:</label>
             <select
+              id="ai-activity-sort-filter"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortBy)}
               className={styles.filterSelect}
