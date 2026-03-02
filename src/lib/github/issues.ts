@@ -109,7 +109,7 @@ export async function getOpenIssues(
   try {
     const octokit = await getOctokit();
     const { data } = await octokit.rest.search.issuesAndPullRequests({
-      q: `is:open is:issue author:${username}`,
+      q: `is:open is:issue author:${username} user:${username}`,
       sort: 'updated',
       order: 'desc',
       per_page: limit,

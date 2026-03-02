@@ -11,11 +11,16 @@ import type { ActivityMetrics, GitHubEvent } from './types';
 
 
 /**
- * Fetch user events from GitHub.
+ * Fetch user events from GitHub, scoped to user-owned repos only.
+ *
+ * @remarks
+ * Filters out events from organization repos to prevent private org data
+ * from leaking into AI-generated content. Only events from repos where
+ * the owner matches the authenticated user are included.
  *
  * @param username - GitHub username
  * @param perPage - Number of events to fetch
- * @returns Array of event data
+ * @returns Array of event data from user-owned repos only
  */
 export async function getUserEvents(
   username: string,
@@ -27,12 +32,15 @@ export async function getUserEvents(
     per_page: perPage,
   });
 
-  return data.map((event) => ({
-    type: event.type || 'Unknown',
-    repo: event.repo?.name || 'unknown',
-    createdAt: event.created_at || now(),
-    payload: event.payload as GitHubEvent['payload'],
-  }));
+  return data
+    .map((event) => ({
+      type: event.type || 'Unknown',
+      repo: event.repo?.name || 'unknown',
+      createdAt: event.created_at || now(),
+      payload: event.payload as GitHubEvent['payload'],
+    }))
+    // Exclude events from organization repos — only include user-owned repos
+    .filter((event) => event.repo.split('/')[0] === username);
 }
 
 /**

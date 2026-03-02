@@ -95,7 +95,7 @@ async function fetchAndAnalyze(username: string): Promise<WorkPatternSummary> {
     const octokit = await getOctokit();
 
     const response = await octokit.rest.search.issuesAndPullRequests({
-      q: `author:${username} is:merged sort:updated`,
+      q: `author:${username} is:merged user:${username} sort:updated`,
       per_page: MAX_ITEMS,
     });
 
