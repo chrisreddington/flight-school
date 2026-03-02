@@ -10,6 +10,7 @@
  */
 
 import type { CopilotSession } from '@github/copilot-sdk';
+import type { PermissionHandler } from '@github/copilot-sdk';
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
 
 import { getMcpServerConfig } from './mcp';
@@ -36,6 +37,13 @@ export const MODEL_TIERS = {
 
 /** Override chat model for performance tuning */
 export const CHAT_MODEL = process.env.COPILOT_CHAT_MODEL ?? MODEL_TIERS.fastChat;
+
+const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
+  if (request.kind === 'mcp') {
+    return { kind: 'approved' };
+  }
+  return { kind: 'denied-by-rules', rules: ['mcp-only'] };
+};
 
 // =============================================================================
 // Singleton Client
@@ -130,15 +138,37 @@ export async function createSessionWithMetrics(
   const startTime = Date.now();
   const copilot = await getCopilotClient();
   const includeMcp = options?.includeMcpTools === true; // Default to false for speed
-  const mcpConfig = includeMcp ? getMcpServerConfig(options?.tools) : null;
+  const mcpConfig = includeMcp ? await getMcpServerConfig(options?.tools) : null;
   const model = options?.model ?? MODEL_TIERS.standard;
+  const permissionHandler = includeMcp ? mcpOnlyPermissionHandler : approveAll;
 
   const session = await copilot.createSession({
     model,
     streaming: true, // Enable streaming for delta events
-    onPermissionRequest: approveAll,
-    // Disable built-in shell/write/url tools — Flight School is read-only
-    excludedTools: ['shell', 'editFile', 'createFile', 'deleteFile', 'runCommand', 'bash', 'terminal'],
+    onPermissionRequest: permissionHandler,
+    // Disable built-in tools we don't need; prefer GitHub MCP tools for repo context
+    excludedTools: [
+      'shell',
+      'editFile',
+      'createFile',
+      'deleteFile',
+      'runCommand',
+      'bash',
+      'terminal',
+      'web_fetch',
+      'web_search',
+      'task',
+      'view',
+      'glob',
+      'rg',
+      'grep',
+      'read_bash',
+      'write_bash',
+      'list_bash',
+      'stop_bash',
+      'gh',
+      'curl',
+    ],
     ...(mcpConfig && {
       mcpServers: {
         github: mcpConfig,
@@ -296,4 +326,3 @@ When responding:
 4. Be conversational but focused
 
 If user wants a quick answer, skip the explanations.`;
-

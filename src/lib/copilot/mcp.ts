@@ -8,6 +8,10 @@
  */
 
 import type { MCPRemoteServerConfig } from '@github/copilot-sdk';
+import { getGitHubToken } from '../github/client';
+import { logger } from '../logger';
+
+const log = logger.withTag('Copilot SDK');
 
 // =============================================================================
 // MCP Server Configuration
@@ -30,27 +34,35 @@ const DEFAULT_MCP_TOOLS = ['*'] as const;
  * Get MCP server configuration for GitHub tools.
  * Uses official Remote GitHub MCP Server hosted by GitHub.
  *
- * Auth is handled automatically by the Copilot SDK backend — it already
- * knows the user's identity from `gh auth`. No manual token needed.
- * This gives full access to repos the user can access (including private).
+ * Uses the same centralized GitHub token as Octokit auth so MCP tool
+ * authorization matches repository access in the rest of the app.
  *
  * @param tools - Array of MCP tools to enable (defaults to all)
  * @returns MCP server config
  *
  * @see https://github.com/github/github-mcp-server
  */
-export function getMcpServerConfig(
+export async function getMcpServerConfig(
   tools: string[] = [...DEFAULT_MCP_TOOLS]
-): MCPRemoteServerConfig {
+): Promise<MCPRemoteServerConfig | null> {
   const toolKey = tools.join(',');
   const cached = cachedMcpConfigs.get(toolKey);
   if (cached) {
     return cached;
   }
 
+  const token = await getGitHubToken();
+  if (!token) {
+    log.warn('No GitHub token available - MCP tools will be disabled');
+    return null;
+  }
+
   const config: MCPRemoteServerConfig = {
     type: 'http',
     url: 'https://api.githubcopilot.com/mcp/',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     tools,
   };
 

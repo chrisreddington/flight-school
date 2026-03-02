@@ -27,15 +27,22 @@ interface AIActivityPanelProps {
   initialState?: PanelState;
 }
 
+const DEFAULT_DOCKED_WIDTH = 450;
+const MIN_DOCKED_WIDTH = 300;
+const MAX_DOCKED_WIDTH_VIEWPORT_RATIO = 0.8;
+
 // PERF: Memoize expensive component with complex filtering/sorting logic
 export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'hidden' }: AIActivityPanelProps) {
   const { isDebugMode } = useDebugMode();
   const [state, setState] = useState<PanelState>(initialState);
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_DOCKED_WIDTH);
+  const [isResizeHandleActive, setIsResizeHandleActive] = useState(false);
   const [showEducational, setShowEducational] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const isResizingRef = useRef(false);
   
   const { events, isPaused, setIsPaused, clear, exportJSON, exportMarkdown, stats, pendingCount } =
-    useAIActivity();
+    useAIActivity({ enabled: isDebugMode });
 
   // Use extracted filtering hook
   const {
@@ -123,6 +130,40 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
     }
   }, [exportMarkdown]);
 
+  const getClampedPanelWidth = useCallback((nextWidth: number): number => {
+    const maxDockedWidth = window.innerWidth * MAX_DOCKED_WIDTH_VIEWPORT_RATIO;
+    return Math.min(maxDockedWidth, Math.max(MIN_DOCKED_WIDTH, nextWidth));
+  }, []);
+
+  const handleResizeMouseMove = useCallback((event: MouseEvent) => {
+    if (!isResizingRef.current) return;
+    const nextWidth = window.innerWidth - event.clientX;
+    setPanelWidth(getClampedPanelWidth(nextWidth));
+  }, [getClampedPanelWidth]);
+
+  const handleResizeMouseUp = useCallback(() => {
+    if (!isResizingRef.current) return;
+    isResizingRef.current = false;
+    setIsResizeHandleActive(false);
+    window.removeEventListener('mousemove', handleResizeMouseMove);
+    window.removeEventListener('mouseup', handleResizeMouseUp);
+  }, [handleResizeMouseMove]);
+
+  const handleResizeMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    isResizingRef.current = true;
+    setIsResizeHandleActive(true);
+    window.addEventListener('mousemove', handleResizeMouseMove);
+    window.addEventListener('mouseup', handleResizeMouseUp);
+  }, [handleResizeMouseMove, handleResizeMouseUp]);
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('mousemove', handleResizeMouseMove);
+      window.removeEventListener('mouseup', handleResizeMouseUp);
+    };
+  }, [handleResizeMouseMove, handleResizeMouseUp]);
+
   // Don't show panel at all if debug mode is off
   if (!isDebugMode) {
     return null;
@@ -161,7 +202,17 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
   const isFullscreen = state === 'fullscreen';
 
   return (
-    <div className={`${styles.panel} ${isFullscreen ? styles.panelFullscreen : styles.panelDocked}`}>
+    <div
+      className={`${styles.panel} ${isFullscreen ? styles.panelFullscreen : styles.panelDocked}`}
+      style={isFullscreen ? undefined : { width: panelWidth }}
+    >
+      {!isFullscreen && (
+        <div
+          className={`${styles.resizeHandle} ${isResizeHandleActive ? styles.resizeHandleActive : ''}`}
+          onMouseDown={handleResizeMouseDown}
+          aria-hidden="true"
+        />
+      )}
       {/* Header */}
       <div className={styles.header}>
         <span className={styles.headerTitle}>🔍 AI Activity</span>

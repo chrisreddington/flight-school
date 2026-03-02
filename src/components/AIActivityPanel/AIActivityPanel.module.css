@@ -25,6 +25,39 @@
   border-left: none;
 }
 
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1001;
+  background-color: transparent;
+  transition: background-color 0.15s;
+}
+
+.resizeHandle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 1px;
+  width: 1px;
+  height: 100%;
+  background-color: var(--borderColor-muted);
+  opacity: 0.8;
+}
+
+.resizeHandle:hover,
+.resizeHandleActive {
+  background-color: var(--bgColor-accent-muted);
+}
+
+.resizeHandle:hover::after,
+.resizeHandleActive::after {
+  background-color: var(--borderColor-accent-emphasis);
+}
+
 /* Header */
 .header {
   padding: 16px;

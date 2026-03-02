@@ -3,7 +3,7 @@
 import type { RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
 import { CheckIcon, CopilotIcon, PencilIcon, XIcon } from '@primer/octicons-react';
 import { Heading, IconButton, Stack, TextInput, Tooltip } from '@primer/react';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatInput } from '../ChatInput';
 import { MessageBubble } from '../MessageBubble';
 import { RepoSelector } from '../RepoSelector';
@@ -51,8 +51,6 @@ interface LearningChatProps {
   isStreaming?: boolean;
   /** IDs of ALL threads that are currently streaming */
   streamingThreadIds?: string[];
-  /** Current streaming content */
-  streamingContent?: string;
   /** User's avatar URL */
   userAvatarUrl?: string;
 }
@@ -75,7 +73,6 @@ interface LearningChatProps {
  *   onDeleteThread={handleDeleteThread}
  *   onSendMessage={handleSend}
  *   isStreaming={isLoading}
- *   streamingContent={streamContent}
  *   userAvatarUrl={user.avatar_url}
  * />
  * ```
@@ -98,6 +95,10 @@ export const LearningChat = memo(function LearningChat({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
+  const hasInitializedScrollRef = useRef(false);
+  const previousActiveThreadIdRef = useRef<string | null>(null);
 
   // Get active thread's messages
   const activeThread = useMemo(
@@ -107,7 +108,7 @@ export const LearningChat = memo(function LearningChat({
 
   const messages = activeThread?.messages ?? [];
   // Use pending repos when no thread exists, otherwise use thread repos
-  const selectedRepos = activeThread?.context.repos ?? pendingRepos;
+  const selectedRepos = activeThread?.context?.repos ?? pendingRepos;
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev);
@@ -172,11 +173,38 @@ export const LearningChat = memo(function LearningChat({
 
   // Detect if active thread is streaming based on thread.isStreaming flag
   // This is set by the background job in storage
-  const isStreamingInActiveThread = activeThread?.isStreaming === true;
+  const isStreamingInActiveThread = (isStreaming === true) || (activeThread?.isStreaming === true);
   
   // All messages come directly from storage - no synthetic messages needed
   // The streaming message has id starting with 'streaming-' and contains cursor ` ▊`
   const displayMessages = messages;
+  // Show typing indicator when streaming starts but no streaming message has arrived yet
+  const hasStreamingMessage = displayMessages.some(m => m.id.startsWith('streaming-'));
+  const showTypingIndicator = isStreamingInActiveThread && !hasStreamingMessage;
+
+  // Auto-scroll to bottom when messages change or typing indicator appears
+  useEffect(() => {
+    const currentCount = displayMessages.length;
+    const previousActiveThreadId = previousActiveThreadIdRef.current;
+    const didHydrateInitialThread = previousActiveThreadId === null && activeThreadId !== null;
+    previousActiveThreadIdRef.current = activeThreadId;
+
+    if (!hasInitializedScrollRef.current) {
+      hasInitializedScrollRef.current = true;
+      prevMessageCountRef.current = currentCount;
+      return;
+    }
+
+    if (didHydrateInitialThread) {
+      prevMessageCountRef.current = currentCount;
+      return;
+    }
+
+    if (currentCount > prevMessageCountRef.current || showTypingIndicator) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessageCountRef.current = currentCount;
+  }, [activeThreadId, displayMessages, showTypingIndicator]);
 
   return (
     <div className={styles.container}>
@@ -286,6 +314,17 @@ export const LearningChat = memo(function LearningChat({
               })}
             </div>
           )}
+
+          {showTypingIndicator && (
+            <div className={styles.typingIndicator} aria-label="Copilot is thinking" role="status">
+              <span className={styles.typingDot} />
+              <span className={styles.typingDot} />
+              <span className={styles.typingDot} />
+            </div>
+          )}
+
+          {/* Scroll sentinel - auto-scrolled to when messages update */}
+          <div ref={messagesEndRef} />
           
           {/* Screen reader announcements for streaming status */}
           <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">

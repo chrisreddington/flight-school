@@ -346,7 +346,9 @@ export async function createLearningStreamingSession(
   const systemMessage = useGitHubTools
     ? `${LEARNING_LENS_SYSTEM_PROMPT}
 
-You have access to GitHub tools. When the user asks about repositories, use the available tools to explore them — search code, read files, get repo details. Always use tools to look up real information rather than guessing.`
+You have access to GitHub MCP tools. When the user asks about repositories, use those tools to explore them — search code, read files, and get repo details.
+Never use local shell/filesystem/web tools for repository questions.
+Always use GitHub tools to look up real information rather than guessing.`
     : LEARNING_LENS_SYSTEM_PROMPT;
 
   return createGenericStreamingSession({

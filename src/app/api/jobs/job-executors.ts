@@ -322,7 +322,7 @@ export async function executeChatResponse(
     let contextualPrompt = prompt;
     if (repos && repos.length > 0 && useGitHubTools) {
       const repoList = repos.map(r => `- ${r}`).join('\n');
-      const repoContext = `The user has selected these repositories as context. Use your GitHub tools to look up information about them:\n${repoList}\n\nUser question: `;
+      const repoContext = `The user has selected these repositories as context.\nYou MUST use GitHub MCP tools to look up live repository information before answering.\nDo NOT use local shell/filesystem tools or generic web tools.\n\nSelected repositories:\n${repoList}\n\nUser question: `;
       contextualPrompt = repoContext + prompt;
       log.debug(`[Job ${jobId}] Added repository context for ${repos.length} repos`);
     }

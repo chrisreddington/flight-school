@@ -192,18 +192,18 @@ export function useLearningChat(): UseLearningChatReturn {
   // For backward compatibility, expose a single streamingThreadId (most recently started)
   const streamingThreadId = streamingThreadIds[streamingThreadIds.length - 1] ?? null;
   
-  // Track threads where we've just started a job (before storage reflects isStreaming)
-  const [pendingStreamThreadIds, setPendingStreamThreadIds] = useState<Set<string>>(new Set());
+  // Maps threadId → userMessageId for the message that triggered the pending stream
+  const [pendingStreamMessages, setPendingStreamMessages] = useState<Map<string, string>>(new Map());
   
   // Combine storage-derived streaming IDs with pending ones
   const allStreamingThreadIds = useMemo(() => {
-    const combined = new Set([...streamingThreadIds, ...pendingStreamThreadIds]);
+    const combined = new Set([...streamingThreadIds, ...pendingStreamMessages.keys()]);
     return Array.from(combined);
-  }, [streamingThreadIds, pendingStreamThreadIds]);
+  }, [streamingThreadIds, pendingStreamMessages]);
   
   // Check if active thread is streaming (from storage OR pending)
   const isStreaming = activeThread?.isStreaming === true || 
-    (activeThreadId ? pendingStreamThreadIds.has(activeThreadId) : false);
+    (activeThreadId ? pendingStreamMessages.has(activeThreadId) : false);
   
   // Streaming content comes from the thread messages in storage
   // The streaming message has cursor ` ▊` which gives the typing effect
@@ -232,35 +232,35 @@ export function useLearningChat(): UseLearningChatReturn {
   
   // Clean up pending stream IDs once storage reflects the streaming state
   useEffect(() => {
-    if (pendingStreamThreadIds.size === 0) return;
+    if (pendingStreamMessages.size === 0) return;
     
-    // Check if any pending threads now have isStreaming in storage
-    const stillPending = new Set<string>();
-    for (const threadId of pendingStreamThreadIds) {
+    const stillPending = new Map<string, string>();
+    for (const [threadId, userMsgId] of pendingStreamMessages) {
       const thread = threads.find(t => t.id === threadId);
-      // Keep as pending if thread not found OR doesn't have isStreaming yet
-      // AND doesn't have a completed message (no cursor)
       if (!thread) {
-        stillPending.add(threadId);
+        stillPending.set(threadId, userMsgId);
       } else if (thread.isStreaming) {
-        // Storage has caught up - no longer pending
+        // Storage has caught up to the streaming state - no longer pending
       } else {
-        // Check if there's a streaming message or completed assistant message
         const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
-        const hasCompletedResponse = thread.messages.some(m => 
-          m.role === 'assistant' && !m.id.startsWith('streaming-')
-        );
-        if (!hasStreamingMsg && !hasCompletedResponse) {
+        // Only consider a response "completed" if it appears AFTER our specific user message
+        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
+        const hasNewResponse =
+          userMsgIdx !== -1 &&
+          thread.messages
+            .slice(userMsgIdx + 1)
+            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
+        if (!hasStreamingMsg && !hasNewResponse) {
           // Still waiting for job to write first content
-          stillPending.add(threadId);
+          stillPending.set(threadId, userMsgId);
         }
       }
     }
     
-    if (stillPending.size !== pendingStreamThreadIds.size) {
-      setPendingStreamThreadIds(stillPending);
+    if (stillPending.size !== pendingStreamMessages.size) {
+      setPendingStreamMessages(stillPending);
     }
-  }, [threads, pendingStreamThreadIds]);
+  }, [threads, pendingStreamMessages]);
 
   useEffect(() => {
     if (isThreadsLoading) return;
@@ -283,7 +283,7 @@ export function useLearningChat(): UseLearningChatReturn {
         if (!thread.isStreaming) return null;
 
         // Never touch streams we started in this session — they're actively handled
-        if (pendingStreamThreadIds.has(thread.id)) return null;
+        if (pendingStreamMessages.has(thread.id)) return null;
 
         const hasStreamingMessage = thread.messages.some((m) =>
           m.id.startsWith('streaming-')
@@ -309,7 +309,7 @@ export function useLearningChat(): UseLearningChatReturn {
     if (updates.length === 0) return;
 
     void Promise.all(updates.map((thread) => threadStore.update(thread)));
-  }, [isThreadsLoading, threads, pendingStreamThreadIds]);
+  }, [isThreadsLoading, threads, pendingStreamMessages]);
 
   // Subscribe to thread data changes from background jobs
   useEffect(() => {
@@ -345,8 +345,8 @@ export function useLearningChat(): UseLearningChatReturn {
     log.debug('Stopping stream for thread:', threadId);
     
     // Remove from pending (stops showing as streaming immediately)
-    setPendingStreamThreadIds(prev => {
-      const next = new Set(prev);
+    setPendingStreamMessages(prev => {
+      const next = new Map(prev);
       next.delete(threadId);
       return next;
     });
@@ -482,7 +482,7 @@ export function useLearningChat(): UseLearningChatReturn {
       }
 
       // Use repos from options first, then thread context
-      const effectiveRepos = repos ?? thread.context.repos;
+      const effectiveRepos = repos ?? thread.context?.repos ?? [];
 
       // Add user message to thread
       const userMessage: Message = {
@@ -492,7 +492,7 @@ export function useLearningChat(): UseLearningChatReturn {
         timestamp: now(),
       };
 
-      updateActiveThread({
+      await updateActiveThread({
         messages: [...thread.messages, userMessage],
       }, targetThreadId);
 
@@ -502,7 +502,7 @@ export function useLearningChat(): UseLearningChatReturn {
       
       // Mark this thread as pending streaming IMMEDIATELY
       // This triggers polling before storage has isStreaming: true
-      setPendingStreamThreadIds(prev => new Set([...prev, targetThreadId]));
+      setPendingStreamMessages(prev => new Map([...prev, [targetThreadId, userMessage.id]]));
       
       try {
         const jobRes = await fetch('/api/jobs', {
@@ -523,8 +523,8 @@ export function useLearningChat(): UseLearningChatReturn {
         if (!jobRes.ok) {
           const err = await jobRes.json();
           // Remove from pending on error
-          setPendingStreamThreadIds(prev => {
-            const next = new Set(prev);
+          setPendingStreamMessages(prev => {
+            const next = new Map(prev);
             next.delete(targetThreadId);
             return next;
           });
@@ -539,8 +539,8 @@ export function useLearningChat(): UseLearningChatReturn {
       } catch (err) {
         log.error('Failed to start chat response job:', err);
         // Remove from pending on error
-        setPendingStreamThreadIds(prev => {
-          const next = new Set(prev);
+        setPendingStreamMessages(prev => {
+          const next = new Map(prev);
           next.delete(targetThreadId);
           return next;
         });
