@@ -2,7 +2,7 @@
 description: |
   Daily QA health check for Flight School.
   Validates that the code builds, tests pass, documentation is clear, and code quality
-  is maintained. Creates discussions for findings and can submit draft PRs with small fixes.
+  is maintained. Creates issues for findings and can submit draft PRs with small fixes.
   Provides continuous quality monitoring throughout development.
 
 on:
@@ -56,4 +56,4 @@ This is a Next.js 14 App Router application using TypeScript, Vitest for tests, 
 
 4. If you find small problems you can fix with very high confidence, create a PR for them.
 
-5. Search for any previous "${{ github.workflow }}" open discussions. If the status is essentially the same as the current state, add a brief comment saying you didn't find anything new and exit. Close all previous open Daily QA Report discussions.
+5. Search for any previous "${{ github.workflow }}" open issues. If the status is essentially the same as the current state, add a brief comment saying you didn't find anything new and exit. Close all previous open Daily QA Report issues.

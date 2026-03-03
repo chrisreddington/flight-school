@@ -18,12 +18,9 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
-  create-discussion:
-    title-prefix: "${{ github.workflow }}"
-    category: "ideas"
   create-issue:
-    max: 1
-    labels: [automation, testing, bug]
+    max: 2
+    labels: [automation, testing]
   add-comment:
     target: "*"
   create-pull-request:
@@ -65,7 +62,7 @@ Focus new unit tests on `src/lib/` utilities, API route handlers, and React comp
 
 To decide which phase to perform:
 
-1. First check for existing open discussion titled "${{ github.workflow }}" using `list_discussions`. If found and open, read it and maintainer comments. If not found, perform Phase 1 and nothing else.
+1. First check for existing open issue titled "${{ github.workflow }}" using `list_issues`. If found and open, read it and maintainer comments. If not found, perform Phase 1 and nothing else.
 
 2. If that exists, then perform Phase 2.
 
@@ -77,7 +74,7 @@ To decide which phase to perform:
 
 3. Keep memory notes in `/tmp/gh-aw/repo-memory-daily-test-improver/` about build commands, test patterns, and coverage gaps.
 
-4. Create a discussion with title "${{ github.workflow }} - Research and Plan" that includes:
+4. Create an issue with title "${{ github.workflow }} - Research and Plan" that includes:
    - Coverage summary (which areas have low coverage)
    - Test pattern notes (conventions used in this repo)
    - A prioritized plan for coverage improvements (focus on `src/lib/`, `src/app/api/`)
@@ -87,7 +84,7 @@ To decide which phase to perform:
 
 ## Phase 2 - Test implementation
 
-1. Re-read the planning discussion and any maintainer comments.
+1. Re-read the planning issue and any maintainer comments.
 
 2. Read memory notes from Phase 1.
 
