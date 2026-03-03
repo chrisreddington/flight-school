@@ -17,6 +17,11 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  create-issue:
+    max: 3
+    labels: [automation, qa]
+  add-comment:
+    target: "*"
   create-pull-request:
     draft: true
     labels: [automation, qa]
