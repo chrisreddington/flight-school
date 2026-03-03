@@ -186,7 +186,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <span className={styles.iconAttention}>
             <ZapIcon size={20} />
           </span>
-          <Heading as="h3" className={styles.sectionTitle}>
+          <Heading as="h2" className={styles.sectionTitle}>
             Daily Focus
           </Heading>
           {isAIEnabled && (
