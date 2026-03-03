@@ -15,7 +15,7 @@ export const WelcomeSection = memo(function WelcomeSection({ displayName, isLoad
   
   return (
     <div className={styles.welcomeSection}>
-      <Heading as="h2" className={styles.welcomeHeading}>
+      <Heading as="h1" className={styles.welcomeHeading}>
         {getGreeting()},{' '}
         {isLoading || !showName ? (
           <SkeletonBox height="1.2em" width="80px" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
