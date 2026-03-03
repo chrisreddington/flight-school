@@ -296,7 +296,7 @@ export function ExportToGitHubDialog({
 
             {isExporting ? (
               /* Loading state */
-              <Stack direction="vertical" gap="normal" align="center" style={{ padding: '24px 0' }}>
+              <Stack direction="vertical" gap="normal" align="center" className={styles.loadingContainer}>
                 <Spinner size="large" />
                 <Stack direction="vertical" gap="condensed" align="center">
                   <p className={styles.loadingTitle}>Exporting your workspace...</p>
@@ -336,7 +336,7 @@ export function ExportToGitHubDialog({
                   <Stack direction="horizontal" align="center" gap="normal" justify="space-between">
                     <Stack direction="horizontal" align="center" gap="condensed">
                       {isPrivate ? <LockIcon size={16} /> : <UnlockIcon size={16} />}
-                      <span style={{ fontWeight: 600 }} id="repo-visibility-label">Repository</span>
+                      <span className={styles.visibilityLabel} id="repo-visibility-label">Repository</span>
                     </Stack>
                     <ToggleSwitch
                       checked={isPrivate}
@@ -347,7 +347,7 @@ export function ExportToGitHubDialog({
                       buttonLabelOff="Public"
                     />
                   </Stack>
-                  <p style={{ fontSize: '12px', color: 'var(--fgColor-muted)', margin: 0 }}>
+                  <p className={styles.visibilityCaption}>
                     {isPrivate
                       ? 'Only you can see this repository'
                       : 'Anyone can see this repository'}

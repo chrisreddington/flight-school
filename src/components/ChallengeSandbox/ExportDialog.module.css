@@ -61,3 +61,17 @@
   color: var(--fgColor-muted);
   font-style: italic;
 }
+
+.loadingContainer {
+  padding: 24px 0;
+}
+
+.visibilityLabel {
+  font-weight: 600;
+}
+
+.visibilityCaption {
+  font-size: 12px;
+  color: var(--fgColor-muted);
+  margin: 0;
+}
