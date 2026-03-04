@@ -286,7 +286,7 @@ export default function SkillProfilePage() {
           <div className={styles.sidebarCard}>
             <div className={styles.sidebarHeader}>
               <MortarBoardIcon size={20} className={styles.sidebarIcon} />
-              <h2 className={styles.sidebarTitle}>Skill Profile</h2>
+              <p className={styles.sidebarTitle}>Skill Profile</p>
             </div>
             <p className={styles.sidebarSubtitle}>Your learning journey</p>
             
@@ -315,7 +315,7 @@ export default function SkillProfilePage() {
           <div className={styles.sidebarCard}>
             <div className={styles.sidebarHeader}>
               <CodeIcon size={20} className={styles.sidebarIcon} />
-              <h3 className={styles.sidebarTitle}>Skill Levels</h3>
+              <p className={styles.sidebarTitle}>Skill Levels</p>
             </div>
             <Stack direction="vertical" gap="condensed">
               {(['beginner', 'intermediate', 'advanced'] as SkillLevel[]).map(level => (
@@ -333,9 +333,9 @@ export default function SkillProfilePage() {
 
           {/* Danger Zone in sidebar */}
           <div className={styles.dangerZone}>
-            <Heading as="h3" className={styles.dangerTitle}>
+            <p className={styles.dangerTitle}>
               <AlertIcon size={16} /> Reset App Data
-            </Heading>
+            </p>
             <p className={styles.dangerDescription}>
               Clear all locally stored data including skill profile, focus history, 
               chat threads, and challenge history.
