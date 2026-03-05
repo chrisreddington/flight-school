@@ -19,13 +19,23 @@
   .main {
     grid-template-columns: 1fr;
   }
+  .sidebar {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .content {
+    grid-column: 1;
+    grid-row: 1;
+  }
 }
 
-/* Left sidebar */
+/* Left sidebar - grid-column: 1 keeps it visually left even though it appears second in DOM */
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: var(--base-size-16, 16px);
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .sidebarCard {
@@ -106,7 +116,7 @@
   line-height: 1.5;
 }
 
-/* Main content area */
+/* Main content area - grid-column: 2 keeps it visually right even though it appears first in DOM */
 .content {
   background-color: var(--bgColor-default, #ffffff);
   border: 1px solid var(--borderColor-default, #d0d7de);
@@ -114,6 +124,8 @@
   padding: var(--base-size-24, 24px);
   min-height: 0;
   overflow-y: auto;
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .header {
