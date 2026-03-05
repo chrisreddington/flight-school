@@ -180,7 +180,7 @@ function HabitCard({
       )}
 
       {showActions && habit.state === 'active' && (
-        <Stack direction="horizontal" gap="condensed" style={{ marginTop: 'var(--base-size-12)' }}>
+        <Stack direction="horizontal" gap="condensed" className={styles.actionsStack}>
           {isPending && (
             <>
               <Button
@@ -243,7 +243,7 @@ export function HabitListSection({
         <div className={styles.sectionHeader}>
           <Stack direction="horizontal" gap="condensed" align="center">
             <FlameIcon size={20} />
-            <Heading as="h2" style={{ fontSize: '1.25rem' }}>
+            <Heading as="h2" className={styles.sectionHeading}>
               Active Habits
             </Heading>
             <CounterLabel>{activeHabits.length}</CounterLabel>
@@ -261,10 +261,10 @@ export function HabitListSection({
         {activeHabits.length === 0 ? (
           <div className={styles.emptyState}>
             <FlameIcon size={48} className={styles.emptyIcon} />
-            <Heading as="h3" style={{ fontSize: '1.125rem', marginTop: 'var(--base-size-16)' }}>
+            <Heading as="h3" className={styles.emptyStateHeading}>
               No active habits yet
             </Heading>
-            <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: 'var(--base-size-8)' }}>
+            <Text as="p" className={styles.emptyStateText}>
               Start building better habits by creating your first one.
             </Text>
           </div>
@@ -293,7 +293,7 @@ export function HabitListSection({
           <div className={styles.sectionHeader}>
             <Stack direction="horizontal" gap="condensed" align="center">
               <GraphIcon size={20} />
-              <Heading as="h2" style={{ fontSize: '1.25rem' }}>
+              <Heading as="h2" className={styles.sectionHeading}>
                 Completed Habits
               </Heading>
               <CounterLabel>{completedHabits.length}</CounterLabel>
@@ -324,7 +324,7 @@ export function HabitListSection({
           <div className={styles.sectionHeader}>
             <Stack direction="horizontal" gap="condensed" align="center">
               <StopIcon size={20} />
-              <Heading as="h2" style={{ fontSize: '1.25rem' }}>
+              <Heading as="h2" className={styles.sectionHeading}>
                 Stopped Habits
               </Heading>
               <CounterLabel>{abandonedHabits.length}</CounterLabel>
