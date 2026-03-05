@@ -212,3 +212,22 @@
   background-color: var(--bgColor-success-emphasis, #1a7f37);
   transition: width 0.3s ease;
 }
+
+/* Habit list section heading styles */
+.sectionHeading {
+  font-size: 1.25rem;
+}
+
+.emptyStateHeading {
+  font-size: 1.125rem;
+  margin-top: var(--base-size-16, 16px);
+}
+
+.emptyStateText {
+  color: var(--fgColor-muted, #656d76);
+  margin-top: var(--base-size-8, 8px);
+}
+
+.actionsStack {
+  margin-top: var(--base-size-12, 12px);
+}
