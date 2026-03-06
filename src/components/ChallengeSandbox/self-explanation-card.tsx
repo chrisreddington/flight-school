@@ -22,13 +22,14 @@ export function SelfExplanationCard({
 
   return (
     <div className={styles.card} data-challenge-id={challengeId} data-date-key={dateKey}>
-      <h4 className={styles.title}>What did you learn?</h4>
+      <h4 id="self-explanation-label" className={styles.title}>What did you learn?</h4>
       <p className={styles.subtitle}>Writing it down helps it stick. Takes 30 seconds.</p>
       <Textarea
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder="e.g. I learned that... I'd do X differently because..."
         rows={3}
+        aria-labelledby="self-explanation-label"
       />
       <Stack direction="horizontal" gap="condensed" justify="end">
         <Button
