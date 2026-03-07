@@ -27,7 +27,7 @@
     "debt:circular": "madge --circular --extensions ts,tsx src/"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^0.1.29",
+    "@github/copilot-sdk": "^0.1.32",
     "@monaco-editor/react": "^4.7.0",
     "@primer/css": "^22.1.0",
     "@primer/octicons-react": "^19.22.0",
