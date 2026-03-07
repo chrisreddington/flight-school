@@ -214,9 +214,9 @@ export default function HabitsPage() {
           />
 
           <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
-            <h3 className={styles.tipTitle}>
+            <p className={styles.tipTitle}>
               <LightBulbIcon size={12} /> Pro Tip
-            </h3>
+            </p>
             <p className={styles.tipText}>
               Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
             </p>
