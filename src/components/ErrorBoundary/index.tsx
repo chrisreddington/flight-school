@@ -3,6 +3,7 @@
 import { Banner, Button, Stack } from '@primer/react';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { logger } from '@/lib/logger';
+import styles from './ErrorBoundary.module.css';
 
 interface Props {
   children: ReactNode;
@@ -50,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div style={{ padding: '48px 24px', maxWidth: '600px', margin: '0 auto' }}>
+        <div className={styles.inlineErrorContainer}>
           <Stack direction="vertical" gap="normal">
             <Banner variant="critical" title="Something went wrong">
               <p>
@@ -58,18 +59,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 the page.
               </p>
               {this.state.error && (
-                <details style={{ marginTop: '8px' }}>
-                  <summary style={{ cursor: 'pointer' }}>Error details</summary>
-                  <pre
-                    style={{
-                      marginTop: '8px',
-                      padding: '12px',
-                      backgroundColor: 'var(--bgColor-muted)',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      overflow: 'auto',
-                    }}
-                  >
+                <details className={styles.inlineErrorDetails}>
+                  <summary className={styles.errorSummary}>Error details</summary>
+                  <pre className={styles.inlineErrorPre}>
                     {this.state.error.message}
                   </pre>
                 </details>
