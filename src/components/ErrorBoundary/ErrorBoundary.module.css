@@ -138,3 +138,23 @@
 .notFoundIcon {
   color: var(--fgColor-muted, #656d76);
 }
+
+/* Inline fallback rendered by ErrorBoundary.render() when no custom fallback is provided */
+.inlineErrorContainer {
+  padding: var(--base-size-48, 48px) var(--base-size-24, 24px);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.inlineErrorDetails {
+  margin-top: var(--base-size-8, 8px);
+}
+
+.inlineErrorPre {
+  margin-top: var(--base-size-8, 8px);
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-small, 6px);
+  font-size: var(--text-body-size-small, 12px);
+  overflow: auto;
+}
