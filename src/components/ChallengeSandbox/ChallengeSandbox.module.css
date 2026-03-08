@@ -576,6 +576,10 @@
   line-height: 1.5;
 }
 
+.hintTextError {
+  color: var(--fgColor-danger);
+}
+
 .hintConcepts {
   display: flex;
   flex-wrap: wrap;
