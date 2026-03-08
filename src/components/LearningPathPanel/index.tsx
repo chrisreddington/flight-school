@@ -27,7 +27,7 @@ export function LearningPathPanel({ profile, onAddSkill }: LearningPathPanelProp
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
-        <h3 className={styles.title}>🗺️ Learning Path</h3>
+        <p className={styles.title}>🗺️ Learning Path</p>
       </div>
       <p className={styles.subtitle}>Skills to tackle next (based on your profile)</p>
 
