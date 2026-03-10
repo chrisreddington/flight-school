@@ -112,7 +112,7 @@ export function HintDisplay({
 
         {error && (
           <div className={styles.hintMessage} role="alert" aria-live="assertive">
-            <div className={styles.hintText} style={{ color: 'var(--fgColor-danger)' }}>
+            <div className={styles.hintTextError}>
               {error}
             </div>
           </div>
