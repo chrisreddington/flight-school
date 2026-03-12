@@ -170,7 +170,7 @@ export function ActivityEvent({ event, showEducational = true }: ActivityEventPr
 
       {/* Performance analysis */}
       {performanceIssues.length > 0 && (
-        <details style={{ marginTop: 8 }}>
+        <details className={styles.perfDetails}>
           <summary className={`f6 ${styles.perfInsightsSummary}`}>
             🔍 Performance insights ({performanceIssues.length})
           </summary>

@@ -173,6 +173,12 @@
   text-decoration: underline;
 }
 
+/* Loading fallback */
+.loadingFallback {
+  padding: 1rem;
+  text-align: center;
+}
+
 /* Streaming cursor */
 .streamingCursor {
   animation: blink 1s step-end infinite;
