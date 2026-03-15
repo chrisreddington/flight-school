@@ -95,8 +95,8 @@ describe('CreateChallengePage', () => {
     container.remove();
   });
 
-  function renderPage() {
-    act(() => {
+  async function renderPage() {
+    await act(async () => {
       root = createRoot(container);
       root.render(createElement(CreateChallengePage));
     });
@@ -110,8 +110,8 @@ describe('CreateChallengePage', () => {
     });
   }
 
-  it('should start with no error message', () => {
-    renderPage();
+  it('should start with no error message', async () => {
+    await renderPage();
 
     expect(container.textContent).not.toContain('Queue is full');
     expect(container.textContent).not.toContain('Failed to add challenge to queue. Please try again.');
@@ -122,7 +122,7 @@ describe('CreateChallengePage', () => {
     queueState.isQueueFull = true;
     queueState.maxQueueSize = 3;
 
-    renderPage();
+    await renderPage();
     await clickSave();
 
     expect(addChallengeMock).not.toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe('CreateChallengePage', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     addChallengeMock.mockResolvedValue(false);
 
-    renderPage();
+    await renderPage();
     await clickSave();
 
     expect(addChallengeMock).toHaveBeenCalledTimes(1);
