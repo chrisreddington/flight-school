@@ -212,3 +212,7 @@
   background-color: var(--bgColor-success-emphasis, #1a7f37);
   transition: width 0.3s ease;
 }
+
+.newHabitButton {
+  margin-top: var(--base-size-16, 16px);
+}
