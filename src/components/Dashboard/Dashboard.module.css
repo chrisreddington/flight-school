@@ -887,6 +887,37 @@
   font-style: italic;
 }
 
+/* Icon inline wrapper — prevents creating new object on every render */
+.iconInline {
+  margin-right: var(--base-size-4, 4px);
+  display: inline-flex;
+}
+
+/* Skeleton loading row header — shared by challenge, goal, and topics loading states */
+.skeletonLoadingRow {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+/* Skeleton flex fill — topic skeleton icon/text row */
+.skeletonFlex {
+  flex: 1;
+}
+
+/* Skeleton bottom margin — small (8px) */
+.skeletonMbSm {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+/* Skeleton bottom margin — extra-small (4px) */
+.skeletonMbXs {
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+/* Skeleton bottom margin — medium (16px) */
+.skeletonMbMd {
+  margin-bottom: var(--base-size-16, 16px);
+}
+
 /* Screen reader only text */
 .srOnly {
   position: absolute;

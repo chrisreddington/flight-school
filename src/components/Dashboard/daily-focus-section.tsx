@@ -191,7 +191,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           </Heading>
           {isAIEnabled && (
             <Label variant="success" size="small">
-              <span style={{ marginRight: '4px', display: 'inline-flex' }}><CopilotIcon size={12} /></span>
+              <span className={styles.iconInline}><CopilotIcon size={12} /></span>
               AI-Powered
             </Label>
           )}
@@ -224,7 +224,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <div className={styles.focusContent}>
             {isChallengeLoading ? (
               <div className={styles.challengeCard}>
-                <Stack direction="horizontal" align="center" justify="space-between" style={{ marginBottom: 8 }}>
+                <Stack direction="horizontal" align="center" justify="space-between" className={styles.skeletonLoadingRow}>
                   <Stack direction="horizontal" align="center" gap="condensed">
                     <Spinner size="small" />
                     <span className={styles.loadingText}>Generating challenge...</span>
@@ -242,7 +242,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                     </Button>
                   )}
                 </Stack>
-                <SkeletonBox height="20px" width="70%" style={{ marginBottom: 8 }} />
+                <SkeletonBox height="20px" width="70%" className={styles.skeletonMbSm} />
                 <SkeletonBox height="40px" width="100%" />
               </div>
             ) : (
@@ -275,7 +275,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <div className={styles.focusContent}>
             {isGoalLoading ? (
               <div className={styles.goalCard}>
-                <Stack direction="horizontal" align="center" justify="space-between" style={{ marginBottom: 8 }}>
+                <Stack direction="horizontal" align="center" justify="space-between" className={styles.skeletonLoadingRow}>
                   <Stack direction="horizontal" align="center" gap="condensed">
                     <Spinner size="small" />
                     <span className={styles.loadingText}>Generating goal...</span>
@@ -293,7 +293,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                     </Button>
                   )}
                 </Stack>
-                <SkeletonBox height="40px" width="100%" style={{ marginBottom: 16 }} />
+                <SkeletonBox height="40px" width="100%" className={styles.skeletonMbMd} />
                 <SkeletonBox height="8px" width="100%" />
               </div>
             ) : (
@@ -313,7 +313,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <div className={styles.focusContent}>
             {isTopicsLoading ? (
               <Stack direction="vertical" gap="normal">
-                <Stack direction="horizontal" align="center" justify="space-between" style={{ marginBottom: 8 }}>
+                <Stack direction="horizontal" align="center" justify="space-between" className={styles.skeletonLoadingRow}>
                   <Stack direction="horizontal" align="center" gap="condensed">
                     <Spinner size="small" />
                     <span className={styles.loadingText}>Generating learning topics...</span>
@@ -335,8 +335,8 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   <div key={`skeleton-topic-${skeletonIndex}`} className={styles.learnCard}>
                     <Stack direction="horizontal" align="start" gap="normal">
                       <SkeletonBox height="44px" width="44px" />
-                      <div style={{ flex: 1 }}>
-                        <SkeletonBox height="16px" width="50%" style={{ marginBottom: 4 }} />
+                      <div className={styles.skeletonFlex}>
+                        <SkeletonBox height="16px" width="50%" className={styles.skeletonMbXs} />
                         <SkeletonBox height="16px" width="80%" />
                       </div>
                     </Stack>
