@@ -107,17 +107,12 @@ export function RelatedSuggestions({
             <div key={suggestion.id} className={styles.relatedSuggestionCard}>
               <Stack direction="vertical" gap="condensed">
                 <Stack direction="horizontal" justify="space-between" align="center">
-                  <Text style={{ fontWeight: 600 }}>{suggestion.title}</Text>
+                  <Text className={styles.suggestionTitle}>{suggestion.title}</Text>
                   <Label variant={getDifficultyVariant(suggestion.difficulty)} size="small">
                     {suggestion.difficulty}
                   </Label>
                 </Stack>
-                <Text
-                  style={{
-                    fontStyle: 'italic',
-                    color: 'var(--fgColor-muted)',
-                  }}
-                >
+                <Text className={styles.suggestionReason}>
                   {suggestion.reason}
                 </Text>
                 <div>
