@@ -151,12 +151,7 @@ export default function EditChallengePage() {
       <div className={styles.root}>
         <AppHeader />
         <main className={styles.main}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            minHeight: '400px'
-          }}>
+          <div className={styles.editLoadingCenter}>
             <Spinner size="medium" />
           </div>
         </main>
@@ -173,7 +168,7 @@ export default function EditChallengePage() {
           <Banner variant="critical" title="Challenge not found">
             This challenge doesn&apos;t exist or has already been completed.
           </Banner>
-          <Button onClick={() => router.push('/')} style={{ marginTop: '16px' }}>
+          <Button onClick={() => router.push('/')} className={styles.editActionTop}>
             Back to Dashboard
           </Button>
         </main>
@@ -190,7 +185,7 @@ export default function EditChallengePage() {
           <Banner variant="warning" title="Cannot edit this challenge">
             Only custom challenges can be edited. AI-generated daily challenges cannot be modified.
           </Banner>
-          <Button onClick={() => router.push('/')} style={{ marginTop: '16px' }}>
+          <Button onClick={() => router.push('/')} className={styles.editActionTop}>
             Back to Dashboard
           </Button>
         </main>
@@ -203,17 +198,17 @@ export default function EditChallengePage() {
       <AppHeader />
 
       <main className={styles.main}>
-        <div style={{ maxWidth: '700px', margin: '0 auto', padding: '24px' }}>
+        <div className={styles.editFormContainer}>
           {/* Header */}
-          <Stack direction="horizontal" align="center" gap="condensed" style={{ marginBottom: '24px' }}>
-            <span style={{ color: 'var(--fgColor-accent)' }}>
+          <Stack direction="horizontal" align="center" gap="condensed" className={styles.editFormHeader}>
+            <span className={styles.editIconAccent}>
               <PencilIcon size={24} />
             </span>
             <Heading as="h1">Edit Challenge</Heading>
           </Stack>
 
           {saveError && (
-            <Banner variant="critical" title="Save failed" style={{ marginBottom: '16px' }}>
+            <Banner variant="critical" title="Save failed" className={styles.editSaveErrorBanner}>
               {saveError}
             </Banner>
           )}
@@ -328,7 +323,7 @@ export default function EditChallengePage() {
               </FormControl>
 
               {/* Actions */}
-              <Stack direction="horizontal" gap="normal" justify="end" style={{ marginTop: '16px' }}>
+              <Stack direction="horizontal" gap="normal" justify="end" className={styles.editActionsFooter}>
                 <Button variant="invisible" onClick={handleCancel} disabled={isSaving}>
                   Cancel
                 </Button>
