@@ -152,6 +152,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
                 progress={lang.percentage}
                 barSize="small"
                 style={{ '--progress-bar-bg': lang.color } as CSSProperties}
+                aria-label={`${lang.name}: ${lang.percentage}%`}
               />
             </div>
           ))}
