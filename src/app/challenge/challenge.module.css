@@ -26,3 +26,38 @@
   font-size: var(--text-body-size-large, 16px);
   color: var(--fgColor-muted, #656d76);
 }
+
+/* Edit page styles */
+
+.editLoadingCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.editFormContainer {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: var(--base-size-24, 24px);
+}
+
+.editFormHeader {
+  margin-bottom: var(--base-size-24, 24px);
+}
+
+.editIconAccent {
+  color: var(--fgColor-accent);
+}
+
+.editActionTop {
+  margin-top: var(--base-size-16, 16px);
+}
+
+.editActionsFooter {
+  margin-top: var(--base-size-16, 16px);
+}
+
+.editSaveErrorBanner {
+  margin-bottom: var(--base-size-16, 16px);
+}
