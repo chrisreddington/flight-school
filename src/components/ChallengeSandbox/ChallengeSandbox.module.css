@@ -576,6 +576,12 @@
   line-height: 1.5;
 }
 
+.hintTextError {
+  font-size: var(--text-body-size-medium);
+  color: var(--fgColor-danger);
+  line-height: 1.5;
+}
+
 .hintConcepts {
   display: flex;
   flex-wrap: wrap;
