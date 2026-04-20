@@ -279,6 +279,8 @@ export default function SkillProfilePage() {
       <AppHeader />
       
       <main className={styles.main}>
+        {/* Visually-hidden h1 must come first in DOM so sidebar h2/h3 headings are correctly nested beneath it (WCAG 1.3.1) */}
+        <h1 className="sr-only">Your Skills</h1>
         {/* Left Sidebar */}
         <aside className={styles.sidebar}>
           <ProfileNav />
@@ -377,7 +379,7 @@ export default function SkillProfilePage() {
             <div className={styles.pageHeader}>
               <Stack direction="horizontal" align="center" justify="space-between">
                 <div>
-                  <Heading as="h1" className={styles.pageTitle}>
+                  <Heading as="h2" className={styles.pageTitle}>
                     Your Skills
                   </Heading>
                   <p className={styles.pageDescription}>
