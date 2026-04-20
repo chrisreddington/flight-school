@@ -201,29 +201,7 @@ export default function HabitsPage() {
       <AppHeader />
 
       <main className={styles.main}>
-        {/* Left Sidebar */}
-        <aside className={styles.sidebar}>
-          <ProfileNav />
-
-          <HabitStatsSection
-            activeHabitsCount={activeHabits.length}
-            totalCheckIns={totalCheckIns}
-            currentStreaks={currentStreaks}
-            totalCompletions={totalCompletions}
-            onNewHabitClick={() => setIsCreateDialogOpen(true)}
-          />
-
-          <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
-            <h3 className={styles.tipTitle}>
-              <LightBulbIcon size={12} /> Pro Tip
-            </h3>
-            <p className={styles.tipText}>
-              Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
-            </p>
-          </div>
-        </aside>
-
-        {/* Main Content */}
+        {/* Main Content - rendered first in DOM so h1 precedes sidebar headings (WCAG 1.3.1) */}
         <div className={styles.content}>
           {/* Header */}
           <div className={styles.header}>
@@ -262,6 +240,28 @@ export default function HabitsPage() {
             onNewHabitClick={() => setIsCreateDialogOpen(true)}
           />
         </div>
+
+        {/* Left Sidebar - rendered after main content so h1 precedes sidebar headings (WCAG 1.3.1) */}
+        <aside className={styles.sidebar}>
+          <ProfileNav />
+
+          <HabitStatsSection
+            activeHabitsCount={activeHabits.length}
+            totalCheckIns={totalCheckIns}
+            currentStreaks={currentStreaks}
+            totalCompletions={totalCompletions}
+            onNewHabitClick={() => setIsCreateDialogOpen(true)}
+          />
+
+          <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
+            <h3 className={styles.tipTitle}>
+              <LightBulbIcon size={12} /> Pro Tip
+            </h3>
+            <p className={styles.tipText}>
+              Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
+            </p>
+          </div>
+        </aside>
       </main>
 
       {/* Dialogs */}
