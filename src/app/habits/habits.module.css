@@ -212,3 +212,21 @@
   background-color: var(--bgColor-success-emphasis, #1a7f37);
   transition: width 0.3s ease;
 }
+
+.actionsStack {
+  margin-top: var(--base-size-12, 12px);
+}
+
+.sectionHeading {
+  font-size: 1.25rem;
+}
+
+.emptyHeading {
+  font-size: 1.125rem;
+  margin-top: var(--base-size-16, 16px);
+}
+
+.emptyText {
+  color: var(--fgColor-muted, #656d76);
+  margin-top: var(--base-size-8, 8px);
+}
