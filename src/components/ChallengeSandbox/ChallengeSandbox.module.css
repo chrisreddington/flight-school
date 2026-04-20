@@ -736,6 +736,25 @@
   font-style: italic;
 }
 
+/* Editor loading placeholder */
+.editorLoading {
+  padding: var(--base-size-16);
+  text-align: center;
+  height: 100%;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-muted, #656d76);
+  font-size: 14px;
+}
+
+/* Wrapper for solve-error Banner spacing */
+.solveErrorWrapper {
+  margin-bottom: var(--base-size-16);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .content {
