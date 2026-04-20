@@ -439,6 +439,15 @@
   background-color: var(--bgColor-muted);
 }
 
+.suggestionTitle {
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.suggestionReason {
+  font-style: italic;
+  color: var(--fgColor-muted);
+}
+
 /* Evaluation result */
 .resultBadge {
   display: inline-flex;
