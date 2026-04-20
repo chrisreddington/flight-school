@@ -26,3 +26,8 @@
   font-size: var(--text-body-size-large, 16px);
   color: var(--fgColor-muted, #656d76);
 }
+
+.authoringWrapper {
+  flex: 1;
+  overflow: hidden;
+}

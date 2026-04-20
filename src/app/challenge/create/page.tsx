@@ -9,15 +9,23 @@
  */
 
 import { AppHeader } from '@/components/AppHeader';
-import { ChallengeAuthoring } from '@/components/ChallengeAuthoring';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import type { DailyChallenge } from '@/lib/focus/types';
-import { Banner } from '@primer/react';
+import { Banner, Spinner } from '@primer/react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import styles from '../challenge.module.css';
+
+// Lazy-load ChallengeAuthoring (1005 lines across 5 files) to reduce /challenge/create
+// initial JS bundle. The header, error banner, and hooks all load instantly; the heavy
+// authoring UI streams in as a separate chunk.
+const ChallengeAuthoring = dynamic(
+  () => import('@/components/ChallengeAuthoring').then((mod) => mod.ChallengeAuthoring),
+  { ssr: false, loading: () => <div className={styles.loading}><Spinner size="medium" /></div> }
+);
 
 /**
  * Challenge authoring page component.
@@ -71,7 +79,7 @@ export default function CreateChallengePage() {
       )}
 
       <main className={styles.main}>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div className={styles.authoringWrapper}>
           <ChallengeAuthoring
             onSaveChallenge={handleSaveChallenge}
             userAvatarUrl={profile?.user?.avatarUrl}
