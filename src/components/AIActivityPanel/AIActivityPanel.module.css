@@ -309,6 +309,10 @@
 }
 
 /* Performance insights */
+.perfDetails {
+  margin-top: 8px;
+}
+
 .perfInsightsSummary {
   cursor: pointer;
   color: var(--fgColor-accent);
