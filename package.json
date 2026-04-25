@@ -50,7 +50,7 @@
     "@vitest/ui": "^4.0.17",
     "depcheck": "^1.4.7",
     "eslint": "^10",
-    "eslint-config-next": "16.2.3",
+    "eslint-config-next": "16.2.4",
     "jsdom": "^28.0.0",
     "knip": "^5.86.0",
     "madge": "^8.0.0",
