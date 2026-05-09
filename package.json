@@ -31,7 +31,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@primer/css": "^22.1.1",
     "@primer/octicons-react": "^19.25.0",
-    "@primer/react": "^38.20.0",
+    "@primer/react": "^38.21.1",
     "next": "16.2.4",
     "octokit": "^5.0.5",
     "react": "19.2.5",
