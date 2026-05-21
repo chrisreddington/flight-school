@@ -29,6 +29,7 @@ import {
     SOLUTION_GENERATION_PROMPT,
 } from '@/lib/challenge/solution-generation';
 import { createLoggedCoachSession } from '@/lib/copilot/server';
+import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
@@ -149,6 +150,11 @@ export async function POST(request: NextRequest) {
       await session.destroy();
     }
   } catch (error) {
+    // D2: Map missing-Copilot-entitlement to 402 so the UI can render the
+    // upgrade banner instead of seeing a generic 500.
+    const entitlementResponse = copilotEntitlementErrorResponse(error);
+    if (entitlementResponse) return entitlementResponse;
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to generate solution';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

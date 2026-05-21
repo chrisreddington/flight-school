@@ -1,6 +1,7 @@
 import { parseJsonBodyWithFallback } from '@/lib/api';
-import { generateGuidedPlan, getGuidedPlanFallback, type GuidedPlan } from '@/lib/copilot/guided-mode';
+import { generateGuidedPlan, getGuidedPlanFallback } from '@/lib/copilot/guided-mode';
 import { requireUserContext } from '@/lib/auth/context';
+import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
@@ -15,7 +16,7 @@ interface GuidedPlanRequestBody {
   challengeDifficulty: string;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<GuidedPlan>> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = await parseJsonBodyWithFallback<GuidedPlanRequestBody>(request, {
     challengeTitle: '',
     challengeDescription: '',
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<GuidedPla
     );
     return NextResponse.json(plan);
   } catch (error) {
+    // D2: Surface a missing-Copilot-entitlement as 402 instead of static
+    // fallback so the UI can show the upgrade banner.
+    const entitlementResponse = copilotEntitlementErrorResponse(error);
+    if (entitlementResponse) return entitlementResponse;
     log.error('Failed to generate guided plan', error);
     return NextResponse.json(getGuidedPlanFallback(challenge));
   }

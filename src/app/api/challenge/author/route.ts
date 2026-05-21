@@ -23,6 +23,7 @@
 
 import { createSSEResponse, parseJsonBody } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
+import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import { nowMs } from '@/lib/utils/date-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
 import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-parser';
@@ -127,6 +128,11 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error) {
+    // D2: Surface missing-Copilot-entitlement as 402 so the UI can render
+    // the upgrade banner instead of a generic 500.
+    const entitlementResponse = copilotEntitlementErrorResponse(error);
+    if (entitlementResponse) return entitlementResponse;
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to start authoring session';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

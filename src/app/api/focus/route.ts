@@ -34,6 +34,7 @@ import type { InterleavingHint } from '@/lib/focus/interleaving';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import type { CompactDeveloperProfile } from '@/lib/github/types';
+import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { logger } from '@/lib/logger';
 import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
@@ -203,6 +204,14 @@ async function generateFocus(identity: SessionIdentity, options: {
       generateSingleComponent(identity, 'learningTopics', serializedContext, skillProfile, { reviewTopics }),
     ]);
 
+    // D2: If any sub-generation failed due to missing Copilot entitlement,
+    // surface that as 402 instead of silently swapping in static fallback.
+    for (const settled of [challengeResult, goalResult, topicsResult]) {
+      if (settled.status === 'rejected' && isCopilotEntitlementError(settled.reason)) {
+        throw settled.reason;
+      }
+    }
+
     const totalTime = nowMs() - startTime;
     
     // Merge results, using fallbacks for failures
@@ -232,6 +241,13 @@ async function generateFocus(identity: SessionIdentity, options: {
 
     return focusResult;
   } catch (error) {
+    // D2: Re-throw entitlement errors so the route maps them to 402.
+    // Static fallback is for "deployment has no AI", not "this user lacks
+    // a Copilot license".
+    if (isCopilotEntitlementError(error)) {
+      throw error;
+    }
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

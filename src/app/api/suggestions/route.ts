@@ -1,5 +1,6 @@
 import { parseJsonBodyWithFallback } from '@/lib/api';
 import { generateWhatsNext, getWhatsNextFallback, type WhatsNextResult } from '@/lib/copilot/suggestions';
+import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
@@ -50,6 +51,11 @@ export async function POST(request: NextRequest) {
           );
           return NextResponse.json(result);
         } catch (error) {
+          // D2: Re-throw entitlement errors so the outer guardErrorResponse
+          // maps them to 402. Static fallback is only for unrelated failures.
+          if (isCopilotEntitlementError(error)) {
+            throw error;
+          }
           log.error('Failed to generate suggestions', error);
           return NextResponse.json(getWhatsNextFallback(completedChallenge));
         }
