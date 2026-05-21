@@ -59,7 +59,8 @@ export function HabitStatsSection({
           variant="primary"
           leadingVisual={PlusIcon}
           onClick={onNewHabitClick}
-          style={{ marginTop: 'var(--base-size-16, 16px)', width: '100%' }}
+          block
+          className={styles.newHabitButton}
         >
           New Habit
         </Button>
