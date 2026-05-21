@@ -5,6 +5,7 @@
  * Each executor runs the AI operation and updates job status in storage.
  */
 
+import { resolveFreshGitHubToken } from '@/lib/auth/token-resolver';
 import {
   buildSingleChallengePrompt,
   buildSingleGoalPrompt,
@@ -36,6 +37,7 @@ import type {
 } from '@/lib/jobs';
 import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
+import { auditLog, hashUserId } from '@/lib/security/audit';
 import type { Message } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
@@ -45,6 +47,47 @@ import { getThreadById, updateThread } from './threads-storage';
 import { readEvaluationStorage, writeEvaluationStorage } from './evaluation-storage';
 
 const log = logger.withTag('JobExecutors');
+
+/**
+ * Resolve a fresh {@link SessionIdentity} for a job at execution time.
+ *
+ * Background jobs persist `userId` only — never the access token captured
+ * at submission. This helper looks up the latest `ghu_` token from the
+ * {@link TokenStore} (refreshing if necessary) so the executor always
+ * acts on behalf of the user with a non-expired credential, even when the
+ * job has been queued for hours.
+ *
+ * @returns The identity to pass to Copilot SDK / Octokit factories, or
+ *   `null` after the helper has already audit-logged the failure and
+ *   marked `jobId` as `failed` in storage. Callers MUST bail when this
+ *   returns `null`.
+ */
+async function resolveJobIdentity(jobId: string, userId: string): Promise<SessionIdentity | null> {
+  try {
+    const token = await resolveFreshGitHubToken(userId);
+    if (!token) {
+      log.warn(`[Job ${jobId}] No stored credentials for user; failing job`);
+      auditLog({
+        type: 'job.credentials_missing',
+        userIdHash: hashUserId(userId),
+        metadata: { jobId },
+      });
+      await jobStorage.markFailed(jobId, 'GitHub credentials missing — user must re-authenticate.');
+      return null;
+    }
+    return { userId, gitHubToken: token };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown refresh error';
+    log.error(`[Job ${jobId}] Token refresh failed:`, message);
+    auditLog({
+      type: 'job.credentials_refresh_failed',
+      userIdHash: hashUserId(userId),
+      metadata: { jobId, error: message },
+    });
+    await jobStorage.markFailed(jobId, 'GitHub credentials expired — user must re-authenticate.');
+    return null;
+  }
+}
 
 /** Map of running sessions for cancellation support */
 const runningSessions = new Map<string, { destroy: () => Promise<void> }>();
@@ -86,12 +129,15 @@ export async function isJobStillValid(jobId: string): Promise<boolean> {
 export async function executeTopicRegeneration(
   jobId: string,
   input: TopicRegenerationInput,
-  identity: SessionIdentity
+  userId: string
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
   try {
     if (!await isJobStillValid(jobId)) return;
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
     
     // Build context
     let serializedContext = '';
@@ -162,12 +208,15 @@ export async function executeTopicRegeneration(
 export async function executeChallengeRegeneration(
   jobId: string,
   input: ChallengeRegenerationInput,
-  identity: SessionIdentity
+  userId: string
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
   try {
     if (!await isJobStillValid(jobId)) return;
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
     
     // Build context
     let serializedContext = '';
@@ -238,12 +287,15 @@ export async function executeChallengeRegeneration(
 export async function executeGoalRegeneration(
   jobId: string,
   input: GoalRegenerationInput,
-  identity: SessionIdentity
+  userId: string
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
   try {
     if (!await isJobStillValid(jobId)) return;
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
     
     // Build context
     let serializedContext = '';
@@ -315,7 +367,7 @@ export async function executeGoalRegeneration(
 export async function executeChatResponse(
   jobId: string,
   input: ChatResponseInput,
-  identity: SessionIdentity
+  userId: string
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -323,6 +375,9 @@ export async function executeChatResponse(
   
   try {
     log.info(`[Job ${jobId}] Starting chat response for thread ${threadId}`);
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
     
     const thread = await getThreadById(threadId);
     if (!thread) {
@@ -465,7 +520,7 @@ export async function executeChatResponse(
 export async function executeChallengeEvaluation(
   jobId: string,
   input: ChallengeEvaluationInput,
-  identity: SessionIdentity
+  userId: string
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -473,6 +528,9 @@ export async function executeChallengeEvaluation(
   
   try {
     log.info(`[Job ${jobId}] Starting evaluation for challenge ${challengeId}`);
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
     
     // Initialize evaluation progress
     await writeEvaluationStorage({

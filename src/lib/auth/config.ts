@@ -14,6 +14,7 @@ import GitHub from 'next-auth/providers/github';
 
 import { logger } from '@/lib/logger';
 
+import { refreshGitHubAccessToken } from './github-oauth';
 import { getTokenStore, type StoredToken } from './token-store';
 
 const log = logger.withTag('Auth');
@@ -41,56 +42,6 @@ const GITHUB_SCOPES = 'read:user user:email read:org repo';
 
 /** Buffer before the actual expiry when we proactively refresh (seconds). */
 const REFRESH_BUFFER_SECONDS = 60;
-
-interface RefreshedToken {
-  access_token: string;
-  expires_in: number;
-  refresh_token: string;
-  refresh_token_expires_in?: number;
-  token_type: string;
-  scope: string;
-  error?: string;
-  error_description?: string;
-}
-
-/**
- * Exchange a refresh token for a fresh `ghu_` access token.
- * GitHub Apps with user-to-server refresh enabled return both a new access
- * token and a rotated refresh token.
- */
-async function refreshGitHubAccessToken(refreshToken: string): Promise<RefreshedToken> {
-  const clientId = process.env.AUTH_GITHUB_ID;
-  const clientSecret = process.env.AUTH_GITHUB_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error('AUTH_GITHUB_ID / AUTH_GITHUB_SECRET must be set to refresh GitHub tokens.');
-  }
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken,
-  });
-
-  const response = await fetch('https://github.com/login/oauth/access_token', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub token refresh failed: HTTP ${response.status}`);
-  }
-
-  const data = (await response.json()) as RefreshedToken;
-  if (data.error) {
-    throw new Error(`GitHub token refresh failed: ${data.error} ${data.error_description ?? ''}`);
-  }
-  return data;
-}
 
 /**
  * Auth.js v5 configuration object. Wires the GitHub provider, JWT session

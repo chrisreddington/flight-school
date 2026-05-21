@@ -171,7 +171,7 @@ implementation is chosen at process boot by `token-store-factory.ts`:
 
 | Env | Store | Notes |
 |---|---|---|
-| `AZURE_COSMOS_ENDPOINT` set | `CosmosTokenStore` | AES-256-GCM token payload, DEK wrapped by Azure Key Vault (`A256KW`) via `DefaultAzureCredential` (managed identity in prod). Documents partitioned by `userId`. |
+| `AZURE_COSMOS_ENDPOINT` set | `CosmosTokenStore` | AES-256-GCM token payload, DEK wrapped by Azure Key Vault (`A256KW`) via `DefaultAzureCredential` (managed identity in prod). Documents partitioned by `userId`. AES-GCM AAD binds the ciphertext to `{alg, expiresAt, kekId, userId}` so a ciphertext+IV+authTag+wrappedDek envelope cannot be replayed into another user's document, against a rotated KEK, or with an extended TTL — any mismatch throws at `decipher.final()`. |
 | Otherwise | `InMemoryTokenStore` | Process-local `Map`. **Local-dev only** — a server restart drops sessions and forces re-auth. That is the secure-by-default behaviour: no plaintext tokens ever touch disk. |
 
 In `NODE_ENV=production` the factory **throws on boot** if
@@ -186,3 +186,47 @@ Required env for the Cosmos path:
 
 No static secrets — both `CosmosClient` and `CryptographyClient` authenticate
 with `DefaultAzureCredential` (managed identity in ACA, `az login` locally).
+
+> **Breaking change (AAD binding):** the AES-GCM envelope now uses Additional
+> Authenticated Data over `{alg, expiresAt, kekId, userId}`. Any token
+> document written before this change will fail to decrypt and surface as
+> a forced re-authentication on the user's next request. This is acceptable
+> because there is no production data yet; if that ever changes, a versioned
+> envelope migration is required instead.
+
+## Background jobs
+
+The `/api/jobs` surface runs AI work asynchronously (topic / challenge / goal
+regeneration, chat responses, challenge evaluation). Jobs can outlive the
+HTTP request that submitted them — GitHub user-to-server access tokens are
+valid for only ~8 hours, so the request-time `ghu_` token is unsafe to
+embed on a queued job.
+
+**Payload contract.** Persisted job records carry **only** the `userId`
+plus the job-specific input. They MUST NOT contain `accessToken`,
+`gitHubToken`, or any other GitHub credential. This invariant is enforced
+by `src/app/api/jobs/route.ts` (and asserted by `route.test.ts`).
+
+**Token-refresh-at-execution.** Each executor in
+`src/app/api/jobs/job-executors.ts` calls
+`resolveFreshGitHubToken(userId)` (`src/lib/auth/token-resolver.ts`) as its
+first step after `markRunning`. The resolver:
+
+1. Looks up the stored token from the configured `TokenStore`.
+2. If the cached access token is within `REFRESH_LEEWAY_MS` of expiry,
+   exchanges the refresh token for a new `ghu_` access token via
+   `refreshGitHubAccessToken` (shared with the Auth.js JWT callback) and
+   re-persists the rotated pair.
+3. Returns the fresh access token.
+
+**Failure modes.**
+
+| Condition | Resolver behaviour | Executor behaviour |
+|---|---|---|
+| No record for `userId` (never authed, signed out, swept) | Returns `null` | `auditLog('job.credentials_missing')`, marks job `failed` with `"GitHub credentials missing — user must re-authenticate."` |
+| Cached token near expiry, refresh exchange fails (revoked / 401) | Throws | `auditLog('job.credentials_refresh_failed')`, marks job `failed` with `"GitHub credentials expired — user must re-authenticate."` |
+| Cached token near expiry, no refresh token stored | Throws | Same as above |
+
+Neither failure path retries: the refresh token is no longer usable and
+the user must re-authenticate via the web flow before any further jobs
+can succeed for them.

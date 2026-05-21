@@ -27,7 +27,9 @@ export type AuditEventType =
   | 'copilot.session.create'
   | 'auth.signin'
   | 'rate-limit.blocked'
-  | 'session-cap.blocked';
+  | 'session-cap.blocked'
+  | 'job.credentials_missing'
+  | 'job.credentials_refresh_failed';
 
 export interface AuditEvent {
   type: AuditEventType;
