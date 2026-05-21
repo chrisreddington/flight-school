@@ -6,12 +6,17 @@
  */
 
 import { logger } from '@/lib/logger';
+import { registerOTel } from '@vercel/otel';
 
 const log = logger.withTag('Instrumentation');
 
 export async function register(): Promise<void> {
   // Only run on server
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    registerOTel({
+      serviceName: process.env.OTEL_SERVICE_NAME ?? 'flight-school',
+    });
+
     log.info('Server starting...');
     const shouldWarm = process.env.COPILOT_WARMUP_ON_START !== 'false';
     if (shouldWarm) {

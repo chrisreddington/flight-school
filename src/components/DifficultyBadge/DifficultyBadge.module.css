@@ -30,3 +30,9 @@
   background-color: var(--bgColor-danger-muted);
   color: var(--fgColor-danger);
 }
+
+/* Icon wrapper inside Primer Label variant — replaces static inline style */
+.labelIconWrapper {
+  margin-right: 4px;
+  display: inline-flex;
+}

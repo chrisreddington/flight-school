@@ -7,7 +7,7 @@
  * @see https://github.com/github/github-mcp-server
  */
 
-import type { MCPRemoteServerConfig } from '@github/copilot-sdk';
+import type { MCPServerConfig } from '@github/copilot-sdk';
 import { getGitHubToken } from '../github/client';
 import { logger } from '../logger';
 
@@ -18,17 +18,21 @@ const log = logger.withTag('Copilot SDK');
 // =============================================================================
 
 /** Cached MCP server configs keyed by tool list */
-const cachedMcpConfigs = new Map<string, MCPRemoteServerConfig>();
+const cachedMcpConfigs = new Map<string, MCPServerConfig>();
 
 /**
  * Default MCP tool set.
  *
- * Uses wildcard to include all tools from the Remote GitHub MCP Server.
- * These are all read-only GitHub exploration tools (search, read files, etc.).
- * Built-in SDK tools (shell, write) are blocked separately via excludedTools
- * in session creation.
+ * Uses an explicit allowlist of read-only GitHub MCP tools.
+ * Built-in SDK tools (shell, write) are blocked separately via excludedTools.
  */
-const DEFAULT_MCP_TOOLS = ['*'] as const;
+const DEFAULT_MCP_TOOLS = [
+  'get_me',
+  'list_user_repositories',
+  'get_file_contents',
+  'search_code',
+  'search_users',
+] as const;
 
 /**
  * Get MCP server configuration for GitHub tools.
@@ -44,7 +48,7 @@ const DEFAULT_MCP_TOOLS = ['*'] as const;
  */
 export async function getMcpServerConfig(
   tools: string[] = [...DEFAULT_MCP_TOOLS]
-): Promise<MCPRemoteServerConfig | null> {
+): Promise<MCPServerConfig | null> {
   const toolKey = tools.join(',');
   const cached = cachedMcpConfigs.get(toolKey);
   if (cached) {
@@ -57,7 +61,7 @@ export async function getMcpServerConfig(
     return null;
   }
 
-  const config: MCPRemoteServerConfig = {
+  const config: MCPServerConfig = {
     type: 'http',
     url: 'https://api.githubcopilot.com/mcp/',
     headers: {
