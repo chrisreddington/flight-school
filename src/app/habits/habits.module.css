@@ -230,3 +230,7 @@
   color: var(--fgColor-muted, #656d76);
   margin-top: var(--base-size-8, 8px);
 }
+
+.newHabitButton {
+  margin-top: var(--base-size-16, 16px);
+}

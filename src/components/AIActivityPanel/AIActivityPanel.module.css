@@ -309,6 +309,10 @@
 }
 
 /* Performance insights */
+.perfDetails {
+  margin-top: 8px;
+}
+
 .perfInsightsSummary {
   cursor: pointer;
   color: var(--fgColor-accent);
@@ -330,4 +334,14 @@
 /* Token & metadata info */
 .metaInfo {
   margin-top: 8px;
+}
+
+/* Full-width input inside a flex wrapper */
+.searchInput {
+  width: 100%;
+}
+
+/* Footer flex rows that wrap on narrow panels */
+.flexWrap {
+  flex-wrap: wrap;
 }
