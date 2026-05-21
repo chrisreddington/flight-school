@@ -310,7 +310,7 @@ export function RepoSelector({
 
       {/* Combobox input */}
       <div className={styles.inputWrapper}>
-        <div style={{ position: 'relative' }}>
+        <div className={styles.inputPositioner}>
           <TextInput
             ref={inputRef}
             value={searchValue}

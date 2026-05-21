@@ -1,0 +1,6 @@
+/* Root application layout wrapper */
+
+.appRoot {
+  min-height: 100vh;
+  background-color: var(--bgColor-default);
+}

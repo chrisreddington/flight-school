@@ -126,6 +126,83 @@ The chat and challenge evaluation experiences stream feedback in real-time using
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run dashboard` | Start Aspire Dashboard (standalone OTLP receiver) |
+| `npm run aspire:run` | Run the Aspire TypeScript AppHost |
+| `npm run aspire:mcp` | Start Aspire MCP server against the dashboard |
+| `npm run aspire:deploy` | Deploy AppHost resources to Azure Container Apps |
+| `npm run aspire:destroy` | Tear down deployed Aspire Azure resources |
+
+## OpenTelemetry + Aspire Dashboard
+
+Flight School now registers OpenTelemetry via `@vercel/otel` in `src/instrumentation.ts`.
+When running with Aspire Dashboard, traces and metrics include:
+
+- Next.js API request timelines
+- GitHub API request spans (including rate-limit headers when available)
+- Copilot SDK session spans (`createSession`, `sendAndWait`, streaming duration)
+- Trace IDs injected into structured logger payloads
+
+Start the local dashboard and app:
+
+```bash
+npm run dashboard
+npm run dev
+```
+
+By default, the dashboard listens on:
+- UI: `http://localhost:18888`
+- OTLP/HTTP: `http://localhost:4318`
+
+> `npm run dashboard` uses `--allow-anonymous`; keep this local-only.
+
+## Aspire AppHost (Stage 2)
+
+This repository includes a TypeScript Aspire AppHost:
+
+- `apphost.ts` orchestrates the Next.js app with `addNextJsApp(...)`
+- `aspire.config.json` configures the TypeScript AppHost profile
+- AppHost includes an Azure Container Apps environment (`addAzureContainerAppEnvironment("aca-env")`)
+
+`aspire init --language typescript` generates the `.modules/` runtime helpers used by the AppHost. These files are local setup artifacts and should not be committed.
+
+### Agent-driven debugging
+
+Run Aspire MCP in dashboard mode so coding agents can inspect traces/logs:
+
+```bash
+npm run aspire:mcp
+```
+
+You can also use the included skill file:
+
+- `.github/skills/aspire-debugging/SKILL.md`
+
+### Container Apps deployment
+
+1. Install Aspire CLI and Azure CLI
+2. Authenticate to Azure:
+
+```bash
+az login
+```
+
+3. Initialize Aspire TypeScript AppHost modules (one-time per setup):
+
+```bash
+aspire init --language typescript
+```
+
+4. Add Azure App Containers integration (one-time per setup):
+
+```bash
+aspire add azure-appcontainers
+```
+
+5. Deploy:
+
+```bash
+npm run aspire:deploy
+```
 
 ## Contributing
 

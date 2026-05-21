@@ -474,8 +474,9 @@ export function useLearningChat(): UseLearningChatReturn {
         }
       }
       
-      // Check if THIS thread is already streaming (from storage)
-      const threadFromStorage = threads.find(t => t.id === targetThreadId);
+      // Check if THIS thread is already streaming (query storage directly to avoid
+      // race condition where React state can lag storage by up to one poll interval)
+      const threadFromStorage = await threadStore.getById(targetThreadId);
       if (threadFromStorage?.isStreaming) {
         log.warn(`Thread ${targetThreadId} is already streaming`);
         return;
@@ -551,7 +552,6 @@ export function useLearningChat(): UseLearningChatReturn {
       createThread,
       updateActiveThread,
       refreshThreads,
-      threads,
     ]
   );
 

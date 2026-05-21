@@ -73,7 +73,7 @@ export function DifficultyBadge({
   // Default: Primer Label variant (use span wrapper for icon spacing)
   return (
     <Label variant={labelVariant} size={size} className={className}>
-      {showIcon && <span style={{ marginRight: 4, display: 'inline-flex' }}><FlameIcon size={12} /></span>}
+      {showIcon && <span className={styles.labelIconWrapper}><FlameIcon size={12} /></span>}
       {label}
     </Label>
   );

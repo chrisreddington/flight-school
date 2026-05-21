@@ -15,6 +15,7 @@ import type { CopilotSession } from '@github/copilot-sdk';
 import { nowMs } from '@/lib/utils/date-utils';
 
 import { logger } from '@/lib/logger';
+import { recordAiOperation, setSpanError, withSpan } from '@/lib/observability/telemetry';
 import { activityLogger, type CompleteOperation } from './activity/logger';
 import type { AIActivityOutput } from './activity/types';
 import {
@@ -140,7 +141,21 @@ export function wrapSessionWithLogging(
 
       try {
         log.info(`Sending prompt for: ${operationName}`);
-        const response = await session.sendAndWait({ prompt }, timeout);
+        const response = await withSpan(
+          'copilot.session.send_and_wait',
+          {
+            'ai.operation': operationName,
+            'ai.model': model,
+          },
+          async (span) => {
+            try {
+              return await session.sendAndWait({ prompt }, timeout);
+            } catch (error) {
+              setSpanError(span, error);
+              throw error;
+            }
+          }
+        );
 
         let responseText = '';
         if (response) {
@@ -158,6 +173,7 @@ export function wrapSessionWithLogging(
           metadata: { toolsUsed: toolCalls.map((t) => t.name) },
         };
         complete(output);
+        recordAiOperation('sendAndWait', totalTimeMs, model, 'ok');
 
         return {
           responseText,
@@ -172,6 +188,7 @@ export function wrapSessionWithLogging(
         complete(undefined, errorMessage);
 
         log.error(`Error after ${totalTimeMs}ms:`, errorMessage);
+        recordAiOperation('sendAndWait', totalTimeMs, model, 'error');
         throw error;
       }
     },
