@@ -214,6 +214,17 @@ describe('multi-tenant auth/token isolation', () => {
 
   describe('storage routes per-user isolation (threads, focus, workspace)', () => {
     beforeEach(async () => {
+      // The "setting GITHUB_TOKEN does not confer access" test above calls
+      // vi.unstubAllEnvs() at the end, which nukes the file-level
+      // FLIGHT_SCHOOL_DATA_DIR stub. Re-apply it here and reset the module
+      // cache so the storage utils re-read the env var on next import.
+      // Without this, later tests fall back to the OS-default storage dir
+      // (~/.local/share/flight-school on macOS) and pick up leftover state
+      // from prior runs — most notably the path-traversal test below seeds
+      // a 'safechallenge' workspace under user 2002 that would otherwise
+      // bleed across runs and break the "user A sees empty list" assertion.
+      vi.resetModules();
+      vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', STORAGE_DIR);
       await fs.mkdir(STORAGE_DIR, { recursive: true });
       requireUserContextMock.mockReset();
     });

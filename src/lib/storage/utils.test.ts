@@ -359,6 +359,14 @@ describe('Storage Utils', () => {
       expect(() => safeChildPath(baseDir, 'evil\0.ts')).toThrow(/NUL byte/);
     });
 
+    it('rejects NUL byte expressed as \\u0000 unicode escape (M3)', () => {
+      // Belt-and-suspenders for the M3 review finding. Both `\0` and the
+      // explicit `\u0000` literal denote the same byte; documenting both
+      // forms makes the contract explicit to anyone scanning the test for
+      // null-byte handling.
+      expect(() => safeChildPath(baseDir, 'foo\u0000.ts')).toThrow(/NUL byte/);
+    });
+
     it('rejects an empty segment', () => {
       expect(() => safeChildPath(baseDir, '')).toThrow(/empty segment/);
     });
