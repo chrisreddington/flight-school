@@ -15,6 +15,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "dashboard": "aspire dashboard run --allow-anonymous",
+    "aspire:run": "aspire run",
+    "aspire:start": "aspire run",
+    "aspire:mcp": "aspire agent mcp --dashboard-url http://localhost:18888",
+    "aspire:deploy": "aspire deploy",
+    "aspire:destroy": "aspire destroy",
     "lint": "eslint",
     "test": "vitest run",
     "test:ui": "vitest --ui",
@@ -24,20 +30,30 @@
     "debt:unused": "knip --exclude duplicates",
     "debt:exports": "ts-prune --project tsconfig.json",
     "debt:deps": "depcheck --ignores='@types/*,eslint-*,@eslint/*,vitest,@vitest/*'",
-    "debt:circular": "madge --circular --extensions ts,tsx src/"
+    "debt:circular": "madge --circular --extensions ts,tsx src/",
+    "aspire:lint": "eslint apphost.mts",
+    "aspire:build": "tsc -p tsconfig.apphost.json",
+    "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
+    "run": "npm run aspire:run",
+    "mcp": "npm run aspire:mcp",
+    "deploy": "npm run aspire:deploy",
+    "destroy": "npm run aspire:destroy"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^0.3.0",
+    "@github/copilot-sdk": "^1.0.0-beta.4",
     "@monaco-editor/react": "^4.7.0",
+    "@opentelemetry/api": "^1.9.0",
     "@primer/css": "^22.1.1",
     "@primer/octicons-react": "^19.25.0",
     "@primer/react": "^38.22.0",
+    "@vercel/otel": "^2.0.0",
     "next": "16.2.6",
     "octokit": "^5.0.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "vscode-jsonrpc": "^8.2.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -49,14 +65,20 @@
     "@vitest/coverage-v8": "^4.1.5",
     "@vitest/ui": "^4.0.17",
     "depcheck": "^1.4.7",
-    "eslint": "^10",
+    "eslint": "^10.0.3",
     "eslint-config-next": "16.2.6",
     "jsdom": "^28.0.0",
     "knip": "^5.86.0",
     "madge": "^8.0.0",
     "ts-prune": "^0.10.3",
-    "typescript": "^5",
-    "vitest": "^4.0.18"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.21.0",
+    "typescript-eslint": "^8.57.1"
   },
-  "description": "AI-powered developer growth companion - personalized coding challenges and tips based on GitHub activity"
+  "description": "AI-powered developer growth companion - personalized coding challenges and tips based on GitHub activity",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  }
 }
