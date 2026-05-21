@@ -24,6 +24,10 @@
   border-color: var(--borderColor-accent-muted);
 }
 
+.inputPositioner {
+  position: relative;
+}
+
 .inputWrapper {
   position: relative;
 }

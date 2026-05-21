@@ -6,6 +6,7 @@ import { DebugProvider } from '@/contexts/debug-context';
 // Import only the Primer CSS that we need for faster load times
 import '@primer/css/dist/primer.css';
 import { BaseStyles, ThemeProvider } from '@primer/react';
+import styles from './providers.module.css';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -13,7 +14,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <DebugProvider>
         <BreadcrumbProvider>
           <BaseStyles>
-            <div style={{ minHeight: '100vh', backgroundColor: 'var(--bgColor-default)' }}>
+            <div className={styles.appRoot}>
               {children}
               <AIActivityPanel />
             </div>

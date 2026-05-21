@@ -155,7 +155,7 @@ export function ReviewDueWidget() {
 
       {selectedTopic && (
         <div className={styles.quizOverlay}>
-          <div className={styles.quizPanel} role="dialog" aria-modal="true">
+          <div className={styles.quizPanel} role="dialog" aria-modal="true" aria-label={`Practice Quiz: ${selectedTopic.topicTitle}`}>
             <TopicQuiz
               topicTitle={selectedTopic.topicTitle}
               topicDescription={selectedTopic.topicDescription}
