@@ -63,6 +63,11 @@ function getSalt(): string {
 
 /**
  * Hash a raw user identifier with the configured audit salt.
+ *
+ * @remarks Never throws. When `AUDIT_SALT` is unset, falls back to a
+ *   process-lifetime random salt and emits a one-time warning via
+ *   {@link logger} — hashes remain stable for the current process but are
+ *   not comparable across restarts.
  */
 export function hashUserId(userId: string): string {
   const salt = getSalt();
@@ -71,6 +76,10 @@ export function hashUserId(userId: string): string {
 
 /**
  * Emit an audit event for a security-sensitive operation.
+ *
+ * @remarks Never throws. The event is forwarded to {@link logger} at info
+ *   level; any sink-side failure is absorbed by the logger so callers on
+ *   security-sensitive paths can fire-and-forget.
  */
 export function auditLog(event: AuditEvent): void {
   const { type, userIdHash, metadata } = event;

@@ -99,24 +99,23 @@ interface CreateSSEResponseOptions<TMeta = Record<string, unknown>> {
  *
  * @example
  * ```typescript
- * // In an API route
- * const { stream, cleanup, model } = await createStreamingSession(prompt);
+ * // In an API route (see src/app/api/challenge/author/route.ts)
+ * const { stream, cleanup, model, newConversationId } =
+ *   await createGenericStreamingSession(\{ prompt, identity \});
  * const startTime = nowMs();
  *
  * return createSSEResponse(
- *   async function* () {
- *     for await (const event of stream) {
- *       yield event;
- *     }
- *   },
- *   {
- *     onComplete: () => ({
- *       type: 'meta',
- *       model,
- *       totalMs: nowMs() - startTime,
- *     }),
+ *   async function* () \{
+ *     for await (const event of stream) \{
+ *       if (event.type === 'delta') \{
+ *         yield \{ type: 'delta' as const, content: event.content \};
+ *       \}
+ *     \}
+ *   \},
+ *   \{
+ *     onComplete: () => (\{ type: 'meta', model, conversationId: newConversationId, totalMs: nowMs() - startTime \}),
  *     cleanup,
- *   }
+ *   \},
  * );
  * ```
  */

@@ -166,27 +166,10 @@ interface TokenDocument {
 
 /**
  * Build the canonical Additional Authenticated Data (AAD) for an AES-GCM
- * envelope. The AAD binds the ciphertext to the record's encryption
- * context, so an attacker (or buggy writer) cannot swap one user's
- * ciphertext + IV + authTag + wrappedDek into another user's document
- * and have it decrypt cleanly.
- *
- * The AAD is a UTF-8 byte string of a JSON object with a **deterministic
- * key order**:
- *
- * ```json
- * {"alg":"AES-256-GCM/A256KW","expiresAt":<n>,"kekId":"<url>","userId":"<id>"}
- * ```
- *
- * Keys are emitted in lexicographic (alphabetical) order. **Do not
- * reorder, rename, add, or remove fields** without a versioned migration:
- * any change makes previously-written ciphertexts unreadable, because
- * AES-GCM AAD is checked byte-for-byte at `decipher.final()`.
- *
- * The same function must be used on both encrypt and decrypt; the
- * decrypt-side input comes from the persisted document, so a tampered
- * `expiresAt` / `kekId` / `userId` / `alg` on the document causes
- * `decipher.final()` to throw.
+ * envelope. Emits a JSON object with **deterministic lexicographic key
+ * order** — any reorder, rename, add, or remove silently invalidates every
+ * previously-written ciphertext. See {@link CosmosTokenStore} for the
+ * security rationale and migration constraints.
  */
 function buildAAD(parts: {
   userId: string;
@@ -205,7 +188,13 @@ function buildAAD(parts: {
 
 /**
  * Read Cosmos store configuration from environment variables. Returns `null`
- * if the required vars are missing.
+ * when `AZURE_COSMOS_ENDPOINT` is unset (signal to fall back to the in-memory
+ * store).
+ *
+ * @throws {Error} when `AZURE_COSMOS_ENDPOINT` is set but any of the required
+ *   Cosmos / Key Vault env vars (`AZURE_COSMOS_DATABASE`,
+ *   `AZURE_COSMOS_CONTAINER`, `AZURE_KEY_VAULT_URL`, `AZURE_KEY_VAULT_KEY_NAME`)
+ *   are missing.
  */
 export function readCosmosConfigFromEnv(): CosmosTokenStoreConfig | null {
   const cosmosEndpoint = process.env.AZURE_COSMOS_ENDPOINT;
@@ -234,6 +223,24 @@ export function readCosmosConfigFromEnv(): CosmosTokenStoreConfig | null {
  *
  * Liskov: behaviourally identical to {@link InMemoryTokenStore} for callers —
  * unknown users return `null`, expired tokens return `null`.
+ *
+ * @remarks
+ * **AAD invariant (do not change without a versioned migration).** Every
+ * record's AES-GCM Additional Authenticated Data is built by `buildAAD` as
+ * a UTF-8 JSON object with lexicographic key order:
+ *
+ * ```json
+ * {"alg":"AES-256-GCM/A256KW","expiresAt":<n>,"kekId":"<url>","userId":"<id>"}
+ * ```
+ *
+ * The AAD binds the ciphertext to its encryption context so a writer (or
+ * attacker) cannot graft one user's `ciphertext + iv + authTag + wrappedDek`
+ * into another user's document and have it decrypt — AES-GCM checks AAD
+ * byte-for-byte at `decipher.final()`. Tampering with `expiresAt` / `kekId`
+ * / `userId` / `alg` on a persisted document therefore causes decryption to
+ * throw. Reordering, renaming, adding, or removing AAD fields silently
+ * invalidates **every** previously-written ciphertext; bump a version field
+ * and migrate if you must change the shape.
  */
 export class CosmosTokenStore implements TokenStore {
   private readonly container: Container;

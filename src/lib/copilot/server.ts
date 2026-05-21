@@ -53,6 +53,16 @@ const log = logger.withTag('Copilot SDK');
  * @param operationName - Human-readable name for logging (e.g., "Focus Generation")
  * @param inputPrompt - The prompt being sent (truncated for logging)
  * @param model - The model being used (for activity tracking)
+ * @param onDestroy - Optional hook fired synchronously when the returned
+ *   wrapper's `.destroy()` is called, **before** the underlying SDK session is
+ *   torn down. Use for pool replenishment or cache eviction.
+ * @param sessionMetrics - Optional session-creation diagnostics (pool hit,
+ *   create latency, MCP enabled, conversation reuse). Forwarded to the
+ *   activity logger so the activity panel can attribute first-token latency.
+ * @param destroyOnCleanup - When `true` (default) the wrapper's `.destroy()`
+ *   also destroys the underlying SDK session. Pass `false` for sessions
+ *   owned by an external cache (e.g. multi-turn conversations) whose
+ *   lifecycle is managed by the cache, not the per-turn wrapper.
  * @returns Object with sendAndWait method that includes logging
  * 
  * @example

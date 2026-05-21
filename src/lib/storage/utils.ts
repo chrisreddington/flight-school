@@ -91,7 +91,8 @@ function safePath(...segments: string[]): string {
  * @returns The absolute resolved path, guaranteed to be a descendant of
  *   `path.resolve(baseDir)`.
  * @throws {Error} when the resolved path is outside `baseDir` or any segment
- *   is structurally invalid.
+ *   is structurally invalid (empty string, `.`, `..`, contains a separator
+ *   `/` or `\`, contains NUL, or is an absolute path).
  */
 export function safeChildPath(baseDir: string, ...segments: string[]): string {
   if (typeof baseDir !== 'string' || baseDir.length === 0) {
