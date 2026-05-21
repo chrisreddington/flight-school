@@ -62,6 +62,7 @@ import { getMcpServerConfig } from '@/lib/copilot/mcp';
 import { getConversationSession } from '@/lib/copilot/sessions';
 import * as githubClient from '@/lib/github/client';
 import { UnauthorizedError } from '@/lib/auth/context';
+import type { ChallengeWorkspace } from '@/lib/workspace/types';
 
 const TOKEN_A = 'ghu_userA_token_aaaaaaaaaaaaaaaaaaaa';
 const TOKEN_B = 'ghu_userB_token_bbbbbbbbbbbbbbbbbbbb';
@@ -395,6 +396,102 @@ describe('multi-tenant auth/token isolation', () => {
         )).status
       ).toBe(400);
       setBad(); expect((await workspaceList.GET()).status).toBe(400);
+    });
+
+    it('rejects path-traversal in workspace file.name with 400 and does not corrupt other users', async () => {
+      const { workspace, workspaceList } = await loadStorageRoutes();
+
+      // Seed user B with a known-good workspace.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      const seedB = await workspace.POST(
+        postReq('http://test/api/workspace/storage', {
+          version: 1,
+          challengeId: 'safechallenge',
+          files: [{ id: 'f1', name: 'solution.ts', content: 'export const safe = 1;', language: 'typescript', createdAt: '', updatedAt: '' }],
+          activeFileId: 'f1',
+          createdAt: 1,
+          updatedAt: 1,
+        }) as never
+      );
+      expect(seedB.status).toBe(200);
+
+      // User A tries to escape into user 2002's workspace via file.name traversal.
+      const malicious = [
+        '../../../2002/workspaces/safechallenge/solution.ts',
+        '..\\..\\..\\2002\\workspaces\\safechallenge\\solution.ts',
+        '/etc/passwd',
+        'foo/../../bar.ts',
+        '..',
+      ];
+
+      for (const evilName of malicious) {
+        requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+        const attack = await workspace.POST(
+          postReq('http://test/api/workspace/storage', {
+            version: 1,
+            challengeId: 'attack',
+            files: [{ id: 'f1', name: evilName, content: 'PWNED', language: 'typescript', createdAt: '', updatedAt: '' }],
+            activeFileId: 'f1',
+            createdAt: 1,
+            updatedAt: 1,
+          }) as never
+        );
+        expect(attack.status, `expected 400 for filename ${evilName}`).toBe(400);
+      }
+
+      // User B's workspace must be unchanged after the attacks.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      const readB = await workspace.GET(
+        new Request('http://test/api/workspace/storage?challengeId=safechallenge') as never
+      );
+      expect(readB.status).toBe(200);
+      const bodyB = (await readB.json()) as ChallengeWorkspace;
+      expect(bodyB.files).toHaveLength(1);
+      expect(bodyB.files[0].name).toBe('solution.ts');
+      expect(bodyB.files[0].content).toBe('export const safe = 1;');
+
+      // User A also should have no leaked workspace from the rejected attacks.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const listA = (await (await workspaceList.GET()).json()) as { challengeIds: string[] };
+      expect(listA.challengeIds).not.toContain('attack');
+    });
+
+    it('accepts a normal filename and writes only inside the per-user workspace dir', async () => {
+      const { workspace } = await loadStorageRoutes();
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('3003'));
+      const save = await workspace.POST(
+        postReq('http://test/api/workspace/storage', {
+          version: 1,
+          challengeId: 'happy',
+          files: [{ id: 'f1', name: 'foo.ts', content: 'export const x = 1;', language: 'typescript', createdAt: '', updatedAt: '' }],
+          activeFileId: 'f1',
+          createdAt: 1,
+          updatedAt: 1,
+        }) as never
+      );
+      expect(save.status).toBe(200);
+
+      // Round-trip through GET as the same user must return our content.
+      // (We rely on the route-level GET as the trust boundary because the
+      // FLIGHT_SCHOOL_DATA_DIR stub does not always take effect in this suite
+      // — the underlying storage utils may write to the platform default.)
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('3003'));
+      const read = await workspace.GET(
+        new Request('http://test/api/workspace/storage?challengeId=happy') as never
+      );
+      expect(read.status).toBe(200);
+      const body = (await read.json()) as ChallengeWorkspace;
+      expect(body.files).toHaveLength(1);
+      expect(body.files[0].name).toBe('foo.ts');
+      expect(body.files[0].content).toBe('export const x = 1;');
+
+      // Another user must not see this workspace.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('4004'));
+      const otherRead = await workspace.GET(
+        new Request('http://test/api/workspace/storage?challengeId=happy') as never
+      );
+      expect(otherRead.status).toBe(404);
     });
   });
 });

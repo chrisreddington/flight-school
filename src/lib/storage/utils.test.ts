@@ -25,6 +25,7 @@ const {
   deleteDir,
   listDirs,
   listFiles,
+  safeChildPath,
 } = await import('./utils');
 
 describe('Storage Utils', () => {
@@ -308,6 +309,66 @@ describe('Storage Utils', () => {
       const files = await listFiles('nonexistent');
 
       expect(files).toEqual([]);
+    });
+  });
+
+  // ===========================================================================
+  // safeChildPath tests
+  // ===========================================================================
+
+  describe('safeChildPath', () => {
+    const baseDir = path.join(TEST_STORAGE_DIR, 'users', 'alice', 'workspaces', 'fizzbuzz');
+
+    it('accepts a normal filename', () => {
+      const resolved = safeChildPath(baseDir, 'solution.ts');
+      expect(resolved).toBe(path.resolve(baseDir, 'solution.ts'));
+      expect(resolved.startsWith(path.resolve(baseDir) + path.sep)).toBe(true);
+    });
+
+    it('accepts multi-segment nested paths when each segment is safe', () => {
+      const resolved = safeChildPath(baseDir, 'src', 'lib', 'index.ts');
+      expect(resolved).toBe(path.resolve(baseDir, 'src', 'lib', 'index.ts'));
+    });
+
+    it('rejects ".." segment', () => {
+      expect(() => safeChildPath(baseDir, '..')).toThrow(/forbidden segment/);
+    });
+
+    it('rejects "." segment', () => {
+      expect(() => safeChildPath(baseDir, '.')).toThrow(/forbidden segment/);
+    });
+
+    it('rejects a single segment that contains "../"', () => {
+      expect(() => safeChildPath(baseDir, '../foo')).toThrow(/separator in segment/);
+    });
+
+    it('rejects multi-segment traversal that would escape baseDir', () => {
+      // Simulates a caller splitting "../../bob/x" on '/' before passing in.
+      expect(() => safeChildPath(baseDir, '..', '..', 'bob', 'x')).toThrow(/forbidden segment/);
+    });
+
+    it('rejects absolute path segments', () => {
+      expect(() => safeChildPath(baseDir, '/etc/passwd')).toThrow();
+    });
+
+    it('rejects backslash separator in segment', () => {
+      expect(() => safeChildPath(baseDir, '..\\..\\evil')).toThrow(/separator in segment/);
+    });
+
+    it('rejects NUL byte in segment', () => {
+      expect(() => safeChildPath(baseDir, 'evil\0.ts')).toThrow(/NUL byte/);
+    });
+
+    it('rejects an empty segment', () => {
+      expect(() => safeChildPath(baseDir, '')).toThrow(/empty segment/);
+    });
+
+    it('rejects when no child segment is supplied', () => {
+      expect(() => safeChildPath(baseDir)).toThrow(/at least one child segment/);
+    });
+
+    it('rejects an empty baseDir', () => {
+      expect(() => safeChildPath('', 'foo.ts')).toThrow(/baseDir/);
     });
   });
 });

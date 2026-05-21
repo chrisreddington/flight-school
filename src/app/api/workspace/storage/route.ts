@@ -28,7 +28,8 @@ import {
   deleteFile,
   deleteDir,
   listFiles,
-  ensureDir
+  ensureDir,
+  safeChildPath
 } from '@/lib/storage/utils';
 import type { ChallengeWorkspace, WorkspaceFile, WorkspaceMetadata } from '@/lib/workspace/types';
 import {
@@ -38,6 +39,7 @@ import {
   toWorkspaceFile
 } from '@/lib/workspace/storage';
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { validationErrorResponse } from '@/lib/api/response-utils';
 import { logger } from '@/lib/logger';
 
 const log = logger.withTag('Workspace Storage API');
@@ -48,6 +50,32 @@ const log = logger.withTag('Workspace Storage API');
  * otherwise escape the per-user workspace directory.
  */
 const SAFE_PATH_SEGMENT = /^[a-zA-Z0-9_-]+$/;
+
+/** Maximum length allowed for a workspace filename (incl. any subpath). */
+const MAX_WORKSPACE_FILENAME_LENGTH = 255;
+
+/**
+ * Validates that `name` is a safe workspace filename: it may consist of one or
+ * more `/`-separated segments, each matching a conservative character class,
+ * and the resolved path must stay under `workspaceDir`. Throws on rejection.
+ */
+function assertSafeWorkspaceFilename(workspaceDir: string, name: unknown): void {
+  if (typeof name !== 'string') {
+    throw new Error('filename must be a string');
+  }
+  if (name.length === 0 || name.length > MAX_WORKSPACE_FILENAME_LENGTH) {
+    throw new Error('filename length out of bounds');
+  }
+  const segments = name.split('/');
+  const segmentPattern = /^[a-zA-Z0-9._-]+$/;
+  for (const segment of segments) {
+    if (!segmentPattern.test(segment)) {
+      throw new Error(`invalid filename segment "${segment}"`);
+    }
+  }
+  // Structural + containment check (rejects `..`, `\`, NUL, absolute, etc.).
+  safeChildPath(workspaceDir, ...segments);
+}
 
 // =============================================================================
 // Utility Functions
@@ -125,6 +153,18 @@ export async function GET(request: NextRequest) {
 
     const files: WorkspaceFile[] = await Promise.all(
       metadata.files.map(async (fileMeta) => {
+        // Defence in depth: reject filenames that escape the workspace
+        // subtree (in case any were persisted before validation was added).
+        try {
+          assertSafeWorkspaceFilename(workspaceDir, fileMeta.name);
+        } catch (validationError) {
+          log.warn('Skipping workspace file with unsafe name on read', {
+            challengeId,
+            name: fileMeta.name,
+            error: validationError instanceof Error ? validationError.message : String(validationError),
+          });
+          return toWorkspaceFile(fileMeta, '');
+        }
         const content = await readFile(workspaceDir, fileMeta.name) ?? '';
         return toWorkspaceFile(fileMeta, content);
       })
@@ -165,6 +205,20 @@ export async function POST(request: NextRequest) {
     }
 
     const workspaceDir = getWorkspaceDir(scoped.root, workspace.challengeId);
+
+    // Validate every caller-supplied filename BEFORE touching the filesystem.
+    // Any rejection -> 400 and no partial writes.
+    try {
+      for (const file of workspace.files) {
+        assertSafeWorkspaceFilename(workspaceDir, file?.name);
+      }
+    } catch (validationError) {
+      log.warn('Rejected workspace POST with unsafe filename', {
+        challengeId: workspace.challengeId,
+        error: validationError instanceof Error ? validationError.message : String(validationError),
+      });
+      return validationErrorResponse('Invalid file name');
+    }
 
     await ensureDir(workspaceDir);
 
