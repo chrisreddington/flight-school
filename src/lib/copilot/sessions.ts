@@ -167,6 +167,7 @@ function pruneChatSessions(): void {
  * @param poolKey - Identifier for metrics tracking
  * @returns Session and creation metrics
  * @throws {Error} if `options.userId` is missing/empty (multi-tenant invariant)
+ * @throws {Error} if `options.gitHubToken` is missing/empty (multi-tenant invariant)
  */
 export async function createSessionWithMetrics(
   options: SessionOptions,
@@ -174,6 +175,9 @@ export async function createSessionWithMetrics(
 ): Promise<SessionWithMetrics> {
   if (!options.userId) {
     throw new Error('userId required for session cache key — multi-tenant invariant');
+  }
+  if (!options.gitHubToken) {
+    throw new Error('gitHubToken is required — multi-tenant invariant (no ambient auth)');
   }
   const model = options.model ?? MODEL_TIERS.standard;
   const includeMcp = options.includeMcpTools === true; // Default to false for speed
@@ -308,6 +312,7 @@ export async function createSessionWithMetrics(
  * @param options - Session configuration (must include matching userId + gitHubToken)
  * @returns Session and creation metrics
  * @throws {Error} if `userId` is missing/empty (multi-tenant invariant)
+ * @throws {Error} if `options.gitHubToken` is missing/empty (multi-tenant invariant)
  */
 export async function getConversationSession(
   userId: string,
@@ -317,6 +322,9 @@ export async function getConversationSession(
 ): Promise<SessionWithMetrics> {
   if (!userId) {
     throw new Error('userId required for session cache key — multi-tenant invariant');
+  }
+  if (!options.gitHubToken) {
+    throw new Error('gitHubToken is required — multi-tenant invariant (no ambient auth)');
   }
   if (!conversationId) {
     log.debug('No conversation ID - creating fresh session', { poolKey, userId });

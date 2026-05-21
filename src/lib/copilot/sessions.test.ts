@@ -25,7 +25,7 @@ vi.mock('./mcp', () => ({
   getMcpServerConfig: vi.fn(),
 }));
 
-import { getConversationSession } from './sessions';
+import { getConversationSession, createSessionWithMetrics } from './sessions';
 
 describe('getConversationSession multitenant cache', () => {
   beforeEach(() => {
@@ -87,6 +87,43 @@ describe('getConversationSession multitenant cache', () => {
         includeMcpTools: false,
       }),
     ).rejects.toThrow(/userId required for session cache key/);
+    expect(createSessionMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSessionWithMetrics gitHubToken invariant (D4)', () => {
+  beforeEach(() => {
+    createSessionMock.mockReset();
+    createSessionMock.mockImplementation(async () => ({ id: 'session-x' }));
+  });
+
+  it('throws when gitHubToken is an empty string', async () => {
+    await expect(
+      createSessionWithMetrics({
+        userId: 'u1',
+        gitHubToken: '',
+        includeMcpTools: false,
+      }),
+    ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
+    expect(createSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('throws when gitHubToken field is missing entirely', async () => {
+    await expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      createSessionWithMetrics({ userId: 'u1', includeMcpTools: false } as any),
+    ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
+    expect(createSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('throws from getConversationSession when gitHubToken is empty', async () => {
+    await expect(
+      getConversationSession('u1', 'conv-y', 'pool', {
+        userId: 'u1',
+        gitHubToken: '',
+        includeMcpTools: false,
+      }),
+    ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 });
