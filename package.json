@@ -45,7 +45,7 @@
     "@opentelemetry/api": "^1.9.0",
     "@primer/css": "^22.1.1",
     "@primer/octicons-react": "^19.25.0",
-    "@primer/react": "^38.22.0",
+    "@primer/react": "^38.23.0",
     "@vercel/otel": "^2.0.0",
     "next": "16.2.6",
     "octokit": "^5.0.5",
