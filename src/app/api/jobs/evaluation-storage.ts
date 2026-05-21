@@ -33,6 +33,10 @@ export interface EvaluationProgress {
   };
   /** Error message if failed */
   error?: string;
+  /** Machine-readable failure classification, mirrored from the job record. */
+  errorCode?: 'credentials_missing' | 'credentials_refresh_failed' | 'unknown';
+  /** Short label describing the current executor phase (e.g. "Running tests…"). */
+  currentStep?: string;
   updatedAt: string;
 }
 

@@ -12,7 +12,18 @@ const log = logger.withTag('JobStorage');
 
 type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-interface BackgroundJob<T = unknown> {
+/**
+ * Structured error codes for failed jobs.
+ *
+ * Surfaced to the polling client so the UI can route credentials-related
+ * failures to a re-auth CTA instead of rendering a generic error string.
+ */
+export type JobErrorCode =
+  | 'credentials_missing'
+  | 'credentials_refresh_failed'
+  | 'unknown';
+
+export interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
   targetId?: string;
@@ -20,6 +31,14 @@ interface BackgroundJob<T = unknown> {
   input: Record<string, unknown>;
   result?: T;
   error?: string;
+  /** Machine-readable failure classification; set alongside `error`. */
+  errorCode?: JobErrorCode;
+  /**
+   * Short, user-facing label describing what the executor is doing
+   * right now (e.g. "Running tests…"). Updated incrementally during
+   * long-running jobs so the client can narrate progress.
+   */
+  currentStep?: string;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -190,13 +209,35 @@ export const jobStorage = {
   
   /**
    * Mark a job as failed with error.
+   *
+   * Optionally accepts a structured `errorCode` so polling clients can
+   * distinguish credentials-expired failures from generic errors.
    */
-  async markFailed(id: string, error: string): Promise<BackgroundJob | undefined> {
+  async markFailed(
+    id: string,
+    error: string,
+    errorCode?: JobErrorCode,
+  ): Promise<BackgroundJob | undefined> {
     return this.update(id, {
       status: 'failed',
       error,
+      errorCode,
       completedAt: new Date().toISOString(),
     });
+  },
+
+  /**
+   * Update the human-readable `currentStep` label for an in-flight job.
+   *
+   * Safe to call repeatedly; only persists when the value actually
+   * changes to avoid disk churn during high-frequency narration.
+   */
+  async setCurrentStep(id: string, step: string): Promise<BackgroundJob | undefined> {
+    const schema = await loadJobs();
+    const job = schema.jobs[id];
+    if (!job) return undefined;
+    if (job.currentStep === step) return job;
+    return this.update(id, { currentStep: step });
   },
   
   /**

@@ -484,8 +484,14 @@ export function ChallengeSandbox({
                   Reset
                 </Button>
                 {isEvaluating ? (
-                  <Button variant="danger" size="small" onClick={stopEvaluation} aria-label="Stop evaluation">
-                    Stop
+                  <Button
+                    variant="danger"
+                    size="small"
+                    onClick={stopEvaluation}
+                    disabled={evaluation.isCancelling}
+                    aria-label={evaluation.isCancelling ? 'Cancelling evaluation' : 'Stop evaluation'}
+                  >
+                    {evaluation.isCancelling ? 'Cancelling…' : 'Stop'}
                   </Button>
                 ) : (
                   <>
