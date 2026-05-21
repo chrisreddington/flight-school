@@ -165,6 +165,45 @@ interface TokenDocument {
 }
 
 /**
+ * Build the canonical Additional Authenticated Data (AAD) for an AES-GCM
+ * envelope. The AAD binds the ciphertext to the record's encryption
+ * context, so an attacker (or buggy writer) cannot swap one user's
+ * ciphertext + IV + authTag + wrappedDek into another user's document
+ * and have it decrypt cleanly.
+ *
+ * The AAD is a UTF-8 byte string of a JSON object with a **deterministic
+ * key order**:
+ *
+ * ```json
+ * {"alg":"AES-256-GCM/A256KW","expiresAt":<n>,"kekId":"<url>","userId":"<id>"}
+ * ```
+ *
+ * Keys are emitted in lexicographic (alphabetical) order. **Do not
+ * reorder, rename, add, or remove fields** without a versioned migration:
+ * any change makes previously-written ciphertexts unreadable, because
+ * AES-GCM AAD is checked byte-for-byte at `decipher.final()`.
+ *
+ * The same function must be used on both encrypt and decrypt; the
+ * decrypt-side input comes from the persisted document, so a tampered
+ * `expiresAt` / `kekId` / `userId` / `alg` on the document causes
+ * `decipher.final()` to throw.
+ */
+function buildAAD(parts: {
+  userId: string;
+  alg: typeof ENVELOPE_ALG;
+  kekId: string;
+  expiresAt: number;
+}): Buffer {
+  const canonical = {
+    alg: parts.alg,
+    expiresAt: parts.expiresAt,
+    kekId: parts.kekId,
+    userId: parts.userId,
+  };
+  return Buffer.from(JSON.stringify(canonical), 'utf8');
+}
+
+/**
  * Read Cosmos store configuration from environment variables. Returns `null`
  * if the required vars are missing.
  */
@@ -265,6 +304,14 @@ export class CosmosTokenStore implements TokenStore {
     try {
       const decipher = createDecipheriv(AEAD_ALG, dek, iv);
       decipher.setAuthTag(authTag);
+      decipher.setAAD(
+        buildAAD({
+          userId: doc.userId,
+          alg: doc.alg,
+          kekId: doc.kekId,
+          expiresAt: doc.expiresAt,
+        }),
+      );
       const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       const parsed = JSON.parse(plaintext.toString('utf8')) as StoredToken;
       return parsed;
@@ -287,6 +334,14 @@ export class CosmosTokenStore implements TokenStore {
     const iv = randomBytes(IV_LENGTH);
     try {
       const cipher = createCipheriv(AEAD_ALG, dek, iv, { authTagLength: AUTH_TAG_LENGTH });
+      cipher.setAAD(
+        buildAAD({
+          userId,
+          alg: ENVELOPE_ALG,
+          kekId: this.kekId,
+          expiresAt: token.expiresAt,
+        }),
+      );
       const plaintext = Buffer.from(JSON.stringify(token), 'utf8');
       const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
       const authTag = cipher.getAuthTag();

@@ -198,6 +198,50 @@ describe('CosmosTokenStore', () => {
     expect(mocks.unwrapKey).not.toHaveBeenCalled();
   });
 
+  it('get: throws on cross-user replay (envelope copied into a different userId document)', async () => {
+    const store = new CosmosTokenStore(baseConfig);
+    // Attacker writes a document whose userId field matches the victim, but
+    // whose ciphertext + iv + authTag were produced with AAD bound to a
+    // different (attacker) userId. AAD mismatch must fail decryption.
+    const envelope = encryptForTest(
+      { accessToken: 'ghu_attacker', expiresAt: 9999999999 },
+      FAKE_DEK,
+      'attacker',
+    );
+    const replayed = { ...envelope, id: 'victim', userId: 'victim' };
+    mocks.containerItemRead.mockResolvedValue({ resource: replayed });
+
+    await expect(store.getToken('victim')).rejects.toThrow();
+  });
+
+  it('get: throws when expiresAt on the document is tampered (AAD mismatch)', async () => {
+    const store = new CosmosTokenStore(baseConfig);
+    const doc = encryptForTest(
+      { accessToken: 'ghu_x', expiresAt: 9999999999 },
+      FAKE_DEK,
+      'user-42',
+    );
+    // Push expiry further out without re-encrypting. AAD includes expiresAt,
+    // so this must trip AES-GCM's authTag check at decipher.final().
+    doc.expiresAt = doc.expiresAt + 1;
+    mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+    await expect(store.getToken('user-42')).rejects.toThrow();
+  });
+
+  it('get: throws when kekId on the document is tampered (AAD mismatch)', async () => {
+    const store = new CosmosTokenStore(baseConfig);
+    const doc = encryptForTest(
+      { accessToken: 'ghu_x', expiresAt: 9999999999 },
+      FAKE_DEK,
+      'user-42',
+    );
+    doc.kekId = 'https://example.vault.azure.net/keys/some-other-key';
+    mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+    await expect(store.getToken('user-42')).rejects.toThrow();
+  });
+
   it('get: returns null on 404 from Cosmos', async () => {
     const store = new CosmosTokenStore(baseConfig);
     mocks.containerItemRead.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
@@ -295,9 +339,18 @@ function encryptForTest(
   token: { accessToken: string; refreshToken?: string; expiresAt: number },
   dek: Buffer,
   userId: string,
+  overrides: { kekId?: string; alg?: 'AES-256-GCM/A256KW'; aadExpiresAt?: number } = {},
 ) {
   const iv = randomBytes(12);
+  const kekId = overrides.kekId ?? 'https://example.vault.azure.net/keys/flight-school-kek';
+  const alg = overrides.alg ?? ('AES-256-GCM/A256KW' as const);
+  const aadExpiresAt = overrides.aadExpiresAt ?? token.expiresAt;
+  const aad = Buffer.from(
+    JSON.stringify({ alg, expiresAt: aadExpiresAt, kekId, userId }),
+    'utf8',
+  );
   const cipher = createCipheriv('aes-256-gcm', dek, iv, { authTagLength: 16 });
+  cipher.setAAD(aad);
   const plaintext = Buffer.from(JSON.stringify(token), 'utf8');
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const authTag = cipher.getAuthTag();
@@ -308,8 +361,8 @@ function encryptForTest(
     iv: iv.toString('base64'),
     authTag: authTag.toString('base64'),
     wrappedDek: Buffer.from([0xaa, 0xbb]).toString('base64'),
-    kekId: 'https://example.vault.azure.net/keys/flight-school-kek',
-    alg: 'AES-256-GCM/A256KW' as const,
+    kekId,
+    alg,
     createdAt: Math.floor(Date.now() / 1000),
     expiresAt: token.expiresAt,
   };
