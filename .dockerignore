@@ -1,0 +1,55 @@
+**/node_modules
+**/.next
+**/out
+**/build
+**/coverage
+**/.turbo
+
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.devcontainer
+.aspire
+.aspire-cache
+
+.env
+.env.*
+!.env.example
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+.DS_Store
+*.pem
+
+# Tests + fixtures
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/__tests__
+**/__mocks__
+**/test
+**/tests
+**/fixtures
+vitest.config.ts
+
+# Docs (keep README so package metadata still works)
+*.md
+!README.md
+docs
+
+# Aspire / infra orchestration not needed inside the container image
+apphost.ts
+aspire.config.json
+aspire-modules.d.ts
+tsconfig.apphost.json
+infra
+
+# Local Docker artefacts
+Dockerfile
+.dockerignore
