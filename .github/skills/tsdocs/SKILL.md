@@ -114,32 +114,67 @@ Don't write TSDoc that:
 4. **Is a placeholder.** `TODO: write docs` is worse than nothing — it signals to readers "stop reading, this is unfinished." Either write it or omit the comment.
 5. **Documents private helpers.** Internal helpers (`cleanupExpired` in `rate-limit.ts`) don't need TSDoc — a brief inline `// NOTE:` is enough when intent isn't obvious. Mark testing-only exports with `@internal` (see `__resetRateLimitState`).
 
-## Common gaps in this codebase (and how to fix them)
+## Examples of well-documented exports in this codebase
 
-Three real files with concrete fix-ups. Don't change them as part of unrelated work — but when you next touch them, leave them better.
+Three real exports worth mining when you write or review TSDoc. Each
+shows a different right-sized shape, from one-liner field docs through
+to fully-tagged thrower contracts. (These were rough spots earlier in
+the project's life; H5 brought them up to standard. They are now the
+benchmark, not the cautionary tale.)
 
-### 1. `src/lib/auth/token-store.ts` — `TokenStore` methods
+### 1. `src/lib/auth/token-store.ts` — `TokenStore` interface methods
 
-The `TokenStore` interface methods (`getToken`, `setToken`, `deleteToken`) have no TSDoc. The `StoredToken` fields are documented; the interface methods are not. Each method's contract — what "not found" looks like for `getToken`, whether `setToken` overwrites, whether `deleteToken` is idempotent — is invisible at the call site.
-
-A minimal fix (proportional to the one-line method bodies in `InMemoryTokenStore`):
+Every method on the `TokenStore` contract documents its **edge-case
+behaviour**, because the contract is the Liskov boundary between the
+in-memory and Cosmos implementations. Notice how each method explains
+the *observable* corners — what "not found" looks like, whether the
+operation is idempotent — rather than restating the signature:
 
 ```typescript
 export interface TokenStore {
-  /** Return the stored token for `userId`, or null if absent or already expired. */
+  /**
+   * Look up the stored token for `userId`.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @returns The {@link StoredToken}, or `null` when no record exists for
+   *   the user **or** when the stored record has already expired
+   *   (`expiresAt * 1000 <= now`). Callers must treat "not found" and
+   *   "expired" identically — both mean "refresh / re-auth required".
+   *   Never throws for missing users.
+   */
   getToken(userId: string): Promise<StoredToken | null>;
-  /** Persist `token` for `userId`, overwriting any previous value. */
+
+  /**
+   * Persist `token` for `userId`.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @param token - The token payload to store. Overwrites (upserts) any
+   *   previous record for the same `userId`; there is no separate update
+   *   path.
+   */
   setToken(userId: string, token: StoredToken): Promise<void>;
-  /** Remove the token for `userId`. No-op if no token is stored. */
+
+  /**
+   * Remove the token record for `userId`.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @remarks Idempotent: deleting a `userId` with no stored token is a
+   *   successful no-op, not an error.
+   */
   deleteToken(userId: string): Promise<void>;
 }
 ```
 
-### 2. `src/lib/security/rate-limit.ts` — `checkRateLimit` missing `@returns`
+What this gets right: every "what does the caller do with the return
+value?" question is answered at the contract level, not deferred to
+"see the implementation".
 
-`checkRateLimit` documents both parameters and explains the side effect ("Records the timestamp when allowed") but never tells the caller what the return value represents. The `RateLimitResult` interface is documented separately, but the call-site hover doesn't include that link.
+### 2. `src/lib/security/rate-limit.ts` — `checkRateLimit`
 
-Add a `@returns`:
+This function is a good template for "function with both a return value
+*and* a side effect". The `@returns` tag describes both arms of the
+discriminated result, and the prose calls out the side effect explicitly
+so callers know that *asking is also recording*:
 
 ```typescript
 /**
@@ -150,31 +185,47 @@ Add a `@returns`:
  * @param userId - Stable user identifier (e.g. GitHub numeric ID).
  * @param limit - Max number of requests permitted within `windowMs`.
  * @param windowMs - Length of the sliding window in milliseconds.
- * @returns A {@link RateLimitResult} with `allowed`, plus `retryAfterMs`
- *   when the request was blocked.
+ * @returns A {@link RateLimitResult}: `allowed: true` when the request fits
+ *   in the window (and the timestamp has been recorded), or
+ *   `allowed: false` with `retryAfterMs` indicating how long the caller
+ *   must wait before the oldest in-window request ages out.
  */
-export function checkRateLimit(...): RateLimitResult {
+export function checkRateLimit(
+  userId: string,
+  limit: number,
+  windowMs: number,
+): RateLimitResult { /* ... */ }
 ```
 
-### 3. `src/lib/security/session-cap.ts` — `acquireSlot` missing `@returns`
+### 3. `src/lib/security/session-cap.ts` — `acquireSlot`
 
-`acquireSlot` returns a *release function* — that's the most important detail about the API, and it's only visible in prose ("Returns a release function that must be invoked..."). The `@returns` tag is missing, so the contract isn't captured as a structured tag. Promoting it makes the hover much clearer:
+When a function returns a callback (release, dispose, unsubscribe), the
+`@returns` tag is the *most important* part of the comment — it tells
+the caller what their cleanup obligation is. `acquireSlot` makes that
+contract structural rather than buried in prose:
 
 ```typescript
 /**
  * Acquire a concurrency slot for `userId`.
  *
  * @param userId - Stable user identifier.
- * @param max - Maximum simultaneous slots for the user.
+ * @param max - Maximum simultaneous slots permitted for the user.
  * @returns A release function. Call it (typically in a `finally` block)
  *   exactly once when the work completes; subsequent calls are no-ops.
  * @throws {@link TooManyConcurrentSessionsError} when the user already
  *   holds `max` slots.
  */
-export async function acquireSlot(...): Promise<() => void> {
+export async function acquireSlot(
+  userId: string,
+  max: number,
+): Promise<() => void> { /* ... */ }
 ```
 
-Note also: the existing prose says "Throws `TooManyConcurrentSessionsError`" in the summary. Promoting that to a `@throws` tag aligns with how `withUserGuards` documents the same error and keeps the style consistent.
+Two reusable patterns to copy: pair every throwable function with a
+`@throws {@link ErrorClass}` tag (the linked class makes the error
+discoverable from the hover), and when the return value carries a
+cleanup obligation, say so in `@returns` — not in a trailing remark
+the reader might skim past.
 
 ## Verifying TSDoc quality
 

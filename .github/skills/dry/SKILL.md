@@ -157,7 +157,7 @@ Before reaching for an extraction, walk the checklist. If two or more of these a
 
 - **The same magic string appears in multiple files** — header names, env-var keys, audit event types, model identifiers, route paths. If `'x-ratelimit-remaining'` shows up in three files, it's a constant in disguise.
 - **The same `if (response.ok)` / `if (!res.ok) throw ...` boilerplate is repeated** around `fetch` or Octokit calls. The error-shape decision is being re-encoded each time.
-- **The same env-var lookup logic is repeated** — `process.env.FOO ?? process.env.FOO_FALLBACK ?? throwSomething()`. That fallback ordering *is* the knowledge; centralise it (see `getGitHubToken()` for the canonical pattern in this repo).
+- **The same env-var lookup logic is repeated** — `process.env.FOO ?? process.env.FOO_FALLBACK ?? throwSomething()`. That fallback ordering *is* the knowledge; centralise it. (For request-scoped GitHub auth in this repo, that knowledge lives in `requireUserContext()` in `src/lib/auth/context.ts` — every route that needs a user token goes through it.)
 - **The same shape of try/catch + log + rethrow** appears around external calls — that is a cross-cutting concern (telemetry, audit, error mapping) waiting to be wrapped.
 - **The same JSON envelope** is constructed by hand instead of going through `apiSuccess` / `validationErrorResponse` / `serviceUnavailableResponse`.
 - **The same SSE framing** (`data: ${JSON.stringify(...)}\n\n`) is built by hand instead of going through `createSSEResponse`.

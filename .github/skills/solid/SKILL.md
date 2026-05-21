@@ -52,20 +52,21 @@ cadence, different test setup), they don't belong in the same file.
 
 ### Example in this codebase
 
-The GitHub client used to be a process-wide singleton Octokit. That
-single module owned three responsibilities at once: **token resolution**
-(env / `gh` CLI), **Octokit construction**, and **request
-instrumentation** — all sharing one cached instance across users. The
-"reason to change" was different for each (multitenancy, telemetry,
-auth), but they were entangled.
+The GitHub client used to be a process-wide singleton Octokit that also
+owned **ambient token resolution** — reading `GITHUB_TOKEN` from the
+environment or shelling out to `gh auth token`. That single module owned
+three responsibilities at once: ambient token discovery, Octokit
+construction, and request instrumentation — and shared one cached
+instance across users. The "reason to change" was different for each
+(multitenancy, telemetry, auth), but they were entangled.
 
-The current `src/lib/github/client.ts` separates these into focused
-functions:
+The current `src/lib/github/client.ts` has no ambient auth surface at
+all. Token resolution lives in the auth layer
+(`src/lib/auth/context.ts`); this module only knows how to *use* a
+token it was handed:
 
 ```ts
 // src/lib/github/client.ts
-export async function getGitHubToken(): Promise<string | null> { /* env or gh CLI */ }
-
 export function getOctokitForToken(token: string): Octokit {
   const instance = new Octokit({ auth: token });
   instrumentOctokitRequests(instance);
@@ -78,16 +79,21 @@ export async function getOctokitForRequest(): Promise<Octokit> {
 }
 ```
 
-Each function has one job: resolve a token, build an Octokit, or bind to
-the current request's user. The file-level comment is explicit about
-*why* the singleton was removed:
+Each function has one job: build an Octokit for a given token, or bind
+to the current request's authenticated user. The file-level docstring is
+explicit about what was *removed* and why:
 
-> There is intentionally NO singleton — sharing Octokit instances across
-> users would leak tokens and rate-limit budgets between sessions.
+> There is intentionally **no** ambient token resolution in this
+> module — no `GITHUB_TOKEN` env fallback, no `gh auth token` CLI
+> lookup, no process-wide cache. Every caller must supply a token that
+> came from the authenticated user context.
 
-That comment is itself an SRP marker: the previous module had two
-responsibilities (instance lifecycle and per-user auth) whose
-requirements diverged.
+The previous module collapsed three axes of change (instance lifecycle,
+ambient auth discovery, per-user authorisation) into one file. Splitting
+them — and deleting the ambient path entirely — is SRP in service of a
+security boundary: a leak test (`src/lib/github/client.test.ts`'s
+`'does not export legacy token resolvers'`) now pins that the helpers
+can never come back.
 
 See also: [Single Responsibility Functions
 rule](../../instructions/typescript.instructions.md#single-responsibility-functions).
@@ -177,30 +183,40 @@ export interface TokenStore {
   getToken(userId: string): Promise<StoredToken | null>;
   setToken(userId: string, token: StoredToken): Promise<void>;
   deleteToken(userId: string): Promise<void>;
+  cleanupExpired(): Promise<number>;
 }
 
-export class InMemoryTokenStore implements TokenStore { /* ... */ }
+export class InMemoryTokenStore implements TokenStore { /* process-local Map */ }
 
 export class CosmosTokenStore implements TokenStore {
-  async getToken(_userId: string): Promise<StoredToken | null> {
-    throw new Error('CosmosTokenStore is not implemented yet. Use InMemoryTokenStore for local dev.');
-  }
-  /* ...same for set/delete... */
+  // Cosmos DB-backed with envelope encryption:
+  //  - per-record AES-256-GCM data encryption key (DEK)
+  //  - DEK wrapped with an Azure Key Vault KEK via `wrapKey(A256KW)`
+  //  - documents partitioned by userId so a buggy or hostile caller
+  //    cannot decrypt another user's row.
 }
 ```
 
-The intent — captured in the file comment — is explicitly Liskov:
+The intent — captured in the file docstring — is explicitly Liskov:
 
-> The interface is intentionally identical to `InMemoryTokenStore` so
-> callers can swap implementations without changes.
+> The {@link TokenStore} contract is the Liskov boundary: callers MUST
+> be able to swap implementations without behavioural change.
 
-Note the *current* `CosmosTokenStore` is a placeholder that throws. That
-is a deliberate, documented LSP violation — it announces "not yet
-implemented" instead of silently returning wrong data. When you wire up
-Cosmos, the substitution rule says: every behaviour `InMemoryTokenStore`
-guarantees (expired tokens come back as `null`, `delete` is idempotent)
-must continue to hold. Otherwise consumers — `getTokenStore()` and
-everything downstream — would need to change.
+Both implementations honour the same observable contract: unknown users
+return `null`, expired records return `null` (callers treat "not found"
+and "expired" identically), `setToken` upserts, `deleteToken` is
+idempotent. The Cosmos store adds confidentiality at rest (envelope
+encryption, AAD bound to `userId`/`expiresAt`/`kekId` so tampered
+documents fail decryption), but it does **not** change the observable
+behaviour — that is the whole point. A caller wired through
+`getTokenStore()` cannot tell which one it has, and tests can swap the
+in-memory store in without rewriting code.
+
+Where LSP could go wrong here: if `CosmosTokenStore` started throwing on
+"user not found" instead of returning `null`, or made `deleteToken`
+non-idempotent, every caller of `getTokenStore()` would need to learn
+the difference. Keeping the contract identical is what makes the
+substitution invisible.
 
 ---
 
@@ -238,27 +254,36 @@ export async function createLoggedCoachSession(
 ) { /* ... */ }
 ```
 
-Internally the Copilot SDK takes a much larger `SessionOptions` (from
+Internally the Copilot SDK takes a wider `SessionOptions` (from
 `src/lib/copilot/types.ts`):
 
 ```ts
 // src/lib/copilot/types.ts
 export interface SessionOptions {
+  // Multi-tenant invariant — BOTH required:
+  userId: string;       // partitions the session cache
+  gitHubToken: string;  // ghu_ token forwarded to the SDK / MCP
+  // Optional configuration:
   systemMessage?: string;
   includeMcpTools?: boolean;
   tools?: string[];
   model?: string;
-  gitHubToken?: string;
-  userId?: string;
 }
 ```
 
 But callers in API routes — `src/app/api/focus/route.ts`,
-`src/app/api/jobs/job-executors.ts` — only ever see `SessionIdentity`.
-They cannot accidentally over-configure a session (wrong model, wrong
-tool list) because the wide options shape is not in their interface.
+`src/app/api/jobs/job-executors.ts` — only ever see `SessionIdentity`
+(the narrow `{ userId, gitHubToken }` pair, which happens to coincide
+with the *required* subset of `SessionOptions`). They cannot accidentally
+over-configure a session (wrong model, wrong tool list, wrong system
+message) because the wide options shape is not in their interface.
 `SessionOptions` is reserved for the small set of factory functions that
 genuinely need it.
+
+Note that `userId` and `gitHubToken` are non-optional on `SessionOptions`
+itself — defaulting either would let sessions leak between users sharing
+a sticky-routed process. ISP doesn't mean "make everything optional";
+it means "don't expose fields callers shouldn't reason about."
 
 The same idea applies to React props: prefer many small prop types over
 one giant `ComponentProps`.

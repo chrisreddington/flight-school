@@ -54,9 +54,11 @@ Another good "red" pattern — cross-user leak tests in [`src/test/integration/m
 ```ts
 describe('multi-tenant auth/token isolation', () => {
   // ...mocks omitted for brevity
-  it('does not reuse user A token for user B requests', async () => {
-    // exercises the system with two distinct tokens and asserts
-    // that no cross-contamination occurs.
+  it('passes the exact per-user token to the Octokit constructor', () => {
+    getOctokitForToken(TOKEN_A);
+    getOctokitForToken(TOKEN_B);
+    expect(octokitConstructorSpy).toHaveBeenNthCalledWith(1, { auth: TOKEN_A });
+    expect(octokitConstructorSpy).toHaveBeenNthCalledWith(2, { auth: TOKEN_B });
   });
 });
 ```
@@ -107,17 +109,24 @@ npm run test:coverage
 
 The project has standardised mocks defined in [`src/test/setup.ts`](../../../src/test/setup.ts) — `global.fetch`, `window.matchMedia`, and `document.adoptedStyleSheets` are stubbed for every test, and `vi.clearAllMocks()` runs in a global `beforeEach`. Don't re-mock those at the file level.
 
-**Environment variables — use `vi.stubEnv`**, not `process.env.X = …`. Example from [`src/lib/github/client.test.ts`](../../../src/lib/github/client.test.ts):
+**Environment variables — use `vi.stubEnv`**, not `process.env.X = …`. The GitHub client used to read `GITHUB_TOKEN` from the environment; that ambient path is now deleted, and the canonical use of `vi.stubEnv` in this repo is in the *negative* (anti-pattern) tests that pin its absence. Example from [`src/test/integration/multitenancy.test.ts`](../../../src/test/integration/multitenancy.test.ts):
 
 ```ts
-it('uses GITHUB_TOKEN when set', async () => {
-  vi.stubEnv('GITHUB_TOKEN', 'ghp_test_token_123');
-  const token = await getGitHubToken();
-  expect(token).toBe('ghp_test_token_123');
+it('setting GITHUB_TOKEN does not confer access without a session', async () => {
+  vi.stubEnv('GITHUB_TOKEN', 'ghp_should_not_be_used_xxxxxxxxxxxxxxxx');
+  requireUserContextMock.mockImplementationOnce(() => {
+    throw new UnauthorizedError();
+  });
+
+  await expect(githubClient.getOctokitForRequest()).rejects.toBeInstanceOf(
+    UnauthorizedError
+  );
+  // No Octokit should have been constructed from the env var.
+  expect(octokitConstructorSpy).not.toHaveBeenCalled();
 });
 ```
 
-`vi.stubEnv` is auto-restored by Vitest between tests, so you don't need an `afterEach` to undo it.
+`vi.stubEnv` is auto-restored by Vitest between tests, so you don't need an `afterEach` to undo it. Reach for it whenever a test exercises (or, as here, deliberately disables) an env-var-driven code path.
 
 **Module mocks — use `vi.mock` at top of file**, with the import *after* the mock. Example from [`src/test/integration/multitenancy.test.ts`](../../../src/test/integration/multitenancy.test.ts):
 
