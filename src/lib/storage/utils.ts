@@ -215,13 +215,26 @@ export async function deleteStorage(filename: string): Promise<void> {
 
 /**
  * Ensures a subdirectory exists in .data directory.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
+ * @param options - Optional mkdir options. Pass `mode` (e.g. `0o700`) to
+ *   restrict the directory permissions on platforms that honour POSIX modes.
+ *   On Windows the mode is ignored by the OS.
  */
-export async function ensureDir(subdir: string): Promise<void> {
+export async function ensureDir(
+  subdir: string,
+  options: { mode?: number } = {}
+): Promise<void> {
   const dirPath = safePath(subdir);
   try {
-    await fs.mkdir(dirPath, { recursive: true });
+    await fs.mkdir(dirPath, { recursive: true, mode: options.mode });
+    if (options.mode !== undefined && os.platform() !== 'win32') {
+      try {
+        await fs.chmod(dirPath, options.mode);
+      } catch (chmodError) {
+        log.debug(`chmod ignored on directory: ${subdir}`, { chmodError });
+      }
+    }
   } catch (error) {
     log.error(`Failed to create directory: ${subdir}`, { error });
     throw error;

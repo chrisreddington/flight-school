@@ -1,16 +1,48 @@
 /**
  * Storage Route Factory
- * 
+ *
  * Generic factory for creating storage API routes with consistent GET/POST/DELETE handlers.
  * Eliminates duplication across storage routes with type-safe schema validation.
- * 
+ *
+ * Storage is **partitioned per authenticated user**: each handler resolves the
+ * GitHub identity via {@link requireUserContext} and rewrites the configured
+ * filename to live under `users/{userId}/{filename}` inside the storage root.
+ * There is no shared cross-user view of the data — User A's GET cannot see
+ * User B's file because the underlying paths never collide.
+ *
+ * The userId is taken from the session (the numeric GitHub ID), never from a
+ * query or body parameter, and is validated against {@link SAFE_USER_ID} to
+ * defend against path-traversal even though GitHub IDs are numeric in
+ * production.
+ *
  * @module api/storage-route-factory
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
+import { readStorage, writeStorage, deleteStorage, ensureDir } from '@/lib/storage/utils';
 import { apiSuccess, validationErrorResponse } from './response-utils';
+import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import type { logger } from '@/lib/logger';
+
+/**
+ * Allowed characters in a userId used as a path segment. GitHub IDs are
+ * numeric, but we accept the full alphanumeric + `_-` set so tests and any
+ * future non-GitHub identity providers don't have to special-case the
+ * factory. Anything outside this set (including `..`, `/`, `.`) is rejected.
+ */
+const SAFE_USER_ID = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Builds the per-user storage path for a logical filename.
+ *
+ * @throws {Error} when the userId fails {@link SAFE_USER_ID} validation.
+ */
+function userScopedFilename(userId: string, filename: string): string {
+  if (!SAFE_USER_ID.test(userId)) {
+    throw new Error(`Refusing unsafe userId for storage path: ${JSON.stringify(userId)}`);
+  }
+  return `users/${userId}/${filename}`;
+}
 
 /**
  * Type for logger instance with tag support.
@@ -59,12 +91,49 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
   const { filename, defaultSchema, logger, validateSchema } = config;
 
   /**
-   * GET: Read current storage
+   * Resolves the per-user storage path or returns an HTTP response describing
+   * why the request can't proceed (401 for missing auth, 400 for an
+   * unrepresentable userId). Also ensures the per-user directory exists with
+   * a restrictive mode so the first write doesn't fail with ENOENT.
+   */
+  async function resolveScopedPath(): Promise<
+    { ok: true; path: string } | { ok: false; response: NextResponse }
+  > {
+    let userId: string;
+    try {
+      ({ userId } = await requireUserContext());
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return {
+          ok: false,
+          response: NextResponse.json({ error: 'Authentication required' }, { status: 401 }),
+        };
+      }
+      throw error;
+    }
+
+    let scopedPath: string;
+    try {
+      scopedPath = userScopedFilename(userId, filename);
+    } catch (error) {
+      logger.warn('Rejected unsafe userId', { error });
+      return { ok: false, response: validationErrorResponse('Invalid user identifier') };
+    }
+
+    await ensureDir(`users/${userId}`, { mode: 0o700 });
+    return { ok: true, path: scopedPath };
+  }
+
+  /**
+   * GET: Read current storage for the authenticated user.
    */
   async function GET() {
+    const scoped = await resolveScopedPath();
+    if (!scoped.ok) return scoped.response;
+
     try {
       const storage = await readStorage<T>(
-        filename,
+        scoped.path,
         defaultSchema,
         validateSchema
       );
@@ -79,19 +148,21 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
   }
 
   /**
-   * POST: Write storage
+   * POST: Write storage for the authenticated user.
    */
   async function POST(request: NextRequest) {
+    const scoped = await resolveScopedPath();
+    if (!scoped.ok) return scoped.response;
+
     try {
       const body = await request.json();
       const schema = body as T;
-      
-      // Validate before writing
+
       if (!validateSchema(schema)) {
         return validationErrorResponse('Invalid storage schema');
       }
 
-      await writeStorage(filename, schema);
+      await writeStorage(scoped.path, schema);
       return apiSuccess(null);
     } catch (error) {
       logger.error(`POST failed`, { error });
@@ -103,11 +174,14 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
   }
 
   /**
-   * DELETE: Clear storage
+   * DELETE: Clear storage for the authenticated user.
    */
   async function DELETE() {
+    const scoped = await resolveScopedPath();
+    if (!scoped.ok) return scoped.response;
+
     try {
-      await deleteStorage(filename);
+      await deleteStorage(scoped.path);
       return apiSuccess(null);
     } catch (error) {
       logger.error(`DELETE failed`, { error });
