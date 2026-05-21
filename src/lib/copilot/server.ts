@@ -214,27 +214,52 @@ export function wrapSessionWithLogging(
 }
 
 /**
- * Common per-request identity required by every session factory.
- *
- * `userId` partitions the in-memory session cache; `gitHubToken` is forwarded
- * to the Copilot SDK so the underlying session uses the caller's GitHub
- * identity (multitenancy — see SessionOptions.gitHubToken).
+ * Per-request identity passed to every Copilot session factory. Both fields
+ * are propagated to the Copilot SDK so the session acts on behalf of the
+ * caller's GitHub user (see `SessionOptions.gitHubToken`). **Never** cache
+ * or reuse a `SessionIdentity` across requests — each HTTP request must
+ * derive its own from {@link requireUserContext}.
  */
 export interface SessionIdentity {
+  /** Stable GitHub numeric ID (as string) of the calling user; partitions the in-memory session cache. */
   userId: string;
+  /** Fresh user-to-server (`ghu_...`) access token for that user. */
   gitHubToken: string;
 }
 
 /**
- * Create a logged coach session for focus generation.
- * 
- * This is a convenience function that creates a coach session
- * with automatic activity logging built in.
- * 
- * @param identity - Per-request user identity (userId + gitHubToken)
- * @param operationName - Name for logging (default: "Coach Session")
- * @param inputPrompt - The prompt being sent (for logging context)
- * @returns Wrapped session with logging
+ * Create a logged coach session **with** GitHub MCP tools (`get_me`,
+ * `list_user_repositories`) for focus generation.
+ *
+ * @param identity - Per-request {@link SessionIdentity}. Carries the
+ *   multi-tenant invariant: the session acts as `identity.userId` and the
+ *   SDK uses `identity.gitHubToken` for MCP calls — never the ambient
+ *   `GITHUB_TOKEN`.
+ * @param operationName - Human-readable label written to the activity log.
+ *   Defaults to `'Coach Session'`.
+ * @param inputPrompt - Initial prompt snippet captured for log context
+ *   only; does not pre-seed the session.
+ * @returns A logging-wrapped session for a single coach turn. **Lifecycle:**
+ *   callers MUST call `.destroy()` (typically in a `finally`) to release
+ *   the underlying SDK session and any MCP resources.
+ * @throws When the Copilot SDK rejects `identity.gitHubToken` (401/403,
+ *   expired token, missing scopes) or MCP server initialisation fails.
+ *
+ * @example
+ * ```typescript
+ * const { userId, accessToken } = await requireUserContext();
+ * const logged = await createLoggedCoachSession(
+ *   \{ userId, gitHubToken: accessToken \},
+ *   'Daily Focus',
+ *   userPrompt,
+ * );
+ * try \{
+ *   const result = await logged.sendAndWait(userPrompt);
+ *   return result.text;
+ * \} finally \{
+ *   await logged.destroy();
+ * \}
+ * ```
  */
 export async function createLoggedCoachSession(
   identity: SessionIdentity,
@@ -259,12 +284,19 @@ export async function createLoggedCoachSession(
 }
 
 /**
- * Create a logged coach session without MCP tools (lightweight/fast).
+ * Create a lightweight logged coach session **without** MCP tools. Faster
+ * to spin up than {@link createLoggedCoachSession}; use when the coach turn
+ * doesn't need to read repos.
  *
- * @param identity - Per-request user identity (userId + gitHubToken)
- * @param operationName - Name for logging
- * @param inputPrompt - Initial prompt context
- * @returns Logged session wrapper
+ * @param identity - Per-request {@link SessionIdentity}; same multi-tenant
+ *   contract as {@link createLoggedCoachSession}.
+ * @param operationName - Activity-log label. Defaults to
+ *   `'Coach Session (fast)'`.
+ * @param inputPrompt - Prompt snippet captured for log context only.
+ * @returns A logging-wrapped session for one fast coach turn. Callers MUST
+ *   call `.destroy()` to release SDK resources.
+ * @throws When the Copilot SDK rejects `identity.gitHubToken` (401/403 or
+ *   expired/invalid credential).
  */
 export async function createLoggedLightweightCoachSession(
   identity: SessionIdentity,
@@ -289,15 +321,24 @@ export async function createLoggedLightweightCoachSession(
 }
 
 /**
- * Create a logged chat session for conversations.
- * 
- * This creates a LIGHTWEIGHT session without MCP tools for fast responses.
- * For GitHub exploration, use createLoggedGitHubChatSession instead.
+ * Create a logged chat session for multi-turn conversations. Lightweight —
+ * **no** MCP tools, so responses are fast. For GitHub exploration, use
+ * {@link createLoggedGitHubChatSession} instead.
  *
- * @param identity - Per-request user identity (userId + gitHubToken)
- * @param operationName - Name for logging (default: "Chat Session")
- * @param inputPrompt - The prompt being sent (for logging context)
- * @returns Wrapped session with logging
+ * @param identity - Per-request {@link SessionIdentity}; the session acts
+ *   as `identity.userId` using `identity.gitHubToken`.
+ * @param operationName - Activity-log label. Defaults to `'Chat Session'`.
+ * @param inputPrompt - Prompt snippet captured for log context only.
+ * @param conversationId - Optional stable conversation key. When supplied,
+ *   the underlying session is reused across turns and is **kept alive on
+ *   wrapper `.destroy()`** so the next turn can resume; the conversation
+ *   cache owns its eventual teardown. When omitted, the session is
+ *   single-turn and is destroyed with the wrapper.
+ * @returns A logging-wrapped session. Callers MUST always call `.destroy()`
+ *   — it is a no-op for the underlying SDK session when `conversationId`
+ *   is set, but still flushes per-turn logging state.
+ * @throws When the Copilot SDK rejects `identity.gitHubToken` (401/403 or
+ *   expired/invalid credential).
  */
 export async function createLoggedChatSession(
   identity: SessionIdentity,
@@ -329,15 +370,23 @@ export async function createLoggedChatSession(
 }
 
 /**
- * Create a logged chat session WITH GitHub MCP tools.
- * 
- * Use this when the user wants to explore repos, search code, etc.
- * Slower to create due to MCP configuration, but enables GitHub access.
+ * Create a logged chat session **with** GitHub MCP tools enabled — for
+ * users exploring repos, searching code, etc. Slower to create than
+ * {@link createLoggedChatSession} because of MCP setup.
  *
- * @param identity - Per-request user identity (userId + gitHubToken)
- * @param operationName - Name for logging
- * @param inputPrompt - The prompt being sent (for logging context)
- * @returns Wrapped session with logging
+ * @param identity - Per-request {@link SessionIdentity}. MCP tools call
+ *   GitHub as `identity.userId` using `identity.gitHubToken`.
+ * @param operationName - Activity-log label. Defaults to
+ *   `'GitHub Chat Session'`.
+ * @param inputPrompt - Prompt snippet captured for log context only.
+ * @param conversationId - Optional stable conversation key. Same reuse /
+ *   lifecycle semantics as {@link createLoggedChatSession}.
+ * @returns A logging-wrapped session backed by MCP-enabled GitHub access.
+ *   Callers MUST call `.destroy()` (no-op on the SDK session when
+ *   `conversationId` is set; the conversation cache handles eventual
+ *   teardown).
+ * @throws When the Copilot SDK rejects `identity.gitHubToken` (401/403 or
+ *   expired/invalid credential) or MCP server initialisation fails.
  */
 export async function createLoggedGitHubChatSession(
   identity: SessionIdentity,
