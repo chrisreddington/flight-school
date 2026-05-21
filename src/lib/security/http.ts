@@ -23,17 +23,36 @@ export function guardErrorResponse(error: unknown): NextResponse | null {
   if (error instanceof RateLimitedError) {
     const retryAfterSeconds = Math.max(1, Math.ceil(error.retryAfterMs / 1000));
     return NextResponse.json(
-      { error: error.message, code: error.code, retryAfterMs: error.retryAfterMs },
+      {
+        error: error.message,
+        code: error.code,
+        reason: 'rate_limit',
+        retryAfterMs: error.retryAfterMs,
+      },
       {
         status: 429,
-        headers: { 'Retry-After': String(retryAfterSeconds) },
+        headers: {
+          'Retry-After': String(retryAfterSeconds),
+          'X-RateLimit-Reason': 'rate_limit',
+        },
       },
     );
   }
   if (error instanceof TooManyConcurrentSessionsError) {
     return NextResponse.json(
-      { error: error.message, code: error.code, max: error.max },
-      { status: 429 },
+      {
+        error: error.message,
+        code: error.code,
+        reason: 'session_cap',
+        max: error.max,
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': '30',
+          'X-RateLimit-Reason': 'session_cap',
+        },
+      },
     );
   }
   if (error instanceof UnauthorizedError) {

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiGet, apiPost, apiPatch, apiDelete } from './api-client';
+import { apiGet, apiPost, apiPatch, apiDelete, apiStream, CopilotRequiredClientError } from './api-client';
 
 // =============================================================================
 // Setup
@@ -182,6 +182,80 @@ describe('API Client', () => {
       });
 
       await expect(apiGet('/api/error')).rejects.toThrow('HTTP 500');
+    });
+  });
+
+  // ===========================================================================
+  // F5: 429 Rate-limit Detection
+  // ===========================================================================
+
+  describe('429 rate-limit detection', () => {
+    function make429Response(opts: {
+      headers?: Record<string, string>;
+      body?: unknown;
+    }) {
+      const headers = new Headers(opts.headers ?? {});
+      return {
+        ok: false,
+        status: 429,
+        headers,
+        json: () => Promise.resolve(opts.body ?? {}),
+      };
+    }
+
+    it('dispatches a rate-limited event with parsed Retry-After', async () => {
+      mockFetch.mockResolvedValueOnce(
+        make429Response({
+          headers: {
+            'Retry-After': '30',
+            'X-RateLimit-Reason': 'rate_limit',
+          },
+          body: { error: 'Rate limit exceeded', reason: 'rate_limit' },
+        }),
+      );
+
+      const listener = vi.fn();
+      window.addEventListener('rate-limited', listener);
+
+      await expect(apiGet('/api/profile')).rejects.toMatchObject({
+        status: 429,
+        reason: 'rate_limit',
+        retryAfterSeconds: 30,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const detail = (listener.mock.calls[0][0] as CustomEvent).detail;
+      expect(detail.retryAfterSeconds).toBe(30);
+      expect(detail.reason).toBe('rate_limit');
+      expect(detail.route).toBe('/api/profile');
+
+      window.removeEventListener('rate-limited', listener);
+    });
+
+    it('defaults to 30s when Retry-After is missing', async () => {
+      mockFetch.mockResolvedValueOnce(
+        make429Response({
+          headers: { 'X-RateLimit-Reason': 'session_cap' },
+          body: { error: 'Too many sessions', reason: 'session_cap', max: 3 },
+        }),
+      );
+
+      const listener = vi.fn();
+      window.addEventListener('rate-limited', listener);
+
+      await expect(apiPost('/api/jobs', { type: 'chat' })).rejects.toMatchObject({
+        status: 429,
+        reason: 'session_cap',
+        retryAfterSeconds: 30,
+        max: 3,
+      });
+
+      const detail = (listener.mock.calls[0][0] as CustomEvent).detail;
+      expect(detail.retryAfterSeconds).toBe(30);
+      expect(detail.reason).toBe('session_cap');
+      expect(detail.max).toBe(3);
+
+      window.removeEventListener('rate-limited', listener);
     });
   });
 
@@ -365,6 +439,109 @@ describe('API Client', () => {
             Authorization: 'Bearer token',
           }),
         })
+      );
+    });
+  });
+
+  // ===========================================================================
+  // F4: apiStream — streaming responses + 402/429 dispatch
+  // ===========================================================================
+
+  describe('apiStream', () => {
+    it('returns the live Response on success without consuming the body', async () => {
+      const response = {
+        ok: true,
+        status: 200,
+        body: { getReader: vi.fn() },
+        clone: vi.fn(),
+      };
+      mockFetch.mockResolvedValueOnce(response);
+
+      const result = await apiStream('/api/stream', { method: 'POST' });
+
+      expect(result).toBe(response);
+      // Body must be intact for the caller to stream from it.
+      expect(response.clone).not.toHaveBeenCalled();
+    });
+
+    it('dispatches copilot-required and throws CopilotRequiredClientError on 402', async () => {
+      const body = {
+        error: 'copilot_required',
+        message: 'Need Copilot',
+        signUpUrl: 'https://example.test/copilot',
+      };
+      const cloneJson = vi.fn(() => Promise.resolve(body));
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+        headers: new Headers(),
+        clone: () => ({ json: cloneJson }),
+      });
+
+      const listener = vi.fn();
+      window.addEventListener('copilot-required', listener);
+
+      await expect(
+        apiStream('/api/challenge/author', { method: 'POST' }),
+      ).rejects.toBeInstanceOf(CopilotRequiredClientError);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const detail = (listener.mock.calls[0][0] as CustomEvent).detail;
+      expect(detail.message).toBe('Need Copilot');
+      expect(detail.signUpUrl).toBe('https://example.test/copilot');
+      expect(detail.endpoint).toBe('/api/challenge/author');
+
+      window.removeEventListener('copilot-required', listener);
+    });
+
+    it('dispatches rate-limited and throws on 429', async () => {
+      const body = { error: 'Rate limit', reason: 'rate_limit' };
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers({ 'Retry-After': '15', 'X-RateLimit-Reason': 'rate_limit' }),
+        clone: () => ({ json: () => Promise.resolve(body) }),
+      });
+
+      const listener = vi.fn();
+      window.addEventListener('rate-limited', listener);
+
+      await expect(apiStream('/api/jobs', { method: 'POST' })).rejects.toMatchObject({
+        status: 429,
+        reason: 'rate_limit',
+        retryAfterSeconds: 15,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      window.removeEventListener('rate-limited', listener);
+    });
+
+    it('throws a generic Error for other non-2xx responses', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        clone: () => ({ json: () => Promise.resolve({ error: 'boom' }) }),
+      });
+
+      await expect(apiStream('/api/oops', { method: 'POST' })).rejects.toThrow(/boom|HTTP 500/);
+    });
+
+    it('sets Content-Type: application/json by default', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: null,
+        clone: vi.fn(),
+      });
+
+      await apiStream('/api/stream', { method: 'POST', body: '{}' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/stream',
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+        }),
       );
     });
   });

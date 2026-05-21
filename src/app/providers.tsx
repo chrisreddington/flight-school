@@ -1,6 +1,7 @@
 'use client';
 
 import { AIActivityPanel } from '@/components/AIActivityPanel';
+import { CopilotRequiredBanner } from '@/components/CopilotRequiredBanner';
 import { BreadcrumbProvider } from '@/contexts/breadcrumb-context';
 import { DebugProvider } from '@/contexts/debug-context';
 // Import only the Primer CSS that we need for faster load times
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <BreadcrumbProvider>
           <BaseStyles>
             <div className={styles.appRoot}>
+              <CopilotRequiredBanner />
               {children}
               <AIActivityPanel />
             </div>

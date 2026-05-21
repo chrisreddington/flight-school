@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPost } from '@/lib/api-client';
 import type { QuizQuestion, QuizResult } from '@/lib/copilot/quiz';
 import { CheckCircleIcon } from '@primer/octicons-react';
 import { Button, FormControl, Heading, Radio, RadioGroup, Spinner, Stack, Text } from '@primer/react';
@@ -72,26 +73,16 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
     setCurrentIndex(0);
 
     try {
-      const response = await fetch('/api/quiz', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topicTitle,
-          topicDescription,
-        }),
+      const data = await apiPost<QuizResult>('/api/quiz', {
+        topicTitle,
+        topicDescription,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate quiz');
-      }
-
-      const data = (await response.json()) as QuizResult;
       writeQuizCache(topicTitle, data);
       setQuiz(data);
       setViewState('question');
     } catch {
+      // 402 already broadcast to the banner via apiPost.
       setErrorMessage('Could not load practice quiz right now. Please try again.');
       setViewState('idle');
     }

@@ -35,6 +35,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { THREAD_DATA_CHANGED_EVENT, threadStore } from '@/lib/threads';
@@ -506,33 +507,17 @@ export function useLearningChat(): UseLearningChatReturn {
       setPendingStreamMessages(prev => new Map([...prev, [targetThreadId, userMessage.id]]));
       
       try {
-        const jobRes = await fetch('/api/jobs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'chat-response',
-            input: {
-              threadId: targetThreadId,
-              prompt: message,
-              learningMode: true,
-              useGitHubTools,
-              repos: effectiveRepos?.map(r => r.fullName),
-            },
-          }),
+        // apiPost handles 402 (banner) and 429 (rate-limit toast) globally.
+        const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
+          type: 'chat-response',
+          input: {
+            threadId: targetThreadId,
+            prompt: message,
+            learningMode: true,
+            useGitHubTools,
+            repos: effectiveRepos?.map(r => r.fullName),
+          },
         });
-
-        if (!jobRes.ok) {
-          const err = await jobRes.json();
-          // Remove from pending on error
-          setPendingStreamMessages(prev => {
-            const next = new Map(prev);
-            next.delete(targetThreadId);
-            return next;
-          });
-          throw new Error(err.error || 'Failed to start job');
-        }
-
-        const { id: jobId } = await jobRes.json();
         log.debug(`Started job ${jobId} for thread ${targetThreadId}`);
         
         // Trigger immediate refresh to pick up the isStreaming flag

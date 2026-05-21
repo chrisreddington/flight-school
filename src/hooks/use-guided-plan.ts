@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPost } from '@/lib/api-client';
 import type { GuidedPlan } from '@/lib/copilot/guided-mode-types';
 import { getGuidedPlanFallback } from '@/lib/copilot/guided-mode-types';
 import { useEffect, useState } from 'react';
@@ -64,21 +65,17 @@ export function useGuidedPlan(
     // No cache: fetch in background while user reads the challenge
     (async () => {
       try {
-        const response = await fetch('/api/guided-plan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            challengeTitle: challenge.title,
-            challengeDescription: challenge.description,
-            challengeLanguage: challenge.language,
-            challengeDifficulty: challenge.difficulty,
-          }),
+        const data = await apiPost<GuidedPlan>('/api/guided-plan', {
+          challengeTitle: challenge.title,
+          challengeDescription: challenge.description,
+          challengeLanguage: challenge.language,
+          challengeDifficulty: challenge.difficulty,
         });
-        const data = (await response.json()) as GuidedPlan;
-        const result = response.ok ? data : getGuidedPlanFallback(challenge);
-        writeCache(challengeId, result);
-        if (mounted) setPlan(result);
+        writeCache(challengeId, data);
+        if (mounted) setPlan(data);
       } catch {
+        // 402 already broadcast to the banner via apiPost; fall back to
+        // the static plan for this view.
         if (mounted) setPlan(getGuidedPlanFallback(challenge));
       } finally {
         if (mounted) setLoading(false);

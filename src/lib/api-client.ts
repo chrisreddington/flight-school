@@ -18,6 +18,10 @@ import {
   COPILOT_REQUIRED_EVENT,
   type CopilotRequiredEventDetail,
 } from '@/lib/copilot/required-event';
+import {
+  dispatchRateLimited,
+  RateLimitedClientError,
+} from '@/lib/api/rate-limit-event';
 
 interface ApiRequestOptions extends RequestInit {
   /** Request timeout in milliseconds (default: 30000) */
@@ -40,6 +44,60 @@ class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/**
+ * Thrown by the client when an AI route returns 402 `copilot_required`.
+ * The global `<CopilotRequiredBanner />` (mounted in `src/app/providers.tsx`)
+ * already shows the user-facing message; per-call sites can catch this
+ * to keep their own error state clean.
+ */
+export class CopilotRequiredClientError extends Error {
+  readonly status = 402;
+  readonly signUpUrl?: string;
+
+  constructor(detail: CopilotRequiredEventDetail) {
+    super(detail.message ?? 'GitHub Copilot subscription required.');
+    this.name = 'CopilotRequiredClientError';
+    this.signUpUrl = detail.signUpUrl;
+  }
+}
+
+/**
+ * Dispatch the `copilot-required` window event so the global banner can
+ * surface a 402 from any fetch site. Returns the dispatched detail so
+ * callers can also throw a typed {@link CopilotRequiredClientError}.
+ */
+function dispatchCopilotRequired(
+  body: unknown,
+  endpoint: string,
+): CopilotRequiredEventDetail {
+  const detail: CopilotRequiredEventDetail = {
+    message:
+      body && typeof body === 'object' && typeof (body as { message?: unknown }).message === 'string'
+        ? (body as { message: string }).message
+        : undefined,
+    signUpUrl:
+      body && typeof body === 'object' && typeof (body as { signUpUrl?: unknown }).signUpUrl === 'string'
+        ? (body as { signUpUrl: string }).signUpUrl
+        : undefined,
+    endpoint,
+  };
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(COPILOT_REQUIRED_EVENT, { detail }));
+  }
+  return detail;
+}
+
+/**
+ * True when a 402 body has the `copilot_required` shape AI routes return.
+ */
+function isCopilotRequiredBody(body: unknown): boolean {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    (body as { error?: unknown }).error === 'copilot_required'
+  );
 }
 
 // Request deduplication cache for GET requests
@@ -118,27 +176,20 @@ async function apiRequest<T>(
 
           const data = await response.json().catch(() => ({}));
 
-          // P5: 402 + `copilot_required` → broadcast so the UI banner can
+          // F4: 402 + `copilot_required` → broadcast so the global banner
+          // can react without each call site having to handle it.
+          if (response.status === 402 && isCopilotRequiredBody(data)) {
+            dispatchCopilotRequired(data, url);
+          }
+
+          // F5: 429 → broadcast so the global rate-limit toast/hook can
           // react without each call site having to handle it.
-          if (
-            response.status === 402 &&
-            typeof data === 'object' &&
-            data !== null &&
-            (data as { error?: unknown }).error === 'copilot_required' &&
-            typeof window !== 'undefined'
-          ) {
-            const detail: CopilotRequiredEventDetail = {
-              message: typeof (data as { message?: unknown }).message === 'string'
-                ? (data as { message: string }).message
-                : undefined,
-              signUpUrl: typeof (data as { signUpUrl?: unknown }).signUpUrl === 'string'
-                ? (data as { signUpUrl: string }).signUpUrl
-                : undefined,
-              endpoint: url,
-            };
-            window.dispatchEvent(
-              new CustomEvent(COPILOT_REQUIRED_EVENT, { detail }),
-            );
+          if (response.status === 429) {
+            const detail = dispatchRateLimited(response, data, url);
+            if (throwOnError) {
+              throw new RateLimitedClientError(detail);
+            }
+            return data as T;
           }
 
           if (!response.ok) {
@@ -253,4 +304,54 @@ export function apiDelete<T>(
   options?: Omit<ApiRequestOptions, 'method'>
 ): Promise<T> {
   return apiRequest<T>(url, { ...options, method: 'DELETE' });
+}
+
+/**
+ * Performs a fetch that returns the live {@link Response} so the caller
+ * can stream the body (SSE, chunked transfer, etc.).
+ *
+ * Unlike {@link apiPost}, the body is **not** consumed here. We only peek
+ * at the status to dispatch global signals:
+ *  - 402 `copilot_required` → `copilot-required` event + throws
+ *    {@link CopilotRequiredClientError}.
+ *  - 429 → `rate-limited` event + throws {@link RateLimitedClientError}.
+ *  - Other non-2xx → throws a generic `Error` with the HTTP status.
+ *  - 2xx → returns the live `Response` with body intact.
+ *
+ * A `Content-Type: application/json` header is added by default; pass
+ * `headers` to override.
+ */
+export async function apiStream(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    // Clone so we can peek at the body without consuming the caller's copy.
+    const peek = response.clone();
+    const body = await peek.json().catch(() => ({}));
+
+    if (response.status === 402 && isCopilotRequiredBody(body)) {
+      const detail = dispatchCopilotRequired(body, url);
+      throw new CopilotRequiredClientError(detail);
+    }
+
+    if (response.status === 429) {
+      const detail = dispatchRateLimited(response, body, url);
+      throw new RateLimitedClientError(detail);
+    }
+
+    throw new Error(
+      (body as { error?: string })?.error || `HTTP ${response.status}`,
+    );
+  }
+
+  return response;
 }

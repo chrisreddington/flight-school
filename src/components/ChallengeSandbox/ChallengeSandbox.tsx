@@ -27,6 +27,7 @@
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
 import { useGuidedPlan } from '@/hooks/use-guided-plan';
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
 import { focusStore } from '@/lib/focus';
 import type { RunResult } from '@/lib/editor/code-runner';
 import { runCode } from '@/lib/editor/code-runner';
@@ -198,6 +199,8 @@ export function ChallengeSandbox({
 
   // Pre-fetch guided plan in background so it's ready when user opens Guided Mode
   const { plan: guidedPlan, loading: isGuidedPlanLoading } = useGuidedPlan(challengeId, challenge);
+  const { disabled: isRateLimited, retryInSeconds: rateLimitRetryInSeconds } =
+    useRateLimitCountdown();
 
   // Get active file for language detection
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
@@ -509,10 +512,14 @@ export function ChallengeSandbox({
                       size="small"
                       onClick={handleEvaluate}
                       leadingVisual={PlayIcon}
-                      disabled={!workspace.files.some(f => f.content.trim())}
-                      aria-label="Evaluate code solution"
+                      disabled={!workspace.files.some(f => f.content.trim()) || isRateLimited}
+                      aria-label={
+                        isRateLimited
+                          ? `Evaluation paused. Retry in ${rateLimitRetryInSeconds}s`
+                          : 'Evaluate code solution'
+                      }
                     >
-                      Evaluate
+                      {isRateLimited ? `Retry in ${rateLimitRetryInSeconds}s` : 'Evaluate'}
                     </Button>
                   </>
                 )}

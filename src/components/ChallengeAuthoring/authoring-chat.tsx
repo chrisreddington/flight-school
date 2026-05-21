@@ -11,6 +11,7 @@
  */
 
 import { now, nowMs } from '@/lib/utils/date-utils';
+import { dispatchRateLimited } from '@/lib/api/rate-limit-event';
 import type { DailyChallenge } from '@/lib/focus/types';
 import {
   forwardRef,
@@ -174,6 +175,17 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
           });
 
           if (!response.ok) {
+            if (response.status === 429) {
+              // Surface the global rate-limit toast for streaming endpoints
+              // that don't go through `apiPost`.
+              let body: unknown = {};
+              try {
+                body = await response.clone().json();
+              } catch {
+                /* ignore */
+              }
+              dispatchRateLimited(response, body, '/api/challenge/author');
+            }
             throw new Error(`HTTP ${response.status}`);
           }
 
