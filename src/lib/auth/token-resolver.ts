@@ -61,7 +61,9 @@ export async function resolveFreshGitHubToken(userId: string): Promise<string | 
   }
 
   const expiresAtMs = stored.expiresAt * 1000;
-  const needsRefresh = stored.expiresAt > 0 && expiresAtMs - REFRESH_LEEWAY_MS <= nowMs();
+  // Fail-closed: expiresAt of 0 (unset/unknown) is treated as expired so we
+  // refresh rather than handing out a token of indeterminate age.
+  const needsRefresh = expiresAtMs - REFRESH_LEEWAY_MS <= nowMs();
   if (!needsRefresh) {
     return stored.accessToken;
   }

@@ -49,7 +49,11 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load cached quiz on mount — skip the generation step if available
+  // Load cached quiz on mount/topicTitle change — skip generation if cached.
+  // Reconciling local state with an external (sessionStorage) cache is a
+  // legitimate effect use; the rule's preferred alternatives (lazy init,
+  // useSyncExternalStore) don't fit a prop-driven re-read pattern.
+  /* eslint-disable react-hooks/set-state-in-effect -- hydrate from session cache on topicTitle change */
   useEffect(() => {
     const cached = readQuizCache(topicTitle);
     if (cached) {
@@ -59,6 +63,7 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
       setViewState('question');
     }
   }, [topicTitle]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const currentQuestion: QuizQuestion | null = quiz?.questions[currentIndex] ?? null;
   const reinforcedConcepts = useMemo(() => {

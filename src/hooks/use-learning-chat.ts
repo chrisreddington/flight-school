@@ -259,6 +259,11 @@ export function useLearningChat(): UseLearningChatReturn {
     }
     
     if (stillPending.size !== pendingStreamMessages.size) {
+      // Reconciling pending-stream tracking against storage updates from a
+      // background job is a legitimate two-source sync; pendingStreamMessages
+      // is real state mutated from multiple flows (send / cancel / cleanup),
+      // so it can't be derived purely from `threads`.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile pending-stream tracking with storage
       setPendingStreamMessages(stillPending);
     }
   }, [threads, pendingStreamMessages]);

@@ -128,7 +128,9 @@ export class InMemoryTokenStore implements TokenStore {
   }
 
   private isExpired(token: StoredToken): boolean {
-    return token.expiresAt > 0 && token.expiresAt * 1000 <= nowMs();
+    // Fail-closed: expiresAt of 0 (unset/unknown) is treated as expired so the
+    // caller refreshes rather than reusing a token of indeterminate age.
+    return token.expiresAt * 1000 <= nowMs();
   }
 }
 
