@@ -6,94 +6,61 @@ Flight School is a sample implementation showing how to build AI-powered develop
 
 ## Getting Started
 
-The fastest way to run Flight School is with **GitHub Codespaces** — everything is pre-configured:
+Flight School is multi-tenant: it authenticates each developer via a
+[GitHub App](https://docs.github.com/en/apps) OAuth flow (Auth.js v5) and
+threads the resulting user-to-server (`ghu_`) token through every GitHub API
+call and Copilot SDK session. To run it locally you need to register a
+GitHub App and supply `AUTH_*` credentials.
 
-1. Click **Code** → **Codespaces** → **Create codespace on main**
-2. Wait for setup to complete (installs dependencies and tools automatically)
-3. Run `gh auth login` to authenticate with GitHub
-4. Run `npm run dev` to start the app
+### Local dev quickstart
 
-That's it! Open the preview URL and you're ready to go.
+1. **Register a GitHub App** at <https://github.com/settings/apps/new>:
+   - **Homepage URL:** `http://localhost:3000`
+   - **Callback URL:** `http://localhost:3000/api/auth/callback/github`
+   - Enable **"Request user authorization (OAuth) during installation"**.
+   - Generate a client secret.
+2. **Configure environment.** Copy `.env.example` to `.env.local` and fill
+   in:
 
-### Running Locally
+   ```bash
+   AUTH_SECRET=                  # openssl rand -base64 32
+   AUTH_GITHUB_ID=               # GitHub App client id
+   AUTH_GITHUB_SECRET=           # GitHub App client secret
+   AUTH_TRUST_HOST=true
+   ```
+3. **Install and run:**
 
-To run Flight School on your own machine, you'll need:
+   ```bash
+   git clone https://github.com/chrisreddington/flight-school.git
+   cd flight-school
+   npm install
+   npm run dev
+   ```
+4. Open <http://localhost:3000> — you'll be redirected to GitHub to authorize
+   the app, then back to your personalized dashboard.
 
-- **Node.js 22+** — [Download here](https://nodejs.org/)
-- **GitHub CLI** — [Installation guide](https://cli.github.com/)
-- **GitHub Copilot CLI** — Required for AI features
-- **GitHub Copilot access** — Individual, Business, or Enterprise subscription
+> **Prerequisites:** Node.js 22+, npm, Git, and a GitHub Copilot subscription
+> (Individual, Business, or Enterprise) for the AI features.
 
-#### Step 1: Install and authenticate GitHub CLI
+### Deploy to Azure Container Apps
 
-```bash
-# Install GitHub CLI (if not already installed)
-# macOS
-brew install gh
+Production deployment is documented end-to-end:
 
-# Windows
-winget install GitHub.cli
+- [`docs/deployment-aca.md`](docs/deployment-aca.md) — Container image build,
+  ACA production checklist (env vars, Key Vault secrets, monitoring,
+  rate-limit tuning).
+- [`infra/README.md`](infra/README.md) — Bicep modules, GitHub App setup
+  against the ACA FQDN, deploy / rotate / cleanup recipes.
+- [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md) —
+  Multi-tenant design (Auth.js → per-request Octokit → per-session Copilot
+  SDK identity).
 
-# Then authenticate
-gh auth login
-```
+### Codespaces
 
-#### Step 2: Install GitHub Copilot CLI extension
-
-The Copilot SDK uses the Copilot CLI for AI features. Install it as a GitHub CLI extension:
-
-```bash
-gh extension install github/gh-copilot
-```
-
-#### Step 3: Clone and run
-
-```bash
-git clone https://github.com/chrisreddington/flight-school.git
-cd flight-school
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) — you should see your GitHub profile loaded automatically.
-
-### Alternative: Using a Personal Access Token
-
-If you prefer not to use the GitHub CLI, you can authenticate with a Personal Access Token (PAT):
-
-1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
-2. Click **Generate new token (classic)**
-3. Select these scopes:
-   - `repo` — Access your repositories
-   - `read:user` — Read your profile information
-   - `read:org` — Read organization membership (optional)
-4. Create a `.env.local` file in the project root:
-
-```bash
-GITHUB_TOKEN=ghp_your_token_here
-```
-
-> **Note:** You'll still need the GitHub Copilot CLI installed for AI-powered features like challenges, hints, and coaching. The token only handles GitHub API access for profile and repository data.
-
-### Multi-tenant OAuth (Auth.js v5 + GitHub App)
-
-When deployed publicly, Flight School authenticates each user via a GitHub App
-OAuth flow. The app receives a user-to-server (`ghu_`) token that downstream
-GitHub API calls and Copilot SDK sessions use on a per-request basis.
-
-Add the following to `.env.local` (see `.env.example`):
-
-```bash
-AUTH_SECRET=                  # openssl rand -base64 32
-AUTH_GITHUB_ID=               # GitHub App client id
-AUTH_GITHUB_SECRET=           # GitHub App client secret
-AUTH_TRUST_HOST=true          # required when running behind a proxy (e.g. ACA)
-```
-
-Configure the GitHub App with the callback URL
-`http(s)://<host>/api/auth/callback/github` and request the scopes
-`read:user user:email read:org repo`. Enable "Expire user authorization
-tokens" so refresh tokens are issued.
+Click **Code → Codespaces → Create codespace on main**. The dev container
+installs dependencies automatically; you still need to register a GitHub App
+(callback `https://<codespace-host>/api/auth/callback/github`) and populate
+`.env.local` before running `npm run dev`.
 
 ## Vision
 

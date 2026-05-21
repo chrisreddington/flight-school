@@ -55,18 +55,30 @@ The fastest way to get started is using GitHub Codespaces, which provides a full
    ```
 
 3. **Configure Environment**
-   
-   If you have the GitHub CLI installed and authenticated (`gh auth login`), the app can use your CLI token automatically. This shares authentication with GitHub Copilot, requiring no additional setup.
-   
-    **Alternative: Use Personal Access Token**
 
-   Create a `.env.local` file in the project root:
-   ```bash
-   # Required: GitHub token for API access
-   # Create at https://github.com/settings/tokens
-   # Required scopes: repo, read:user
-   GITHUB_TOKEN=your_github_pat_here
-   ```
+   Flight School authenticates every user via a GitHub App OAuth flow
+   (Auth.js v5). You need an `.env.local` for local development.
+
+   1. Register a GitHub App at <https://github.com/settings/apps/new>:
+      - **Homepage URL:** `http://localhost:3000`
+      - **Callback URL:** `http://localhost:3000/api/auth/callback/github`
+      - Enable **"Request user authorization (OAuth) during installation"**.
+      - Generate a client secret.
+   2. Copy `.env.example` to `.env.local` and fill in the required vars:
+
+      ```bash
+      AUTH_SECRET=                  # openssl rand -base64 32
+      AUTH_GITHUB_ID=               # GitHub App client id
+      AUTH_GITHUB_SECRET=           # GitHub App client secret
+      AUTH_TRUST_HOST=true
+      ```
+
+   > **Legacy `GITHUB_TOKEN` / `gh auth login`** still resolves a token for a
+   > small set of deprecated boot-time paths (see `getGitHubToken()` in
+   > `src/lib/github/client.ts`), but request handlers always go through the
+   > Auth.js session. The `gh` CLI fallback is **dev-only** — it is disabled
+   > when `NODE_ENV=production` or `ACA_DEPLOYMENT=true`. New code should
+   > not rely on it.
 
 4. **Start the Development Server**
    ```bash
@@ -114,7 +126,7 @@ src/
 ### Key Patterns
 
 - **API routes** in `src/app/api/` handle all GitHub and AI provider calls server-side
-- **Authentication**: Always use `getGitHubToken()` from `@/lib/github/client`
+- **Authentication**: resolve the user in handlers via `requireUserContext()` from `@/lib/auth/context`, then use `getOctokitForRequest()` from `@/lib/github/client`. For AI-backed routes prefer `withUserGuards` from `@/lib/security/guard`. See [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md).
 - **Component organization**: Each component in its own folder with co-located styles
 
 ## Making Changes

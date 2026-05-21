@@ -6,31 +6,87 @@ Next.js 14 App Router application with Primer React UI. All API calls to GitHub 
 
 **Data Flow**: Dashboard → `/api/profile` (Octokit direct) → `/api/focus` (Copilot SDK creative generation) → UI
 
+## Multi-tenant design
+
+Flight School is **multi-tenant**: every request is authenticated as a specific
+GitHub user via Auth.js v5 + a GitHub App OAuth flow, and that user's
+`ghu_` user-to-server token is what downstream GitHub API calls and Copilot
+SDK sessions use. There is **no process-wide token** and **no Octokit
+singleton**. See [`docs/architecture-multitenant.md`](../docs/architecture-multitenant.md)
+for the full design.
+
 ## GitHub API Access
 
-This project uses the `octokit` package for direct GitHub API access and the `@github/copilot-sdk` for AI-powered features.
+This project uses the `octokit` package for direct GitHub API access and the
+`@github/copilot-sdk` for AI-powered features. Both are bound per-request to
+the authenticated user's token.
 
 ### Authentication (SINGLE SOURCE OF TRUTH)
 
-**Always use `getGitHubToken()` from `@/lib/github/client`** for GitHub authentication.
+In server code that handles an authenticated request — API routes, server
+components, server actions — **resolve the user via
+`@/lib/auth/context`** and let the GitHub/Copilot factories pick up the token
+from there.
 
 ```typescript
-import { getGitHubToken, isGitHubConfigured } from '@/lib/github/client';
+import { requireUserContext, getUserContext } from '@/lib/auth/context';
+import { getOctokitForRequest, getOctokitForToken } from '@/lib/github/client';
 
-// Check if auth is available
-if (await isGitHubConfigured()) {
-  const token = await getGitHubToken(); // Returns token or null
-}
+// In an API route handler:
+const { userId, login, accessToken } = await requireUserContext(); // throws UnauthorizedError (401) if no session
+const octokit = await getOctokitForRequest();                      // fresh, instrumented, bound to this user
+
+// If you already have a token (e.g. inside a guard or background job):
+const octokit2 = getOctokitForToken(accessToken);
 ```
 
-Token resolution order:
-1. `GITHUB_TOKEN` environment variable (fastest)
-2. `gh auth token` from GitHub CLI (shares Copilot auth, no extra setup needed)
+Rules:
 
-**NEVER** access `process.env.GITHUB_TOKEN` directly outside of `client.ts`.
+- **Per-request Octokit only.** Never cache or share an Octokit across users
+  or across requests. `getOctokitForRequest()` constructs a fresh, instrumented
+  instance every call.
+- **Never read `process.env.GITHUB_TOKEN` directly** outside of
+  `src/lib/github/client.ts`. There is no ambient identity to fall back to in
+  production.
+- **Hot AI routes should use `withUserGuards`** (`src/lib/security/guard.ts`),
+  which composes `requireUserContext` + rate limit + concurrent-session cap +
+  audit log around the handler.
 
-- Same token is shared between Octokit and Copilot SDK (MCP tools)
-- User identity is consistent across both systems
+### Deprecated / limited-use APIs
+
+| Symbol | Status | Allowed use |
+|--------|--------|-------------|
+| `getGitHubToken()` (in `@/lib/github/client`) | `@deprecated` | Boot-time / instrumentation paths that legitimately operate without a user. **Not** in request handlers. |
+| `isGitHubConfigured()` | `@deprecated` | Health/debug checks only. |
+| `getAuthMethod()` | Internal | Diagnostics. Returns `'github-cli'` only in dev. |
+
+### `gh` CLI fallback is dev-only
+
+`getTokenFromGhCli()` is automatically disabled when
+`NODE_ENV === 'production'` **or** `ACA_DEPLOYMENT === 'true'`. Production
+deployments must rely on the Auth.js session token; there is no host identity
+to inherit.
+
+### Copilot SDK: per-session GitHub identity
+
+The `CopilotClient` is constructed once with `useLoggedInUser: false` (see
+`src/lib/copilot/sessions.ts`). Every session passes the user's token via
+`SessionOptions.gitHubToken`, and the MCP server config is rebuilt per call
+with that same token (see `src/lib/copilot/mcp.ts`).
+
+```typescript
+import {
+  createLoggedChatSession,
+  createLoggedCoachSession,
+  type SessionIdentity,
+} from '@/lib/copilot/server';
+
+const identity: SessionIdentity = { userId, gitHubToken: accessToken };
+const session = await createLoggedChatSession(identity, 'chat', prompt);
+```
+
+Chat session cache keys include `userId` so two users sharing a
+`conversationId` can never collide.
 
 ### When to Use Which
 
@@ -39,15 +95,17 @@ Token resolution order:
 | Fetch user data | `octokit.rest.users.getAuthenticated()` | Fast, deterministic |
 | List repositories | `octokit.rest.repos.listForAuthenticatedUser()` | Fast, deterministic |
 | Get activity events | `octokit.rest.activity.listEventsForAuthenticatedUser()` | Fast, deterministic |
-| Creative AI generation | Copilot SDK session | AI adds real value |
-| Multi-turn chat | Copilot SDK session with MCP | Conversation context |
+| Creative AI generation | Copilot SDK session via `createLoggedCoachSession` | AI adds real value |
+| Multi-turn chat | Copilot SDK session via `createLoggedChatSession` (+ MCP) | Conversation context |
 
 ### Code Location
 
 | Path | Purpose |
 |------|---------|
-| `src/lib/github/` | Direct GitHub API (client.ts, user.ts, repos.ts, activity.ts, issues.ts) |
-| `src/lib/copilot/` | Copilot SDK (server.ts, evaluation.ts, hints.ts, activity-logger.ts) |
+| `src/lib/auth/` | Auth.js v5 config, user-context resolution, token store |
+| `src/lib/github/` | Per-request Octokit factories + GitHub data access |
+| `src/lib/copilot/` | Copilot SDK sessions (per-session `gitHubToken`), MCP config |
+| `src/lib/security/` | `withUserGuards`, rate limit, session cap, audit log |
 
 ### Never Use SDK For
 
@@ -65,10 +123,20 @@ The SDK is used authentically for:
 - **MCP tool access**: Real-time GitHub exploration during chat
 
 ```typescript
-// Create a session for chat or coaching
-import { createChatSession, createCoachSession } from '@/lib/copilot/server';
+// Create a session for chat or coaching. The caller must supply the
+// per-request user identity so the session inherits their GitHub token.
+import {
+  createLoggedChatSession,
+  createLoggedCoachSession,
+} from '@/lib/copilot/server';
+import { requireUserContext } from '@/lib/auth/context';
 
-const session = await createChatSession();
+const { userId, accessToken } = await requireUserContext();
+const session = await createLoggedChatSession(
+  { userId, gitHubToken: accessToken },
+  'chat',
+  prompt,
+);
 const response = await session.sendAndWait({ prompt });
 ```
 
@@ -263,19 +331,25 @@ Quick-start templates provide context for common challenge types:
 
 ## Environment Variables
 
+See [`.env.example`](../.env.example) for the canonical list. Highlights:
+
 ```bash
-# GitHub Authentication (choose one - gh CLI fallback works automatically)
-GITHUB_TOKEN=xxx              # Optional: PAT for explicit auth
-# OR just run `gh auth login`  # CLI auth shares Copilot token
+# Auth.js v5 + GitHub App (REQUIRED in every environment)
+AUTH_SECRET=                  # openssl rand -base64 32
+AUTH_GITHUB_ID=               # GitHub App client id
+AUTH_GITHUB_SECRET=           # GitHub App client secret
+AUTH_TRUST_HOST=true          # required behind a proxy (ACA, Codespaces, etc.)
 
-# GitHub Models (recommended for MVP)
-GITHUB_MODELS_ENABLED=true
-GITHUB_MODELS_MODEL=gpt-4o-mini  # optional
+# Production-only: disable the dev gh CLI fallback in client.ts
+ACA_DEPLOYMENT=true
 
-# Alternative: Azure AI Foundry
-AZURE_AI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_AI_KEY=xxx
-AZURE_AI_DEPLOYMENT=gpt-4
+# Per-user abuse controls (defaults match in-code values)
+AUDIT_SALT=                   # openssl rand -hex 32
+# RATE_LIMIT_CHAT_PER_MIN=30
+# RATE_LIMIT_CHAT_CAP=3
+
+# Legacy single-tenant PAT — dev only, not used by request handlers
+# GITHUB_TOKEN=
 ```
 
 ## Commands
