@@ -41,18 +41,13 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             <span className={styles.iconAccent}>
               <PersonIcon size={20} />
             </span>
-            <Heading as="h3" className={styles.sectionTitle}>
+            <Heading as="h2" className={styles.sectionTitle}>
               Your Profile &amp; Activity
             </Heading>
           </Stack>
         </Stack>
         
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          padding: '3rem 0'
-        }}>
+        <div className={styles.sectionLoadingCenter}>
           <Spinner size="small" />
         </div>
       </section>
@@ -67,7 +62,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             <span className={styles.iconAccent}>
               <PersonIcon size={20} />
             </span>
-            <Heading as="h3" className={styles.sectionTitle}>
+            <Heading as="h2" className={styles.sectionTitle}>
               Your Profile &amp; Activity
             </Heading>
           </Stack>
@@ -100,7 +95,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
           <span className={styles.iconAccent}>
             <PersonIcon size={20} />
           </span>
-          <Heading as="h3" className={styles.sectionTitle}>
+          <Heading as="h2" className={styles.sectionTitle}>
             Your Profile &amp; Activity
           </Heading>
           {isDemo && <Label size="small">Demo</Label>}
@@ -152,6 +147,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
                 progress={lang.percentage}
                 barSize="small"
                 style={{ '--progress-bar-bg': lang.color } as CSSProperties}
+                aria-label={`${lang.name}: ${lang.percentage}%`}
               />
             </div>
           ))}

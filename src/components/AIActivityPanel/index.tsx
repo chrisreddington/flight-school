@@ -253,7 +253,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
             placeholder="Search events..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '100%' }}
+            className={styles.searchInput}
             aria-label="Search events"
           />
         </div>
@@ -385,7 +385,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
       {/* Footer Stats */}
       <div className={styles.footer}>
         {/* Stats row */}
-        <div className="d-flex gap-3 mb-2" style={{ flexWrap: 'wrap' }}>
+        <div className={`d-flex gap-3 mb-2 ${styles.flexWrap}`}>
           <span className="f6 color-fg-muted">
             <strong>{stats.total}</strong> calls
           </span>
@@ -398,7 +398,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
         </div>
 
         {/* Actions row */}
-        <div className="d-flex gap-2" style={{ flexWrap: 'wrap' }}>
+        <div className={`d-flex gap-2 ${styles.flexWrap}`}>
           <Button size="small" variant="danger" leadingVisual={TrashIcon} onClick={clear}>
             Clear
           </Button>
