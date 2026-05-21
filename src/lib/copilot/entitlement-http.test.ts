@@ -2,26 +2,12 @@
  * Tests for the HTTP mapping of CopilotEntitlementRequiredError → 402 (P5).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { CopilotEntitlementRequiredError } from './entitlement';
 import { copilotEntitlementErrorResponse } from './entitlement-http';
 
 describe('copilotEntitlementErrorResponse', () => {
-  const ORIGINAL = process.env.COPILOT_REQUIRED;
-
-  beforeEach(() => {
-    delete process.env.COPILOT_REQUIRED;
-  });
-
-  afterEach(() => {
-    if (ORIGINAL === undefined) {
-      delete process.env.COPILOT_REQUIRED;
-    } else {
-      process.env.COPILOT_REQUIRED = ORIGINAL;
-    }
-  });
-
   it('returns null for unrelated errors', () => {
     expect(copilotEntitlementErrorResponse(new Error('nope'))).toBeNull();
     expect(copilotEntitlementErrorResponse(null)).toBeNull();
@@ -49,12 +35,29 @@ describe('copilotEntitlementErrorResponse', () => {
     expect(res!.status).toBe(402);
   });
 
-  it('returns the deferred-fallback shape when COPILOT_REQUIRED=false', async () => {
-    process.env.COPILOT_REQUIRED = 'false';
+  // H2: the GitHub Models REST fallback was removed. The 402 body must
+  // never advertise a `fallback` hint — Copilot is now the only AI route.
+  it('never includes a `fallback` field in the 402 body', async () => {
     const res = copilotEntitlementErrorResponse(new CopilotEntitlementRequiredError());
-    expect(res!.status).toBe(402);
     const body = await res!.json();
-    expect(body.error).toBe('copilot_required');
-    expect(body.fallback).toBe('github_models_pending');
+    expect(body).not.toHaveProperty('fallback');
+  });
+
+  it('ignores any legacy COPILOT_REQUIRED=false escape hatch', async () => {
+    const ORIGINAL = process.env.COPILOT_REQUIRED;
+    process.env.COPILOT_REQUIRED = 'false';
+    try {
+      const res = copilotEntitlementErrorResponse(new CopilotEntitlementRequiredError('still required'));
+      expect(res!.status).toBe(402);
+      const body = await res!.json();
+      expect(body).toEqual({
+        error: 'copilot_required',
+        message: 'still required',
+        signUpUrl: 'https://github.com/features/copilot',
+      });
+    } finally {
+      if (ORIGINAL === undefined) delete process.env.COPILOT_REQUIRED;
+      else process.env.COPILOT_REQUIRED = ORIGINAL;
+    }
   });
 });
