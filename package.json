@@ -67,7 +67,7 @@
     "depcheck": "^1.4.7",
     "eslint": "^10.0.3",
     "eslint-config-next": "16.2.6",
-    "jsdom": "^28.0.0",
+    "jsdom": "^29.1.1",
     "knip": "^6.13.1",
     "madge": "^8.0.0",
     "ts-prune": "^0.10.3",
