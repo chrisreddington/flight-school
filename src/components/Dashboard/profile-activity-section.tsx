@@ -41,7 +41,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             <span className={styles.iconAccent}>
               <PersonIcon size={20} />
             </span>
-            <Heading as="h3" className={styles.sectionTitle}>
+            <Heading as="h2" className={styles.sectionTitle}>
               Your Profile &amp; Activity
             </Heading>
           </Stack>
@@ -67,7 +67,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             <span className={styles.iconAccent}>
               <PersonIcon size={20} />
             </span>
-            <Heading as="h3" className={styles.sectionTitle}>
+            <Heading as="h2" className={styles.sectionTitle}>
               Your Profile &amp; Activity
             </Heading>
           </Stack>
@@ -100,7 +100,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
           <span className={styles.iconAccent}>
             <PersonIcon size={20} />
           </span>
-          <Heading as="h3" className={styles.sectionTitle}>
+          <Heading as="h2" className={styles.sectionTitle}>
             Your Profile &amp; Activity
           </Heading>
           {isDemo && <Label size="small">Demo</Label>}
