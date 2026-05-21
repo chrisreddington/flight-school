@@ -10,6 +10,7 @@
  */
 
 import { logger } from '@/lib/logger';
+import { recordAiOperation } from '@/lib/observability/telemetry';
 import { activityLogger } from './activity/logger';
 import {
   CHAT_MODEL,
@@ -237,6 +238,8 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         }
       }
 
+      recordAiOperation('streamSession', durationMs, model, 'ok');
+
       // Yield final done event
       yield {
         type: 'done',
@@ -246,6 +249,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      recordAiOperation('streamSession', Date.now() - startTime, model, 'error');
       complete(undefined, errorMessage);
       yield { type: 'error', message: errorMessage };
     } finally {

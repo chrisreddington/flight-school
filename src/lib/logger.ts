@@ -1,4 +1,5 @@
 import { now } from '@/lib/utils/date-utils';
+import { getActiveTraceContext } from '@/lib/observability/telemetry';
 
 /**
  * Application Logger
@@ -22,6 +23,37 @@ import { now } from '@/lib/utils/date-utils';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 class Logger {
+  private enrichDataWithTraceContext(data: unknown): unknown {
+    const traceContext = getActiveTraceContext();
+    if (!traceContext) {
+      return data;
+    }
+
+    if (data === undefined) {
+      return traceContext;
+    }
+
+    if (data instanceof Error) {
+      return {
+        ...traceContext,
+        error: {
+          name: data.name,
+          message: data.message,
+          stack: data.stack,
+        },
+      };
+    }
+
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      return { ...data, ...traceContext };
+    }
+
+    return {
+      ...traceContext,
+      value: data,
+    };
+  }
+
   private shouldLog(level: LogLevel): boolean {
     if (level === 'debug') {
       // Only debug in development or if explicitly enabled
@@ -46,7 +78,8 @@ class Logger {
     if (!this.shouldLog(level)) return;
 
     const formatted = this.formatMessage(level, message, tag);
-    const args = data !== undefined ? [formatted, data] : [formatted];
+    const enrichedData = this.enrichDataWithTraceContext(data);
+    const args = enrichedData !== undefined ? [formatted, enrichedData] : [formatted];
 
     switch (level) {
       case 'error':

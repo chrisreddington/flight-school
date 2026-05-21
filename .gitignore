@@ -41,6 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 .playwright-mcp
+.modules/
+.agents/
 
 # Keeping this entry in case anyone adds it to the local repo
 .data/
