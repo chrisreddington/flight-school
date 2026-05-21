@@ -63,6 +63,9 @@ async function getCopilotClient(): Promise<CopilotClient> {
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
     client = new CopilotClient({
+      // Multitenant: never fall back to the host's ambient gh CLI identity.
+      // GitHub tokens are supplied per-session via SessionOptions.gitHubToken.
+      useLoggedInUser: false,
       ...(otlpEndpoint && {
         telemetry: {
           otlpEndpoint,
@@ -100,6 +103,8 @@ interface CachedChatSession {
   session: CopilotSession;
   lastUsed: number;
   metrics: SessionCreationMetrics;
+  /** GitHub user ID this session is bound to (for diagnostics + eviction logging). */
+  userId: string;
 }
 
 // Store conversation cache in global to survive HMR in dev mode
@@ -116,6 +121,7 @@ function pruneChatSessions(): void {
   const now = Date.now();
   for (const [key, entry] of chatSessionCache.entries()) {
     if (now - entry.lastUsed > CHAT_SESSION_TTL_MS) {
+      log.debug('Chat session expired', { key, userId: entry.userId });
       entry.session.destroy().catch((err) => {
         log.warn('Session destroy warning', { err });
       });
@@ -130,6 +136,7 @@ function pruneChatSessions(): void {
   const sorted = [...chatSessionCache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
   const overflow = sorted.slice(0, chatSessionCache.size - CHAT_SESSION_MAX);
   for (const [key, entry] of overflow) {
+    log.debug('Chat session evicted (LRU)', { key, userId: entry.userId });
     entry.session.destroy().catch((err) => {
       log.warn('Session destroy warning', { err });
     });
@@ -166,13 +173,26 @@ export async function createSessionWithMetrics(
     async () => {
       try {
         const copilot = await getCopilotClient();
-        const mcpConfig = includeMcp ? await getMcpServerConfig(options?.tools) : null;
+        let mcpConfig = null;
+        if (includeMcp) {
+          if (options?.gitHubToken) {
+            mcpConfig = getMcpServerConfig({
+              token: options.gitHubToken,
+              tools: options.tools,
+            });
+          } else {
+            log.warn('No GitHub token supplied - MCP tools will be disabled');
+          }
+        }
         const permissionHandler = includeMcp ? mcpOnlyPermissionHandler : approveAll;
 
         const session = await copilot.createSession({
           model,
           streaming: true, // Enable streaming for delta events
           onPermissionRequest: permissionHandler,
+          // Per-session GitHub identity (multitenancy). Independent of any
+          // client-level token. Only set when the caller supplied one.
+          ...(options?.gitHubToken && { gitHubToken: options.gitHubToken }),
           // Disable built-in tools we don't need; prefer GitHub MCP tools for repo context
           excludedTools: [
             'shell',
@@ -237,27 +257,32 @@ export async function createSessionWithMetrics(
  * For new conversations, creates a fresh session and caches it.
  * For existing conversations, reuses the cached session (multi-turn).
  *
+ * The cache is keyed by `userId` so that two different GitHub identities
+ * can never share a session entry even if they share a conversation ID.
+ *
+ * @param userId - GitHub user ID. Required to isolate session caches per user.
  * @param conversationId - Optional conversation ID for session reuse
  * @param poolKey - Pool identifier (for logging/metrics)
  * @param options - Session configuration
  * @returns Session and creation metrics
  */
 export async function getConversationSession(
+  userId: string,
   conversationId: string | undefined,
   poolKey: string,
   options: SessionOptions
 ): Promise<SessionWithMetrics> {
   if (!conversationId) {
-    log.debug('No conversation ID - creating fresh session', { poolKey });
+    log.debug('No conversation ID - creating fresh session', { poolKey, userId });
     return createSessionWithMetrics(options, poolKey);
   }
 
   pruneChatSessions();
 
-  const cacheKey = `${poolKey}:${conversationId}`;
+  const cacheKey = `${userId}:${poolKey}:${conversationId}`;
   const cached = chatSessionCache.get(cacheKey);
   if (cached) {
-    log.debug('Conversation HIT', { conversationId, poolKey });
+    log.debug('Conversation HIT', { conversationId, poolKey, userId });
     cached.lastUsed = Date.now();
     return {
       session: cached.session,
@@ -270,7 +295,7 @@ export async function getConversationSession(
     };
   }
 
-  log.debug('Conversation MISS - creating session', { conversationId, poolKey });
+  log.debug('Conversation MISS - creating session', { conversationId, poolKey, userId });
   const { session, metrics } = await createSessionWithMetrics(options, poolKey);
   const cachedMetrics = {
     ...metrics,
@@ -281,6 +306,7 @@ export async function getConversationSession(
     session,
     lastUsed: Date.now(),
     metrics: cachedMetrics,
+    userId,
   });
 
   return { session, metrics: cachedMetrics };

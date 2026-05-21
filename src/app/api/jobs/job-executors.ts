@@ -10,7 +10,7 @@ import {
   buildSingleGoalPrompt,
   buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
-import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
+import { createLoggedLightweightCoachSession, type SessionIdentity } from '@/lib/copilot/server';
 import { createEvaluationStreamingSession, createLearningStreamingSession, createStreamingChatSession } from '@/lib/copilot/streaming';
 import {
   buildEvaluationPrompt,
@@ -19,6 +19,7 @@ import {
   parseEvaluationResponse,
   parsePartialEvaluation,
 } from '@/lib/copilot/evaluation';
+import { getOctokitForToken } from '@/lib/github/client';
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import type {
@@ -84,7 +85,8 @@ export async function isJobStillValid(jobId: string): Promise<boolean> {
  */
 export async function executeTopicRegeneration(
   jobId: string,
-  input: TopicRegenerationInput
+  input: TopicRegenerationInput,
+  identity: SessionIdentity
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -94,7 +96,8 @@ export async function executeTopicRegeneration(
     // Build context
     let serializedContext = '';
     try {
-      const compactProfile = await buildCompactContext(1000);
+      const octokit = getOctokitForToken(identity.gitHubToken);
+      const compactProfile = await buildCompactContext(octokit, 1000);
       serializedContext = serializeContext(compactProfile);
     } catch (err) {
       log.warn('Failed to build context:', err);
@@ -110,6 +113,7 @@ export async function executeTopicRegeneration(
     );
     
     const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
       'Job: topic-regeneration',
       prompt.slice(0, 50)
     );
@@ -157,7 +161,8 @@ export async function executeTopicRegeneration(
  */
 export async function executeChallengeRegeneration(
   jobId: string,
-  input: ChallengeRegenerationInput
+  input: ChallengeRegenerationInput,
+  identity: SessionIdentity
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -167,7 +172,8 @@ export async function executeChallengeRegeneration(
     // Build context
     let serializedContext = '';
     try {
-      const compactProfile = await buildCompactContext(1000);
+      const octokit = getOctokitForToken(identity.gitHubToken);
+      const compactProfile = await buildCompactContext(octokit, 1000);
       serializedContext = serializeContext(compactProfile);
     } catch (err) {
       log.warn('Failed to build context:', err);
@@ -183,6 +189,7 @@ export async function executeChallengeRegeneration(
     );
     
     const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
       'Job: challenge-regeneration',
       prompt.slice(0, 50)
     );
@@ -230,7 +237,8 @@ export async function executeChallengeRegeneration(
  */
 export async function executeGoalRegeneration(
   jobId: string,
-  input: GoalRegenerationInput
+  input: GoalRegenerationInput,
+  identity: SessionIdentity
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -240,7 +248,8 @@ export async function executeGoalRegeneration(
     // Build context
     let serializedContext = '';
     try {
-      const compactProfile = await buildCompactContext(1000);
+      const octokit = getOctokitForToken(identity.gitHubToken);
+      const compactProfile = await buildCompactContext(octokit, 1000);
       serializedContext = serializeContext(compactProfile);
     } catch (err) {
       log.warn('Failed to build context:', err);
@@ -256,6 +265,7 @@ export async function executeGoalRegeneration(
     );
     
     const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
       'Job: goal-regeneration',
       prompt.slice(0, 50)
     );
@@ -304,7 +314,8 @@ export async function executeGoalRegeneration(
  */
 export async function executeChatResponse(
   jobId: string,
-  input: ChatResponseInput
+  input: ChatResponseInput,
+  identity: SessionIdentity
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -329,8 +340,8 @@ export async function executeChatResponse(
     
     // Create the appropriate streaming session
     const session = learningMode
-      ? await createLearningStreamingSession(contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId)
-      : await createStreamingChatSession(contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId);
+      ? await createLearningStreamingSession(identity, contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId)
+      : await createStreamingChatSession(identity, contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId);
     
     registerSession(jobId, { 
       destroy: async () => {
@@ -453,7 +464,8 @@ export async function executeChatResponse(
  */
 export async function executeChallengeEvaluation(
   jobId: string,
-  input: ChallengeEvaluationInput
+  input: ChallengeEvaluationInput,
+  identity: SessionIdentity
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
@@ -492,6 +504,7 @@ export async function executeChallengeEvaluation(
     
     // Create streaming session
     const { stream, cleanup } = await createEvaluationStreamingSession(
+      identity,
       prompt,
       EVALUATION_SYSTEM_PROMPT,
       `Job: ${jobId}`

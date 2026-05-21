@@ -214,16 +214,30 @@ export function wrapSessionWithLogging(
 }
 
 /**
+ * Common per-request identity required by every session factory.
+ *
+ * `userId` partitions the in-memory session cache; `gitHubToken` is forwarded
+ * to the Copilot SDK so the underlying session uses the caller's GitHub
+ * identity (multitenancy — see SessionOptions.gitHubToken).
+ */
+export interface SessionIdentity {
+  userId: string;
+  gitHubToken: string;
+}
+
+/**
  * Create a logged coach session for focus generation.
  * 
  * This is a convenience function that creates a coach session
  * with automatic activity logging built in.
  * 
+ * @param identity - Per-request user identity (userId + gitHubToken)
  * @param operationName - Name for logging (default: "Coach Session")
  * @param inputPrompt - The prompt being sent (for logging context)
  * @returns Wrapped session with logging
  */
 export async function createLoggedCoachSession(
+  identity: SessionIdentity,
   operationName = 'Coach Session',
   inputPrompt = ''
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
@@ -231,6 +245,7 @@ export async function createLoggedCoachSession(
     includeMcpTools: true,
     tools: ['get_me', 'list_user_repositories'],
     systemMessage: COACH_SYSTEM_PROMPT,
+    gitHubToken: identity.gitHubToken,
   }, 'coach:mcp');
   return wrapSessionWithLogging(
     session,
@@ -244,12 +259,14 @@ export async function createLoggedCoachSession(
 
 /**
  * Create a logged coach session without MCP tools (lightweight/fast).
- * 
+ *
+ * @param identity - Per-request user identity (userId + gitHubToken)
  * @param operationName - Name for logging
  * @param inputPrompt - Initial prompt context
  * @returns Logged session wrapper
  */
 export async function createLoggedLightweightCoachSession(
+  identity: SessionIdentity,
   operationName = 'Coach Session (fast)',
   inputPrompt = ''
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
@@ -257,6 +274,7 @@ export async function createLoggedLightweightCoachSession(
     includeMcpTools: false,
     model: MODEL_TIERS.fastChat,
     systemMessage: COACH_LIGHTWEIGHT_PROMPT,
+    gitHubToken: identity.gitHubToken,
   }, 'coach:lightweight');
   return wrapSessionWithLogging(
     session,
@@ -273,21 +291,29 @@ export async function createLoggedLightweightCoachSession(
  * 
  * This creates a LIGHTWEIGHT session without MCP tools for fast responses.
  * For GitHub exploration, use createLoggedGitHubChatSession instead.
- * 
+ *
+ * @param identity - Per-request user identity (userId + gitHubToken)
  * @param operationName - Name for logging (default: "Chat Session")
  * @param inputPrompt - The prompt being sent (for logging context)
  * @returns Wrapped session with logging
  */
 export async function createLoggedChatSession(
+  identity: SessionIdentity,
   operationName = 'Chat Session',
   inputPrompt = '',
   conversationId?: string
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const { session, metrics } = await getConversationSession(conversationId, 'chat:lightweight', {
-    includeMcpTools: false,
-    model: CHAT_MODEL,
-    systemMessage: CHAT_SYSTEM_PROMPT,
-  });
+  const { session, metrics } = await getConversationSession(
+    identity.userId,
+    conversationId,
+    'chat:lightweight',
+    {
+      includeMcpTools: false,
+      model: CHAT_MODEL,
+      systemMessage: CHAT_SYSTEM_PROMPT,
+      gitHubToken: identity.gitHubToken,
+    },
+  );
   return wrapSessionWithLogging(
     session,
     operationName,
@@ -304,23 +330,31 @@ export async function createLoggedChatSession(
  * 
  * Use this when the user wants to explore repos, search code, etc.
  * Slower to create due to MCP configuration, but enables GitHub access.
- * 
+ *
+ * @param identity - Per-request user identity (userId + gitHubToken)
  * @param operationName - Name for logging
  * @param inputPrompt - The prompt being sent (for logging context)
  * @returns Wrapped session with logging
  */
 export async function createLoggedGitHubChatSession(
+  identity: SessionIdentity,
   operationName = 'GitHub Chat Session',
   inputPrompt = '',
   conversationId?: string
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
   const chatTools = process.env.COPILOT_GITHUB_MCP_TOOLS?.split(',').map((tool) => tool.trim()).filter(Boolean);
-  const { session, metrics } = await getConversationSession(conversationId, 'chat:mcp', {
-    includeMcpTools: true,
-    model: CHAT_MODEL,
-    ...(chatTools && chatTools.length > 0 && { tools: chatTools }),
-    systemMessage: GITHUB_CHAT_SYSTEM_PROMPT,
-  });
+  const { session, metrics } = await getConversationSession(
+    identity.userId,
+    conversationId,
+    'chat:mcp',
+    {
+      includeMcpTools: true,
+      model: CHAT_MODEL,
+      ...(chatTools && chatTools.length > 0 && { tools: chatTools }),
+      systemMessage: GITHUB_CHAT_SYSTEM_PROMPT,
+      gitHubToken: identity.gitHubToken,
+    },
+  );
   return wrapSessionWithLogging(
     session,
     operationName,

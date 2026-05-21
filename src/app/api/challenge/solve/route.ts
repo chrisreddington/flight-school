@@ -30,6 +30,7 @@ import {
 } from '@/lib/challenge/solution-generation';
 import { createLoggedCoachSession } from '@/lib/copilot/server';
 import type { ChallengeDef } from '@/lib/copilot/types';
+import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 import { extractJSON } from '@/lib/utils/json-utils';
 import { NextRequest } from 'next/server';
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
 
     const { challenge, files } = parseResult.data;
 
+    const ctx = await requireUserContext();
+    const identity = { userId: ctx.userId, gitHubToken: ctx.accessToken };
+
     log.info(`Generating solution for: ${challenge.title} (${files.length} files)`);
 
     // Build the solution prompt with system prompt injected
@@ -76,6 +80,7 @@ export async function POST(request: NextRequest) {
 
     // Create a logged session and send the prompt
     const session = await createLoggedCoachSession(
+      identity,
       'Challenge Solution Generation',
       systemPromptedPrompt.slice(0, 100)
     );

@@ -6,29 +6,14 @@
  * autonomously-chosen interests sustains intrinsic motivation.
  */
 
-import { getOctokit } from './client';
-import { nowMs } from '@/lib/utils/date-utils';
+import type { Octokit } from 'octokit';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-/** Cache TTL: 24 hours */
-const STARRED_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
 /** Number of recently starred repos to fetch */
 const STARRED_LIMIT = 20;
-
-// =============================================================================
-// Cache
-// =============================================================================
-
-interface CachedStarred {
-  interests: string[];
-  timestamp: number;
-}
-
-let starredCache: CachedStarred | null = null;
 
 // =============================================================================
 // Public API
@@ -39,29 +24,17 @@ let starredCache: CachedStarred | null = null;
  *
  * @remarks
  * Returns a deduplicated list of languages and topics from the last STARRED_LIMIT
- * starred repos. Cached for 24 hours. Used in `buildCompactContext` as the
- * `si` (star interests) field.
+ * starred repos. Used in `buildCompactContext` as the `si` (star interests) field.
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param username - GitHub username
  * @returns Deduplicated array of interest signals (languages + topics)
  */
-export async function getStarredInterests(username: string): Promise<string[]> {
-  if (starredCache && nowMs() - starredCache.timestamp < STARRED_CACHE_TTL_MS) {
-    return starredCache.interests;
-  }
-
-  const interests = await fetchStarredInterests(username);
-  starredCache = { interests, timestamp: nowMs() };
-  return interests;
-}
-
-// =============================================================================
-// Internal helpers
-// =============================================================================
-
-async function fetchStarredInterests(username: string): Promise<string[]> {
+export async function getStarredInterests(
+  octokit: Octokit,
+  username: string
+): Promise<string[]> {
   try {
-    const octokit = await getOctokit();
     const response = await octokit.rest.activity.listReposStarredByUser({
       username,
       per_page: STARRED_LIMIT,

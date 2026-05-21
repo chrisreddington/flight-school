@@ -5,6 +5,7 @@
  */
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import type {
   ChallengeEvaluationInput,
   ChallengeRegenerationInput,
@@ -72,6 +73,8 @@ export async function cancelRunningJob(jobId: string): Promise<boolean> {
 }
 
 export async function POST(request: NextRequest) {
+  const { userId, accessToken } = await requireUserContext();
+  const identity = { userId, gitHubToken: accessToken };
   const body = await parseJsonBodyWithFallback<CreateJobRequest>(request, {} as CreateJobRequest);
   
   if (!body.type) {
@@ -87,34 +90,35 @@ export async function POST(request: NextRequest) {
     input: body.input as unknown as Record<string, unknown>,
   });
   
-  // Start execution async (fire and forget)
+  // Start execution async (fire and forget). identity + accessToken captured at request time
+  // so each executor can build a per-request Octokit and per-session SDK token.
   if (body.type === 'topic-regeneration') {
     setImmediate(() => {
-      executeTopicRegeneration(jobId, body.input as TopicRegenerationInput).catch(err => {
+      executeTopicRegeneration(jobId, body.input as TopicRegenerationInput, identity).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });
   } else if (body.type === 'challenge-regeneration') {
     setImmediate(() => {
-      executeChallengeRegeneration(jobId, body.input as ChallengeRegenerationInput).catch(err => {
+      executeChallengeRegeneration(jobId, body.input as ChallengeRegenerationInput, identity).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });
   } else if (body.type === 'goal-regeneration') {
     setImmediate(() => {
-      executeGoalRegeneration(jobId, body.input as GoalRegenerationInput).catch(err => {
+      executeGoalRegeneration(jobId, body.input as GoalRegenerationInput, identity).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });
   } else if (body.type === 'chat-response') {
     setImmediate(() => {
-      executeChatResponse(jobId, body.input as ChatResponseInput).catch(err => {
+      executeChatResponse(jobId, body.input as ChatResponseInput, identity).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });
   } else if (body.type === 'challenge-evaluation') {
     setImmediate(() => {
-      executeChallengeEvaluation(jobId, body.input as ChallengeEvaluationInput).catch(err => {
+      executeChallengeEvaluation(jobId, body.input as ChallengeEvaluationInput, identity).catch(err => {
         log.error(`Unhandled error in job ${jobId}:`, err);
       });
     });

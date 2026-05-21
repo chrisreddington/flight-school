@@ -33,6 +33,8 @@ export interface SessionOptions {
   tools?: string[];
   /** Model override (defaults to standard) */
   model?: string;
+  /** GitHub token to bind to MCP server config for this session */
+  gitHubToken?: string;
 }
 
 /**

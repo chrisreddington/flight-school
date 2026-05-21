@@ -1,5 +1,7 @@
 import { parseJsonBodyWithFallback } from '@/lib/api';
 import { generateGuidedPlan, getGuidedPlanFallback, type GuidedPlan } from '@/lib/copilot/guided-mode';
+import { requireUserContext } from '@/lib/auth/context';
+import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,14 +32,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<GuidedPla
 
   let profileContext = '';
   try {
-    const compactContext = await buildCompactContext(1000);
+    const octokit = await getOctokitForRequest();
+    const compactContext = await buildCompactContext(octokit, 1000);
     profileContext = serializeContext(compactContext);
   } catch (error) {
     log.warn('Failed to build profile context for guided plan', error);
   }
 
   try {
-    const plan = await generateGuidedPlan(challenge, profileContext);
+    const ctx = await requireUserContext();
+    const plan = await generateGuidedPlan(
+      { userId: ctx.userId, gitHubToken: ctx.accessToken },
+      challenge,
+      profileContext
+    );
     return NextResponse.json(plan);
   } catch (error) {
     log.error('Failed to generate guided plan', error);

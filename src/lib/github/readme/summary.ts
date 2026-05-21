@@ -6,7 +6,7 @@
  */
 
 import { nowMs } from '@/lib/utils/date-utils';
-import { getOctokit } from '../client';
+import type { Octokit } from 'octokit';
 
 // =============================================================================
 // Constants
@@ -175,6 +175,7 @@ function extractKeywords(content: string): string[] {
  * ```
  */
 export async function getRepoReadmeSummary(
+  octokit: Octokit,
   owner: string,
   repo: string
 ): Promise<ReadmeSummary> {
@@ -188,8 +189,6 @@ export async function getRepoReadmeSummary(
   }
 
   try {
-    const octokit = await getOctokit();
-    
     // Fetch README using raw media type for plain text
     const { data } = await octokit.rest.repos.getReadme({
       owner,

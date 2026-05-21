@@ -1,5 +1,5 @@
 import { extractJSON } from '@/lib/utils/json-utils';
-import { createLoggedLightweightCoachSession } from './server';
+import { createLoggedLightweightCoachSession, type SessionIdentity } from './server';
 import type { GuidedPlan, GuidedStep, ScaffoldLevel } from './guided-mode-types';
 import { getGuidedPlanFallback } from './guided-mode-types';
 
@@ -57,6 +57,7 @@ function normalizePlan(
 }
 
 export async function generateGuidedPlan(
+  identity: SessionIdentity,
   challenge: { title: string; description: string; language: string; difficulty: string },
   profileContext: string
 ): Promise<GuidedPlan> {
@@ -71,7 +72,7 @@ Step 1: orient thinking and identify key inputs/outputs. Step 2: prompt planning
 JSON only:
 {"steps":[{"stepNumber":1,"title":"","instruction":"","elaborationPrompt":"Why does this approach work here?"}]}`;
 
-  const loggedSession = await createLoggedLightweightCoachSession('Guided Challenge Plan', challenge.title);
+  const loggedSession = await createLoggedLightweightCoachSession(identity, 'Guided Challenge Plan', challenge.title);
 
   try {
     const result = await loggedSession.sendAndWait(prompt);

@@ -1,10 +1,15 @@
 /**
  * GitHub API Client
  *
- * Singleton Octokit instance for direct GitHub API access.
- * Authentication priority:
- * 1. GITHUB_TOKEN environment variable (fastest)
- * 2. `gh auth token` from GitHub CLI (shares Copilot auth)
+ * Per-request Octokit factory. Each authenticated request constructs its
+ * own Octokit instance bound to the session's GitHub App user-to-server
+ * token (resolved by `@/lib/auth/context`). There is intentionally NO
+ * singleton — sharing Octokit instances across users would leak tokens
+ * and rate-limit budgets between sessions.
+ *
+ * Legacy env / gh-CLI token resolution remains available via
+ * `getGitHubToken()` for boot-time and instrumentation paths that
+ * legitimately operate without a user (see P6).
  */
 
 import { execFile } from 'child_process';
@@ -12,6 +17,7 @@ import { nowMs } from '@/lib/utils/date-utils';
 import { Octokit } from 'octokit';
 import { promisify } from 'util';
 
+import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 import {
   recordGitHubOperation,
@@ -19,17 +25,12 @@ import {
   withSpan,
 } from '@/lib/observability/telemetry';
 
-/** Singleton Octokit instance */
-let octokitInstance: Octokit | null = null;
-
-/** Cached token from gh CLI */
+/** Cached token from gh CLI (process-wide, not user-scoped). */
 let cachedGhToken: string | null = null;
 /** Last time we attempted gh CLI token lookup */
 let cachedGhTokenCheckedAt: number | null = null;
 /** In-flight gh CLI token request */
 let ghTokenPromise: Promise<string | null> | null = null;
-/** In-flight Octokit creation */
-let octokitPromise: Promise<Octokit> | null = null;
 
 /** Cache duration for negative gh CLI lookups (ms) */
 const GH_TOKEN_CACHE_TTL_MS = 30 * 1000;
@@ -187,8 +188,12 @@ async function getTokenFromGhCli(): Promise<string | null> {
 }
 
 /**
- * Get the best available GitHub token.
- * Prefers GITHUB_TOKEN env var, falls back to gh CLI.
+ * Get the best available GitHub token from the environment or gh CLI.
+ *
+ * @deprecated For authenticated request handling, use {@link getOctokitForRequest}
+ *   which resolves the user's session token via `@/lib/auth/context`. This
+ *   function remains only for boot-time / instrumentation paths that operate
+ *   without a user (and for P6's gh-cli-disable work).
  *
  * @returns GitHub token or null if none available
  */
@@ -211,42 +216,45 @@ export async function getGitHubToken(): Promise<string | null> {
 }
 
 /**
- * Get the singleton Octokit client.
- * Uses GITHUB_TOKEN from env or gh CLI auth.
+ * Build a fully instrumented Octokit instance bound to the given token.
  *
- * @returns Configured Octokit instance
- * @throws Error if no GitHub token is available
+ * @remarks
+ * Each call constructs a fresh Octokit — there is no caching. Callers are
+ * responsible for scoping the returned instance to a single request so user
+ * tokens never leak across sessions.
+ *
+ * @param token - GitHub access token (PAT, gh CLI, or `ghu_` user-to-server token)
+ * @returns Configured Octokit instance with OpenTelemetry request instrumentation
  */
-export async function getOctokit(): Promise<Octokit> {
-  if (octokitInstance) {
-    return octokitInstance;
-  }
+export function getOctokitForToken(token: string): Octokit {
+  const instance = new Octokit({ auth: token });
+  instrumentOctokitRequests(instance);
+  return instance;
+}
 
-  if (!octokitPromise) {
-    octokitPromise = (async () => {
-      const token = await getGitHubToken();
-      if (!token) {
-        throw new Error(
-          'GitHub authentication required. Set GITHUB_TOKEN or run `gh auth login`.'
-        );
-      }
-      const instance = new Octokit({ auth: token });
-      instrumentOctokitRequests(instance);
-      octokitInstance = instance;
-      return instance;
-    })();
-  }
-
-  try {
-    return await octokitPromise;
-  } catch (error) {
-    octokitPromise = null;
-    throw error;
-  }
+/**
+ * Construct an Octokit instance for the current authenticated request.
+ *
+ * @remarks
+ * Resolves the per-user `ghu_` token from the Auth.js session via
+ * `requireUserContext()` and returns a freshly instrumented Octokit. Throws
+ * {@link UnauthorizedError} when no session is present — API routes should
+ * either catch that error or rely on the route middleware to surface 401s.
+ *
+ * @returns Configured Octokit bound to the requesting user's access token
+ * @throws {@link UnauthorizedError} when the request has no authenticated session
+ */
+export async function getOctokitForRequest(): Promise<Octokit> {
+  const { accessToken } = await requireUserContext();
+  return getOctokitForToken(accessToken);
 }
 
 /**
  * Check if GitHub API is configured (GITHUB_TOKEN or gh CLI auth available).
+ *
+ * @deprecated Authenticated routes should rely on middleware + session auth
+ *   rather than probing for ambient credentials. Retained for boot-time and
+ *   debug paths.
  */
 export async function isGitHubConfigured(): Promise<boolean> {
   return Boolean(await getGitHubToken());
@@ -271,15 +279,13 @@ export function getAuthMethod(): 'github-token' | 'github-cli' | 'none' {
 }
 
 /**
- * Invalidate the cached GitHub token.
- * Forces a fresh token retrieval on the next call to getGitHubToken().
- * Use this when authentication fails to ensure retry with fresh credentials.
+ * Invalidate the cached gh CLI token lookup.
+ * Forces a fresh `gh auth token` invocation on the next call. Use after
+ * authentication failures to retry with refreshed credentials.
  */
 export function invalidateTokenCache(): void {
   log.warn('Invalidating token cache');
   cachedGhToken = null;
   cachedGhTokenCheckedAt = null;
   ghTokenPromise = null;
-  octokitInstance = null;
-  octokitPromise = null;
 }

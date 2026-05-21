@@ -9,14 +9,14 @@
  * @see {@link createLearningGoalIssue} for learning-specific issue creation
  */
 
-import { parseJsonBody, serviceUnavailableResponse, validationErrorResponse } from '@/lib/api';
+import { parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import {
   type IssueRequest,
   validateIssueRequest,
 } from '@/lib/github/api-requests';
-import { isGitHubConfigured } from '@/lib/github/client';
+import { getOctokitForRequest } from '@/lib/github/client';
 import { createIssue, createLearningGoalIssue } from '@/lib/github/issues';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -85,14 +85,6 @@ export async function POST(
   const startTime = nowMs();
   log.info('POST request started');
 
-  // Check GitHub configuration
-  if (!(await isGitHubConfigured())) {
-    log.warn('GitHub not configured');
-    return serviceUnavailableResponse('GitHub authentication not configured', {
-      totalTimeMs: nowMs() - startTime,
-    });
-  }
-
   // Parse and validate request body
   const parseResult = await parseJsonBody<IssueRequest>(request);
   if (!parseResult.success) {
@@ -111,11 +103,12 @@ export async function POST(
   const req = parseResult.data;
 
   try {
+    const octokit = await getOctokitForRequest();
     let result;
 
     if (req.type === 'generic') {
       log.info(`Creating generic issue in ${req.owner}/${req.repo}`);
-      result = await createIssue({
+      result = await createIssue(octokit, {
         owner: req.owner,
         repo: req.repo,
         title: req.title,
@@ -125,6 +118,7 @@ export async function POST(
     } else {
       log.info(`Creating learning goal issue in ${req.owner}/${req.repo}`);
       result = await createLearningGoalIssue(
+        octokit,
         req.owner,
         req.repo,
         req.topic,

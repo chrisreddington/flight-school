@@ -127,8 +127,13 @@ export async function POST(
 
     return await withUserGuards(
       { ...EVAL_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/challenge/hint', challengeTitle: challenge.title } },
-      async () => {
-        const hintResult: HintResult = await getHint(challenge, question, currentCode);
+      async (ctx) => {
+        const hintResult: HintResult = await getHint(
+          { userId: ctx.userId, gitHubToken: ctx.accessToken },
+          challenge,
+          question,
+          currentCode
+        );
 
         const totalTime = nowMs() - startTime;
         log.info(`Hint generated in ${totalTime}ms`);

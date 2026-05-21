@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
     let streamingMetrics: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['streamingMetrics'];
     try {
       ({ stream, cleanup, model, streamingMetrics } = await createEvaluationStreamingSession(
+        { userId: userCtx.userId, gitHubToken: userCtx.accessToken },
         prompt,
         EVALUATION_SYSTEM_PROMPT,
         'Challenge Evaluation'

@@ -41,15 +41,16 @@ export async function POST(request: NextRequest) {
 
     return await withUserGuards(
       { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
-      async () => {
+      async (ctx) => {
+        const identity = { userId: ctx.userId, gitHubToken: ctx.accessToken };
         const enableGitHub = useGitHubTools === true || needsGitHubTools(prompt);
         const sessionType = enableGitHub ? 'GitHub Chat' : 'Chat (fast)';
 
         log.info(`${sessionType} - ${enableGitHub ? 'with MCP' : 'lightweight'}`);
 
         const loggedSession = enableGitHub
-          ? await createLoggedGitHubChatSession(sessionType, prompt, conversationId)
-          : await createLoggedChatSession(sessionType, prompt, conversationId);
+          ? await createLoggedGitHubChatSession(identity, sessionType, prompt, conversationId)
+          : await createLoggedChatSession(identity, sessionType, prompt, conversationId);
 
         const result = await loggedSession.sendAndWait(prompt);
 

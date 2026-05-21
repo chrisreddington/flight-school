@@ -153,7 +153,7 @@ function buildAuthoringPrompt(config: AuthoringSessionConfig): string {
 export async function createGenericStreamingSession(
   config: AuthoringSessionConfig
 ): Promise<AuthoringStreamingSession> {
-  const { prompt, conversationId, action } = config;
+  const { prompt, conversationId, action, identity } = config;
   const startTime = nowMs();
 
   const model = CHAT_MODEL;
@@ -169,12 +169,14 @@ export async function createGenericStreamingSession(
 
   // Get or create session (reuses session for same conversation)
   const { session, metrics } = await getConversationSession(
+    identity.userId,
     newConversationId,
     poolKey,
     {
       includeMcpTools: false, // Authoring doesn't need GitHub tools
       model,
       systemMessage,
+      gitHubToken: identity.gitHubToken,
     }
   );
 

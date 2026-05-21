@@ -43,6 +43,10 @@ interface StreamingSessionConfig {
   poolKeyPrefix: string;
   /** Log prefix for console messages */
   logPrefix: string;
+  /** GitHub user ID (partitions session cache per-identity) */
+  userId: string;
+  /** Per-session GitHub token forwarded to the SDK */
+  gitHubToken: string;
 }
 
 // =============================================================================
@@ -58,7 +62,7 @@ interface StreamingSessionConfig {
  * @internal
  */
 async function createGenericStreamingSession(config: StreamingSessionConfig): Promise<StreamingSession> {
-  const { prompt, useGitHubTools, operationName, conversationId, systemMessage, poolKeyPrefix, logPrefix } = config;
+  const { prompt, useGitHubTools, operationName, conversationId, systemMessage, poolKeyPrefix, logPrefix, userId, gitHubToken } = config;
   const startTime = Date.now();
   
   const log = logger.withTag(logPrefix);
@@ -70,18 +74,20 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
 
   // Create session with or without MCP tools
   const { session, metrics } = useGitHubTools
-    ? await getConversationSession(conversationId, poolKey, {
+    ? await getConversationSession(userId, conversationId, poolKey, {
         includeMcpTools: true,
         model,
         ...(process.env.COPILOT_GITHUB_MCP_TOOLS
           ? { tools: process.env.COPILOT_GITHUB_MCP_TOOLS.split(',').map((tool) => tool.trim()).filter(Boolean) }
           : {}),
         systemMessage,
+        gitHubToken,
       })
-    : await getConversationSession(conversationId, poolKey, {
+    : await getConversationSession(userId, conversationId, poolKey, {
         includeMcpTools: false,
         model,
         systemMessage,
+        gitHubToken,
       });
 
   // Track tool calls
@@ -299,6 +305,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
  * ```
  */
 export async function createStreamingChatSession(
+  identity: { userId: string; gitHubToken: string },
   prompt: string,
   useGitHubTools: boolean,
   operationName = 'Chat',
@@ -319,6 +326,8 @@ Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
     systemMessage,
     poolKeyPrefix: 'chat',
     logPrefix: 'Copilot Streaming',
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
   });
 }
 
@@ -341,6 +350,7 @@ Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
  * @see SPEC-001 for learning chat requirements (AC3.1, AC3.2)
  */
 export async function createLearningStreamingSession(
+  identity: { userId: string; gitHubToken: string },
   prompt: string,
   useGitHubTools: boolean,
   operationName = 'Learning Chat',
@@ -363,6 +373,8 @@ Always use GitHub tools to look up real information rather than guessing.`
     systemMessage,
     poolKeyPrefix: 'learning',
     logPrefix: 'Copilot Learning',
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
   });
 }
 
@@ -381,6 +393,7 @@ Always use GitHub tools to look up real information rather than guessing.`
  * @see SPEC-002 for challenge evaluation requirements
  */
 export async function createEvaluationStreamingSession(
+  identity: { userId: string; gitHubToken: string },
   prompt: string,
   systemMessage: string,
   operationName = 'Challenge Evaluation'
@@ -393,5 +406,7 @@ export async function createEvaluationStreamingSession(
     systemMessage,
     poolKeyPrefix: 'evaluation',
     logPrefix: 'Copilot Evaluation',
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
   });
 }

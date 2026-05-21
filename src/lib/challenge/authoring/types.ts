@@ -3,6 +3,7 @@
  */
 
 import type { DailyChallenge } from '@/lib/focus/types';
+import type { SessionIdentity } from '@/lib/copilot/server';
 
 /**
  * Context provided by the user during challenge authoring.
@@ -24,6 +25,8 @@ export interface AuthoringContext {
  * Authoring session configuration.
  */
 export interface AuthoringSessionConfig {
+  /** User identity for per-session SDK auth */
+  identity: SessionIdentity;
   /** User's message */
   prompt: string;
   /** Existing conversation ID for multi-turn */
@@ -33,7 +36,6 @@ export interface AuthoringSessionConfig {
   /** Action type */
   action?: 'clarify' | 'generate' | 'validate';
 }
-
 /**
  * Streaming event types for authoring.
  */

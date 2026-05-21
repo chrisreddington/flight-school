@@ -5,6 +5,7 @@
  * Orchestrates data fetching from multiple GitHub APIs with caching.
  */
 
+import type { Octokit } from 'octokit';
 import { analyzeCommitPatterns, identifySkillGaps } from '@/lib/expertise';
 import { calculateActivityMetrics, getUserEvents } from './activity';
 import { getRepoDependencies } from './dependencies';
@@ -63,6 +64,7 @@ const ARRAY_DELIMITER = ',';
  * ```
  */
 export async function buildCompactContext(
+  octokit: Octokit,
   timeout = CONTEXT_TIMEOUT_MS
 ): Promise<CompactDeveloperProfile> {
   // Create abort signal for timeout
@@ -72,9 +74,9 @@ export async function buildCompactContext(
   try {
     // Phase 1: Fetch base data in parallel (including new interest/pattern signals)
     const [userResult, reposResult, eventsResult, starredResult, workPatternsResult] = await Promise.allSettled([
-      getAuthenticatedUser(),
-      getUserRepositories(),
-      getAuthenticatedUserEvents(),
+      getAuthenticatedUser(octokit),
+      getUserRepositories(octokit),
+      getAuthenticatedUserEvents(octokit),
       // Starred interests and work patterns use username — resolved after user fetch
       // We kick them off after user is known; handled in Phase 1b below
       Promise.resolve(null), // placeholder
@@ -88,9 +90,9 @@ export async function buildCompactContext(
     // Phase 1b: Fetch username-dependent signals in parallel
     const username = user?.login;
     const [starredResult2, workPatternsResult2, openIssuesResult] = await Promise.allSettled([
-      username ? getStarredInterests(username) : Promise.resolve([]),
-      username ? analyzeWorkPatterns(username) : Promise.resolve({ patterns: [], bugRatio: 0 }),
-      username ? getOpenIssues(username) : Promise.resolve([]),
+      username ? getStarredInterests(octokit, username) : Promise.resolve([]),
+      username ? analyzeWorkPatterns(octokit, username) : Promise.resolve({ patterns: [], bugRatio: 0 }),
+      username ? getOpenIssues(octokit, username) : Promise.resolve([]),
     ]);
 
     // Suppress unused variable warnings from the placeholders
@@ -114,9 +116,9 @@ export async function buildCompactContext(
     const deepDataPromises = topRepos.map(async (repo) => {
       const [owner, repoName] = repo.fullName.split('/');
       const [langResult, readmeResult, depsResult] = await Promise.allSettled([
-        getRepoLanguageBytes(owner, repoName),
-        getRepoReadmeSummary(owner, repoName),
-        getRepoDependencies(owner, repoName),
+        getRepoLanguageBytes(octokit, owner, repoName),
+        getRepoReadmeSummary(octokit, owner, repoName),
+        getRepoDependencies(octokit, owner, repoName),
       ]);
 
       return {
@@ -263,10 +265,10 @@ function escapeDelimiters(value: string): string {
 // =============================================================================
 
 /** Fetches events for the authenticated user. */
-async function getAuthenticatedUserEvents(): Promise<GitHubEvent[]> {
+async function getAuthenticatedUserEvents(octokit: Octokit): Promise<GitHubEvent[]> {
   try {
-    const user = await getAuthenticatedUser();
-    return getUserEvents(user.login);
+    const user = await getAuthenticatedUser(octokit);
+    return getUserEvents(octokit, user.login);
   } catch {
     return [];
   }

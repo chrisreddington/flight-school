@@ -8,14 +8,14 @@
  * @see {@link createRepository} for the underlying implementation
  */
 
-import { parseJsonBody, serviceUnavailableResponse, validationErrorResponse } from '@/lib/api';
+import { parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import {
   type ExportWorkspaceRequest,
   validateExportWorkspaceRequest,
 } from '@/lib/github/api-requests';
-import { getOctokit, isGitHubConfigured } from '@/lib/github/client';
+import { getOctokitForRequest } from '@/lib/github/client';
 import { createRepository, getRepositoryState } from '@/lib/github/repos';
 import { getAuthenticatedUser } from '@/lib/github/user';
 import { buildWorkspaceExportFiles } from '@/lib/github/workspace-export';
@@ -73,14 +73,6 @@ export async function POST(
   const startTime = nowMs();
   log.info('POST request started');
 
-  // Check GitHub configuration
-  if (!(await isGitHubConfigured())) {
-    log.warn('GitHub not configured');
-    return serviceUnavailableResponse('GitHub authentication not configured', {
-      totalTimeMs: nowMs() - startTime,
-    });
-  }
-
   // Parse and validate request body
   const parseResult = await parseJsonBody<ExportWorkspaceRequest>(request);
   if (!parseResult.success) {
@@ -98,11 +90,11 @@ export async function POST(
 
   const req = parseResult.data;
   let owner: string;
-  let octokit: Awaited<ReturnType<typeof getOctokit>>;
+  let octokit: Awaited<ReturnType<typeof getOctokitForRequest>>;
 
   try {
-    octokit = await getOctokit();
-    const user = await getAuthenticatedUser();
+    octokit = await getOctokitForRequest();
+    const user = await getAuthenticatedUser(octokit);
     owner = user.login;
   } catch (error) {
     const errorStatus = (error as { status?: number })?.status;
@@ -119,7 +111,7 @@ export async function POST(
   try {
     // Step 1: Check if repository already exists
     log.info(`Checking if repository exists: ${owner}/${req.repoName}`);
-    const repoState = await getRepositoryState(owner, req.repoName);
+    const repoState = await getRepositoryState(octokit, owner, req.repoName);
     log.info(`Repository state: exists=${repoState.exists}, hasCommits=${repoState.hasCommits}`);
 
     if (repoState.exists && repoState.hasCommits) {
@@ -141,7 +133,7 @@ export async function POST(
     if (!repoState.exists) {
       // Create new repository with auto_init to have a base commit
       log.info(`Creating new repository: ${req.repoName}`);
-      const repo = await createRepository({
+      const repo = await createRepository(octokit, {
         name: req.repoName,
         description: req.description || `Solution: ${req.challenge.title}`,
         isPrivate: req.isPrivate ?? false,
