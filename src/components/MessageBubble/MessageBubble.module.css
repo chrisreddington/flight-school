@@ -183,3 +183,121 @@
   padding: 2px 6px;
   border-radius: var(--borderRadius-small);
 }
+
+/* Tool-event timeline */
+.toolEvents {
+  margin: var(--base-size-8) 0;
+}
+
+.toolEventList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-4);
+}
+
+.toolEvent {
+  font-size: 13px;
+  color: var(--fgColor-default);
+  background-color: var(--bgColor-muted);
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-small);
+  padding: var(--base-size-6) var(--base-size-8);
+}
+
+.toolEventRunning {
+  border-color: var(--borderColor-accent-muted, var(--borderColor-default));
+}
+
+.toolEventComplete {
+  border-color: var(--borderColor-muted);
+}
+
+.toolEventLine {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8);
+}
+
+.toolEventStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.toolEventCheck {
+  color: var(--fgColor-success);
+}
+
+.toolEventIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.toolEventSummary {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toolEventDuration {
+  font-size: 11px;
+  color: var(--fgColor-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.toolEventDetails {
+  margin-top: var(--base-size-6);
+  font-size: 12px;
+}
+
+.toolEventDetailsToggle {
+  cursor: pointer;
+  color: var(--fgColor-muted);
+  font-size: 12px;
+}
+
+.toolEventDetailsBody {
+  margin-top: var(--base-size-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-4);
+}
+
+.toolEventDetailsLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fgColor-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toolEventDetailsPre {
+  margin: 0;
+  padding: var(--base-size-6) var(--base-size-8);
+  background-color: var(--bgColor-inset);
+  border-radius: var(--borderRadius-small);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -38,7 +38,7 @@ import type {
 import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
 import { auditLog, hashUserId } from '@/lib/security/audit';
-import type { Message } from '@/lib/threads';
+import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
@@ -72,7 +72,12 @@ async function resolveJobIdentity(jobId: string, userId: string): Promise<Sessio
         userIdHash: hashUserId(userId),
         metadata: { jobId },
       });
-      await jobStorage.markFailed(jobId, 'GitHub credentials missing — user must re-authenticate.');
+      await jobStorage.markFailed(
+        jobId,
+        'GitHub credentials missing — user must re-authenticate.',
+        'credentials_missing',
+      );
+      await mirrorCredentialsFailureToEvaluation(jobId, 'credentials_missing');
       return null;
     }
     return { userId, gitHubToken: token };
@@ -84,8 +89,78 @@ async function resolveJobIdentity(jobId: string, userId: string): Promise<Sessio
       userIdHash: hashUserId(userId),
       metadata: { jobId, error: message },
     });
-    await jobStorage.markFailed(jobId, 'GitHub credentials expired — user must re-authenticate.');
+    await jobStorage.markFailed(
+      jobId,
+      'GitHub credentials expired — user must re-authenticate.',
+      'credentials_refresh_failed',
+    );
+    await mirrorCredentialsFailureToEvaluation(jobId, 'credentials_refresh_failed');
     return null;
+  }
+}
+
+/**
+ * Update the polling-visible `currentStep` for an in-flight evaluation job.
+ *
+ * Writes to both the job record (visible via `/api/jobs/[id]`) and, when the
+ * job is a challenge evaluation, to the evaluation progress record (visible
+ * via `/api/evaluations/[challengeId]`) so the existing sandbox polling
+ * client picks up step narration without a second fetch.
+ */
+async function reportStep(jobId: string, step: string, challengeId?: string): Promise<void> {
+  try {
+    await jobStorage.setCurrentStep(jobId, step);
+    if (challengeId) {
+      const storage = await readEvaluationStorage();
+      const existing = storage.evaluations[challengeId];
+      if (existing) {
+        existing.currentStep = step;
+        existing.updatedAt = now();
+        storage.evaluations[challengeId] = existing;
+        await writeEvaluationStorage(storage);
+      }
+    }
+  } catch (err) {
+    log.debug(`[Job ${jobId}] Failed to report step "${step}":`, err);
+  }
+}
+
+/**
+ * Mirror credentials failures into the evaluation storage so the sandbox's
+ * evaluation poller surfaces the structured errorCode (and re-auth CTA)
+ * without needing a separate /api/jobs/[id] lookup.
+ */
+async function mirrorCredentialsFailureToEvaluation(
+  jobId: string,
+  errorCode: 'credentials_missing' | 'credentials_refresh_failed',
+): Promise<void> {
+  try {
+    const job = await jobStorage.get(jobId);
+    if (!job || job.type !== 'challenge-evaluation') return;
+    const challengeId =
+      typeof job.targetId === 'string'
+        ? job.targetId
+        : (job.input as { challengeId?: string }).challengeId;
+    if (!challengeId) return;
+    const storage = await readEvaluationStorage();
+    const previous = storage.evaluations[challengeId];
+    storage.evaluations[challengeId] = {
+      ...(previous ?? {
+        challengeId,
+        jobId,
+        streamingFeedback: '',
+      }),
+      challengeId,
+      jobId,
+      status: 'failed',
+      streamingFeedback: previous?.streamingFeedback ?? '',
+      error: job.error,
+      errorCode,
+      updatedAt: now(),
+    };
+    await writeEvaluationStorage(storage);
+  } catch (err) {
+    log.debug(`[Job ${jobId}] Failed to mirror credentials failure:`, err);
   }
 }
 
@@ -407,6 +482,8 @@ export async function executeChatResponse(
     
     let fullContent = '';
     const toolCalls: string[] = [];
+    const toolEvents: ToolCallEvent[] = [];
+    let toolCounter = 0;
     let hasActionableItem = false;
     let lastSaveTime = Date.now();
     const SAVE_INTERVAL_MS = 400;
@@ -434,6 +511,7 @@ export async function executeChatResponse(
           content: fullContent + (isFinal ? '' : ' ▊'),
           timestamp: now(),
           toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+          toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
           hasActionableItem,
         };
         
@@ -480,6 +558,31 @@ export async function executeChatResponse(
         }
       } else if (event.type === 'tool_start') {
         toolCalls.push(event.name);
+        toolEvents.push({
+          id: `tool-${jobId}-${toolCounter++}`,
+          name: event.name,
+          status: 'running',
+          args: event.args,
+        });
+        // Persist immediately so the UI surfaces the running state without
+        // waiting for the next 400ms save tick.
+        await saveProgressToThread(false);
+        lastSaveTime = Date.now();
+      } else if (event.type === 'tool_complete') {
+        // Match the most recent running event by name (SDK has no correlation id).
+        for (let i = toolEvents.length - 1; i >= 0; i--) {
+          if (toolEvents[i].status === 'running' && toolEvents[i].name === event.name) {
+            toolEvents[i] = {
+              ...toolEvents[i],
+              status: 'complete',
+              result: event.result,
+              durationMs: event.duration,
+            };
+            break;
+          }
+        }
+        await saveProgressToThread(false);
+        lastSaveTime = Date.now();
       } else if (event.type === 'done') {
         hasActionableItem = detectActionableContent(fullContent);
       } else if (event.type === 'error') {
@@ -529,6 +632,8 @@ export async function executeChallengeEvaluation(
   try {
     log.info(`[Job ${jobId}] Starting evaluation for challenge ${challengeId}`);
 
+    await reportStep(jobId, 'Preparing context…', challengeId);
+
     const identity = await resolveJobIdentity(jobId, userId);
     if (!identity) return;
     
@@ -540,6 +645,7 @@ export async function executeChallengeEvaluation(
           jobId,
           status: 'pending',
           streamingFeedback: '',
+          currentStep: 'Preparing context…',
           updatedAt: now(),
         },
       },
@@ -559,6 +665,8 @@ export async function executeChallengeEvaluation(
       },
       files
     );
+
+    await reportStep(jobId, 'Running tests…', challengeId);
     
     // Create streaming session
     const { stream, cleanup } = await createEvaluationStreamingSession(
@@ -593,6 +701,9 @@ export async function executeChallengeEvaluation(
         if (partial) {
           sentPartial = true;
           currentProgress.partial = partial;
+          // First parseable signal — narrate the analysis phase.
+          await reportStep(jobId, 'Analysing results…', challengeId);
+          currentProgress.currentStep = 'Analysing results…';
         }
       }
       
@@ -656,6 +767,8 @@ export async function executeChallengeEvaluation(
       log.info(`[Job ${jobId}] Evaluation cancelled`);
       return;
     }
+
+    await reportStep(jobId, 'Generating feedback…', challengeId);
     
     // Save final result
     await saveProgress(true);
