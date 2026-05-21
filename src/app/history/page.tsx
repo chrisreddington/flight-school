@@ -7,13 +7,18 @@
 
 'use client';
 
-import { Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { AppHeader } from '@/components/AppHeader';
-import { LearningHistory } from '@/components/LearningHistory';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { Spinner } from '@primer/react';
 import { useSearchParams } from 'next/navigation';
 import styles from './history.module.css';
+
+// PERF: Code-split LearningHistory (740-line component with activity-graph,
+// insights charts, and stats tabs) — deferred until route is rendered.
+const LearningHistory = lazy(() =>
+  import('@/components/LearningHistory').then(mod => ({ default: mod.LearningHistory }))
+);
 
 function HistoryPageContent() {
   const searchParams = useSearchParams();
