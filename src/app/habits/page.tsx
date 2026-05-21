@@ -8,8 +8,6 @@
 'use client';
 
 import { AppHeader } from '@/components/AppHeader';
-import { HabitCreationDialog } from '@/components/Habits/HabitCreationDialog';
-import { HabitEditDialog } from '@/components/Habits/HabitEditDialog';
 import { HabitStatsSection } from '@/components/Habits/habit-stats-section';
 import { HabitListSection } from '@/components/Habits/habit-list-section';
 import { ProfileNav } from '@/components/ProfileNav';
@@ -35,6 +33,18 @@ import {
 } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './habits.module.css';
+import dynamic from 'next/dynamic';
+
+// Lazy-load dialog components — they are only needed on first user interaction,
+// so we defer their JS chunk until the user opens a dialog.
+const HabitCreationDialog = dynamic(
+  () => import('@/components/Habits/HabitCreationDialog').then(m => ({ default: m.HabitCreationDialog })),
+  { ssr: false }
+);
+const HabitEditDialog = dynamic(
+  () => import('@/components/Habits/HabitEditDialog').then(m => ({ default: m.HabitEditDialog })),
+  { ssr: false }
+);
 
 export default function HabitsPage() {
   useBreadcrumb('/habits', 'Habits', '/habits');
@@ -264,12 +274,14 @@ export default function HabitsPage() {
         </div>
       </main>
 
-      {/* Dialogs */}
-      <HabitCreationDialog
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        onCreated={loadHabits}
-      />
+      {/* Dialogs — rendered conditionally so their chunks load on first use */}
+      {isCreateDialogOpen && (
+        <HabitCreationDialog
+          isOpen={isCreateDialogOpen}
+          onClose={() => setIsCreateDialogOpen(false)}
+          onCreated={loadHabits}
+        />
+      )}
 
       {editingHabit && (
         <HabitEditDialog
