@@ -69,7 +69,7 @@ Before submitting TSDoc, verify:
 - [ ] **No duplication**: Don't restate what the code already says
 - [ ] **Intent over mechanics**: Explain WHY, not WHAT
 - [ ] **Accurate**: @param names match actual parameters
-- [ ] **Examples compile**: Run `npx tsc --noEmit` to verify
+- [ ] **Examples compile**: `tsc --noEmit` does **not** type-check code inside `/** @example */` blocks — it only checks code that's actually imported into the program, so a broken snippet in a doc comment will pass silently. To verify example code, either (a) lift it into a real `*.example.ts` file referenced via `@see`, or (b) manually paste it into a scratch file and run `npx tsc --noEmit` against that file. Treat `@example` blocks as illustrative: keep them short, and re-review them whenever the surrounding API changes.
 
 ### Right-Sizing: Before and After Example
 
