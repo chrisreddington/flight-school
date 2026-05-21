@@ -68,7 +68,7 @@
     "eslint": "^10.0.3",
     "eslint-config-next": "16.2.6",
     "jsdom": "^29.1.1",
-    "knip": "^5.86.0",
+    "knip": "^6.13.1",
     "madge": "^8.0.0",
     "ts-prune": "^0.10.3",
     "typescript": "^5.9.3",
