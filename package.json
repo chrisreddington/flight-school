@@ -53,7 +53,7 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "vscode-jsonrpc": "^8.2.0"
+    "vscode-jsonrpc": "8.2.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
