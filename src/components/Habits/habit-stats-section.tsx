@@ -31,7 +31,7 @@ export function HabitStatsSection({
     <div className={styles.sidebarCard}>
       <div className={styles.sidebarHeader}>
         <FlameIcon size={20} className={styles.sidebarIcon} />
-        <h2 className={styles.sidebarTitle}>Habit Tracker</h2>
+        <p className={styles.sidebarTitle}>Habit Tracker</p>
       </div>
       <p className={styles.sidebarSubtitle}>Build lasting habits</p>
 
