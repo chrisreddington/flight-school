@@ -34,12 +34,9 @@ import {
 import { createEvaluationStreamingSession } from '@/lib/copilot/streaming';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
-import { requireUserContext } from '@/lib/auth/context';
-import { auditLog, hashUserId } from '@/lib/security/audit';
+import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
-import { checkRateLimit, RateLimitedError } from '@/lib/security/rate-limit';
 import { EVAL_GUARD } from '@/lib/security/route-defaults';
-import { acquireSlot } from '@/lib/security/session-cap';
 import { NextRequest } from 'next/server';
 
 const log = logger.withTag('Evaluate API');
@@ -77,117 +74,110 @@ export async function POST(request: NextRequest) {
 
     const { challenge, files } = parseResult.data;
 
-    const userCtx = await requireUserContext();
-    const userIdHash = hashUserId(userCtx.userId);
-
-    const rl = checkRateLimit(userCtx.userId, EVAL_GUARD.rateLimit.limit, EVAL_GUARD.rateLimit.windowMs);
-    if (!rl.allowed) {
-      auditLog({ type: 'rate-limit.blocked', userIdHash, metadata: { route: '/api/challenge/evaluate', retryAfterMs: rl.retryAfterMs } });
-      throw new RateLimitedError(rl.retryAfterMs ?? EVAL_GUARD.rateLimit.windowMs);
-    }
-
-    const releaseSlot = await acquireSlot(userCtx.userId, EVAL_GUARD.concurrentCap);
-    auditLog({
-      type: 'copilot.session.create',
-      userIdHash,
-      metadata: { route: '/api/challenge/evaluate', challengeTitle: challenge.title },
-    });
-
-    log.info(`Evaluating solution for: ${challenge.title} (${files.length} files)`);
-
-    // Build the evaluation prompt
-    const prompt = buildEvaluationPrompt(challenge, files);
-
-    // Create streaming session with evaluation system prompt
-    // Use dedicated evaluation session factory for proper logging separation
-    let stream: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['stream'];
-    let cleanup: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['cleanup'];
-    let model: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['model'];
-    let streamingMetrics: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['streamingMetrics'];
-    try {
-      ({ stream, cleanup, model, streamingMetrics } = await createEvaluationStreamingSession(
-        { userId: userCtx.userId, gitHubToken: userCtx.accessToken },
-        prompt,
-        EVALUATION_SYSTEM_PROMPT,
-        'Challenge Evaluation'
-      ));
-    } catch (error) {
-      releaseSlot();
-      throw error;
-    }
-
-    const sessionCreateTime = nowMs() - startTime;
-    log.info(`Session created in ${sessionCreateTime}ms`);
-
-    // Track full content for parsing
-    let fullContent = '';
-    // Track whether we've sent the partial metadata
-    let sentPartial = false;
-    // Track feedback text sent so far
-    let lastFeedbackLength = 0;
-
-    return createSSEResponse(
-      async function* () {
-        for await (const event of stream) {
-          if (event.type === 'delta') {
-            fullContent += event.content;
-
-            if (!sentPartial) {
-              const partial = parsePartialEvaluation(fullContent);
-              if (partial) {
-                sentPartial = true;
-                log.debug(`Sent partial result: isCorrect=${partial.isCorrect}`);
-                yield { type: 'partial' as const, ...partial };
-              }
-            }
-
-            if (sentPartial) {
-              const currentFeedback = extractStreamingFeedback(fullContent);
-              if (currentFeedback.length > lastFeedbackLength) {
-                const newContent = currentFeedback.slice(lastFeedbackLength);
-                lastFeedbackLength = currentFeedback.length;
-                yield { type: 'feedback-delta' as const, content: newContent };
-              }
-            }
-          }
-
-          if (event.type === 'done') {
-            fullContent = event.totalContent;
-          }
-        }
-
-        const evaluationResult = parseEvaluationResponse(fullContent);
-
-        if (evaluationResult) {
-          yield { type: 'result' as const, ...evaluationResult };
-        } else {
-          yield {
-            type: 'result' as const,
-            isCorrect: false,
-            feedback: fullContent || 'Unable to parse evaluation.',
-            strengths: [],
-            improvements: ['Please try submitting again.'],
-          };
-        }
-      },
+    return await withUserGuards(
       {
-        onComplete: () => ({
-          type: 'meta' as const,
-          model,
-          sessionCreateMs: sessionCreateTime,
-          totalMs: nowMs() - startTime,
-          firstDeltaMs: streamingMetrics.firstDeltaMs,
+        ...EVAL_GUARD,
+        eventType: 'copilot.session.create',
+        auditMetadata: {
+          route: '/api/challenge/evaluate',
+          action: 'challenge_evaluate',
           challengeTitle: challenge.title,
-          challengeDifficulty: challenge.difficulty,
-        }),
-        onError: (error) => {
-          const errorMessage = error instanceof Error ? error.message : 'Stream error';
-          log.error('Stream error:', errorMessage);
         },
-        cleanup: () => {
-          try { cleanup(); } finally { releaseSlot(); }
-        },
-      }
+      },
+      async (userCtx) => {
+        log.info(`Evaluating solution for: ${challenge.title} (${files.length} files)`);
+
+        // Build the evaluation prompt
+        const prompt = buildEvaluationPrompt(challenge, files);
+
+        // Create streaming session with evaluation system prompt
+        // Use dedicated evaluation session factory for proper logging separation
+        const { stream, cleanup, model, streamingMetrics } = await createEvaluationStreamingSession(
+          { userId: userCtx.userId, gitHubToken: userCtx.accessToken },
+          prompt,
+          EVALUATION_SYSTEM_PROMPT,
+          'Challenge Evaluation'
+        );
+
+        const sessionCreateTime = nowMs() - startTime;
+        log.info(`Session created in ${sessionCreateTime}ms`);
+
+        // Track full content for parsing
+        let fullContent = '';
+        // Track whether we've sent the partial metadata
+        let sentPartial = false;
+        // Track feedback text sent so far
+        let lastFeedbackLength = 0;
+
+        // NOTE: `withUserGuards` releases the concurrent-session slot when this
+        // callback returns (i.e. as soon as the SSE Response object is handed
+        // back to Next.js). The underlying Copilot session is still cleaned up
+        // separately via the SSE `cleanup` callback below when the stream
+        // finishes or the client disconnects. Releasing the slot at handler
+        // return keeps the cap consistent with other AI routes and matches the
+        // guard contract.
+        return createSSEResponse(
+          async function* () {
+            for await (const event of stream) {
+              if (event.type === 'delta') {
+                fullContent += event.content;
+
+                if (!sentPartial) {
+                  const partial = parsePartialEvaluation(fullContent);
+                  if (partial) {
+                    sentPartial = true;
+                    log.debug(`Sent partial result: isCorrect=${partial.isCorrect}`);
+                    yield { type: 'partial' as const, ...partial };
+                  }
+                }
+
+                if (sentPartial) {
+                  const currentFeedback = extractStreamingFeedback(fullContent);
+                  if (currentFeedback.length > lastFeedbackLength) {
+                    const newContent = currentFeedback.slice(lastFeedbackLength);
+                    lastFeedbackLength = currentFeedback.length;
+                    yield { type: 'feedback-delta' as const, content: newContent };
+                  }
+                }
+              }
+
+              if (event.type === 'done') {
+                fullContent = event.totalContent;
+              }
+            }
+
+            const evaluationResult = parseEvaluationResponse(fullContent);
+
+            if (evaluationResult) {
+              yield { type: 'result' as const, ...evaluationResult };
+            } else {
+              yield {
+                type: 'result' as const,
+                isCorrect: false,
+                feedback: fullContent || 'Unable to parse evaluation.',
+                strengths: [],
+                improvements: ['Please try submitting again.'],
+              };
+            }
+          },
+          {
+            onComplete: () => ({
+              type: 'meta' as const,
+              model,
+              sessionCreateMs: sessionCreateTime,
+              totalMs: nowMs() - startTime,
+              firstDeltaMs: streamingMetrics.firstDeltaMs,
+              challengeTitle: challenge.title,
+              challengeDifficulty: challenge.difficulty,
+            }),
+            onError: (error) => {
+              const errorMessage = error instanceof Error ? error.message : 'Stream error';
+              log.error('Stream error:', errorMessage);
+            },
+            cleanup,
+          }
+        );
+      },
     );
   } catch (error) {
     const guardResponse = guardErrorResponse(error);
