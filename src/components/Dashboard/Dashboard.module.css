@@ -918,6 +918,20 @@
   margin-bottom: var(--base-size-16, 16px);
 }
 
+/* Loading spinner centered in a section */
+.sectionLoadingCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 0;
+}
+
+/* Inline skeleton placeholder (e.g. username in welcome heading) */
+.skeletonInline {
+  display: inline-block;
+  vertical-align: middle;
+}
+
 /* Screen reader only text */
 .srOnly {
   position: absolute;
