@@ -81,12 +81,14 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
           ? { tools: process.env.COPILOT_GITHUB_MCP_TOOLS.split(',').map((tool) => tool.trim()).filter(Boolean) }
           : {}),
         systemMessage,
+        userId,
         gitHubToken,
       })
     : await getConversationSession(userId, conversationId, poolKey, {
         includeMcpTools: false,
         model,
         systemMessage,
+        userId,
         gitHubToken,
       });
 

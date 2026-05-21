@@ -22,9 +22,31 @@ export interface SessionCreationMetrics {
 }
 
 /**
- * Configuration options for creating a Copilot session
+ * Configuration options for creating a Copilot session.
+ *
+ * @remarks
+ * Multi-tenant invariant: both `userId` and `gitHubToken` are REQUIRED. They
+ * partition the session cache and bind the underlying SDK session to the
+ * caller's GitHub identity. Defaulting either field would let sessions leak
+ * between users sharing a sticky-routed process — see {@link getConversationSession}.
  */
 export interface SessionOptions {
+  /**
+   * GitHub user ID. Partitions the in-memory session cache so two identities
+   * sharing a `conversationId` never share a session entry. Also powers the
+   * per-user sticky-negative entitlement cache (P5).
+   *
+   * Required (multi-tenant invariant — see file-level remarks).
+   */
+  userId: string;
+  /**
+   * GitHub user-to-server token (`ghu_...`) bound to the SDK session and
+   * forwarded to MCP. Must come from the current request's `UserContext`,
+   * never from a process-wide env var or the ambient `gh` CLI.
+   *
+   * Required (multi-tenant invariant — see file-level remarks).
+   */
+  gitHubToken: string;
   /** System message mode */
   systemMessage?: string;
   /** Whether to include MCP GitHub tools */
@@ -33,14 +55,6 @@ export interface SessionOptions {
   tools?: string[];
   /** Model override (defaults to standard) */
   model?: string;
-  /** GitHub token to bind to MCP server config for this session */
-  gitHubToken?: string;
-  /**
-   * GitHub user ID. When provided, enables the per-user sticky-negative
-   * entitlement cache (P5) so we don't re-ask the SDK for a user already
-   * known to lack a Copilot license.
-   */
-  userId?: string;
 }
 
 /**

@@ -176,6 +176,7 @@ export async function createGenericStreamingSession(
       includeMcpTools: false, // Authoring doesn't need GitHub tools
       model,
       systemMessage,
+      userId: identity.userId,
       gitHubToken: identity.gitHubToken,
     }
   );

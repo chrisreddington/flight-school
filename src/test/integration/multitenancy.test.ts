@@ -119,10 +119,12 @@ describe('multi-tenant auth/token isolation', () => {
   describe('Copilot conversation cache per-user isolation', () => {
     it('does not share sessions across users for the same poolKey + conversationId', async () => {
       const a = await getConversationSession('userA', 'shared-conv', 'pool', {
+        userId: 'userA',
         gitHubToken: TOKEN_A,
         includeMcpTools: false,
       });
       const b = await getConversationSession('userB', 'shared-conv', 'pool', {
+        userId: 'userB',
         gitHubToken: TOKEN_B,
         includeMcpTools: false,
       });
@@ -136,10 +138,12 @@ describe('multi-tenant auth/token isolation', () => {
     it('handles concurrent requests from two users without crossing tokens', async () => {
       const [a, b] = await Promise.all([
         getConversationSession('userA', 'conv-A', 'pool', {
+          userId: 'userA',
           gitHubToken: TOKEN_A,
           includeMcpTools: false,
         }),
         getConversationSession('userB', 'conv-B', 'pool', {
+          userId: 'userB',
           gitHubToken: TOKEN_B,
           includeMcpTools: false,
         }),
@@ -152,10 +156,12 @@ describe('multi-tenant auth/token isolation', () => {
 
     it('still hits the cache for the same user + conversation on a follow-up turn', async () => {
       const first = await getConversationSession('userA', 'multi-turn', 'pool', {
+        userId: 'userA',
         gitHubToken: TOKEN_A,
         includeMcpTools: false,
       });
       const second = await getConversationSession('userA', 'multi-turn', 'pool', {
+        userId: 'userA',
         gitHubToken: TOKEN_A,
         includeMcpTools: false,
       });

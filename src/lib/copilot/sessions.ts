@@ -157,16 +157,26 @@ function pruneChatSessions(): void {
 /**
  * Create a Copilot session with metrics tracking.
  *
- * @param options - Session configuration
+ * @remarks
+ * Multi-tenant invariant: `options.userId` and `options.gitHubToken` are
+ * REQUIRED. If `userId` is falsy this function throws — the cache layer above
+ * also keys on `userId`, and defaulting either field would risk session
+ * reuse across GitHub identities.
+ *
+ * @param options - Session configuration (must include userId + gitHubToken)
  * @param poolKey - Identifier for metrics tracking
  * @returns Session and creation metrics
+ * @throws {Error} if `options.userId` is missing/empty (multi-tenant invariant)
  */
 export async function createSessionWithMetrics(
-  options?: SessionOptions,
+  options: SessionOptions,
   poolKey = 'unknown'
 ): Promise<SessionWithMetrics> {
-  const model = options?.model ?? MODEL_TIERS.standard;
-  const includeMcp = options?.includeMcpTools === true; // Default to false for speed
+  if (!options.userId) {
+    throw new Error('userId required for session cache key — multi-tenant invariant');
+  }
+  const model = options.model ?? MODEL_TIERS.standard;
+  const includeMcp = options.includeMcpTools === true; // Default to false for speed
   const startTime = Date.now();
 
   return withSpan(
@@ -180,7 +190,7 @@ export async function createSessionWithMetrics(
       // P5: short-circuit for users already known to lack a Copilot license.
       // The negative verdict is sticky for NEGATIVE_TTL_MS (5 minutes) so we
       // don't ping the SDK every request for unentitled users.
-      if (options?.userId && hasNegativeEntitlement(options.userId)) {
+      if (hasNegativeEntitlement(options.userId)) {
         recordAiOperation('createSession', Date.now() - startTime, model, 'error');
         throw new CopilotEntitlementRequiredError(
           'A GitHub Copilot subscription is required to use AI features.',
@@ -191,7 +201,7 @@ export async function createSessionWithMetrics(
         const copilot = await getCopilotClient();
         let mcpConfig = null;
         if (includeMcp) {
-          if (options?.gitHubToken) {
+          if (options.gitHubToken) {
             mcpConfig = getMcpServerConfig({
               token: options.gitHubToken,
               tools: options.tools,
@@ -208,7 +218,7 @@ export async function createSessionWithMetrics(
           onPermissionRequest: permissionHandler,
           // Per-session GitHub identity (multitenancy). Independent of any
           // client-level token. Only set when the caller supplied one.
-          ...(options?.gitHubToken && { gitHubToken: options.gitHubToken }),
+          ...(options.gitHubToken && { gitHubToken: options.gitHubToken }),
           // Disable built-in tools we don't need; prefer GitHub MCP tools for repo context
           excludedTools: [
             'shell',
@@ -237,7 +247,7 @@ export async function createSessionWithMetrics(
               github: mcpConfig,
             },
           }),
-          ...(options?.systemMessage && {
+          ...(options.systemMessage && {
             systemMessage: {
               mode: 'append',
               content: options.systemMessage,
@@ -264,11 +274,9 @@ export async function createSessionWithMetrics(
         // P5: detect entitlement failures from the SDK / underlying CLI
         // server and re-throw as a typed error the HTTP layer maps to 402.
         if (isCopilotEntitlementError(error)) {
-          if (options?.userId) {
-            markNegativeEntitlement(options.userId);
-          }
+          markNegativeEntitlement(options.userId);
           log.warn('Copilot entitlement check failed', {
-            userId: options?.userId,
+            userId: options.userId,
             poolKey,
           });
           throw new CopilotEntitlementRequiredError(
@@ -285,17 +293,21 @@ export async function createSessionWithMetrics(
 /**
  * Get or create a session for a conversation (with caching).
  *
- * For new conversations, creates a fresh session and caches it.
- * For existing conversations, reuses the cached session (multi-turn).
+ * @remarks
+ * For new conversations, creates a fresh session and caches it. For existing
+ * conversations, reuses the cached session (multi-turn).
  *
- * The cache is keyed by `userId` so that two different GitHub identities
- * can never share a session entry even if they share a conversation ID.
+ * Multi-tenant invariant: the cache is keyed by `userId` so two GitHub
+ * identities can never share a session entry even if they share a
+ * `conversationId`. `userId` (caller-supplied) MUST match `options.userId`;
+ * we throw if `userId` is missing/empty.
  *
  * @param userId - GitHub user ID. Required to isolate session caches per user.
  * @param conversationId - Optional conversation ID for session reuse
  * @param poolKey - Pool identifier (for logging/metrics)
- * @param options - Session configuration
+ * @param options - Session configuration (must include matching userId + gitHubToken)
  * @returns Session and creation metrics
+ * @throws {Error} if `userId` is missing/empty (multi-tenant invariant)
  */
 export async function getConversationSession(
   userId: string,
@@ -303,6 +315,9 @@ export async function getConversationSession(
   poolKey: string,
   options: SessionOptions
 ): Promise<SessionWithMetrics> {
+  if (!userId) {
+    throw new Error('userId required for session cache key — multi-tenant invariant');
+  }
   if (!conversationId) {
     log.debug('No conversation ID - creating fresh session', { poolKey, userId });
     return createSessionWithMetrics({ ...options, userId }, poolKey);

@@ -245,6 +245,7 @@ export async function createLoggedCoachSession(
     includeMcpTools: true,
     tools: ['get_me', 'list_user_repositories'],
     systemMessage: COACH_SYSTEM_PROMPT,
+    userId: identity.userId,
     gitHubToken: identity.gitHubToken,
   }, 'coach:mcp');
   return wrapSessionWithLogging(
@@ -274,6 +275,7 @@ export async function createLoggedLightweightCoachSession(
     includeMcpTools: false,
     model: MODEL_TIERS.fastChat,
     systemMessage: COACH_LIGHTWEIGHT_PROMPT,
+    userId: identity.userId,
     gitHubToken: identity.gitHubToken,
   }, 'coach:lightweight');
   return wrapSessionWithLogging(
@@ -311,6 +313,7 @@ export async function createLoggedChatSession(
       includeMcpTools: false,
       model: CHAT_MODEL,
       systemMessage: CHAT_SYSTEM_PROMPT,
+      userId: identity.userId,
       gitHubToken: identity.gitHubToken,
     },
   );
@@ -352,6 +355,7 @@ export async function createLoggedGitHubChatSession(
       model: CHAT_MODEL,
       ...(chatTools && chatTools.length > 0 && { tools: chatTools }),
       systemMessage: GITHUB_CHAT_SYSTEM_PROMPT,
+      userId: identity.userId,
       gitHubToken: identity.gitHubToken,
     },
   );
