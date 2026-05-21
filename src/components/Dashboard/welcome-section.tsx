@@ -18,7 +18,7 @@ export const WelcomeSection = memo(function WelcomeSection({ displayName, isLoad
       <Heading as="h1" className={styles.welcomeHeading}>
         {getGreeting()},{' '}
         {isLoading || !showName ? (
-          <SkeletonBox height="1.2em" width="80px" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+          <SkeletonBox height="1.2em" width="80px" className={styles.skeletonInline} />
         ) : (
           displayName
         )}! 👋

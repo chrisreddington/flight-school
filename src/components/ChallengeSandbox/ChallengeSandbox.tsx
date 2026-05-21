@@ -57,20 +57,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 // PERF: Set ssr: false to prevent hydration issues and reduce server bundle
 const Editor = dynamic(() => import('@monaco-editor/react'), {
   loading: () => (
-    <div 
-      style={{ 
-        padding: '16px', 
-        textAlign: 'center',
-        height: '100%',
-        minHeight: '300px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--bgColor-muted, #f6f8fa)',
-        color: 'var(--fgColor-muted, #656d76)',
-        fontSize: '14px',
-      }}
-    >
+    <div className={styles.editorLoadingPlaceholder}>
       Loading editor...
     </div>
   ),
@@ -372,13 +359,14 @@ export function ChallengeSandbox({
 
       {/* Solution error message */}
       {solveError && (
-        <Banner
-          title="Error"
-          description={solveError}
-          variant="critical"
-          hideTitle
-          style={{ marginBottom: 16 }}
-        />
+        <div className={styles.solveErrorBanner}>
+          <Banner
+            title="Error"
+            description={solveError}
+            variant="critical"
+            hideTitle
+          />
+        </div>
       )}
 
       {mode === 'guided' && (
@@ -459,20 +447,7 @@ export function ChallengeSandbox({
                 aria-label={`Code editor for ${activeFileName}`}
               />
             ) : (
-              <div 
-                style={{ 
-                  padding: '16px', 
-                  textAlign: 'center',
-                  height: '100%',
-                  minHeight: '300px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: 'var(--bgColor-muted, #f6f8fa)',
-                  color: 'var(--fgColor-muted, #656d76)',
-                  fontSize: '14px',
-                }}
-              >
+              <div className={styles.editorLoadingPlaceholder}>
                 Loading editor...
               </div>
             )}

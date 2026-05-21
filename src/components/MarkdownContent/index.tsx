@@ -19,7 +19,7 @@ import styles from './MarkdownContent.module.css';
 
 // Lazy load markdown rendering to reduce initial bundle
 const ReactMarkdown = dynamic(() => import('react-markdown'), {
-  loading: () => <div style={{ padding: '1rem', textAlign: 'center' }}><Spinner size="small" /></div>,
+  loading: () => <div className={styles.loadingFallback}><Spinner size="small" /></div>,
 });
 
 /**
