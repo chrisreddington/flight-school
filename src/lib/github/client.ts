@@ -120,6 +120,11 @@ function isValidGitHubToken(token: string): boolean {
  * @returns GitHub token or null if gh CLI is not available/authenticated
  */
 async function getTokenFromGhCli(): Promise<string | null> {
+  if (process.env.NODE_ENV === 'production' || process.env.ACA_DEPLOYMENT === 'true') {
+    log.debug('gh CLI fallback disabled in production / ACA');
+    return null;
+  }
+
   if (cachedGhToken) {
     log.debug('Using cached gh CLI token');
     return cachedGhToken;
@@ -250,6 +255,10 @@ export async function isGitHubConfigured(): Promise<boolean> {
 /**
  * Get the authentication method currently in use.
  * @returns 'github-token' if using GITHUB_TOKEN env var, 'github-cli' if using gh CLI
+ *
+ * Note: `'github-cli'` is a development-only auth method. In production (or when
+ * `ACA_DEPLOYMENT=true`), the gh CLI fallback is disabled in {@link getTokenFromGhCli},
+ * so this function will never return `'github-cli'` in those environments.
  */
 export function getAuthMethod(): 'github-token' | 'github-cli' | 'none' {
   if (process.env.GITHUB_TOKEN) {

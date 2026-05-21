@@ -128,3 +128,46 @@ describe.skipIf(!canMockGithubToken)('GitHub Token Format Validation', () => {
     expect(result).toBe(token);
   });
 });
+
+// =============================================================================
+// gh CLI fallback guard (production / ACA)
+// =============================================================================
+
+describe('gh CLI fallback guard', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    invalidateTokenCache();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    invalidateTokenCache();
+    vi.restoreAllMocks();
+  });
+
+  it('returns null without invoking execFile when NODE_ENV=production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('GITHUB_TOKEN', '');
+
+    const start = Date.now();
+    const token = await getGitHubToken();
+    const elapsed = Date.now() - start;
+
+    expect(token).toBeNull();
+    // Guard must short-circuit synchronously; if execFile ran it would take ~5s on failure
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('returns null without invoking execFile when ACA_DEPLOYMENT=true', async () => {
+    vi.stubEnv('ACA_DEPLOYMENT', 'true');
+    vi.stubEnv('GITHUB_TOKEN', '');
+
+    const start = Date.now();
+    const token = await getGitHubToken();
+    const elapsed = Date.now() - start;
+
+    expect(token).toBeNull();
+    expect(elapsed).toBeLessThan(500);
+  });
+});
