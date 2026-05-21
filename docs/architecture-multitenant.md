@@ -90,12 +90,15 @@ users without ever mixing their tokens.
 
 ## Anti-patterns to reject in review
 
-- Reading `process.env.GITHUB_TOKEN` outside `src/lib/github/client.ts`.
+- Reading `process.env.GITHUB_TOKEN` anywhere in production code. There is
+  no ambient identity — even in local dev, sign in via the OAuth flow.
+- Shelling out to `gh auth token` or any other CLI to resolve a GitHub
+  token. The client module no longer imports `child_process`.
 - Caching an `Octokit` instance at module scope.
 - Calling `new CopilotClient(...)` outside `src/lib/copilot/sessions.ts`.
 - Creating a session without passing `gitHubToken`, or passing one user's
   token into another user's session cache key.
-- Using `getGitHubToken()` or `isGitHubConfigured()` inside a request handler.
+- Resolving a token outside `requireUserContext()` / `getUserContext()`.
 
 ## Related docs
 
@@ -105,3 +108,27 @@ users without ever mixing their tokens.
   GitHub App setup.
 - [`docs/migrations/2025-multitenant-auth.md`](migrations/2025-multitenant-auth.md)
   — Before/after for developers upgrading from the single-tenant model.
+
+## Token storage
+
+GitHub user-to-server tokens (`ghu_` access, `ghr_` refresh) are persisted via
+the {@link TokenStore} abstraction in `src/lib/auth/token-store.ts`. The
+implementation is chosen at process boot by `token-store-factory.ts`:
+
+| Env | Store | Notes |
+|---|---|---|
+| `AZURE_COSMOS_ENDPOINT` set | `CosmosTokenStore` | AES-256-GCM token payload, DEK wrapped by Azure Key Vault (`A256KW`) via `DefaultAzureCredential` (managed identity in prod). Documents partitioned by `userId`. |
+| Otherwise | `InMemoryTokenStore` | Process-local `Map`. **Local-dev only** — a server restart drops sessions and forces re-auth. That is the secure-by-default behaviour: no plaintext tokens ever touch disk. |
+
+In `NODE_ENV=production` the factory **throws on boot** if
+`AZURE_COSMOS_ENDPOINT` is missing, so the in-memory store cannot be deployed
+to production by accident.
+
+Required env for the Cosmos path:
+
+- `AZURE_COSMOS_ENDPOINT`, `AZURE_COSMOS_DATABASE`, `AZURE_COSMOS_CONTAINER`
+- `AZURE_KEY_VAULT_URL`, `AZURE_KEY_VAULT_KEY_NAME`
+- `AZURE_KEY_VAULT_KEY_VERSION` (optional; defaults to the latest key version)
+
+No static secrets — both `CosmosClient` and `CryptographyClient` authenticate
+with `DefaultAzureCredential` (managed identity in ACA, `az login` locally).

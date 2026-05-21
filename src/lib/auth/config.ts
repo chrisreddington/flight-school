@@ -14,7 +14,24 @@ import GitHub from 'next-auth/providers/github';
 
 import { logger } from '@/lib/logger';
 
+import { getTokenStore, type StoredToken } from './token-store';
+
 const log = logger.withTag('Auth');
+
+/**
+ * Persist the user's GitHub tokens to the configured {@link TokenStore} on a
+ * best-effort basis. The JWT cookie remains the source of truth for the
+ * request; the store is what we rely on for server-side refresh and audit.
+ * Failures are logged and swallowed so an outage in Cosmos/Key Vault never
+ * locks users out of the application.
+ */
+async function persistTokenToStore(userId: string, stored: StoredToken): Promise<void> {
+  try {
+    await getTokenStore().setToken(userId, stored);
+  } catch (error) {
+    log.warn('Failed to persist token to token store (continuing with cookie-only)', error);
+  }
+}
 
 /**
  * GitHub App OAuth scopes. `repo` is required for the repo-creation features
@@ -107,6 +124,13 @@ export const authConfig: NextAuthConfig = {
           if (ghProfile.id !== undefined) token.userId = String(ghProfile.id);
           if (ghProfile.login) token.login = ghProfile.login;
         }
+        if (typeof token.userId === 'string' && typeof token.accessToken === 'string') {
+          await persistTokenToStore(token.userId, {
+            accessToken: token.accessToken,
+            refreshToken: typeof token.refreshToken === 'string' ? token.refreshToken : undefined,
+            expiresAt: token.expiresAt,
+          });
+        }
         return token;
       }
 
@@ -130,6 +154,13 @@ export const authConfig: NextAuthConfig = {
         token.expiresAt = Math.floor(Date.now() / 1000) + refreshed.expires_in;
         delete (token as { error?: string }).error;
         log.debug('Refreshed GitHub user-to-server access token');
+        if (typeof token.userId === 'string') {
+          await persistTokenToStore(token.userId, {
+            accessToken: refreshed.access_token,
+            refreshToken: token.refreshToken,
+            expiresAt: token.expiresAt,
+          });
+        }
         return token;
       } catch (error) {
         log.error('Failed to refresh GitHub access token', error);
