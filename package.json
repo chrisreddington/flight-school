@@ -48,6 +48,7 @@
     "@primer/react": "^38.23.0",
     "@vercel/otel": "^2.0.0",
     "next": "16.2.6",
+    "next-auth": "^5.0.0-beta.31",
     "octokit": "^5.0.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
@@ -70,12 +71,12 @@
     "jsdom": "^29.1.1",
     "knip": "^6.13.1",
     "madge": "^8.0.0",
-    "ts-prune": "^0.10.3",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
     "nodemon": "^3.1.14",
+    "ts-prune": "^0.10.3",
     "tsx": "^4.21.0",
-    "typescript-eslint": "^8.57.1"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.1",
+    "vitest": "^4.0.18"
   },
   "description": "AI-powered developer growth companion - personalized coding challenges and tips based on GitHub activity",
   "engines": {

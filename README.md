@@ -75,6 +75,26 @@ GITHUB_TOKEN=ghp_your_token_here
 
 > **Note:** You'll still need the GitHub Copilot CLI installed for AI-powered features like challenges, hints, and coaching. The token only handles GitHub API access for profile and repository data.
 
+### Multi-tenant OAuth (Auth.js v5 + GitHub App)
+
+When deployed publicly, Flight School authenticates each user via a GitHub App
+OAuth flow. The app receives a user-to-server (`ghu_`) token that downstream
+GitHub API calls and Copilot SDK sessions use on a per-request basis.
+
+Add the following to `.env.local` (see `.env.example`):
+
+```bash
+AUTH_SECRET=                  # openssl rand -base64 32
+AUTH_GITHUB_ID=               # GitHub App client id
+AUTH_GITHUB_SECRET=           # GitHub App client secret
+AUTH_TRUST_HOST=true          # required when running behind a proxy (e.g. ACA)
+```
+
+Configure the GitHub App with the callback URL
+`http(s)://<host>/api/auth/callback/github` and request the scopes
+`read:user user:email read:org repo`. Enable "Expire user authorization
+tokens" so refresh tokens are issued.
+
 ## Vision
 
 AI can be a learning partner, not just a tool that helps generate solutions. Flight School explores how the Copilot SDK can create educational experiences that adapt to each developer's existing experience, their skill level, provide constructive feedback, and guide learners toward understanding.
