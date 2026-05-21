@@ -8,7 +8,7 @@
  */
 
 // Client
-export { getAuthMethod, isGitHubConfigured } from './client';
+export { getOctokitForRequest, getOctokitForToken } from './client';
 
 // User
 export {

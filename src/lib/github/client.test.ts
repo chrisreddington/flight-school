@@ -1,16 +1,16 @@
 /**
  * Tests for the GitHub client.
  *
- * The new API exposes `getOctokitForToken(token)` for per-request Octokit
- * construction. There is no shared singleton — different tokens must produce
- * distinct Octokit instances so user credentials never leak between sessions.
+ * In the multi-tenant runtime there is no ambient token resolution. The
+ * client exposes only:
+ *  - `getOctokitForToken(token)` — per-request Octokit factory
+ *  - `getOctokitForRequest()` — pulls the token from the Auth.js session
  *
- * Legacy env-based helpers (`getGitHubToken`, `isGitHubConfigured`) remain for
- * boot-time / instrumentation paths and are exercised here only for the gh CLI
- * production guard.
+ * These tests pin the factory's per-token isolation guarantees so user
+ * credentials cannot leak between sessions.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const octokitConstructorSpy = vi.fn();
 
@@ -32,28 +32,9 @@ vi.mock('octokit', () => {
   };
 });
 
-import {
-  getGitHubToken,
-  getOctokitForToken,
-  invalidateTokenCache,
-} from './client';
-
-/** Whether we can write to GITHUB_TOKEN in this environment. */
-const canMockGithubToken = (() => {
-  const backup = process.env.GITHUB_TOKEN;
-  try {
-    process.env.GITHUB_TOKEN = '__vitest_canary__';
-    const writable = process.env.GITHUB_TOKEN === '__vitest_canary__';
-    if (backup !== undefined) {
-      process.env.GITHUB_TOKEN = backup;
-    } else {
-      delete process.env.GITHUB_TOKEN;
-    }
-    return writable;
-  } catch {
-    return false;
-  }
-})();
+import * as clientModule from './client';
+import { getOctokitForRequest, getOctokitForToken } from './client';
+import { requireUserContext } from '@/lib/auth/context';
 
 describe('getOctokitForToken', () => {
   beforeEach(() => {
@@ -86,70 +67,41 @@ describe('getOctokitForToken', () => {
   });
 });
 
-describe.skipIf(!canMockGithubToken)('getGitHubToken (legacy boot-time helper)', () => {
+describe('getOctokitForRequest', () => {
   beforeEach(() => {
-    vi.unstubAllEnvs();
-    invalidateTokenCache();
+    octokitConstructorSpy.mockClear();
+    vi.mocked(requireUserContext).mockReset();
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    invalidateTokenCache();
+  it('uses the access token from the authenticated user context', async () => {
+    vi.mocked(requireUserContext).mockResolvedValue({
+      userId: '42',
+      login: 'octocat',
+      accessToken: 'ghu_session_token',
+    });
+
+    const octokit = await getOctokitForRequest();
+
+    expect(octokit).toBeDefined();
+    expect(octokitConstructorSpy).toHaveBeenCalledWith({ auth: 'ghu_session_token' });
   });
 
-  it('returns GITHUB_TOKEN when set', async () => {
-    vi.stubEnv('GITHUB_TOKEN', 'ghp_test_token_123');
-    const token = await getGitHubToken();
-    expect(token).toBe('ghp_test_token_123');
-  });
+  it('propagates UnauthorizedError when no session is present', async () => {
+    class UnauthorizedError extends Error {}
+    vi.mocked(requireUserContext).mockRejectedValue(new UnauthorizedError('no session'));
 
-  it.each([
-    ['ghp_personaltoken123', 'PAT'],
-    ['gho_oauthtoken123456', 'OAuth'],
-    ['ghs_servertoken12345', 'Server'],
-    ['ghu_usertoken1234567', 'User'],
-    ['github_pat_longertoken', 'Fine-grained PAT'],
-  ])('returns %s token format (%s)', async (token) => {
-    vi.stubEnv('GITHUB_TOKEN', token);
-    const result = await getGitHubToken();
-    expect(result).toBe(token);
+    await expect(getOctokitForRequest()).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(octokitConstructorSpy).not.toHaveBeenCalled();
   });
 });
 
-describe('gh CLI fallback guard', () => {
-  beforeEach(() => {
-    vi.unstubAllEnvs();
-    invalidateTokenCache();
-    vi.restoreAllMocks();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    invalidateTokenCache();
-    vi.restoreAllMocks();
-  });
-
-  it('returns null without invoking execFile when NODE_ENV=production', async () => {
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('GITHUB_TOKEN', '');
-
-    const start = Date.now();
-    const token = await getGitHubToken();
-    const elapsed = Date.now() - start;
-
-    expect(token).toBeNull();
-    expect(elapsed).toBeLessThan(500);
-  });
-
-  it('returns null without invoking execFile when ACA_DEPLOYMENT=true', async () => {
-    vi.stubEnv('ACA_DEPLOYMENT', 'true');
-    vi.stubEnv('GITHUB_TOKEN', '');
-
-    const start = Date.now();
-    const token = await getGitHubToken();
-    const elapsed = Date.now() - start;
-
-    expect(token).toBeNull();
-    expect(elapsed).toBeLessThan(500);
+describe('no ambient auth surface', () => {
+  it('does not export legacy token resolvers', () => {
+    const exported = clientModule as Record<string, unknown>;
+    expect(exported.getGitHubToken).toBeUndefined();
+    expect(exported.getTokenFromGhCli).toBeUndefined();
+    expect(exported.isGitHubConfigured).toBeUndefined();
+    expect(exported.getAuthMethod).toBeUndefined();
+    expect(exported.invalidateTokenCache).toBeUndefined();
   });
 });

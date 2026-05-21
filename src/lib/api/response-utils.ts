@@ -101,8 +101,8 @@ export function validationErrorResponse(
  * 
  * @example
  * ```typescript
- * if (!(await isGitHubConfigured())) {
- *   return serviceUnavailableResponse('GitHub API not configured');
+ * if (!externalServiceReady) {
+ *   return serviceUnavailableResponse('Downstream service unavailable');
  * }
  * ```
  */

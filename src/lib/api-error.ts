@@ -1,9 +1,14 @@
 /**
  * API Error Handler
  *
- * Centralizes error handling logic for API routes.
- * Maps error messages to appropriate HTTP status codes and invalidates
- * cached tokens for authentication errors.
+ * Centralizes error handling for API routes. Maps error messages to
+ * appropriate HTTP status codes and emits a consistent JSON envelope.
+ *
+ * @remarks
+ * In the multi-tenant runtime each request resolves its own token from the
+ * Auth.js session, so there is no process-wide token cache to invalidate
+ * on auth failures. A 401/403 simply means the user needs to re-authenticate
+ * via the OAuth flow.
  *
  * @example
  * ```typescript
@@ -18,7 +23,6 @@
  * ```
  */
 
-import { invalidateTokenCache } from '@/lib/github/client';
 import { nowMs } from '@/lib/utils/date-utils';
 import { logger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
@@ -29,7 +33,7 @@ interface ApiErrorOptions {
 }
 
 /**
- * Handles API errors with appropriate status codes and token invalidation.
+ * Handle an API error and convert it into a JSON {@link NextResponse}.
  *
  * @param error - The caught error
  * @param contextTag - Logging context (e.g., "GET /api/profile")
@@ -45,11 +49,9 @@ export function handleApiError(
 ) {
   const totalTime = nowMs() - startTime;
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-  
-  // Log the error using the centralized logger
+
   logger.error(`Error after ${totalTime}ms:`, errorMessage, contextTag);
 
-  // Determine appropriate status code based on error message patterns
   let statusCode = options.statusCode ?? 500;
   const msg = errorMessage.toLowerCase();
   const errorStatus = (error as { status?: number })?.status;
@@ -73,19 +75,6 @@ export function handleApiError(
 
   if (!hasStatusOverride && statusCode === 500 && errorStatus && errorStatus >= 400 && errorStatus <= 599) {
     statusCode = errorStatus;
-  }
-
-  const authStatusCodes = new Set([401, 403]);
-  const shouldInvalidateToken =
-    authStatusCodes.has(statusCode) ||
-    (errorStatus ? authStatusCodes.has(errorStatus) : false) ||
-    msg.includes('unauthorized') ||
-    msg.includes('authentication') ||
-    msg.includes('bad credentials');
-
-  if (shouldInvalidateToken) {
-    logger.warn('Invalidating token cache due to authentication error', contextTag);
-    invalidateTokenCache();
   }
 
   return NextResponse.json(

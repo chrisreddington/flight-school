@@ -57,11 +57,12 @@ users without ever mixing their tokens.
 ## Cross-cutting guarantees
 
 - **No singleton tokens.** Octokit instances are constructed per request via
-  `getOctokitForToken(token)` / `getOctokitForRequest()`. The deprecated
-  `getGitHubToken()` exists only for boot-time / instrumentation paths and is
-  never called by request handlers.
-- **gh CLI fallback is dev-only.** `getTokenFromGhCli()` short-circuits when
-  `NODE_ENV === 'production'` or `ACA_DEPLOYMENT === 'true'`.
+  `getOctokitForToken(token)` / `getOctokitForRequest()`. There is no
+  ambient token resolution — every token originates from
+  `requireUserContext()`.
+- **No CLI / env back doors.** The client module does not import
+  `child_process` and does not read `process.env.GITHUB_TOKEN`. Local dev
+  signs in via the OAuth flow just like production.
 - **User-keyed chat session cache.** The Copilot conversation cache key is
   `${userId}:${poolKey}:${conversationId}` (see `chatSessionCache` in
   `src/lib/copilot/sessions.ts`). Two users sharing a conversation ID never
@@ -88,6 +89,56 @@ users without ever mixing their tokens.
 | Route guard composition | `src/lib/security/guard.ts` | `withUserGuards` |
 | Audit + abuse controls | `src/lib/security/` | `auditLog`, `checkRateLimit`, `acquireSlot` |
 
+## Storage isolation
+
+The server-side storage APIs — `/api/threads/storage`, `/api/focus/storage`,
+and `/api/workspace/storage` (plus `/api/workspace/storage/list`) — are
+**partitioned per authenticated user** on disk. The shared
+`createStorageRoute` factory in `src/lib/api/storage-route-factory.ts` and the
+workspace route both resolve the caller's identity via `requireUserContext()`
+and rewrite the storage path to live under a per-user subdirectory:
+
+```
+{FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/threads.json
+{FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/focus-storage.json
+{FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/workspaces/{challengeId}/...
+```
+
+`{userId}` is the numeric GitHub user ID taken from the Auth.js session —
+never from a query string or request body. Before it is used as a path
+segment it is validated against `/^[a-zA-Z0-9_-]+$/`; anything else
+(including `..`, `/`, `.`) is rejected with HTTP 400. The per-user directory
+is created on demand with mode `0o700` on platforms that honour POSIX modes.
+
+### Guarantees
+
+- **GET returns the caller's data only.** User A's `GET /api/threads/storage`
+  sees the default empty schema even if User B has written threads, because
+  A's path doesn't exist on disk.
+- **DELETE only clears the caller's file.** User A deleting their workspace
+  cannot affect User B's `users/{B}/workspaces/...`.
+- **Unauthenticated requests return 401** before any filesystem call.
+- **Path-traversal is rejected with 400** rather than silently sandboxed.
+
+### Migration policy
+
+The pre-multitenant code wrote storage files directly at the root of
+`FLIGHT_SCHOOL_DATA_DIR` (e.g. `threads.json` at the top level). Those files
+are **ignored** by the multi-tenant code — there is no automatic migration.
+This is safe because the multi-tenant version is not yet deployed to
+production. Developers running local dev environments can delete the old
+files manually:
+
+```sh
+# macOS/Linux default location
+rm -rf ~/.local/share/flight-school/threads.json \
+       ~/.local/share/flight-school/focus-storage.json \
+       ~/.local/share/flight-school/workspaces/
+```
+
+See [`src/lib/api/MIGRATION.md`](../src/lib/api/MIGRATION.md) for the same
+note alongside the code.
+
 ## Anti-patterns to reject in review
 
 - Reading `process.env.GITHUB_TOKEN` anywhere in production code. There is
@@ -99,6 +150,9 @@ users without ever mixing their tokens.
 - Creating a session without passing `gitHubToken`, or passing one user's
   token into another user's session cache key.
 - Resolving a token outside `requireUserContext()` / `getUserContext()`.
+- Writing or reading server-side storage files at the storage root rather
+  than under `users/{userId}/...`. All storage routes derive the userId from
+  `requireUserContext()`; the caller is never trusted to supply it.
 
 ## Related docs
 

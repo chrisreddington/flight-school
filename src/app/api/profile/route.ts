@@ -13,7 +13,6 @@ import {
     calculateExperienceLevel,
     calculateYearsOnGitHub,
     getAuthenticatedUser,
-    getAuthMethod,
     getLanguageStats,
     getUserEvents,
     getUserRepositories,
@@ -62,8 +61,8 @@ export interface ProfileResponse {
     aiEnabled: boolean;
     method: string;
     totalTimeMs: number;
-    /** Authentication method: 'github-token' | 'github-cli' | 'copilot-mcp' | 'none' */
-    authMethod: 'github-token' | 'github-cli' | 'copilot-mcp' | 'none';
+    /** Authentication method: 'github-oauth' for signed-in users, 'none' for fallback responses. */
+    authMethod: 'github-oauth' | 'none';
   };
 }
 
@@ -176,7 +175,7 @@ export async function GET() {
         aiEnabled: true,
         method: 'octokit-cached',
         totalTimeMs: nowMs() - startTime,
-        authMethod: getAuthMethod(),
+        authMethod: 'github-oauth',
       },
     } satisfies ProfileResponse);
   }
@@ -249,7 +248,7 @@ export async function GET() {
         aiEnabled: true,
         method: 'octokit-direct',
         totalTimeMs: totalTime,
-        authMethod: getAuthMethod(),
+        authMethod: 'github-oauth',
       },
     };
 

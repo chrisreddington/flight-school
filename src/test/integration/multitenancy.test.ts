@@ -7,7 +7,10 @@
  * this suite verifies the system as a whole.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
 
 const createSessionMock = vi.fn();
 const octokitConstructorSpy = vi.fn();
@@ -33,14 +36,32 @@ vi.mock('octokit', () => ({
   }),
 }));
 
-vi.mock('@/lib/auth/context', () => ({
-  requireUserContext: vi.fn(),
-  UnauthorizedError: class UnauthorizedError extends Error {},
+const { requireUserContextMock } = vi.hoisted(() => ({
+  requireUserContextMock: vi.fn(),
 }));
+
+vi.mock('@/lib/auth/context', () => ({
+  requireUserContext: requireUserContextMock,
+  UnauthorizedError: class UnauthorizedError extends Error {
+    readonly status = 401;
+    constructor(message = 'Authentication required') {
+      super(message);
+      this.name = 'UnauthorizedError';
+    }
+  },
+}));
+
+const STORAGE_DIR = path.join(
+  os.tmpdir(),
+  `flight-school-mt-${Date.now()}-${Math.random().toString(36).slice(2)}`
+);
+vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', STORAGE_DIR);
 
 import { getOctokitForToken } from '@/lib/github/client';
 import { getMcpServerConfig } from '@/lib/copilot/mcp';
 import { getConversationSession } from '@/lib/copilot/sessions';
+import * as githubClient from '@/lib/github/client';
+import { UnauthorizedError } from '@/lib/auth/context';
 
 const TOKEN_A = 'ghu_userA_token_aaaaaaaaaaaaaaaaaaaa';
 const TOKEN_B = 'ghu_userB_token_bbbbbbbbbbbbbbbbbbbb';
@@ -143,4 +164,239 @@ describe('multi-tenant auth/token isolation', () => {
       expect(createSessionMock).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('no ambient auth back doors', () => {
+    it('does not expose any legacy ambient-token resolvers', () => {
+      const exported = githubClient as Record<string, unknown>;
+      expect(exported.getGitHubToken).toBeUndefined();
+      expect(exported.getTokenFromGhCli).toBeUndefined();
+      expect(exported.isGitHubConfigured).toBeUndefined();
+      expect(exported.getAuthMethod).toBeUndefined();
+      expect(exported.invalidateTokenCache).toBeUndefined();
+    });
+
+    it('setting GITHUB_TOKEN does not confer access without a session', async () => {
+      vi.stubEnv('GITHUB_TOKEN', 'ghp_should_not_be_used_xxxxxxxxxxxxxxxx');
+      requireUserContextMock.mockImplementationOnce(() => {
+        throw new UnauthorizedError();
+      });
+
+      await expect(githubClient.getOctokitForRequest()).rejects.toBeInstanceOf(
+        UnauthorizedError
+      );
+      // No Octokit should have been constructed from the env var.
+      expect(octokitConstructorSpy).not.toHaveBeenCalled();
+
+      vi.unstubAllEnvs();
+    });
+
+    it('does not read the GitHub token from the gh CLI', async () => {
+      // The client module must not import child_process for token resolution.
+      // Inspecting the module source is the simplest contract test.
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const source = await fs.readFile(
+        path.resolve(process.cwd(), 'src/lib/github/client.ts'),
+        'utf-8'
+      );
+      expect(source).not.toMatch(/child_process/);
+      expect(source).not.toMatch(/execFile|execSync|spawn/);
+      expect(source).not.toMatch(/process\.env\.GITHUB_TOKEN/);
+    });
+  });
+
+  describe('storage routes per-user isolation (threads, focus, workspace)', () => {
+    beforeEach(async () => {
+      await fs.mkdir(STORAGE_DIR, { recursive: true });
+      requireUserContextMock.mockReset();
+    });
+
+    async function loadStorageRoutes() {
+      // Imported lazily so the FLIGHT_SCHOOL_DATA_DIR stub is in effect when
+      // the storage utils module reads it during init.
+      const threads = await import('@/app/api/threads/storage/route');
+      const focus = await import('@/app/api/focus/storage/route');
+      const workspace = await import('@/app/api/workspace/storage/route');
+      const workspaceList = await import('@/app/api/workspace/storage/list/route');
+      return { threads, focus, workspace, workspaceList };
+    }
+
+    function ctxFor(userId: string) {
+      return { userId, login: `u${userId}`, accessToken: `ghu_${userId}` };
+    }
+
+    function postReq(url: string, body: unknown): Request {
+      return new Request(url, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    it('threads + focus storage are partitioned: user A cannot see user B writes', async () => {
+      const { threads, focus } = await loadStorageRoutes();
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const tWriteB = await threads.POST(
+        postReq('http://test/api/threads/storage', {
+          threads: [{ id: 'thread-of-user-1001', title: 'secret' }],
+        }) as never
+      );
+      expect(tWriteB.status).toBe(200);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      const tReadA = await threads.GET();
+      const tBodyA = (await tReadA.json()) as { threads: unknown[] };
+      expect(tBodyA.threads).toEqual([]);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const fWriteB = await focus.POST(
+        postReq('http://test/api/focus/storage', {
+          history: { '2024-01-01': { items: ['secret-focus'] } },
+        }) as never
+      );
+      expect(fWriteB.status).toBe(200);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      const fReadA = await focus.GET();
+      const fBodyA = (await fReadA.json()) as { history: Record<string, unknown> };
+      expect(fBodyA.history).toEqual({});
+    });
+
+    it('workspace storage is partitioned per user', async () => {
+      const { workspace, workspaceList } = await loadStorageRoutes();
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const saveB = await workspace.POST(
+        postReq('http://test/api/workspace/storage', {
+          version: 1,
+          challengeId: 'fizzbuzz',
+          files: [{ name: 'solution.ts', content: 'export const secret = 42;', id: 'f1' }],
+          activeFileId: 'f1',
+          createdAt: 1,
+          updatedAt: 1,
+        }) as never
+      );
+      expect(saveB.status).toBe(200);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      const readA = await workspace.GET(
+        new Request('http://test/api/workspace/storage?challengeId=fizzbuzz') as never
+      );
+      expect(readA.status).toBe(404);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      const listA = await workspaceList.GET();
+      const listBodyA = (await listA.json()) as { challengeIds: string[] };
+      expect(listBodyA.challengeIds).toEqual([]);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const listB = await workspaceList.GET();
+      const listBodyB = (await listB.json()) as { challengeIds: string[] };
+      expect(listBodyB.challengeIds).toContain('fizzbuzz');
+    });
+
+    it('all three storage routes return 401 when unauthenticated', async () => {
+      const { threads, focus, workspace, workspaceList } = await loadStorageRoutes();
+
+      const fail = () => { throw new UnauthorizedError(); };
+
+      requireUserContextMock.mockImplementationOnce(fail);
+      expect((await threads.GET()).status).toBe(401);
+      requireUserContextMock.mockImplementationOnce(fail);
+      expect((await focus.GET()).status).toBe(401);
+      requireUserContextMock.mockImplementationOnce(fail);
+      expect(
+        (await workspace.GET(
+          new Request('http://test/api/workspace/storage?challengeId=x') as never
+        )).status
+      ).toBe(401);
+      requireUserContextMock.mockImplementationOnce(fail);
+      expect((await workspaceList.GET()).status).toBe(401);
+    });
+
+    it('DELETE for user A does not affect user B in any of the three routes', async () => {
+      const { threads, focus, workspace, workspaceList } = await loadStorageRoutes();
+
+      // Seed A and B in threads + focus + workspace.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      await threads.POST(postReq('http://t', { threads: [{ id: 'b-thread' }] }) as never);
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      await threads.POST(postReq('http://t', { threads: [{ id: 'a-thread' }] }) as never);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      await focus.POST(postReq('http://t', { history: { d: { v: 1 } } }) as never);
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      await focus.POST(postReq('http://t', { history: { d: { v: 2 } } }) as never);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      await workspace.POST(
+        postReq('http://t', {
+          version: 1,
+          challengeId: 'c1',
+          files: [{ name: 'a.ts', content: 'b', id: 'i' }],
+          activeFileId: 'i',
+          createdAt: 1,
+          updatedAt: 1,
+        }) as never
+      );
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      await workspace.POST(
+        postReq('http://t', {
+          version: 1,
+          challengeId: 'c1',
+          files: [{ name: 'a.ts', content: 'a', id: 'i' }],
+          activeFileId: 'i',
+          createdAt: 1,
+          updatedAt: 1,
+        }) as never
+      );
+
+      // User A deletes everything.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      await threads.DELETE();
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      await focus.DELETE();
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
+      await workspace.DELETE(new Request('http://t/api/workspace/storage') as never);
+
+      // User B's data must still be intact.
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const tB = (await (await threads.GET()).json()) as { threads: { id: string }[] };
+      expect(tB.threads).toEqual([{ id: 'b-thread' }]);
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const fB = (await (await focus.GET()).json()) as { history: Record<string, unknown> };
+      expect(fB.history).toEqual({ d: { v: 1 } });
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor('1001'));
+      const lB = (await (await workspaceList.GET()).json()) as { challengeIds: string[] };
+      expect(lB.challengeIds).toContain('c1');
+    });
+
+    it('rejects path-traversal in userId with 400 across all three routes', async () => {
+      const { threads, focus, workspace, workspaceList } = await loadStorageRoutes();
+
+      const setBad = () => requireUserContextMock.mockResolvedValueOnce(ctxFor('..'));
+      // ctxFor('..') yields userId='..' which fails the regex.
+
+      setBad(); expect((await threads.GET()).status).toBe(400);
+      setBad(); expect((await focus.GET()).status).toBe(400);
+      setBad();
+      expect(
+        (await workspace.GET(
+          new Request('http://test/api/workspace/storage?challengeId=x') as never
+        )).status
+      ).toBe(400);
+      setBad(); expect((await workspaceList.GET()).status).toBe(400);
+    });
+  });
+});
+
+afterAll(async () => {
+  try {
+    await fs.rm(STORAGE_DIR, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup errors
+  }
 });

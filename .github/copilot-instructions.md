@@ -45,27 +45,19 @@ Rules:
 - **Per-request Octokit only.** Never cache or share an Octokit across users
   or across requests. `getOctokitForRequest()` constructs a fresh, instrumented
   instance every call.
-- **Never read `process.env.GITHUB_TOKEN` directly** outside of
-  `src/lib/github/client.ts`. There is no ambient identity to fall back to in
-  production.
+- **Never read `process.env.GITHUB_TOKEN`.** There is no ambient identity in
+  any environment, including local dev. The OAuth flow is the only auth path.
+- **No `gh auth token` fallback.** The client module does not shell out;
+  every token comes from the Auth.js session.
 - **Hot AI routes should use `withUserGuards`** (`src/lib/security/guard.ts`),
   which composes `requireUserContext` + rate limit + concurrent-session cap +
   audit log around the handler.
 
-### Deprecated / limited-use APIs
+### `gh` CLI fallback is gone
 
-| Symbol | Status | Allowed use |
-|--------|--------|-------------|
-| `getGitHubToken()` (in `@/lib/github/client`) | `@deprecated` | Boot-time / instrumentation paths that legitimately operate without a user. **Not** in request handlers. |
-| `isGitHubConfigured()` | `@deprecated` | Health/debug checks only. |
-| `getAuthMethod()` | Internal | Diagnostics. Returns `'github-cli'` only in dev. |
-
-### `gh` CLI fallback is dev-only
-
-`getTokenFromGhCli()` is automatically disabled when
-`NODE_ENV === 'production'` **or** `ACA_DEPLOYMENT === 'true'`. Production
-deployments must rely on the Auth.js session token; there is no host identity
-to inherit.
+There is no `gh auth token` lookup anywhere in the application. Local dev
+must sign in through the same OAuth flow as production. The
+`ACA_DEPLOYMENT` env var no longer affects token resolution.
 
 ### Copilot SDK: per-session GitHub identity
 
@@ -340,16 +332,10 @@ AUTH_GITHUB_ID=               # GitHub App client id
 AUTH_GITHUB_SECRET=           # GitHub App client secret
 AUTH_TRUST_HOST=true          # required behind a proxy (ACA, Codespaces, etc.)
 
-# Production-only: disable the dev gh CLI fallback in client.ts
-ACA_DEPLOYMENT=true
-
 # Per-user abuse controls (defaults match in-code values)
 AUDIT_SALT=                   # openssl rand -hex 32
 # RATE_LIMIT_CHAT_PER_MIN=30
 # RATE_LIMIT_CHAT_CAP=3
-
-# Legacy single-tenant PAT — dev only, not used by request handlers
-# GITHUB_TOKEN=
 ```
 
 ## Commands

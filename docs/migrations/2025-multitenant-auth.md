@@ -27,9 +27,10 @@ AUTH_TRUST_HOST=true
 AUDIT_SALT=                   # openssl rand -hex 32
 ```
 
-`GITHUB_TOKEN` and `gh auth login` still work in dev for the deprecated
-boot-time paths, but they are **not** used by request handlers any more and
-are disabled entirely when `NODE_ENV=production` or `ACA_DEPLOYMENT=true`.
+`GITHUB_TOKEN` and `gh auth login` are **no longer recognised** by the
+application. Local dev requires the same OAuth flow as production: register
+a GitHub App, fill in the `AUTH_*` vars, and sign in via the browser. There
+are no boot-time fallbacks and no CLI back doors.
 
 ## GitHub App registration (local dev)
 
@@ -43,9 +44,11 @@ are disabled entirely when `NODE_ENV=production` or `ACA_DEPLOYMENT=true`.
 
 | Symbol / pattern | Status | Replacement |
 |---|---|---|
-| `process.env.GITHUB_TOKEN` in handlers | Forbidden | `requireUserContext()` → `accessToken` |
-| `getGitHubToken()` in handlers | `@deprecated` (still exported for boot-time use) | `requireUserContext()` |
-| `isGitHubConfigured()` in handlers | `@deprecated` | Rely on Auth.js middleware; handlers either get a context or 401 |
+| `process.env.GITHUB_TOKEN` in handlers | Removed | `requireUserContext()` → `accessToken` |
+| `getGitHubToken()` | Removed | `requireUserContext()` |
+| `isGitHubConfigured()` | Removed | Rely on Auth.js middleware; handlers either get a context or 401 |
+| `getAuthMethod()` / `invalidateTokenCache()` | Removed | No process-wide token cache exists |
+| `gh auth token` CLI fallback | Removed | Sign in via OAuth even in local dev |
 | Module-scope Octokit singleton | Removed | `getOctokitForRequest()` per call |
 | `new CopilotClient(...)` in feature code | Forbidden | Use `createLoggedChatSession` / `createLoggedCoachSession` |
 | Copilot session without `gitHubToken` | Forbidden | Pass `SessionIdentity { userId, gitHubToken }` |

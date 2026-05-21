@@ -73,12 +73,10 @@ The fastest way to get started is using GitHub Codespaces, which provides a full
       AUTH_TRUST_HOST=true
       ```
 
-   > **Legacy `GITHUB_TOKEN` / `gh auth login`** still resolves a token for a
-   > small set of deprecated boot-time paths (see `getGitHubToken()` in
-   > `src/lib/github/client.ts`), but request handlers always go through the
-   > Auth.js session. The `gh` CLI fallback is **dev-only** — it is disabled
-   > when `NODE_ENV=production` or `ACA_DEPLOYMENT=true`. New code should
-   > not rely on it.
+   > **No ambient auth fallbacks.** `GITHUB_TOKEN` env vars and `gh auth login`
+   > are not used anywhere in the app — local dev signs in via the same
+   > GitHub App OAuth flow as production. If you are not signed in, every
+   > API route returns 401.
 
 4. **Start the Development Server**
    ```bash
