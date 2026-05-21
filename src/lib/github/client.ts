@@ -13,6 +13,11 @@ import { Octokit } from 'octokit';
 import { promisify } from 'util';
 
 import { logger } from '@/lib/logger';
+import {
+  recordGitHubOperation,
+  setSpanError,
+  withSpan,
+} from '@/lib/observability/telemetry';
 
 /** Singleton Octokit instance */
 let octokitInstance: Octokit | null = null;
@@ -32,6 +37,76 @@ const VALID_GITHUB_TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghs_', 'ghu_', 'github_pat
 
 const log = logger.withTag('GitHub Auth');
 const execFileAsync = promisify(execFile);
+
+type GitHubRequestOptions = {
+  method?: string;
+  url?: string;
+};
+
+type GitHubResponseLike = {
+  status?: number;
+  headers?: Record<string, string | number | string[] | undefined>;
+};
+
+function getHeaderValue(
+  headers: GitHubResponseLike['headers'],
+  name: string
+): string | undefined {
+  const raw = headers?.[name];
+  if (raw === undefined) return undefined;
+  if (Array.isArray(raw)) return raw[0];
+  return String(raw);
+}
+
+function instrumentOctokitRequests(instance: Octokit): void {
+  instance.hook.wrap('request', async (request, options) => {
+      const requestOptions = options as GitHubRequestOptions;
+      const route = requestOptions.url ?? 'unknown';
+      const method = requestOptions.method ?? 'GET';
+      const startTime = nowMs();
+
+      return withSpan(
+        'github.request',
+        {
+          'github.route': route,
+          'http.method': method,
+        },
+        async (span) => {
+          try {
+            const response = await request(options);
+            const responseLike = response as GitHubResponseLike;
+            const statusCode = responseLike.status;
+            if (statusCode !== undefined) {
+              span.setAttribute('http.status_code', statusCode);
+            }
+
+            const remaining = getHeaderValue(responseLike.headers, 'x-ratelimit-remaining');
+            const reset = getHeaderValue(responseLike.headers, 'x-ratelimit-reset');
+            if (remaining !== undefined) {
+              span.setAttribute('github.rate_limit.remaining', remaining);
+            }
+            if (reset !== undefined) {
+              span.setAttribute('github.rate_limit.reset', reset);
+            }
+
+            recordGitHubOperation(route, nowMs() - startTime, 'ok', statusCode);
+            return response;
+          } catch (error) {
+            setSpanError(span, error);
+            const statusCode =
+              typeof error === 'object' &&
+              error !== null &&
+              'status' in error &&
+              typeof (error as { status?: unknown }).status === 'number'
+                ? (error as { status: number }).status
+                : undefined;
+            recordGitHubOperation(route, nowMs() - startTime, 'error', statusCode);
+            throw error;
+          }
+        }
+      );
+    });
+}
 
 function isValidGitHubToken(token: string): boolean {
   return VALID_GITHUB_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix));
@@ -60,31 +135,42 @@ async function getTokenFromGhCli(): Promise<string | null> {
     ghTokenPromise = (async () => {
       const checkedAt = nowMs();
       try {
-        log.debug('Attempting to retrieve token from gh CLI');
-        const { stdout } = await execFileAsync('gh', ['auth', 'token'], {
-          encoding: 'utf-8',
-          timeout: 5000,
-          maxBuffer: 1024 * 1024,
-        });
-        const token = stdout.trim();
+        return await withSpan(
+          'github.auth.gh_cli_token',
+          { 'auth.method': 'github-cli' },
+          async (span) => {
+            try {
+              log.debug('Attempting to retrieve token from gh CLI');
+              const { stdout } = await execFileAsync('gh', ['auth', 'token'], {
+                encoding: 'utf-8',
+                timeout: 5000,
+                maxBuffer: 1024 * 1024,
+              });
+              const token = stdout.trim();
 
-        log.debug('Retrieved token from gh CLI');
+              log.debug('Retrieved token from gh CLI');
 
-        // Accept all GitHub token types: ghp_ (PAT), gho_ (OAuth), ghs_ (server), ghu_ (user), github_pat_
-        if (token && isValidGitHubToken(token)) {
-          log.debug('Token validated');
-          cachedGhToken = token;
-          cachedGhTokenCheckedAt = checkedAt;
-          return token;
-        }
+              // Accept all GitHub token types: ghp_ (PAT), gho_ (OAuth), ghs_ (server), ghu_ (user), github_pat_
+              if (token && isValidGitHubToken(token)) {
+                log.debug('Token validated');
+                cachedGhToken = token;
+                cachedGhTokenCheckedAt = checkedAt;
+                return token;
+              }
 
-        log.warn('Token does not match expected format');
-        cachedGhTokenCheckedAt = checkedAt;
-        return null;
-      } catch (error) {
-        log.error('Failed to retrieve token from gh CLI', error);
-        cachedGhTokenCheckedAt = checkedAt;
-        log.warn('gh CLI token retrieval failed');
+              span.setAttribute('auth.token.valid', false);
+              log.warn('Token does not match expected format');
+              cachedGhTokenCheckedAt = checkedAt;
+              return null;
+            } catch (error) {
+              log.error('Failed to retrieve token from gh CLI', error);
+              cachedGhTokenCheckedAt = checkedAt;
+              log.warn('gh CLI token retrieval failed');
+              throw error;
+            }
+          }
+        );
+      } catch {
         return null;
       } finally {
         ghTokenPromise = null;
@@ -140,6 +226,7 @@ export async function getOctokit(): Promise<Octokit> {
         );
       }
       const instance = new Octokit({ auth: token });
+      instrumentOctokitRequests(instance);
       octokitInstance = instance;
       return instance;
     })();

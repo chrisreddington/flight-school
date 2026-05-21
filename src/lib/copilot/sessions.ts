@@ -12,6 +12,7 @@
 import type { CopilotSession } from '@github/copilot-sdk';
 import type { PermissionHandler } from '@github/copilot-sdk';
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
+import { context, propagation } from '@opentelemetry/api';
 
 import { getMcpServerConfig } from './mcp';
 import type {
@@ -20,6 +21,7 @@ import type {
   SessionWithMetrics,
 } from './types';
 import { logger } from '@/lib/logger';
+import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
 
 const log = logger.withTag('Copilot SDK');
 
@@ -40,9 +42,9 @@ export const CHAT_MODEL = process.env.COPILOT_CHAT_MODEL ?? MODEL_TIERS.fastChat
 
 const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
   if (request.kind === 'mcp') {
-    return { kind: 'approved' };
+    return { kind: 'approve-once' };
   }
-  return { kind: 'denied-by-rules', rules: ['mcp-only'] };
+  return { kind: 'reject', feedback: 'MCP tools only for this session.' };
 };
 
 // =============================================================================
@@ -56,7 +58,22 @@ let client: CopilotClient | null = null;
  */
 async function getCopilotClient(): Promise<CopilotClient> {
   if (!client) {
-    client = new CopilotClient();
+    const otlpEndpoint =
+      process.env.COPILOT_OTEL_ENDPOINT ??
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+
+    client = new CopilotClient({
+      ...(otlpEndpoint && {
+        telemetry: {
+          otlpEndpoint,
+        },
+      }),
+      onGetTraceContext: () => {
+        const carrier: Record<string, string> = {};
+        propagation.inject(context.active(), carrier);
+        return carrier;
+      },
+    });
   }
   return client;
 }
@@ -135,64 +152,83 @@ export async function createSessionWithMetrics(
   options?: SessionOptions,
   poolKey = 'unknown'
 ): Promise<SessionWithMetrics> {
-  const startTime = Date.now();
-  const copilot = await getCopilotClient();
-  const includeMcp = options?.includeMcpTools === true; // Default to false for speed
-  const mcpConfig = includeMcp ? await getMcpServerConfig(options?.tools) : null;
   const model = options?.model ?? MODEL_TIERS.standard;
-  const permissionHandler = includeMcp ? mcpOnlyPermissionHandler : approveAll;
+  const includeMcp = options?.includeMcpTools === true; // Default to false for speed
+  const startTime = Date.now();
 
-  const session = await copilot.createSession({
-    model,
-    streaming: true, // Enable streaming for delta events
-    onPermissionRequest: permissionHandler,
-    // Disable built-in tools we don't need; prefer GitHub MCP tools for repo context
-    excludedTools: [
-      'shell',
-      'editFile',
-      'createFile',
-      'deleteFile',
-      'runCommand',
-      'bash',
-      'terminal',
-      'web_fetch',
-      'web_search',
-      'task',
-      'view',
-      'glob',
-      'rg',
-      'grep',
-      'read_bash',
-      'write_bash',
-      'list_bash',
-      'stop_bash',
-      'gh',
-      'curl',
-    ],
-    ...(mcpConfig && {
-      mcpServers: {
-        github: mcpConfig,
-      },
-    }),
-    ...(options?.systemMessage && {
-      systemMessage: {
-        mode: 'append',
-        content: options.systemMessage,
-      },
-    }),
-  });
-
-  return {
-    session,
-    metrics: {
-      poolKey,
-      createdNew: true,
-      sessionCreateMs: Date.now() - startTime,
-      mcpEnabled: Boolean(mcpConfig),
-      model,
-      reusedConversation: false,
+  return withSpan(
+    'copilot.session.create',
+    {
+      'ai.model': model,
+      'copilot.pool_key': poolKey,
+      'copilot.mcp_enabled': includeMcp,
     },
-  };
+    async () => {
+      try {
+        const copilot = await getCopilotClient();
+        const mcpConfig = includeMcp ? await getMcpServerConfig(options?.tools) : null;
+        const permissionHandler = includeMcp ? mcpOnlyPermissionHandler : approveAll;
+
+        const session = await copilot.createSession({
+          model,
+          streaming: true, // Enable streaming for delta events
+          onPermissionRequest: permissionHandler,
+          // Disable built-in tools we don't need; prefer GitHub MCP tools for repo context
+          excludedTools: [
+            'shell',
+            'editFile',
+            'createFile',
+            'deleteFile',
+            'runCommand',
+            'bash',
+            'terminal',
+            'web_fetch',
+            'web_search',
+            'task',
+            'view',
+            'glob',
+            'rg',
+            'grep',
+            'read_bash',
+            'write_bash',
+            'list_bash',
+            'stop_bash',
+            'gh',
+            'curl',
+          ],
+          ...(mcpConfig && {
+            mcpServers: {
+              github: mcpConfig,
+            },
+          }),
+          ...(options?.systemMessage && {
+            systemMessage: {
+              mode: 'append',
+              content: options.systemMessage,
+            },
+          }),
+        });
+
+        const sessionCreateMs = Date.now() - startTime;
+        recordAiOperation('createSession', sessionCreateMs, model, 'ok');
+
+        return {
+          session,
+          metrics: {
+            poolKey,
+            createdNew: true,
+            sessionCreateMs,
+            mcpEnabled: Boolean(mcpConfig),
+            model,
+            reusedConversation: false,
+          },
+        };
+      } catch (error) {
+        recordAiOperation('createSession', Date.now() - startTime, model, 'error');
+        throw error;
+      }
+    }
+  );
 }
 
 /**

@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import styles from './StatusBadge.module.css';
 
 type BadgeVariant = 'success' | 'warning' | 'info' | 'neutral';
 
@@ -20,41 +21,12 @@ interface StatusBadgeProps {
   children: React.ReactNode;
 }
 
-const variantStyles: Record<BadgeVariant, React.CSSProperties> = {
-  success: {
-    backgroundColor: 'var(--bgColor-success-muted)',
-    color: 'var(--fgColor-success)',
-  },
-  warning: {
-    backgroundColor: 'var(--bgColor-attention-muted)',
-    color: 'var(--fgColor-attention)',
-  },
-  info: {
-    backgroundColor: 'var(--bgColor-accent-muted)',
-    color: 'var(--fgColor-accent)',
-  },
-  neutral: {
-    backgroundColor: 'var(--bgColor-muted)',
-    color: 'var(--fgColor-muted)',
-  },
-};
-
-const baseStyles: React.CSSProperties = {
-  borderRadius: 12,
-  padding: '2px 8px',
-  fontSize: 11,
-  fontWeight: 500,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 4,
-};
-
 /**
  * Generic status badge component.
  */
 export function StatusBadge({ variant, icon, children }: StatusBadgeProps): React.ReactElement {
   return (
-    <span className="f6" style={{ ...baseStyles, ...variantStyles[variant] }}>
+    <span className={`${styles.badge} ${styles[variant]}`}>
       {icon && <span>{icon}</span>}
       {children}
     </span>
