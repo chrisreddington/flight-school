@@ -47,12 +47,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
           </Stack>
         </Stack>
         
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          padding: '3rem 0'
-        }}>
+        <div className={styles.sectionLoadingCenter}>
           <Spinner size="small" />
         </div>
       </section>
