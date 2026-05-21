@@ -92,6 +92,18 @@ async function refreshGitHubAccessToken(refreshToken: string): Promise<Refreshed
   return data;
 }
 
+/**
+ * Auth.js v5 configuration object. Wires the GitHub provider, JWT session
+ * strategy, sign-in page, and the {@link authConfig.callbacks.jwt} /
+ * {@link authConfig.callbacks.session} callbacks.
+ *
+ * @remarks
+ * Session strategy is JWT (signed, encrypted cookie). The JWT callback owns
+ * token refresh; the session callback projects the relevant fields onto
+ * `session` for client and server consumers. Mutating this object after
+ * `NextAuth()` is constructed has no effect — re-export {@link handlers} /
+ * {@link auth} / {@link signIn} / {@link signOut} from this module.
+ */
 export const authConfig: NextAuthConfig = {
   session: { strategy: 'jwt' },
   trustHost: true,
@@ -110,6 +122,24 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
+    /**
+     * JWT callback. Runs on sign-in and on every authenticated request that
+     * touches the session cookie.
+     *
+     * @remarks
+     * - **First sign-in** (`account` is defined): captures the GitHub
+     *   `accessToken` / `refreshToken` / `expiresAt` plus the `userId` and
+     *   `login` from the OAuth profile, and best-effort-persists the token
+     *   triple to the {@link TokenStore}.
+     * - **Subsequent requests**: if `expiresAt - REFRESH_BUFFER_SECONDS`
+     *   has passed, exchanges the refresh token for a fresh `ghu_` access
+     *   token via GitHub's `/login/oauth/access_token` endpoint and
+     *   re-persists. On refresh failure the token is returned with
+     *   `error: 'RefreshAccessTokenError'`; on missing refresh token,
+     *   `'RefreshTokenMissing'`. Callers detect these via
+     *   {@link UserContext} returning `null` from `getUserContext()`, which
+     *   forces a re-auth.
+     */
     async jwt({ token, account, profile }) {
       // First-time sign-in: persist tokens from the GitHub OAuth response.
       if (account) {
@@ -168,6 +198,17 @@ export const authConfig: NextAuthConfig = {
       }
     },
 
+    /**
+     * Session callback. Projects fields off the JWT onto the session object
+     * exposed to server components and API routes.
+     *
+     * @remarks
+     * Injects `session.user.id` (GitHub numeric ID as string),
+     * `session.login` (GitHub login), `session.accessToken` (the current
+     * `ghu_...` access token from the JWT, so route handlers can hand it
+     * straight to Octokit / the Copilot SDK), and `session.error` when the
+     * JWT callback flagged a refresh failure.
+     */
     async session({ session, token }) {
       if (typeof token.userId === 'string') {
         session.user = { ...(session.user ?? {}), id: token.userId } as typeof session.user;
@@ -186,4 +227,14 @@ export const authConfig: NextAuthConfig = {
   },
 };
 
+/**
+ * Auth.js v5 entry points built from {@link authConfig}.
+ *
+ * - `handlers` — `GET`/`POST` route handlers to re-export from
+ *   `src/app/api/auth/[...nextauth]/route.ts`.
+ * - `auth` — server-side accessor for the current session; used by
+ *   {@link getUserContext} and middleware.
+ * - `signIn` / `signOut` — server-action helpers for the sign-in page and
+ *   sign-out controls.
+ */
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

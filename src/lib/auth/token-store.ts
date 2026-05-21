@@ -53,12 +53,41 @@ export interface StoredToken {
 }
 
 export interface TokenStore {
+  /**
+   * Look up the stored token for `userId`.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @returns The {@link StoredToken}, or `null` when no record exists for
+   *   the user **or** when the stored record has already expired
+   *   (`expiresAt * 1000 <= now`). Callers must treat "not found" and
+   *   "expired" identically — both mean "refresh / re-auth required".
+   *   Never throws for missing users.
+   */
   getToken(userId: string): Promise<StoredToken | null>;
+  /**
+   * Persist `token` for `userId`.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @param token - The token payload to store. Overwrites (upserts) any
+   *   previous record for the same `userId`; there is no separate update
+   *   path. TTL semantics live on the record itself via
+   *   {@link StoredToken.expiresAt}; implementations do not enforce a
+   *   separate store-level TTL.
+   */
   setToken(userId: string, token: StoredToken): Promise<void>;
+  /**
+   * Remove the token record for `userId`.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @remarks Idempotent: deleting a `userId` with no stored token is a
+   *   successful no-op, not an error.
+   */
   deleteToken(userId: string): Promise<void>;
   /**
    * Best-effort sweep of expired records. Implementations that do not retain
-   * expired records may no-op. Returns the number of records removed.
+   * expired records may no-op.
+   *
+   * @returns The number of records removed during this sweep.
    */
   cleanupExpired(): Promise<number>;
 }
@@ -189,6 +218,16 @@ export class CosmosTokenStore implements TokenStore {
     this.cryptographyClient = config.cryptographyClient ?? new CryptographyClient(keyIdentifier, credential);
   }
 
+  /**
+   * {@inheritDoc TokenStore.getToken}
+   *
+   * @remarks
+   * Cosmos point-read by `(userId, userId)` partition key. The wrapped DEK
+   * is unwrapped via Azure Key Vault `unwrapKey(A256KW)` and the payload is
+   * decrypted in-process with AES-256-GCM. The DEK buffer is zeroed before
+   * the method returns. Returns `null` on 404, on a mismatched `userId` in
+   * the persisted document (defence-in-depth), and on expiry.
+   */
   async getToken(userId: string): Promise<StoredToken | null> {
     let doc: TokenDocument | undefined;
     try {
@@ -234,6 +273,15 @@ export class CosmosTokenStore implements TokenStore {
     }
   }
 
+  /**
+   * {@inheritDoc TokenStore.setToken}
+   *
+   * @remarks
+   * Encrypts the JSON-serialised token with a freshly generated AES-256-GCM
+   * data encryption key (DEK), wraps the DEK with the configured Azure Key
+   * Vault KEK (`wrapKey(A256KW)`), and upserts the envelope as a single
+   * Cosmos document partitioned by `userId`. The DEK is zeroed in `finally`.
+   */
   async setToken(userId: string, token: StoredToken): Promise<void> {
     const dek = randomBytes(DEK_LENGTH);
     const iv = randomBytes(IV_LENGTH);

@@ -30,14 +30,15 @@ export class TooManyConcurrentSessionsError extends Error {
 }
 
 /**
- * Acquire a concurrency slot for `userId`. Returns a release function that
- * must be invoked (typically in a `finally` block) once the work is done.
- *
- * Throws {@link TooManyConcurrentSessionsError} when the user already has
- * `max` slots in use.
+ * Acquire a concurrency slot for `userId`.
  *
  * @param userId - Stable user identifier.
- * @param max - Maximum simultaneous slots for the user.
+ * @param max - Maximum simultaneous slots permitted for the user.
+ * @returns A release function. Call it (typically in a `finally` block)
+ *   exactly once when the work completes; subsequent calls are no-ops, so
+ *   it is safe to release even if the caller is unsure whether work ran.
+ * @throws {@link TooManyConcurrentSessionsError} when the user already
+ *   holds `max` slots in flight.
  */
 export async function acquireSlot(
   userId: string,

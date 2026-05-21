@@ -47,6 +47,10 @@ export class RateLimitedError extends Error {
  * @param userId - Stable user identifier (e.g. GitHub numeric ID).
  * @param limit - Max number of requests permitted within `windowMs`.
  * @param windowMs - Length of the sliding window in milliseconds.
+ * @returns A {@link RateLimitResult}: `allowed: true` when the request fits
+ *   in the window (and the timestamp has been recorded), or
+ *   `allowed: false` with `retryAfterMs` indicating how long the caller
+ *   must wait before the oldest in-window request ages out.
  */
 export function checkRateLimit(
   userId: string,
