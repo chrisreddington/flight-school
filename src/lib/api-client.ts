@@ -14,6 +14,11 @@
  * ```
  */
 
+import {
+  COPILOT_REQUIRED_EVENT,
+  type CopilotRequiredEventDetail,
+} from '@/lib/copilot/required-event';
+
 interface ApiRequestOptions extends RequestInit {
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
@@ -112,6 +117,29 @@ async function apiRequest<T>(
           clearTimeout(timeoutId);
 
           const data = await response.json().catch(() => ({}));
+
+          // P5: 402 + `copilot_required` → broadcast so the UI banner can
+          // react without each call site having to handle it.
+          if (
+            response.status === 402 &&
+            typeof data === 'object' &&
+            data !== null &&
+            (data as { error?: unknown }).error === 'copilot_required' &&
+            typeof window !== 'undefined'
+          ) {
+            const detail: CopilotRequiredEventDetail = {
+              message: typeof (data as { message?: unknown }).message === 'string'
+                ? (data as { message: string }).message
+                : undefined,
+              signUpUrl: typeof (data as { signUpUrl?: unknown }).signUpUrl === 'string'
+                ? (data as { signUpUrl: string }).signUpUrl
+                : undefined,
+              endpoint: url,
+            };
+            window.dispatchEvent(
+              new CustomEvent(COPILOT_REQUIRED_EVENT, { detail }),
+            );
+          }
 
           if (!response.ok) {
             const errorMessage = data.error || `HTTP ${response.status}`;

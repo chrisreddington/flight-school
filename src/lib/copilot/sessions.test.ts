@@ -83,3 +83,59 @@ describe('getConversationSession multitenant cache', () => {
     expect(call.gitHubToken).toBeUndefined();
   });
 });
+
+describe('entitlement failure handling (P5)', () => {
+  beforeEach(() => {
+    createSessionMock.mockReset();
+    // Reset the negative cache between tests
+    return import('./entitlement').then(({ clearNegativeEntitlement }) => {
+      clearNegativeEntitlement();
+    });
+  });
+
+  it('translates an entitlement error from the SDK into CopilotEntitlementRequiredError', async () => {
+    const { CopilotEntitlementRequiredError } = await import('./entitlement');
+    createSessionMock.mockRejectedValueOnce(new Error('User is not entitled to Copilot'));
+
+    await expect(
+      getConversationSession('userNoLicense', 'conv-x', 'pool', {
+        gitHubToken: 'ghu_x',
+        includeMcpTools: false,
+      }),
+    ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
+  });
+
+  it('caches the negative verdict for subsequent calls (no second SDK ping)', async () => {
+    const { CopilotEntitlementRequiredError } = await import('./entitlement');
+    createSessionMock.mockRejectedValueOnce(new Error('No active Copilot subscription'));
+
+    await expect(
+      getConversationSession('userCached', 'conv-1', 'pool', {
+        gitHubToken: 'ghu_x',
+        includeMcpTools: false,
+      }),
+    ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
+
+    // Second call should short-circuit without invoking the SDK again.
+    await expect(
+      getConversationSession('userCached', 'conv-2', 'pool', {
+        gitHubToken: 'ghu_x',
+        includeMcpTools: false,
+      }),
+    ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
+
+    expect(createSessionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-throws non-entitlement errors unchanged', async () => {
+    const networkError = new Error('ECONNREFUSED localhost:54321');
+    createSessionMock.mockRejectedValueOnce(networkError);
+
+    await expect(
+      getConversationSession('userNet', 'conv-net', 'pool', {
+        gitHubToken: 'ghu_x',
+        includeMcpTools: false,
+      }),
+    ).rejects.toBe(networkError);
+  });
+});

@@ -35,6 +35,12 @@ export interface SessionOptions {
   model?: string;
   /** GitHub token to bind to MCP server config for this session */
   gitHubToken?: string;
+  /**
+   * GitHub user ID. When provided, enables the per-user sticky-negative
+   * entitlement cache (P5) so we don't re-ask the SDK for a user already
+   * known to lack a Copilot license.
+   */
+  userId?: string;
 }
 
 /**

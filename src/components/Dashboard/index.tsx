@@ -22,6 +22,7 @@ import type { RepoReference } from '@/lib/threads/types';
 import { Stack } from '@primer/react';
 import { useCallback, useMemo } from 'react';
 import { AppHeader } from '../AppHeader';
+import { CopilotRequiredBanner } from '../CopilotRequiredBanner';
 import { LearningChat } from '../LearningChat';
 import { DailyFocusSection } from './daily-focus-section';
 import styles from './Dashboard.module.css';
@@ -168,6 +169,7 @@ export function Dashboard() {
       <main className={styles.main}>
         <div className={styles.mainContent}>
           <Stack direction="vertical" gap="spacious">
+            <CopilotRequiredBanner />
             <WelcomeSection displayName={displayName} isLoading={profileLoading} />
             <ReviewDueWidget />
             <DailyFocusSection

@@ -15,6 +15,12 @@ import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import { context, propagation } from '@opentelemetry/api';
 
 import { getMcpServerConfig } from './mcp';
+import {
+  CopilotEntitlementRequiredError,
+  hasNegativeEntitlement,
+  isCopilotEntitlementError,
+  markNegativeEntitlement,
+} from './entitlement';
 import type {
   SessionCreationMetrics,
   SessionOptions,
@@ -171,6 +177,16 @@ export async function createSessionWithMetrics(
       'copilot.mcp_enabled': includeMcp,
     },
     async () => {
+      // P5: short-circuit for users already known to lack a Copilot license.
+      // The negative verdict is sticky for NEGATIVE_TTL_MS (5 minutes) so we
+      // don't ping the SDK every request for unentitled users.
+      if (options?.userId && hasNegativeEntitlement(options.userId)) {
+        recordAiOperation('createSession', Date.now() - startTime, model, 'error');
+        throw new CopilotEntitlementRequiredError(
+          'A GitHub Copilot subscription is required to use AI features.',
+        );
+      }
+
       try {
         const copilot = await getCopilotClient();
         let mcpConfig = null;
@@ -245,6 +261,21 @@ export async function createSessionWithMetrics(
         };
       } catch (error) {
         recordAiOperation('createSession', Date.now() - startTime, model, 'error');
+        // P5: detect entitlement failures from the SDK / underlying CLI
+        // server and re-throw as a typed error the HTTP layer maps to 402.
+        if (isCopilotEntitlementError(error)) {
+          if (options?.userId) {
+            markNegativeEntitlement(options.userId);
+          }
+          log.warn('Copilot entitlement check failed', {
+            userId: options?.userId,
+            poolKey,
+          });
+          throw new CopilotEntitlementRequiredError(
+            'A GitHub Copilot subscription is required to use AI features.',
+            error,
+          );
+        }
         throw error;
       }
     }
@@ -274,7 +305,7 @@ export async function getConversationSession(
 ): Promise<SessionWithMetrics> {
   if (!conversationId) {
     log.debug('No conversation ID - creating fresh session', { poolKey, userId });
-    return createSessionWithMetrics(options, poolKey);
+    return createSessionWithMetrics({ ...options, userId }, poolKey);
   }
 
   pruneChatSessions();
@@ -296,7 +327,7 @@ export async function getConversationSession(
   }
 
   log.debug('Conversation MISS - creating session', { conversationId, poolKey, userId });
-  const { session, metrics } = await createSessionWithMetrics(options, poolKey);
+  const { session, metrics } = await createSessionWithMetrics({ ...options, userId }, poolKey);
   const cachedMetrics = {
     ...metrics,
     reusedConversation: false,
