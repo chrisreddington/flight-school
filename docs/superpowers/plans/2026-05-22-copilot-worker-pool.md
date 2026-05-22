@@ -21,6 +21,7 @@
 - **Affected Domains**: Test, performance, code quality, technical writing, code documentation.
 - **Migration Strategy**: Indirection first, then worker extraction, then per-user runtime isolation.
 - **Risk**: External `cliUrl` plus token behavior must be re-verified against the installed SDK before implementing external CLI auth.
+- **Rubber-duck adjustments before execution**: Preserve `/api/copilot` `meta.generatedAt`; use `vi.hoisted` for mocks referenced by `vi.mock` factories; remove stale `shared-runtime.ts` references; validate runtime pool capacity; keep jobs route cancellation imports while moving executor routing into the dispatcher.
 
 ## Codebase Analysis
 | # | File | Role | Change |
@@ -35,11 +36,10 @@
 | F8 | `src/app/api/jobs/dispatcher.test.ts` | Dispatcher tests | Verify token-free payload and executor routing. |
 | F9 | `src/app/api/jobs/route.ts` | Jobs API route | Use dispatcher boundary instead of direct `setImmediate`. |
 | F10 | `src/lib/copilot/runtime/types.ts` | Runtime pool contracts | Create runtime pool interfaces and lifecycle event types. |
-| F11 | `src/lib/copilot/runtime/shared-runtime.ts` | Transitional runtime provider | Wrap current singleton behavior in a named provider. |
-| F12 | `src/lib/copilot/runtime/per-user-pool.ts` | Future pool skeleton | Add disabled/prototype pool logic with no route usage. |
-| F13 | `src/lib/copilot/runtime/per-user-pool.test.ts` | Runtime pool tests | Verify user-keying, TTL eviction, and lifecycle hooks with fake runtimes. |
-| F14 | `docs/architecture-multitenant.md` | Architecture docs | Add links to the new execution boundary and plan status. |
-| F15 | `docs/deployment-aca.md` | ACA docs | Add worker-service migration note and non-production caveat. |
+| F11 | `src/lib/copilot/runtime/per-user-pool.ts` | Future pool skeleton | Add disabled/prototype pool logic with no route usage. |
+| F12 | `src/lib/copilot/runtime/per-user-pool.test.ts` | Runtime pool tests | Verify user-keying, TTL eviction, and lifecycle hooks with fake runtimes. |
+| F13 | `docs/architecture-multitenant.md` | Architecture docs | Add links to the new execution boundary and plan status. |
+| F14 | `docs/deployment-aca.md` | ACA docs | Add worker-service migration note and non-production caveat. |
 
 ## Implementation Steps
 
