@@ -39,6 +39,15 @@ const jwtCallback = authConfig.callbacks?.jwt as
   | ((p: JwtParams) => Promise<JWT>)
   | undefined;
 
+interface SessionParams {
+  session: Record<string, unknown> & { user?: Record<string, unknown> };
+  token: JWT;
+}
+
+const sessionCallback = authConfig.callbacks?.session as
+  | ((p: SessionParams) => Promise<SessionParams['session']>)
+  | undefined;
+
 const ORIGINAL_FETCH = global.fetch;
 const ORIGINAL_ID = process.env.AUTH_GITHUB_ID;
 const ORIGINAL_SECRET = process.env.AUTH_GITHUB_SECRET;
@@ -206,5 +215,47 @@ describe('Auth.js jwt callback', () => {
       token: { accessToken: 'ghu_old', expiresAt: nowSec - 5 },
     });
     expect(result.error).toBe('RefreshTokenMissing');
+  });
+});
+
+describe('Auth.js session callback (browser-reachable shape)', () => {
+  it('exposes a session callback', () => {
+    expect(typeof sessionCallback).toBe('function');
+  });
+
+  it('projects user.id, login, and error onto session', async () => {
+    const session = { user: {} };
+    const token: JWT = {
+      userId: '12345',
+      login: 'octocat',
+      error: 'RefreshAccessTokenError',
+    };
+    const result = await sessionCallback!({ session, token });
+    expect((result.user as { id?: string }).id).toBe('12345');
+    expect((result as { login?: string }).login).toBe('octocat');
+    expect((result as { error?: string }).error).toBe('RefreshAccessTokenError');
+  });
+
+  it('NEVER projects accessToken or refreshToken onto session (browser-reachable)', async () => {
+    // Anything on the returned session object is sent verbatim by the
+    // built-in /api/auth/session JSON endpoint and is reachable from
+    // browser JS. The GitHub user-to-server access token and refresh token
+    // must stay in the encrypted httpOnly JWT cookie. A regression here
+    // would turn an XSS into full GitHub token theft.
+    const session = { user: {} };
+    const token: JWT = {
+      userId: '12345',
+      login: 'octocat',
+      accessToken: 'ghu_supersecret',
+      refreshToken: 'ghr_supersecret',
+      expiresAt: 9999999999,
+    };
+    const result = await sessionCallback!({ session, token });
+
+    expect(JSON.stringify(result)).not.toContain('ghu_supersecret');
+    expect(JSON.stringify(result)).not.toContain('ghr_supersecret');
+    expect(JSON.stringify(result)).not.toContain('accessToken');
+    expect(JSON.stringify(result)).not.toContain('refreshToken');
+    expect(JSON.stringify(result)).not.toContain('expiresAt');
   });
 });

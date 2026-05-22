@@ -158,11 +158,13 @@ export const authConfig: NextAuthConfig = {
      * exposed to server components and API routes.
      *
      * @remarks
-     * Injects `session.user.id` (GitHub numeric ID as string),
-     * `session.login` (GitHub login), `session.accessToken` (the current
-     * `ghu_...` access token from the JWT, so route handlers can hand it
-     * straight to Octokit / the Copilot SDK), and `session.error` when the
-     * JWT callback flagged a refresh failure.
+     * **Security invariant:** the session object is returned by the
+     * NextAuth-builtin `/api/auth/session` endpoint and reachable from
+     * browser JavaScript. We deliberately project only non-sensitive
+     * identity (`user.id`, `login`) and the refresh-failure marker
+     * (`error`). The GitHub access token, refresh token, and expiry stay
+     * in the encrypted httpOnly JWT cookie; server-side helpers in
+     * {@link getUserContext} read them via `next-auth/jwt`'s `getToken()`.
      */
     async session({ session, token }) {
       if (typeof token.userId === 'string') {
@@ -170,9 +172,6 @@ export const authConfig: NextAuthConfig = {
       }
       if (typeof token.login === 'string') {
         (session as { login?: string }).login = token.login;
-      }
-      if (typeof token.accessToken === 'string') {
-        (session as { accessToken?: string }).accessToken = token.accessToken;
       }
       if (typeof token.error === 'string') {
         (session as { error?: string }).error = token.error;

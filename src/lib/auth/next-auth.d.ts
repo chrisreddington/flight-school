@@ -10,8 +10,15 @@ import 'next-auth/jwt';
 
 declare module 'next-auth' {
   interface Session {
-    accessToken?: string;
+    /**
+     * GitHub login (username). Safe to expose to the client.
+     */
     login?: string;
+    /**
+     * Refresh-failure marker set by the JWT callback when the refresh
+     * exchange with GitHub fails. Client and server code use this to drive
+     * a re-auth prompt. Never carries the underlying error detail.
+     */
     error?: 'RefreshAccessTokenError' | 'RefreshTokenMissing';
     user?: {
       id?: string;
@@ -19,6 +26,12 @@ declare module 'next-auth' {
       email?: string | null;
       image?: string | null;
     };
+    // accessToken is deliberately NOT on Session. Anything projected onto
+    // `session` is returned by the NextAuth-builtin /api/auth/session
+    // endpoint and reachable from browser JS — exposing the GitHub user-to-
+    // server token there turns an XSS into a full token theft. Server-side
+    // helpers (see src/lib/auth/context.ts) read the access token from the
+    // raw encrypted JWT cookie via next-auth/jwt's getToken().
   }
 }
 
