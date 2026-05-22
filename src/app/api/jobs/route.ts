@@ -18,12 +18,8 @@ import { jobStorage } from '@/lib/jobs';
 import { redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
+import { dispatchJobExecution, type DispatchableJobInput, type DispatchableJobType } from './dispatcher';
 import {
-  executeChallengeEvaluation,
-  executeChallengeRegeneration,
-  executeChatResponse,
-  executeGoalRegeneration,
-  executeTopicRegeneration,
   getRegisteredSession,
   unregisterSession,
 } from './job-executors';
@@ -33,29 +29,12 @@ const log = logger.withTag('Jobs API');
 /** RFC4122 v4 uuid shape (lowercase hex; 4 in version nibble; 8|9|a|b in variant). */
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-type JobType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response' | 'challenge-evaluation';
+type JobType = DispatchableJobType;
 
 interface CreateJobRequest {
   type: JobType;
   targetId?: string;
   input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput | ChallengeEvaluationInput;
-}
-
-const executeByType: Record<JobType, (jobId: string, input: CreateJobRequest['input'], userId: string) => Promise<void>> = {
-  'topic-regeneration': (jobId, input, userId) => executeTopicRegeneration(jobId, input as TopicRegenerationInput, userId),
-  'challenge-regeneration': (jobId, input, userId) => executeChallengeRegeneration(jobId, input as ChallengeRegenerationInput, userId),
-  'goal-regeneration': (jobId, input, userId) => executeGoalRegeneration(jobId, input as GoalRegenerationInput, userId),
-  'chat-response': (jobId, input, userId) => executeChatResponse(jobId, input as ChatResponseInput, userId),
-  'challenge-evaluation': (jobId, input, userId) => executeChallengeEvaluation(jobId, input as ChallengeEvaluationInput, userId),
-};
-
-function enqueueExecution(jobId: string, type: JobType, input: CreateJobRequest['input'], userId: string): void {
-  const executor = executeByType[type];
-  setImmediate(() => {
-    executor(jobId, input, userId).catch((err: unknown) => {
-      log.error(`Unhandled error in job ${jobId}:`, err);
-    });
-  });
 }
 
 /** 
@@ -189,7 +168,12 @@ export async function POST(request: NextRequest) {
   // their payload — the executor resolves a fresh `ghu_` token from the
   // TokenStore at run-time (see resolveFreshGitHubToken) so queued / retried
   // work cannot use a stale access token captured at submission.
-  enqueueExecution(jobId, body.type, body.input, userId);
+  dispatchJobExecution({
+    jobId,
+    type: body.type,
+    input: body.input as DispatchableJobInput,
+    userId,
+  });
   
   return NextResponse.json({
     id: job.id,
