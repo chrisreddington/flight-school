@@ -1,7 +1,7 @@
 // Aspire TypeScript AppHost
 // For more information, see: https://aspire.dev
 
-import { createBuilder } from './.modules/aspire.js';
+import { createBuilder, EndpointProperty } from './.modules/aspire.js';
 
 async function main(): Promise<void> {
   const builder = await createBuilder();
@@ -14,11 +14,22 @@ async function main(): Promise<void> {
   // bearer token. Locally we expose a "Sweep retention" custom dashboard
   // command that POSTs to the cron endpoint with `CRON_SKIP_AUTH=1`; the
   // route honours the bypass only when `NODE_ENV !== 'production'`.
+  const workerSecret = 'local-dev-worker-secret';
+  const copilotWorker = await builder
+    .addNextJsApp('copilot-worker', '.', { runScriptName: 'dev:worker' })
+    .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
+    .withEnvironment('COPILOT_WORKER_ENABLED', '1')
+    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
+  const workerEndpoint = await copilotWorker.getEndpoint('http');
+  const workerUrl = await workerEndpoint.property(EndpointProperty.Url);
+
   const flightSchool = await builder
     .addNextJsApp('flight-school', '.', { runScriptName: 'dev' })
     .withHttpEndpoint({ port: 3000, targetPort: 3000, isProxied: false })
     .withExternalHttpEndpoints()
-    .withEnvironment('CRON_SKIP_AUTH', '1');
+    .withEnvironment('CRON_SKIP_AUTH', '1')
+    .withEnvironment('COPILOT_WORKER_URL', workerUrl)
+    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
 
   await flightSchool.withCommand(
     'sweep-retention',
