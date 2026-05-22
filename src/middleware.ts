@@ -29,6 +29,7 @@ const { auth } = NextAuth(edgeAuthConfig);
 const PUBLIC_PREFIXES = [
   '/api/auth',
   '/api/health',
+  '/api/_internal',
   '/sign-in',
   '/_next',
   '/favicon.ico',

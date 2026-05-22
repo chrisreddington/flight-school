@@ -77,6 +77,12 @@ describe('middleware gating', () => {
     expect(response.status).toBe(200);
   });
 
+  it('allows unauthenticated /api/_internal/* requests to reach route-specific auth', async () => {
+    const res = await middleware(makeRequest('/api/_internal/copilot/execute'));
+    const response = res as Response;
+    expect(response.status).toBe(200);
+  });
+
   it('allows unauthenticated /_next/* and static assets', async () => {
     expect(((await middleware(makeRequest('/_next/static/chunk.js'))) as Response).status).toBe(200);
     expect(((await middleware(makeRequest('/favicon.ico'))) as Response).status).toBe(200);
