@@ -230,3 +230,138 @@ first step after `markRunning`. The resolver:
 Neither failure path retries: the refresh token is no longer usable and
 the user must re-authenticate via the web flow before any further jobs
 can succeed for them.
+
+**Pre-enqueue token-store seed.** `POST /api/jobs` calls
+`seedTokenStoreFromJwt(userId)` (`src/lib/auth/seed.ts`) **before** the
+job is persisted. The seed:
+
+- Reads `accessToken` + `refreshToken` + `expiresAt` from the raw
+  encrypted JWT cookie via the server-only `readCredentialsFromJwt`
+  helper (see [No tokens on the public session](#no-tokens-on-the-public-session) below).
+- Writes via `TokenStore.setTokenIfNewer` (CAS), so a concurrent refresh
+  on another replica that has already written a strictly newer record
+  is never clobbered.
+- Returns `{ status: 'skipped-no-expiry' }` when the JWT has no
+  `expiresAt`; the executor's resolver path then surfaces re-auth at
+  run-time, which is the correct UX.
+- On store-write failure, returns `{ status: 'error' }` and the route
+  **refuses to enqueue the job**, responding `503` to the caller.
+  Returning success while the store is unwritable would leave the
+  executor with no credentials and the job would silently fail.
+
+This closes the gap where a fresh pod, a swept record, or a user who
+authenticated against a different replica's in-memory store could leave
+the executor with no usable refresh material despite a valid JWT cookie.
+
+## Token-store CAS write
+
+`TokenStore.setTokenIfNewer(userId, token)` is the conditional write
+used by every concurrent path (the Auth.js JWT-callback refresh, the
+background-job token resolver, and the pre-enqueue seed). Contract:
+
+- If no record exists for `userId`, write and return `true`.
+- If the existing record has `expiresAt < token.expiresAt`, replace and
+  return `true`.
+- Otherwise return `false` without writing. **A `false` return is not
+  an error** — it means another writer already persisted a record at
+  least as fresh as the one we offered, and the caller should treat
+  that as the success-equivalent outcome.
+
+The `CosmosTokenStore` implementation uses Cosmos optimistic
+concurrency: a point-read returns the document plus its `_etag`; on
+replace we set `accessCondition: { type: 'IfMatch', condition: etag }`
+and translate `412 Precondition Failed` (or `409 Conflict` on the
+create path) into `false`. The compare is performed on cleartext
+`expiresAt`, so the skip path never pays the cost of a Key Vault
+`wrapKey` round-trip.
+
+`setToken` (the unconditional upsert) is reserved for the initial
+sign-in path where there is, by construction, no competing writer.
+
+## `TokenStore.getToken` semantics
+
+`getToken` returns the persisted record regardless of access-token
+expiry. The single consumer, `resolveFreshGitHubToken`, needs the
+refresh token even when the access token is past expiry. Filtering at
+the store layer used to break the refresh-at-execution path entirely
+(the record would be hidden right when it was needed most).
+
+`cleanupExpired` is currently a no-op for the same reason: sweeping by
+access-token expiry would delete records whose refresh tokens are still
+valid. Re-introducing it requires plumbing GitHub's
+`refresh_token_expires_in` through the OAuth callback so we can compare
+against the refresh-token TTL instead.
+
+## DEK cache (CosmosTokenStore)
+
+Every `getToken` in `CosmosTokenStore` would otherwise round-trip to
+Azure Key Vault to `unwrapKey` the per-record DEK before AES-GCM
+decryption. Under normal traffic (every authenticated request,
+every chat turn, every job executor) the same record is read many
+times per minute, so this becomes the dominant latency component.
+
+The store keeps a bounded LRU+TTL cache of unwrapped DEKs keyed by
+`userId`:
+
+- **Bounded**: defaults to 256 entries; oldest evicted on overflow.
+- **TTL-bounded**: defaults to 15 minutes — well below the GitHub
+  access-token lifetime, so sign-out / revocation is naturally honoured
+  within a short window without an explicit purge.
+- **Invalidated on every write path** (`setToken`, `setTokenIfNewer`,
+  `deleteToken`) so a re-wrapped record can never be decrypted with a
+  stale DEK from a previous envelope.
+- **Envelope-digest validated** on each read (sha256 of
+  `kekId || wrappedDek`): a record rewritten with a fresh DEK (e.g. by
+  another replica) invalidates the cache entry on the very next lookup
+  even before TTL expiry.
+- **Zeroed buffers**: DEK buffers are zeroed on eviction, invalidation,
+  and TTL expiry.
+
+The cache is per-instance (per `CosmosTokenStore`, i.e. per Next.js
+runtime). Set `dekCacheMaxEntries: 0` to disable it entirely.
+
+## No tokens on the public session
+
+The Auth.js `Session` object is reachable from browser JavaScript via
+the built-in `/api/auth/session` endpoint. Anything attached to
+`session.*` is therefore sent to the client verbatim. The GitHub
+user-to-server access token (`ghu_`) and refresh token (`ghr_`) MUST
+never appear on `session`. A regression here would turn any XSS into
+full GitHub token theft with the scopes of the configured GitHub App.
+
+Concretely:
+
+- The session callback in `src/lib/auth/config.ts` projects **only**
+  `user.id`, `login`, and `error` onto the session.
+- The `Session` augmentation in `src/lib/auth/next-auth.d.ts` does
+  **not** declare an `accessToken` field; only the `JWT` augmentation
+  does. TypeScript blocks accidental re-introduction.
+- Server-side consumers (`getUserContext` in `src/lib/auth/context.ts`,
+  `seedTokenStoreFromJwt` in `src/lib/auth/seed.ts`) read the access
+  token directly from the raw encrypted JWT cookie via
+  `next-auth/jwt`'s `getToken({ req, secret })`. The cookie is
+  `httpOnly` and signed/encrypted by `AUTH_SECRET`, so it is server-only.
+- Tests in `src/lib/auth/oauth-flow.test.ts` assert that the serialised
+  session never contains `ghu_`, `ghr_`, `accessToken`, `refreshToken`,
+  or `expiresAt`.
+
+## Future work: durable async execution
+
+The current background-job executor runs in-process via `setImmediate`,
+which limits horizontal scaling and means a pod-recycle mid-job loses
+the work. The recommended end-state is a Service Bus queue with a
+KEDA-scaled Azure Container Apps Job worker:
+
+- `POST /api/jobs` enqueues the job descriptor (still userId-only) to
+  Service Bus after `seedTokenStoreFromJwt`.
+- A queue-driven ACA Job consumes the message, looks up the user's
+  refresh material from the `TokenStore`, calls
+  `resolveFreshGitHubToken`, and runs the executor with a fresh access
+  token.
+- The web replicas can then be stateless and freely roll without
+  abandoning in-flight work.
+
+The current `setImmediate`-based path is intentionally a transitional
+shape: the CAS-safe `TokenStore`, the no-token-on-payload contract, and
+the seed-at-boundary precondition all transfer to the durable design
+unchanged.
