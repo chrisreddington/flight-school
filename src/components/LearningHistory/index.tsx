@@ -11,7 +11,6 @@
  */
 
 import { ProfileNav } from '@/components/ProfileNav';
-import { ActivitySummary, RecentActivityList, StreakCard } from '@/components/Insights';
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
 import { computeInsights, type LearningInsights } from '@/lib/focus/analytics';
@@ -24,27 +23,19 @@ import {
 } from '@primer/octicons-react';
 import {
   Banner,
-  Button,
   Link,
-  Spinner,
-  Stack,
 } from '@primer/react';
 import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLearningChat } from '@/hooks/use-learning-chat';
 import { logger } from '@/lib/logger';
-import insightsStyles from '@/components/Insights/Insights.module.css';
 import styles from './LearningHistory.module.css';
 
-// Import sub-components and utilities
-import { ActivityGraph } from './activity-graph';
-import { GeneratingBanner } from './generating-banner';
-import { HistoryEntryCard } from './history-entry-card';
-import { HistoryFilters } from './history-filters';
-import { DateNavigation, StatsSummary } from './sidebar-components';
+import { HistoryPanel } from './history-panel';
+import { LearningHistorySidebar } from './learning-history-sidebar';
+import { StatsPanel } from './stats-panel';
 import type { HistoryEntry, StatusFilter, TypeFilter } from './types';
-import { formatDateForDisplay } from './utils';
 import {
   buildHistoryEntries,
   buildLearningHistoryViewModel,
@@ -336,54 +327,21 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
       
       {/* Two-column layout */}
       <div className={styles.layoutV2}>
-        {/* Sidebar */}
-        <aside className={styles.sidebar}>
-          {/* Profile Navigation */}
-          <ProfileNav />
-
-          {/* Activity & Stats Card */}
-          <div className={styles.sidebarCard}>
-            {/* Title in sidebar */}
-            <div className={styles.sidebarHeader}>
-              <CalendarIcon size={20} className={styles.sidebarIcon} />
-              <div className={styles.sidebarTitleGroup}>
-                <h2 className={styles.sidebarTitle}>Activity</h2>
-                <p className={styles.sidebarDescription}>Your learning journey</p>
-              </div>
-            </div>
-
-            {/* 52-week activity graph */}
-            <ActivityGraph 
-              activity={activityData}
-              selectedDate={selectedDate}
-              onSelectDate={handleSelectDate}
-            />
-
-            {/* Stats */}
-            <StatsSummary stats={stats} />
-          </div>
-
-          {/* Search & Filters Card */}
-          <HistoryFilters
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            typeFilter={typeFilter}
-            onTypeFilterChange={setTypeFilter}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-          />
-
-          {/* Date navigation */}
-          <div className={styles.sidebarCard}>
-            <DateNavigation
-              groupedEntries={groupedEntries}
-              expandedMonths={expandedMonths}
-              onToggleMonth={toggleMonth}
-              selectedDate={selectedDate}
-              onSelectDate={(date) => setSelectedDate(date)}
-            />
-          </div>
-        </aside>
+        <LearningHistorySidebar
+          activityData={activityData}
+          selectedDate={selectedDate}
+          onSelectDate={handleSelectDate}
+          stats={stats}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          typeFilter={typeFilter}
+          onTypeFilterChange={setTypeFilter}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          groupedEntries={groupedEntries}
+          expandedMonths={expandedMonths}
+          onToggleMonth={toggleMonth}
+        />
 
         {/* Main content */}
         <main className={styles.mainContent}>
@@ -407,157 +365,41 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
               Stats
             </UnderlinePanels.Tab>
             <UnderlinePanels.Panel>
-              {loadError && (
-                <Banner
-                  title="Failed to load history"
-                  description={loadError}
-                  variant="critical"
-                />
-              )}
-              {isLoading ? (
-                <div className={styles.loadingState}>
-                  <Spinner size="medium" />
-                  <span>Loading history...</span>
-                </div>
-              ) : (
-                <Stack direction="vertical" gap="normal">
-                  {/* Selected date indicator */}
-                  {selectedDate && (
-                    <div className={styles.selectedDateBanner}>
-                      <span>Showing: {formatDateForDisplay(selectedDate)}</span>
-                      <Button variant="invisible" size="small" onClick={() => setSelectedDate(null)}>
-                        Show all
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Generating banner at top */}
-                  {hasGenerating && (
-                    <GeneratingBanner
-                      topicIds={activeTopicIds}
-                      challengeIds={activeChallengeIds}
-                      goalIds={activeGoalIds}
-                    />
-                  )}
-
-                  {/* Items */}
-                  {filteredEntries.map(entry => {
-                    const isToday = entry.dateKey === todayDateKey;
-                    const isDayCollapsed = collapsedDays.has(entry.dateKey);
-                    return (
-                      <HistoryEntryCard
-                        key={entry.dateKey}
-                        entry={entry}
-                        isToday={isToday}
-                        isCollapsed={isDayCollapsed}
-                        onToggleCollapse={() => toggleDayCollapse(entry.dateKey)}
-                        onRefresh={forceRefresh}
-                        onSkipTopic={skipAndReplaceTopic}
-                        onSkipChallenge={skipAndReplaceChallenge}
-                        onSkipGoal={skipAndReplaceGoal}
-                        onStopSkipTopic={stopTopicSkip}
-                        onStopSkipChallenge={stopChallengeSkip}
-                        onStopSkipGoal={stopGoalSkip}
-                        onExploreTopic={handleExploreTopic}
-                        skippingTopicIds={skippingTopicIds}
-                        skippingChallengeIds={skippingChallengeIds}
-                        skippingGoalIds={skippingGoalIds}
-                        activeTopicIds={activeTopicIds}
-                        activeChallengeIds={activeChallengeIds}
-                        activeGoalIds={activeGoalIds}
-                      />
-                    );
-                  })}
-
-                  {/* No results */}
-                  {filteredEntries.length === 0 && !hasGenerating && (
-                    <Banner
-                      title="No results"
-                      description={`No items match your filters.${searchQuery ? ' Try a different search term.' : ''}`}
-                      variant="info"
-                      hideTitle
-                    />
-                  )}
-                </Stack>
-              )}
+              <HistoryPanel
+                loadError={loadError}
+                isLoading={isLoading}
+                selectedDate={selectedDate}
+                onClearSelectedDate={() => setSelectedDate(null)}
+                hasGenerating={hasGenerating}
+                activeTopicIds={activeTopicIds}
+                activeChallengeIds={activeChallengeIds}
+                activeGoalIds={activeGoalIds}
+                filteredEntries={filteredEntries}
+                todayDateKey={todayDateKey}
+                collapsedDays={collapsedDays}
+                onToggleDayCollapse={toggleDayCollapse}
+                onRefresh={forceRefresh}
+                onSkipTopic={skipAndReplaceTopic}
+                onSkipChallenge={skipAndReplaceChallenge}
+                onSkipGoal={skipAndReplaceGoal}
+                onStopSkipTopic={stopTopicSkip}
+                onStopSkipChallenge={stopChallengeSkip}
+                onStopSkipGoal={stopGoalSkip}
+                onExploreTopic={handleExploreTopic}
+                skippingTopicIds={skippingTopicIds}
+                skippingChallengeIds={skippingChallengeIds}
+                skippingGoalIds={skippingGoalIds}
+                searchQuery={searchQuery}
+              />
             </UnderlinePanels.Panel>
             <UnderlinePanels.Panel>
-              {loadError && (
-                <Banner
-                  title="Failed to load history"
-                  description={loadError}
-                  variant="critical"
-                />
-              )}
-              {isLoading ? (
-                <div className={styles.loadingState}>
-                  <Spinner size="medium" />
-                  <span>Loading stats...</span>
-                </div>
-              ) : hasNoInsightsHistory || !insights ? (
-                <Banner
-                  title="No stats yet"
-                  description="Start exploring topics and completing challenges to see your stats here."
-                  variant="info"
-                  hideTitle
-                />
-              ) : (
-                <Stack direction="vertical" gap="normal" className={styles.statsTabContent}>
-                  <div className={styles.statsGrid}>
-                    <StreakCard
-                      currentStreak={insights.currentStreak}
-                      longestStreak={insights.longestStreak}
-                    />
-                    <ActivitySummary
-                      totalChallengesCompleted={insights.totalChallengesCompleted}
-                      totalTopicsExplored={insights.totalTopicsExplored}
-                      totalGoalsCompleted={totalGoalsCompleted}
-                    />
-                  </div>
-
-                  {insights.totalChallengesCompleted > 0 && (
-                    <div className={styles.statsCard}>
-                      <h2 className={styles.statsCardHeading}>Challenges by Difficulty</h2>
-                      <div className={styles.difficultyList}>
-                        <DifficultyRow
-                          difficulty="Beginner"
-                          count={insights.challengesByDifficulty.beginner}
-                          total={insights.totalChallengesCompleted}
-                        />
-                        <DifficultyRow
-                          difficulty="Intermediate"
-                          count={insights.challengesByDifficulty.intermediate}
-                          total={insights.totalChallengesCompleted}
-                        />
-                        <DifficultyRow
-                          difficulty="Advanced"
-                          count={insights.challengesByDifficulty.advanced}
-                          total={insights.totalChallengesCompleted}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {insights.totalChallengesCompleted > 0 && Object.keys(insights.challengesByLanguage).length > 0 && (
-                    <div className={styles.statsCard}>
-                      <h2 className={styles.statsCardHeading}>Challenges by Language</h2>
-                      <div className={styles.languageList}>
-                        {Object.entries(insights.challengesByLanguage)
-                          .sort(([, a], [, b]) => b - a)
-                          .slice(0, 5)
-                          .map(([language, count]) => (
-                            <div key={language} className={styles.languageRow}>
-                              <span className={styles.languageName}>{language}</span>
-                              <span className={styles.languageCount}>{count}</span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <RecentActivityList activities={insights.recentActivity} />
-                </Stack>
-              )}
+              <StatsPanel
+                loadError={loadError}
+                isLoading={isLoading}
+                hasNoInsightsHistory={hasNoInsightsHistory}
+                insights={insights}
+                totalGoalsCompleted={totalGoalsCompleted}
+              />
             </UnderlinePanels.Panel>
           </UnderlinePanels>
         </main>
@@ -565,37 +407,3 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     </div>
   );
 });
-
-function DifficultyRow({ difficulty, count, total }: { difficulty: string; count: number; total: number }) {
-  const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-
-  return (
-    <div className={insightsStyles.difficultyRow}>
-      <div className={insightsStyles.difficultyHeader}>
-        <span className={insightsStyles.difficultyName}>{difficulty}</span>
-        <span className={insightsStyles.difficultyStats}>
-          {count} ({percentage}%)
-        </span>
-      </div>
-      <div className={insightsStyles.difficultyProgressBar}>
-        <div
-          className={`${insightsStyles.difficultyProgressFill} ${getDifficultyClass(difficulty)}`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function getDifficultyClass(difficulty: string): string {
-  switch (difficulty.toLowerCase()) {
-    case 'beginner':
-      return insightsStyles.difficultyProgressBeginner;
-    case 'intermediate':
-      return insightsStyles.difficultyProgressIntermediate;
-    case 'advanced':
-      return insightsStyles.difficultyProgressAdvanced;
-    default:
-      return insightsStyles.difficultyProgressBeginner;
-  }
-}
