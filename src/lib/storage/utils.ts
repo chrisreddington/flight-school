@@ -18,7 +18,7 @@ import { logger } from '@/lib/logger';
 const log = logger.withTag('Storage Utils');
 
 /** Determines the appropriate storage directory based on platform. */
-function getDefaultStorageDir(): string {
+export function getStorageRoot(): string {
   // Allow override via environment variable
   if (process.env.FLIGHT_SCHOOL_DATA_DIR) {
     return process.env.FLIGHT_SCHOOL_DATA_DIR;
@@ -37,7 +37,7 @@ function getDefaultStorageDir(): string {
   return path.join(home, '.local', 'share', 'flight-school');
 }
 
-const STORAGE_DIR = getDefaultStorageDir();
+const STORAGE_DIR = getStorageRoot();
 
 /**
  * Safely joins path segments and ensures the result is within STORAGE_DIR.
