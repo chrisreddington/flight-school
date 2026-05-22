@@ -1,7 +1,12 @@
 # Flight School — Azure Container Apps infrastructure
 
-This directory contains the Bicep modules that provision the multi-tenant
-production environment for Flight School on **Azure Container Apps (ACA)**.
+> [!WARNING]
+> **Exploratory only — not production guidance.**
+> These Bicep modules are for experimenting with Flight School on Azure Container Apps while evaluating GitHub, Copilot SDK, Aspire, and related platform capabilities.
+> This project is **not recommended for production use**.
+
+This directory contains the Bicep modules that provision a multi-tenant
+reference environment for Flight School on **Azure Container Apps (ACA)**.
 
 ## What gets deployed
 

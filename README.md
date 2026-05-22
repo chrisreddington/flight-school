@@ -4,6 +4,11 @@
 
 Flight School is a sample implementation showing how to build AI-powered developer tools using the [GitHub Copilot SDK](https://github.com/github/copilot-sdk). It's a learning platform where developers practice coding challenges, receive real-time AI evaluation, and get personalized guidance all powered by GitHub Copilot.
 
+> [!WARNING]
+> **Exploratory project — not production ready.**
+> Flight School is an experiment for trying the latest capabilities across **GitHub**, the **Copilot SDK**, **Aspire**, and related tooling.
+> It is **not recommended for production use**.
+
 ## Getting Started
 
 Flight School is multi-tenant: it authenticates each developer via a
@@ -42,12 +47,12 @@ GitHub App and supply `AUTH_*` credentials.
 > **Prerequisites:** Node.js 22+, npm, Git, and a GitHub Copilot subscription
 > (Individual, Business, or Enterprise) for the AI features.
 
-### Deploy to Azure Container Apps
+### Deploy to Azure Container Apps (experimental)
 
-Production deployment is documented end-to-end:
+Experimental ACA deployment notes:
 
 - [`docs/deployment-aca.md`](docs/deployment-aca.md) — Container image build,
-  ACA production checklist (env vars, Key Vault secrets, monitoring,
+  ACA deployment checklist for lab/test environments (env vars, Key Vault secrets, monitoring,
   rate-limit tuning).
 - [`infra/README.md`](infra/README.md) — Bicep modules, GitHub App setup
   against the ACA FQDN, deploy / rotate / cleanup recipes.

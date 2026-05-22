@@ -1,5 +1,10 @@
 # Deploying Flight School to Azure Container Apps
 
+> [!WARNING]
+> **Exploratory only — not for production use.**
+> This document exists to support experimentation with GitHub, Copilot SDK, Aspire, and ACA workflows.
+> Do **not** treat this project or these deployment steps as production guidance.
+
 This doc covers the **container image** half of deploying Flight School. The
 full Azure Container Apps deployment (infra, identity, secrets wiring) is
 tracked in P8.
@@ -7,7 +12,7 @@ tracked in P8.
 ## Building the image
 
 The repo ships a multi-stage `Dockerfile` at the root. It produces a
-production-ready Next.js standalone server image based on `node:20-slim`.
+Next.js standalone server image based on `node:20-slim` for test environments.
 
 ```bash
 docker build -t flight-school .
@@ -63,9 +68,9 @@ revision — but verify the SDK still spawns the CLI before shipping that.
   secrets, ingress on port 3000, and a managed identity for ACR pull.
 * Wire up a health probe (target route TBD — none exists today).
 
-## Production checklist
+## Deployment checklist (lab/test environments only)
 
-Use this checklist before promoting an image to a production ACA revision.
+Use this checklist before promoting an image to a shared **non-production** ACA revision.
 The Bicep modules in [`infra/`](../infra/) provision everything; this section
 is the operator's "have I configured it right?" view.
 
