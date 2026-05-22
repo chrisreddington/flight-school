@@ -49,12 +49,15 @@ function isSchema(data: unknown): data is Schema {
   );
 }
 
-function buildRoute() {
+function buildRoute(options?: {
+  transformRead?: (userId: string, data: Schema) => Promise<Schema> | Schema;
+}) {
   return createStorageRoute<Schema>({
     filename: 'items.json',
     defaultSchema: DEFAULT_SCHEMA,
     logger: logger.withTag('Test Storage'),
     validateSchema: isSchema,
+    transformRead: options?.transformRead,
   });
 }
 
@@ -213,5 +216,37 @@ describe('createStorageRoute (per-user partitioning)', () => {
     });
     const res = await POST(badBody as never);
     expect(res.status).toBe(400);
+  });
+
+  it('applies transformRead on GET with the authenticated userId', async () => {
+    const { POST, GET } = buildRoute({
+      transformRead: (userId, data) => ({ items: [...data.items, `uid:${userId}`] }),
+    });
+
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    await POST(postRequest({ items: ['alice'] }) as never);
+
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await readJson(res)) as Schema;
+    expect(body).toEqual({ items: ['alice', 'uid:111'] });
+  });
+
+  it('returns raw storage when transformRead throws', async () => {
+    const { POST, GET } = buildRoute({
+      transformRead: () => {
+        throw new Error('transform failed');
+      },
+    });
+
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    await POST(postRequest({ items: ['alice'] }) as never);
+
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await readJson(res)) as Schema;
+    expect(body).toEqual({ items: ['alice'] });
   });
 });

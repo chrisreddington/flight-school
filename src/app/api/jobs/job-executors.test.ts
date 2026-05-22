@@ -3,20 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
-/**
- * Helper to test repository context building logic
- * Extracts the logic from executeChatResponse for testing
- */
-function buildRepositoryContext(repos: string[] | undefined, prompt: string, useGitHubTools: boolean): string {
-  let contextualPrompt = prompt;
-  if (repos && repos.length > 0 && useGitHubTools) {
-    const repoList = repos.map(r => `- ${r}`).join('\n');
-    const repoContext = `Context: Focus on these repositories when using GitHub tools:\n${repoList}\n\n`;
-    contextualPrompt = repoContext + prompt;
-  }
-  return contextualPrompt;
-}
+import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 
 describe('Job Executors - Repository Context', () => {
   it('should add repository context when repos provided and GitHub tools enabled', () => {
@@ -24,14 +11,16 @@ describe('Job Executors - Repository Context', () => {
     const prompt = 'What is the main purpose of this repository?';
     const useGitHubTools = true;
 
-    const result = buildRepositoryContext(repos, prompt, useGitHubTools);
+    const result = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
 
-    expect(result).toContain('Context: Focus on these repositories when using GitHub tools:');
+    expect(result).toContain('The user has selected these repositories as context.');
+    expect(result).toContain('You MUST use GitHub MCP tools to look up live repository information before answering.');
+    expect(result).toContain('Do NOT use local shell/filesystem tools or generic web tools.');
+    expect(result).toContain('Selected repositories:');
     expect(result).toContain('- chrisreddington/trend-radar');
     expect(result).toContain('- chrisreddington/timestamp');
     expect(result).toContain('What is the main purpose of this repository?');
-    // Verify context comes before prompt
-    expect(result.indexOf('Context:')).toBeLessThan(result.indexOf('What is the main purpose'));
+    expect(result.indexOf('Selected repositories:')).toBeLessThan(result.indexOf('What is the main purpose'));
   });
 
   it('should not add repository context when repos empty', () => {
@@ -39,10 +28,10 @@ describe('Job Executors - Repository Context', () => {
     const prompt = 'What is the main purpose of this repository?';
     const useGitHubTools = true;
 
-    const result = buildRepositoryContext(repos, prompt, useGitHubTools);
+    const result = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
 
     expect(result).toBe(prompt);
-    expect(result).not.toContain('Context:');
+    expect(result).not.toContain('Selected repositories:');
   });
 
   it('should not add repository context when repos undefined', () => {
@@ -50,10 +39,10 @@ describe('Job Executors - Repository Context', () => {
     const prompt = 'What is the main purpose of this repository?';
     const useGitHubTools = true;
 
-    const result = buildRepositoryContext(repos, prompt, useGitHubTools);
+    const result = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
 
     expect(result).toBe(prompt);
-    expect(result).not.toContain('Context:');
+    expect(result).not.toContain('Selected repositories:');
   });
 
   it('should not add repository context when GitHub tools disabled', () => {
@@ -61,10 +50,10 @@ describe('Job Executors - Repository Context', () => {
     const prompt = 'What is the main purpose of this repository?';
     const useGitHubTools = false;
 
-    const result = buildRepositoryContext(repos, prompt, useGitHubTools);
+    const result = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
 
     expect(result).toBe(prompt);
-    expect(result).not.toContain('Context:');
+    expect(result).not.toContain('Selected repositories:');
   });
 
   it('should handle single repository', () => {
@@ -72,9 +61,9 @@ describe('Job Executors - Repository Context', () => {
     const prompt = 'Show me the README';
     const useGitHubTools = true;
 
-    const result = buildRepositoryContext(repos, prompt, useGitHubTools);
+    const result = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
 
-    expect(result).toContain('Context: Focus on these repositories when using GitHub tools:');
+    expect(result).toContain('The user has selected these repositories as context.');
     expect(result).toContain('- chrisreddington/flight-school');
     expect(result).toContain('Show me the README');
   });
@@ -84,7 +73,7 @@ describe('Job Executors - Repository Context', () => {
     const prompt = 'Compare these repos';
     const useGitHubTools = true;
 
-    const result = buildRepositoryContext(repos, prompt, useGitHubTools);
+    const result = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
 
     expect(result).toContain('- owner1/repo1\n- owner2/repo2\n- owner3/repo3');
   });

@@ -36,6 +36,7 @@ import type {
   TopicRegenerationResult,
 } from '@/lib/jobs';
 import { jobStorage } from '@/lib/jobs';
+import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 import { logger } from '@/lib/logger';
 import { auditLog, hashUserId } from '@/lib/security/audit';
 import type { Message, ToolCallEvent } from '@/lib/threads';
@@ -48,6 +49,25 @@ import { readEvaluationStorage, writeEvaluationStorage } from './evaluation-stor
 import { deleteScratchpad, readScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
 
 const log = logger.withTag('JobExecutors');
+const STREAM_CURSOR = ' ▊';
+
+function upsertMessageById(
+  messages: Message[],
+  messageId: string,
+  nextMessage: Message,
+  mergeExisting: boolean,
+): Message[] {
+  const existingIndex = messages.findIndex((m) => m.id === messageId);
+  if (existingIndex < 0) {
+    return [...messages, nextMessage];
+  }
+
+  const updatedMessages = [...messages];
+  updatedMessages[existingIndex] = mergeExisting
+    ? { ...updatedMessages[existingIndex], ...nextMessage }
+    : nextMessage;
+  return updatedMessages;
+}
 
 /**
  * Resolve a fresh {@link SessionIdentity} for a job at execution time.
@@ -467,23 +487,18 @@ async function consolidateScratchpadToThread(
   const consolidatedMessage: Message = {
     id: assistantMessageId,
     role: 'assistant',
-    content: content + (isFinal ? '' : ' ▊'),
+    content: content + (isFinal ? '' : STREAM_CURSOR),
     timestamp: now(),
     toolEvents: toolEvents && toolEvents.length > 0 ? toolEvents.map((e) => ({ ...e })) : undefined,
     hasActionableItem,
   };
 
-  const existingIndex = currentThread.messages.findIndex((m) => m.id === assistantMessageId);
-  let updatedMessages: Message[];
-  if (existingIndex >= 0) {
-    updatedMessages = [...currentThread.messages];
-    updatedMessages[existingIndex] = {
-      ...updatedMessages[existingIndex],
-      ...consolidatedMessage,
-    };
-  } else {
-    updatedMessages = [...currentThread.messages, consolidatedMessage];
-  }
+  const updatedMessages = upsertMessageById(
+    currentThread.messages,
+    assistantMessageId,
+    consolidatedMessage,
+    true,
+  );
 
   await updateThread(userId, {
     ...currentThread,
@@ -524,12 +539,9 @@ export async function executeChatResponse(
     }
     
     // Build repository context if repos are provided
-    let contextualPrompt = prompt;
-    if (repos && repos.length > 0 && useGitHubTools) {
-      const repoList = repos.map(r => `- ${r}`).join('\n');
-      const repoContext = `The user has selected these repositories as context.\nYou MUST use GitHub MCP tools to look up live repository information before answering.\nDo NOT use local shell/filesystem tools or generic web tools.\n\nSelected repositories:\n${repoList}\n\nUser question: `;
-      contextualPrompt = repoContext + prompt;
-      log.debug(`[Job ${jobId}] Added repository context for ${repos.length} repos`);
+    const contextualPrompt = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
+    if (contextualPrompt !== prompt) {
+      log.debug(`[Job ${jobId}] Added repository context for ${repos?.length ?? 0} repos`);
     }
     
     // Create the appropriate streaming session
@@ -581,24 +593,22 @@ export async function executeChatResponse(
         const currentThread = await getThreadById(userId, threadId);
         if (!currentThread) return;
 
-        const existingIndex = currentThread.messages.findIndex(m => m.id === assistantMessageId);
         const consolidatedMessage: Message = {
           id: assistantMessageId,
           role: 'assistant',
-          content: fullContent + (isFinal ? '' : ' ▊'),
+          content: fullContent + (isFinal ? '' : STREAM_CURSOR),
           timestamp: now(),
           toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
           toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
           hasActionableItem,
         };
 
-        let updatedMessages: Message[];
-        if (existingIndex >= 0) {
-          updatedMessages = [...currentThread.messages];
-          updatedMessages[existingIndex] = consolidatedMessage;
-        } else {
-          updatedMessages = [...currentThread.messages, consolidatedMessage];
-        }
+        const updatedMessages = upsertMessageById(
+          currentThread.messages,
+          assistantMessageId,
+          consolidatedMessage,
+          false,
+        );
 
         await updateThread(userId, {
           ...currentThread,
