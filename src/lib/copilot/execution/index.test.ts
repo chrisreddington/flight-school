@@ -48,12 +48,12 @@ describe('executeCopilotChat', () => {
     mocks.executeCopilotChatViaWorker.mockResolvedValue(result);
   });
 
-  it('uses in-process execution when no worker is configured', async () => {
+  it('throws a safe configuration error when no worker is configured', async () => {
     mocks.getCopilotWorkerConfig.mockReturnValue(null);
 
-    await expect(executeCopilotChat(request)).resolves.toBe(result);
+    await expect(executeCopilotChat(request)).rejects.toThrow('Copilot worker is required for chat execution');
 
-    expect(mocks.executeCopilotChatInProcess).toHaveBeenCalledWith(request);
+    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
     expect(mocks.executeCopilotChatViaWorker).not.toHaveBeenCalled();
   });
 

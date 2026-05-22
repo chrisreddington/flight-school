@@ -1,14 +1,14 @@
 import { getCopilotWorkerConfig } from './config';
 import { executeCopilotChatViaWorker } from './http-client';
-import { executeCopilotChatInProcess } from './in-process';
 import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from './types';
+import { CopilotWorkerRequiredError } from './worker-required-error';
 
 export async function executeCopilotChat(
   request: CopilotChatExecutionRequest,
 ): Promise<CopilotChatExecutionResult> {
   const workerConfig = getCopilotWorkerConfig();
-  if (workerConfig) {
-    return executeCopilotChatViaWorker(workerConfig, request);
+  if (!workerConfig) {
+    throw new CopilotWorkerRequiredError();
   }
-  return executeCopilotChatInProcess(request);
+  return executeCopilotChatViaWorker(workerConfig, request);
 }
