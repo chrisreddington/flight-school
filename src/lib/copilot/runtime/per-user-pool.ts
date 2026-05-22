@@ -45,8 +45,12 @@ export function createPerUserRuntimePool({
     }
   }
 
-  async function createAndStoreRuntime(userId: string, currentTime: number): Promise<CopilotRuntime> {
-    const runtime = await createRuntime(userId);
+  async function createAndStoreRuntime(
+    userId: string,
+    currentTime: number,
+    context: Parameters<typeof createRuntime>[1],
+  ): Promise<CopilotRuntime> {
+    const runtime = await createRuntime(userId, context);
     runtimes.set(userId, { runtime, lastUsed: currentTime });
     pendingCreations.delete(userId);
     onEvent?.({ type: 'created', userId });
@@ -55,7 +59,7 @@ export function createPerUserRuntimePool({
   }
 
   return {
-    async getRuntime(userId: string) {
+    async getRuntime(userId: string, context) {
       const currentTime = now();
       await pruneExpired(currentTime);
 
@@ -71,7 +75,7 @@ export function createPerUserRuntimePool({
         return pending;
       }
 
-      const created = createAndStoreRuntime(userId, currentTime).catch((error: unknown) => {
+      const created = createAndStoreRuntime(userId, currentTime, context).catch((error: unknown) => {
         pendingCreations.delete(userId);
         throw error;
       });
