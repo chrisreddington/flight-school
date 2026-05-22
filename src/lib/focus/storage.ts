@@ -54,21 +54,9 @@ import type {
     FocusStorageSchema,
     LearningTopic,
 } from './types';
-import { MAX_HISTORY_ENTRIES } from './types';
+import { getTodaysFocusFromHistory, saveFocusToHistory } from './history';
 
 const log = logger.withTag('FocusStore');
-
-/**
- * Deep equality check for generic objects.
- * Used to deduplicate focus components.
- */
-function isEqual<T>(a: T, b: T): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-// =============================================================================
-// FocusStore Class
-// =============================================================================
 
 interface FocusStoreInterface {
   /** Get today's cached focus view (reconstructed from components) */
@@ -155,88 +143,13 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
   }
 
-  private pruneHistory(history: FocusHistory): FocusHistory {
-    const entries = Object.entries(history);
-    if (entries.length <= MAX_HISTORY_ENTRIES) {
-      return history;
-    }
-    const sorted = entries.sort(([a], [b]) => b.localeCompare(a));
-    const pruned = sorted.slice(0, MAX_HISTORY_ENTRIES);
-    return Object.fromEntries(pruned);
-  }
-
   /**
    * Reconstructs the current view of the day's focus from the latest components.
    */
   async getTodaysFocus(): Promise<FocusResponse | null> {
     const schema = await this.getStorage();
     const todayKey = getDateKey();
-    const record = schema.history[todayKey];
-    
-    if (!record || 
-        record.challenges.length === 0 || 
-        record.goals.length === 0 || 
-        record.learningTopics.length === 0) {
-      return null;
-    }
-    
-    // Get latest version of each component
-    const latestChallenge = record.challenges[record.challenges.length - 1];
-    const latestGoal = record.goals[record.goals.length - 1];
-    const latestTopics = record.learningTopics[record.learningTopics.length - 1];
-
-    // Safety check: ensure items have stateHistory (handle old data format)
-    if (!latestChallenge.stateHistory || !latestGoal.stateHistory || !latestTopics[0]?.stateHistory) {
-      return null; // Old format - will be reset on schema mismatch
-    }
-
-    // Get generated timestamp from first state transition
-    const challengeGenerated = latestChallenge.stateHistory[0].timestamp;
-    const goalGenerated = latestGoal.stateHistory[0].timestamp;
-    const topicsGenerated = latestTopics[0].stateHistory[0].timestamp;
-    
-    const timestamps = [challengeGenerated, goalGenerated, topicsGenerated].sort();
-    const latestGeneratedAt = timestamps[timestamps.length - 1];
-
-    // Filter topics for dashboard display:
-    // 1. Exclude skipped topics
-    // 2. Exclude explored topics that have been replaced
-    // 3. Limit to 3 topics (prioritize non-explored over explored)
-    const displayableTopics = latestTopics.filter(t => {
-      const state = getCurrentTopicState(t);
-      // Hide skipped topics
-      if (state === 'skipped') return false;
-      // Hide explored topics that have been replaced
-      if (state === 'explored' && t.data.replacedByTopicId) return false;
-      return true;
-    });
-    
-    // Sort: non-explored first, then explored (to prioritize active topics)
-    const sortedTopics = displayableTopics.sort((a, b) => {
-      const stateA = getCurrentTopicState(a);
-      const stateB = getCurrentTopicState(b);
-      if (stateA === 'not-explored' && stateB === 'explored') return -1;
-      if (stateA === 'explored' && stateB === 'not-explored') return 1;
-      return 0; // maintain order within same state
-    });
-    
-    // Limit to 3 topics for dashboard display
-    const dashboardTopics = sortedTopics.slice(0, 3);
-
-    return {
-        challenge: latestChallenge.data,
-        goal: latestGoal.data,
-        learningTopics: dashboardTopics.map(t => t.data),
-        calibrationNeeded: record.calibrationNeeded,
-        meta: {
-            generatedAt: latestGeneratedAt,
-            aiEnabled: true, 
-            model: 'stored',
-            toolsUsed: [],
-            totalTimeMs: 0,
-            usedCachedProfile: true
-        }
-    };
+    return getTodaysFocusFromHistory(schema.history, todayKey);
   }
 
   /**
@@ -246,66 +159,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   async saveTodaysFocus(focus: FocusResponse): Promise<void> {
     const schema = await this.getStorage();
     const todayKey = getDateKey();
-
-    // Initialize daily record if needed
-    if (!schema.history[todayKey]) {
-      schema.history[todayKey] = {
-        challenges: [],
-        goals: [],
-        learningTopics: []
-      };
-    }
-    const record = schema.history[todayKey];
-
-    // Helper to check if an item has valid content (not empty placeholders)
-    const isValidChallenge = focus.challenge?.id && focus.challenge?.title;
-    const isValidGoal = focus.goal?.id && focus.goal?.title;
-    const hasValidTopics = focus.learningTopics?.length > 0 && 
-      focus.learningTopics.every(t => t.id && t.title);
-
-    // 1. Append Challenge if different AND valid
-    if (isValidChallenge) {
-      const lastChallenge = record.challenges[record.challenges.length - 1];
-      if (!lastChallenge || !isEqual(lastChallenge.data, focus.challenge)) {
-          const statefulChallenge = createStatefulChallenge(focus.challenge);
-          record.challenges.push(statefulChallenge);
-      }
-    }
-
-    // 2. Append Goal if different AND valid
-    if (isValidGoal) {
-      const lastGoal = record.goals[record.goals.length - 1];
-      if (!lastGoal || !isEqual(lastGoal.data, focus.goal)) {
-          const statefulGoal = createStatefulGoal(focus.goal);
-          record.goals.push(statefulGoal);
-      }
-    }
-
-    // 3. Append Topics if different AND valid
-    if (hasValidTopics) {
-      const lastTopics = record.learningTopics[record.learningTopics.length - 1];
-      const topicsChanged = !lastTopics || !isEqual(
-        lastTopics.map(t => t.data),
-        focus.learningTopics
-      );
-      
-      if (topicsChanged) {
-          const statefulTopics = focus.learningTopics.map(topic => 
-            createStatefulTopic(topic)
-          );
-          record.learningTopics.push(statefulTopics);
-      }
-    }
-
-    // 4. Save calibration items (merge with existing, avoiding duplicates)
-    if (focus.calibrationNeeded && focus.calibrationNeeded.length > 0) {
-      const existingIds = new Set(record.calibrationNeeded?.map(c => c.skillId) || []);
-      const newItems = focus.calibrationNeeded.filter(c => !existingIds.has(c.skillId));
-      record.calibrationNeeded = [...(record.calibrationNeeded || []), ...newItems];
-    }
-
-    // Prune old days
-    schema.history = this.pruneHistory(schema.history);
+    schema.history = saveFocusToHistory(schema.history, todayKey, focus);
     await this.setStorage(schema);
   }
 
