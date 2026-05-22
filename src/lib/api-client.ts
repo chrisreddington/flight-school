@@ -47,26 +47,8 @@ export class ApiError extends Error {
 }
 
 /**
- * Thrown by the client when an AI route returns 402 `copilot_required`.
- * The global `<CopilotRequiredBanner />` (mounted in `src/app/providers.tsx`)
- * already shows the user-facing message; per-call sites can catch this
- * to keep their own error state clean.
- */
-export class CopilotRequiredClientError extends Error {
-  readonly status = 402;
-  readonly signUpUrl?: string;
-
-  constructor(detail: CopilotRequiredEventDetail) {
-    super(detail.message ?? 'GitHub Copilot subscription required.');
-    this.name = 'CopilotRequiredClientError';
-    this.signUpUrl = detail.signUpUrl;
-  }
-}
-
-/**
  * Dispatch the `copilot-required` window event so the global banner can
- * surface a 402 from any fetch site. Returns the dispatched detail so
- * callers can also throw a typed {@link CopilotRequiredClientError}.
+ * surface a 402 from any fetch site.
  */
 function dispatchCopilotRequired(
   body: unknown,
@@ -286,26 +268,6 @@ export function apiPost<T>(
 }
 
 /**
- * Perform a PATCH request.
- * 
- * @param url - API endpoint URL
- * @param data - Request body data
- * @param options - Request options
- * @returns Promise resolving to the API response
- */
-export function apiPatch<T>(
-  url: string,
-  data?: unknown,
-  options?: Omit<ApiRequestOptions, 'method' | 'body'>
-): Promise<T> {
-  return apiRequest<T>(url, {
-    ...options,
-    method: 'PATCH',
-    body: data ? JSON.stringify(data) : undefined,
-  });
-}
-
-/**
  * Performs a DELETE request.
  *
  * @param url - API endpoint URL
@@ -317,54 +279,4 @@ export function apiDelete<T>(
   options?: Omit<ApiRequestOptions, 'method'>
 ): Promise<T> {
   return apiRequest<T>(url, { ...options, method: 'DELETE' });
-}
-
-/**
- * Performs a fetch that returns the live {@link Response} so the caller
- * can stream the body (SSE, chunked transfer, etc.).
- *
- * Unlike {@link apiPost}, the body is **not** consumed here. We only peek
- * at the status to dispatch global signals:
- *  - 402 `copilot_required` → `copilot-required` event + throws
- *    {@link CopilotRequiredClientError}.
- *  - 429 → `rate-limited` event + throws {@link RateLimitedClientError}.
- *  - Other non-2xx → throws a generic `Error` with the HTTP status.
- *  - 2xx → returns the live `Response` with body intact.
- *
- * A `Content-Type: application/json` header is added by default; pass
- * `headers` to override.
- */
-export async function apiStream(
-  url: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    // Clone so we can peek at the body without consuming the caller's copy.
-    const peek = response.clone();
-    const body = await peek.json().catch(() => ({}));
-
-    if (response.status === 402 && isCopilotRequiredBody(body)) {
-      const detail = dispatchCopilotRequired(body, url);
-      throw new CopilotRequiredClientError(detail);
-    }
-
-    if (response.status === 429) {
-      const detail = dispatchRateLimited(response, body, url);
-      throw new RateLimitedClientError(detail);
-    }
-
-    throw new Error(
-      (body as { error?: string })?.error || `HTTP ${response.status}`,
-    );
-  }
-
-  return response;
 }

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiGet, apiPost, apiPatch, apiDelete, apiStream, CopilotRequiredClientError } from './api-client';
+import { apiGet, apiPost, apiDelete } from './api-client';
 
 // =============================================================================
 // Setup
@@ -97,30 +97,6 @@ describe('API Client', () => {
           body: undefined,
         })
       );
-    });
-  });
-
-  // ===========================================================================
-  // apiPatch Tests
-  // ===========================================================================
-
-  describe('apiPatch', () => {
-    it('should make PATCH request with body', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ updated: true }),
-      });
-
-      const result = await apiPatch('/api/update/1', { name: 'updated' });
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/update/1',
-        expect.objectContaining({
-          method: 'PATCH',
-          body: JSON.stringify({ name: 'updated' }),
-        })
-      );
-      expect(result).toEqual({ updated: true });
     });
   });
 
@@ -439,109 +415,6 @@ describe('API Client', () => {
             Authorization: 'Bearer token',
           }),
         })
-      );
-    });
-  });
-
-  // ===========================================================================
-  // F4: apiStream — streaming responses + 402/429 dispatch
-  // ===========================================================================
-
-  describe('apiStream', () => {
-    it('returns the live Response on success without consuming the body', async () => {
-      const response = {
-        ok: true,
-        status: 200,
-        body: { getReader: vi.fn() },
-        clone: vi.fn(),
-      };
-      mockFetch.mockResolvedValueOnce(response);
-
-      const result = await apiStream('/api/stream', { method: 'POST' });
-
-      expect(result).toBe(response);
-      // Body must be intact for the caller to stream from it.
-      expect(response.clone).not.toHaveBeenCalled();
-    });
-
-    it('dispatches copilot-required and throws CopilotRequiredClientError on 402', async () => {
-      const body = {
-        error: 'copilot_required',
-        message: 'Need Copilot',
-        signUpUrl: 'https://example.test/copilot',
-      };
-      const cloneJson = vi.fn(() => Promise.resolve(body));
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 402,
-        headers: new Headers(),
-        clone: () => ({ json: cloneJson }),
-      });
-
-      const listener = vi.fn();
-      window.addEventListener('copilot-required', listener);
-
-      await expect(
-        apiStream('/api/challenge/author', { method: 'POST' }),
-      ).rejects.toBeInstanceOf(CopilotRequiredClientError);
-
-      expect(listener).toHaveBeenCalledTimes(1);
-      const detail = (listener.mock.calls[0][0] as CustomEvent).detail;
-      expect(detail.message).toBe('Need Copilot');
-      expect(detail.signUpUrl).toBe('https://example.test/copilot');
-      expect(detail.endpoint).toBe('/api/challenge/author');
-
-      window.removeEventListener('copilot-required', listener);
-    });
-
-    it('dispatches rate-limited and throws on 429', async () => {
-      const body = { error: 'Rate limit', reason: 'rate_limit' };
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        headers: new Headers({ 'Retry-After': '15', 'X-RateLimit-Reason': 'rate_limit' }),
-        clone: () => ({ json: () => Promise.resolve(body) }),
-      });
-
-      const listener = vi.fn();
-      window.addEventListener('rate-limited', listener);
-
-      await expect(apiStream('/api/jobs', { method: 'POST' })).rejects.toMatchObject({
-        status: 429,
-        reason: 'rate_limit',
-        retryAfterSeconds: 15,
-      });
-
-      expect(listener).toHaveBeenCalledTimes(1);
-      window.removeEventListener('rate-limited', listener);
-    });
-
-    it('throws a generic Error for other non-2xx responses', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        headers: new Headers(),
-        clone: () => ({ json: () => Promise.resolve({ error: 'boom' }) }),
-      });
-
-      await expect(apiStream('/api/oops', { method: 'POST' })).rejects.toThrow(/boom|HTTP 500/);
-    });
-
-    it('sets Content-Type: application/json by default', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        body: null,
-        clone: vi.fn(),
-      });
-
-      await apiStream('/api/stream', { method: 'POST', body: '{}' });
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/stream',
-        expect.objectContaining({
-          headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-        }),
       );
     });
   });

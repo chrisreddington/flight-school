@@ -91,24 +91,3 @@ export function validationErrorResponse(
 ): NextResponse<ApiErrorResponse> {
   return apiError(message, meta, 400);
 }
-
-/**
- * Create a service unavailable error response (503).
- * 
- * @param message - Error message
- * @param meta - Optional metadata
- * @returns Next.js response with 503 status
- * 
- * @example
- * ```typescript
- * if (!externalServiceReady) {
- *   return serviceUnavailableResponse('Downstream service unavailable');
- * }
- * ```
- */
-export function serviceUnavailableResponse(
-  message: string,
-  meta?: Record<string, unknown>
-): NextResponse<ApiErrorResponse> {
-  return apiError(message, meta, 503);
-}
