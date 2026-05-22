@@ -24,6 +24,7 @@ const FILE_LIMITS = {
   'src/components/LearningHistory/learning-history-sidebar.tsx': 82,
   'src/components/LearningHistory/stats-panel.tsx': 151,
   'src/components/LearningHistory/use-learning-history-view-model.ts': 232,
+  'src/components/FocusItem/SkippingCard.tsx': 41,
   'src/lib/auth/token-store.ts': 19,
   'src/lib/auth/token-store/cosmos.ts': 319,
   'src/lib/auth/token-store/envelope.ts': 115,

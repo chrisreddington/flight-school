@@ -13,12 +13,13 @@ import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { ArrowRightIcon, ClockIcon, StopIcon } from '@primer/octicons-react';
-import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { ArrowRightIcon, ClockIcon } from '@primer/octicons-react';
+import { Button, Heading, Label, Stack } from '@primer/react';
 import { InlineMessage } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
+import { SkippingCard } from './SkippingCard';
 
 interface ChallengeCardProps {
   challenge: DailyChallenge;
@@ -171,30 +172,7 @@ export function ChallengeCard({
   // Show loading state while regenerating (with stop button on dashboard)
   if (isSkipping) {
     return (
-      <div className={styles.card}>
-        <Stack direction="vertical" gap="normal">
-          <Stack direction="horizontal" align="center" justify="space-between">
-            <Stack direction="horizontal" align="center" gap="condensed">
-              <Spinner size="small" />
-              <span className={styles.loadingText}>Generating new challenge...</span>
-            </Stack>
-            {onStopSkip && (
-              <Button
-                variant="danger"
-                size="small"
-                onClick={() => onStopSkip(challenge.id)}
-                leadingVisual={StopIcon}
-                aria-label="Stop generating challenge"
-              >
-                Stop
-              </Button>
-            )}
-          </Stack>
-          <SkeletonBox height="24px" width="70%" />
-          <SkeletonBox height="16px" width="100%" />
-          <SkeletonBox height="16px" width="90%" />
-        </Stack>
-      </div>
+      <SkippingCard id={challenge.id} itemType="challenge" skeletonLines={3} onStop={onStopSkip} />
     );
   }
 

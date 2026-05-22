@@ -10,11 +10,12 @@ import type { GoalState } from '@/lib/focus/state-machine';
 import type { DailyGoal } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { CheckCircleIcon, CheckIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
-import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { CheckCircleIcon, CheckIcon, SkipIcon } from '@primer/octicons-react';
+import { Button, Heading, Label, Stack } from '@primer/react';
 import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
+import { SkippingCard } from './SkippingCard';
 
 interface GoalCardProps {
   goal: DailyGoal;
@@ -107,31 +108,7 @@ export function GoalCard({
 
   // Show loading state while regenerating (with stop button on dashboard)
   if (isSkipping) {
-    return (
-      <div className={styles.card}>
-        <Stack direction="vertical" gap="normal">
-          <Stack direction="horizontal" align="center" justify="space-between">
-            <Stack direction="horizontal" align="center" gap="condensed">
-              <Spinner size="small" />
-              <span className={styles.loadingText}>Generating new goal...</span>
-            </Stack>
-            {onStopSkip && (
-              <Button
-                variant="danger"
-                size="small"
-                onClick={() => onStopSkip(goal.id)}
-                leadingVisual={StopIcon}
-                aria-label="Stop generating goal"
-              >
-                Stop
-              </Button>
-            )}
-          </Stack>
-          <SkeletonBox height="24px" width="70%" />
-          <SkeletonBox height="16px" width="100%" />
-        </Stack>
-      </div>
-    );
+    return <SkippingCard id={goal.id} itemType="goal" skeletonLines={2} onStop={onStopSkip} />;
   }
 
   // Don't render skipped goals on dashboard (they've been replaced)
