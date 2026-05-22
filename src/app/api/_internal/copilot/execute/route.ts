@@ -1,6 +1,6 @@
 import { parseJsonBody } from '@/lib/api/request-utils';
-import { executeCopilotChatInProcess } from '@/lib/copilot/execution/in-process';
 import { parseCopilotWorkerChatRequest } from '@/lib/copilot/execution/protocol';
+import { executeCopilotChatInWorkerRuntime } from '@/lib/copilot/runtime/worker-executor';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await executeCopilotChatInProcess(workerRequest);
+    const result = await executeCopilotChatInWorkerRuntime(workerRequest);
     return NextResponse.json(result);
   } catch {
     return NextResponse.json({ error: 'Worker execution failed' }, { status: 500 });

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  executeCopilotChatInProcess: vi.fn(),
+  executeCopilotChatInWorkerRuntime: vi.fn(),
 }));
 
-vi.mock('@/lib/copilot/execution/in-process', () => ({
-  executeCopilotChatInProcess: mocks.executeCopilotChatInProcess,
+vi.mock('@/lib/copilot/runtime/worker-executor', () => ({
+  executeCopilotChatInWorkerRuntime: mocks.executeCopilotChatInWorkerRuntime,
 }));
 
 import { POST } from './route';
@@ -25,7 +25,7 @@ describe('/api/_internal/copilot/execute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('COPILOT_WORKER_SECRET', 'local-secret');
-    mocks.executeCopilotChatInProcess.mockResolvedValue({
+    mocks.executeCopilotChatInWorkerRuntime.mockResolvedValue({
       response: 'answer',
       toolCalls: [],
       meta: {
@@ -52,7 +52,7 @@ describe('/api/_internal/copilot/execute', () => {
     const response = await POST(makeRequest({}));
 
     expect(response.status).toBe(404);
-    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
+    expect(mocks.executeCopilotChatInWorkerRuntime).not.toHaveBeenCalled();
   });
 
   it('returns 401 when bearer auth is missing or wrong', async () => {
@@ -61,7 +61,7 @@ describe('/api/_internal/copilot/execute', () => {
     const response = await POST(makeRequest({}, 'wrong-secret'));
 
     expect(response.status).toBe(401);
-    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
+    expect(mocks.executeCopilotChatInWorkerRuntime).not.toHaveBeenCalled();
   });
 
   it('returns 400 without echoing tokens when the worker request is invalid', async () => {
@@ -75,7 +75,7 @@ describe('/api/_internal/copilot/execute', () => {
     expect(response.status).toBe(400);
     expect(text).toContain('Invalid worker request');
     expect(text).not.toContain('ghu_user');
-    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
+    expect(mocks.executeCopilotChatInWorkerRuntime).not.toHaveBeenCalled();
   });
 
   it('executes valid worker requests in-process', async () => {
@@ -92,12 +92,12 @@ describe('/api/_internal/copilot/execute', () => {
 
     expect(response.status).toBe(200);
     expect(body.response).toBe('answer');
-    expect(mocks.executeCopilotChatInProcess).toHaveBeenCalledWith(request);
+    expect(mocks.executeCopilotChatInWorkerRuntime).toHaveBeenCalledWith(request);
   });
 
   it('returns 500 without echoing tokens when execution fails', async () => {
     vi.stubEnv('COPILOT_WORKER_ENABLED', '1');
-    mocks.executeCopilotChatInProcess.mockRejectedValue(new Error('SDK failed for ghu_user'));
+    mocks.executeCopilotChatInWorkerRuntime.mockRejectedValue(new Error('SDK failed for ghu_user'));
 
     const response = await POST(makeRequest({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
