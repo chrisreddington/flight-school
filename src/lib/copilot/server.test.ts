@@ -90,4 +90,75 @@ describe('logged Copilot session factories', () => {
       expect.objectContaining({ userId: 'u1', gitHubToken: 'ghu_1' }),
     );
   });
+
+  it('creates coach sessions with MCP repository tools and the coach pool', async () => {
+    await createLoggedCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Daily Focus', 'prompt');
+
+    expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        includeMcpTools: true,
+        tools: ['get_me', 'list_user_repositories'],
+        userId: 'u1',
+        gitHubToken: 'ghu_1',
+      }),
+      'coach:mcp',
+    );
+  });
+
+  it('creates lightweight coach sessions without MCP tools and with the lightweight pool', async () => {
+    await createLoggedLightweightCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' });
+
+    expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        includeMcpTools: false,
+        model: expect.any(String),
+        userId: 'u1',
+        gitHubToken: 'ghu_1',
+      }),
+      'coach:lightweight',
+    );
+  });
+
+  it('keeps single-turn chat sessions on the conversation-session path and destroys them on cleanup', async () => {
+    const loggedSession = await createLoggedChatSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Chat', 'prompt');
+
+    expect(getConversationSessionMock).toHaveBeenCalledWith(
+      'u1',
+      undefined,
+      'chat:lightweight',
+      expect.objectContaining({
+        includeMcpTools: false,
+        userId: 'u1',
+        gitHubToken: 'ghu_1',
+      }),
+    );
+
+    await loggedSession.destroy();
+
+    expect(fakeSession.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps conversation chat sessions alive on wrapper cleanup', async () => {
+    const loggedSession = await createLoggedGitHubChatSession(
+      { userId: 'u1', gitHubToken: 'ghu_1' },
+      'GitHub Chat',
+      'prompt',
+      'conv-1',
+    );
+
+    expect(getConversationSessionMock).toHaveBeenCalledWith(
+      'u1',
+      'conv-1',
+      'chat:mcp',
+      expect.objectContaining({
+        includeMcpTools: true,
+        userId: 'u1',
+        gitHubToken: 'ghu_1',
+      }),
+    );
+
+    await loggedSession.destroy();
+
+    expect(fakeSession.destroy).not.toHaveBeenCalled();
+  });
 });

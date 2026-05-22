@@ -42,7 +42,7 @@ const FILE_LIMITS = {
   'src/hooks/use-ai-focus.ts': 558,
   'src/lib/copilot/logged-session.ts': 152,
   'src/lib/copilot/mcp-tools.ts': 7,
-  'src/lib/copilot/server.ts': 227,
+  'src/lib/copilot/server.ts': 173,
   'src/lib/copilot/session-identity.ts': 17,
   'src/lib/copilot/session-metrics.ts': 33,
   'src/lib/copilot/sessions.ts': 415,
