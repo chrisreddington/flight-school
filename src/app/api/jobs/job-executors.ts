@@ -47,6 +47,12 @@ import { extractJSON } from '@/lib/utils/json-utils';
 import { getThreadById, updateThread } from './threads-storage';
 import { readEvaluationStorage, writeEvaluationStorage } from './evaluation-storage';
 import { deleteScratchpad, readScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
+import { registerSession, unregisterSession } from './executors/session-registry';
+export {
+  getRegisteredSession,
+  registerSession,
+  unregisterSession,
+} from './executors/session-registry';
 
 const log = logger.withTag('JobExecutors');
 const STREAM_CURSOR = ' ▊';
@@ -184,25 +190,6 @@ async function mirrorCredentialsFailureToEvaluation(
   } catch (err) {
     log.debug(`[Job ${jobId}] Failed to mirror credentials failure:`, err);
   }
-}
-
-/** Map of running sessions for cancellation support */
-const runningSessions = new Map<string, { destroy: () => Promise<void> }>();
-
-/** Register a session for potential cancellation */
-export function registerSession(jobId: string, session: { destroy: () => Promise<void> }): void {
-  runningSessions.set(jobId, session);
-  log.debug(`[Job ${jobId}] Session registered for cancellation`);
-}
-
-/** Unregister a session (call when job completes) */
-export function unregisterSession(jobId: string): void {
-  runningSessions.delete(jobId);
-}
-
-/** Get a registered session for cancellation */
-export function getRegisteredSession(jobId: string): { destroy: () => Promise<void> } | undefined {
-  return runningSessions.get(jobId);
 }
 
 /** Check if job is still valid (exists and not cancelled). */

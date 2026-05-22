@@ -6,7 +6,8 @@ const ROOT = process.cwd();
 const NEW_FILE_LIMIT = 400;
 
 const FILE_LIMITS = {
-  'src/app/api/jobs/job-executors.ts': 914,
+  'src/app/api/jobs/job-executors.ts': 901,
+  'src/app/api/jobs/executors/session-registry.ts': 21,
   'src/lib/focus/storage.ts': 881,
   'src/components/LearningHistory/index.tsx': 740,
   'src/lib/auth/token-store.ts': 712,
