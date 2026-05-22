@@ -131,12 +131,15 @@ flowchart LR
 ## Error Handling
 - If `COPILOT_WORKER_URL` is unset, use the in-process adapter.
 - If the worker returns a non-2xx response, surface an explicit upstream worker error through existing route error handling.
+- Worker HTTP calls use a configurable timeout and propagate abort signals where available.
 - If the worker is unreachable, do not silently fall back in production; local fallback should be opt-in by leaving the worker URL unset.
-- Invalid worker request payloads return 400 and should not create Copilot sessions.
+- Invalid worker request payloads return a generic 400 and should not create Copilot sessions or echo request bodies.
 
 ## Testing Strategy
 - Unit test worker protocol parsing and failure responses.
 - Unit test execution client selection: worker URL set vs unset.
+- Unit test middleware allows `/api/_internal/*` through to the route-specific bearer-secret gate.
+- Unit test worker client timeout/abort handling.
 - Route tests continue to assert `/api/copilot` delegates through the execution boundary.
 - Infra validation runs `az bicep build --file infra/main.bicep --stdout >/dev/null`.
 - Final gate remains TypeScript, lint, Vitest, build, and maintainability checks.

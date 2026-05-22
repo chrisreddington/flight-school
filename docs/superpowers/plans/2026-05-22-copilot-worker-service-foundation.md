@@ -20,25 +20,26 @@
 - **Stories**: S1 local worker, S2 typed worker protocol, S3 private ACA worker scaffold, S4 docs, S5 deferred queue boundary.
 - **Migration Strategy**: Transport indirection first; private worker scaffold second; durable async queue later.
 - **Key decisions**: HTTP worker transport; in-process fallback; chat execution first; same image for web + worker.
-- **Security condition**: Worker route must be disabled unless `COPILOT_WORKER_ENABLED=1` and must require `Authorization: Bearer ${COPILOT_WORKER_SECRET}`.
+- **Security condition**: Worker route must be disabled unless `COPILOT_WORKER_ENABLED=1` and must require `Authorization: Bearer ${COPILOT_WORKER_SECRET}`. Middleware must allow `/api/_internal/*` through to this route-specific bearer-secret gate, and the public web container must never set `COPILOT_WORKER_ENABLED`.
 
 ## Codebase Analysis
 | # | File | Role | Change |
 |---|---|---|---|
 | F1 | `src/lib/copilot/execution/config.ts` | Worker env config | Read/validate worker URL + shared secret. |
-| F2 | `src/lib/copilot/execution/http-client.ts` | Worker transport | POST chat requests to internal worker route. |
+| F2 | `src/lib/copilot/execution/http-client.ts` | Worker transport | POST chat requests to internal worker route with timeout/abort handling. |
 | F3 | `src/lib/copilot/execution/index.ts` | Execution selector | Choose worker client when configured, otherwise in-process. |
 | F4 | `src/lib/copilot/execution/protocol.ts` | Runtime validation | Validate worker request payloads without `any`. |
 | F5 | `src/lib/copilot/execution/*.test.ts` | Unit tests | Cover config, selector, HTTP transport, protocol. |
-| F6 | `src/app/api/internal/copilot/execute/route.ts` | Worker endpoint | Authenticated internal route executing in-process adapter. |
-| F7 | `src/app/api/internal/copilot/execute/route.test.ts` | Route tests | Reject disabled/unauthorized/invalid; accept valid request. |
+| F6 | `src/app/api/_internal/copilot/execute/route.ts` | Worker endpoint | Authenticated internal route executing in-process adapter. |
+| F7 | `src/app/api/_internal/copilot/execute/route.test.ts` | Route tests | Reject disabled/unauthorized/invalid; accept valid request. |
 | F8 | `package.json` | Local scripts | Add `dev:worker`. |
 | F9 | `.env.example` | Local config docs | Document worker URL/secret/enabled vars. |
 | F10 | `apphost.ts` / `aspire-modules.d.ts` | Local orchestration | Add worker app and inject URL/secret into web app. |
 | F11 | `infra/modules/copilot-worker-app.bicep` | ACA worker | Private internal Container App for worker mode. |
 | F12 | `infra/modules/container-app.bicep` | ACA web | Add worker URL + secret env refs. |
 | F13 | `infra/main.bicep` | Infra wiring | Deploy worker before web; grant KV access to both identities. |
-| F14 | `infra/README.md`, `docs/*.md`, `README.md` | Docs | Local and production worker instructions. |
+| F14 | `src/middleware.ts`, `src/middleware.test.ts` | Internal route gate | Let `/api/_internal/*` reach route-specific auth without Auth.js session. |
+| F15 | `infra/README.md`, `docs/*.md`, `README.md` | Docs | Local and production worker instructions. |
 
 ## Implementation Steps
 
@@ -74,7 +75,8 @@ describe('getCopilotWorkerConfig', () => {
     expect(getCopilotWorkerConfig({
       COPILOT_WORKER_URL: 'http://localhost:3001/',
       COPILOT_WORKER_SECRET: 'local-secret',
-    })).toEqual({ baseUrl: 'http://localhost:3001', secret: 'local-secret' });
+      COPILOT_WORKER_TIMEOUT_MS: '45000',
+    })).toEqual({ baseUrl: 'http://localhost:3001', secret: 'local-secret', timeoutMs: 45000 });
   });
 });
 ```
@@ -149,7 +151,7 @@ describe('executeCopilotChatViaWorker', () => {
     );
 
     expect(result.response).toBe('answer');
-    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/api/internal/copilot/execute', expect.objectContaining({
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/api/_internal/copilot/execute', expect.objectContaining({
       method: 'POST',
       headers: expect.objectContaining({ authorization: 'Bearer local-secret' }),
     }));
@@ -162,6 +164,22 @@ describe('executeCopilotChatViaWorker', () => {
       { baseUrl: 'http://localhost:3001', secret: 'local-secret' },
       { identity: { userId: '123', gitHubToken: 'ghu_user' }, prompt: 'hello' },
     )).rejects.toThrow('Copilot worker returned HTTP 400: bad request');
+  });
+
+  it('aborts the worker call when the timeout expires', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      (init?.signal as AbortSignal).addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+
+    const result = executeCopilotChatViaWorker(
+      { baseUrl: 'http://localhost:3001', secret: 'local-secret', timeoutMs: 10 },
+      { identity: { userId: '123', gitHubToken: 'ghu_user' }, prompt: 'hello' },
+    );
+
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(result).rejects.toThrow('Copilot worker request timed out after 10ms');
+    vi.useRealTimers();
   });
 });
 ```
@@ -184,6 +202,7 @@ Create the modules with these public signatures:
 export interface CopilotWorkerConfig {
   baseUrl: string;
   secret: string;
+  timeoutMs: number;
 }
 
 export function getCopilotWorkerConfig(env = process.env): CopilotWorkerConfig | null;
@@ -194,9 +213,12 @@ export function executeCopilotChatViaWorker(config: CopilotWorkerConfig, request
 Implementation notes:
 - Trim one or more trailing `/` characters from `COPILOT_WORKER_URL`.
 - Throw when URL is set and `COPILOT_WORKER_SECRET` is empty.
+- Default `COPILOT_WORKER_TIMEOUT_MS` to `120000`; reject non-positive values.
 - Use lowercase `authorization` and `content-type` headers.
 - Parse worker error JSON `{ error: string }`; fall back to response text if JSON parsing fails.
 - Validate response shape enough to avoid returning non-object or missing `response`/`meta`.
+- Do not log or echo request bodies; they contain `identity.gitHubToken`.
+- Use `AbortController` to enforce timeout and compose with any caller-provided signal when available.
 
 - [ ] **Step 1.6: Run tests to verify GREEN**
 
@@ -278,11 +300,13 @@ git add src/lib/copilot/execution src/app/api/copilot/route.test.ts
 git commit -m "feat: select copilot worker execution when configured" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 ```
 
-### Task 3: Add the internal worker route
+### Task 3: Add the internal worker route and middleware exemption
 
 **Files:**
-- Create: `src/app/api/internal/copilot/execute/route.ts`
-- Create: `src/app/api/internal/copilot/execute/route.test.ts`
+- Create: `src/app/api/_internal/copilot/execute/route.ts`
+- Create: `src/app/api/_internal/copilot/execute/route.test.ts`
+- Modify: `src/middleware.ts`
+- Modify: `src/middleware.test.ts`
 
 - [ ] **Step 3.1: Write failing worker route tests**
 
@@ -291,12 +315,13 @@ Create route tests that:
 - return 401 when bearer token is missing or wrong;
 - return 400 for invalid request body;
 - call `executeCopilotChatInProcess` and return its result for a valid request.
+- never return or log the `ghu_` token on invalid request paths.
 
 Mock `@/lib/copilot/execution/in-process` and use `new Request(...) as never` like existing route tests.
 
 - [ ] **Step 3.2: Run route test to verify RED**
 
-Run: `npm test -- --run src/app/api/internal/copilot/execute/route.test.ts`
+Run: `npm test -- --run src/app/api/_internal/copilot/execute/route.test.ts`
 
 Expected: FAIL because the route does not exist.
 
@@ -307,22 +332,37 @@ Route behavior:
 - Compare `Authorization` header to `Bearer ${process.env.COPILOT_WORKER_SECRET}`.
 - If secret is missing in worker mode, return 500 with `"COPILOT_WORKER_SECRET is not configured"`.
 - Parse JSON with `parseJsonBody<unknown>()`, validate with `parseCopilotWorkerChatRequest()`.
+- Catch validation errors and return `{ error: 'Invalid worker request' }` without echoing details or request body.
 - Execute `executeCopilotChatInProcess(validatedRequest)`.
 
-- [ ] **Step 3.4: Run route and execution tests**
+- [ ] **Step 3.4: Add middleware exemption regression test**
+
+In `src/middleware.test.ts`, add:
+
+```ts
+it('allows unauthenticated /api/_internal/* requests to reach route-specific auth', async () => {
+  const res = await middleware(makeRequest('/api/_internal/copilot/execute'));
+  const response = res as Response;
+  expect(response.status).toBe(200);
+});
+```
+
+Then add `/api/_internal` to `PUBLIC_PREFIXES` in `src/middleware.ts`.
+
+- [ ] **Step 3.5: Run route, middleware, and execution tests**
 
 Run:
 
 ```bash
-npm test -- --run src/app/api/internal/copilot/execute/route.test.ts src/lib/copilot/execution/http-client.test.ts src/lib/copilot/execution/index.test.ts
+npm test -- --run src/app/api/_internal/copilot/execute/route.test.ts src/middleware.test.ts src/lib/copilot/execution/http-client.test.ts src/lib/copilot/execution/index.test.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 3.5: Commit Task 3**
+- [ ] **Step 3.6: Commit Task 3**
 
 ```bash
-git add src/app/api/internal/copilot/execute src/lib/copilot/execution
+git add src/app/api/_internal/copilot/execute src/middleware.ts src/middleware.test.ts src/lib/copilot/execution
 git commit -m "feat: add internal copilot worker route" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 ```
 
@@ -350,6 +390,7 @@ Add `.env.example` entries:
 # Leave COPILOT_WORKER_URL unset to use the in-process adapter.
 # COPILOT_WORKER_URL=http://localhost:3001
 # COPILOT_WORKER_SECRET=local-dev-worker-secret
+# COPILOT_WORKER_TIMEOUT_MS=120000
 # COPILOT_WORKER_ENABLED=1
 ```
 
@@ -415,6 +456,7 @@ In `infra/modules/container-app.bicep`:
 - add Key Vault secret ref `copilot-worker-secret`;
 - add env `{ name: 'COPILOT_WORKER_URL', value: copilotWorkerUrl }`;
 - add env `{ name: 'COPILOT_WORKER_SECRET', secretRef: 'copilot-worker-secret' }`.
+- do not add `COPILOT_WORKER_ENABLED` to the public web app.
 
 - [ ] **Step 5.4: Wire modules in `infra/main.bicep`**
 
@@ -434,7 +476,17 @@ az bicep build --file infra/main.bicep --stdout >/dev/null
 
 Expected: PASS.
 
-- [ ] **Step 5.6: Commit Task 5**
+- [ ] **Step 5.6: Check web app does not enable worker mode**
+
+Run:
+
+```bash
+grep -n "COPILOT_WORKER_ENABLED" infra/modules/container-app.bicep && exit 1 || exit 0
+```
+
+Expected: exit 0.
+
+- [ ] **Step 5.7: Commit Task 5**
 
 ```bash
 git add infra/main.bicep infra/main.parameters.json infra/modules/container-app.bicep infra/modules/copilot-worker-app.bicep infra/modules/key-vault.bicep
@@ -468,7 +520,7 @@ Also document `npm run aspire:run` as the preferred local two-process path once 
 In ACA/infra docs, add:
 - set `copilot-worker-secret` in Key Vault;
 - public web app has external ingress;
-- worker app uses internal ingress;
+- worker app uses internal ingress and `transport: 'http'`;
 - Service Bus async job execution is still deferred;
 - worker URL is an internal ACA FQDN injected by Bicep.
 
@@ -528,10 +580,11 @@ Expected: no output.
 | 1.6 | Same as 1.4 | PASS |
 | 2.2 | `npm test -- --run src/lib/copilot/execution/index.test.ts` | FAIL before selector |
 | 2.4 | `npm test -- --run src/lib/copilot/execution/index.test.ts src/lib/copilot/execution/in-process.test.ts src/app/api/copilot/route.test.ts` | PASS |
-| 3.2 | `npm test -- --run src/app/api/internal/copilot/execute/route.test.ts` | FAIL before route |
-| 3.4 | `npm test -- --run src/app/api/internal/copilot/execute/route.test.ts src/lib/copilot/execution/http-client.test.ts src/lib/copilot/execution/index.test.ts` | PASS |
+| 3.2 | `npm test -- --run src/app/api/_internal/copilot/execute/route.test.ts` | FAIL before route |
+| 3.5 | `npm test -- --run src/app/api/_internal/copilot/execute/route.test.ts src/middleware.test.ts src/lib/copilot/execution/http-client.test.ts src/lib/copilot/execution/index.test.ts` | PASS |
 | 4.3 | `npm run aspire:build` | PASS |
 | 5.5 | `az bicep build --file infra/main.bicep --stdout >/dev/null` | PASS |
+| 5.6 | `grep -n "COPILOT_WORKER_ENABLED" infra/modules/container-app.bicep && exit 1 || exit 0` | PASS |
 | 6.4 | `git --no-pager diff --check` | PASS |
 | 7.1 | `npx tsc --noEmit --pretty false && npm run lint && npm test -- --run && npm run build && npm run maintainability:check` | PASS |
 | 7.2 | `npm run aspire:build && az bicep build --file infra/main.bicep --stdout >/dev/null` | PASS |
