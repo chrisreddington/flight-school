@@ -11,6 +11,7 @@ async function main(): Promise<void> {
 
   await builder
     .addNextJsApp('flight-school', '.', { runScriptName: 'dev' })
+    .withHttpEndpoint({ port: 3000, targetPort: 3000, isProxied: false })
     .withExternalHttpEndpoints();
 
   await builder.build().run();
