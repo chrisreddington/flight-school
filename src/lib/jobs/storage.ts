@@ -26,6 +26,14 @@ export type JobErrorCode =
 export interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
+  /**
+   * Owner of this job. **REQUIRED** on every job since the multi-tenant
+   * hardening — read/list/cancel endpoints filter by this. Populated at
+   * `/api/jobs` POST from {@link requireUserContext}. Older job records
+   * persisted before this field existed are treated as orphaned and are
+   * never returned to any user.
+   */
+  userId: string;
   targetId?: string;
   status: JobStatus;
   input: Record<string, unknown>;
@@ -146,6 +154,9 @@ export const jobStorage = {
    * Create a new job.
    */
   async create<T>(job: Omit<BackgroundJob<T>, 'status' | 'createdAt'>): Promise<BackgroundJob<T>> {
+    if (!job.userId) {
+      throw new Error('jobStorage.create: userId is required (multi-tenant invariant)');
+    }
     const schema = await loadJobs();
     const cleaned = cleanup(schema);
     

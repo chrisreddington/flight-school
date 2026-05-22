@@ -97,7 +97,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   let totalContent = '';
 
   // Start activity logging
-  const complete = activityLogger.startOperation('ask', operationName, {
+  const complete = activityLogger.startOperation(userId, 'ask', operationName, {
     prompt: prompt.slice(0, 100),
     model,
     sessionMetrics: metrics ? {
@@ -114,9 +114,9 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   });
 
   // Capture the activity event ID so we can return it to the client
-  // The client will use this to update the event with client-side metrics
-  const activityEvents = activityLogger.getEvents();
-  const activityEventId = activityEvents[activityEvents.length - 1]?.id;
+  // The client will use this to update the event with client-side metrics.
+  // Scoped to this user to avoid leaking other tenants' event IDs.
+  const activityEventId = activityLogger.latestEventIdForUser(userId);
 
   // Create async generator for streaming events
   const streamingMetrics = {
@@ -163,7 +163,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         queueResolver?.();
 
         // Log to activity logger
-        activityLogger.logEvent('tool', `mcp.${data.toolName}`, {
+        activityLogger.logEvent(userId, 'tool', `mcp.${data.toolName}`, {
           metadata: { args: data.arguments },
         });
       } else if (eventType === 'tool.execution_complete') {
@@ -238,7 +238,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       
       // Update server metrics in the event input
       if (activityEventId) {
-        const events = activityLogger['getEvents']();
+        const events = activityLogger.getEvents(userId);
         const event = events.find(e => e.id === activityEventId);
         if (event && event.input?.serverMetrics) {
           event.input.serverMetrics.firstTokenMs = streamingMetrics.firstDeltaMs;

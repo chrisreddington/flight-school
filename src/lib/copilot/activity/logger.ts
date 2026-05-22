@@ -40,14 +40,22 @@ class AIActivityLogger {
   /**
    * Start logging an SDK operation.
    * Returns a function to call when the operation completes.
+   *
+   * @param userId - Owner of this event. Required for multi-tenant
+   *   filtering — events without an owning user are never surfaced via
+   *   `/api/ai-activity`. Must come from a server-resolved identity
+   *   (Auth.js session or a request-bound `SessionIdentity`), never from
+   *   client input.
    */
   startOperation(
+    userId: string,
     type: AIActivityType,
     operation: string,
     input?: AIActivityInput
   ): CompleteOperation {
     const event: AIActivityEvent = {
       id: this.generateId(),
+      userId,
       timestamp: new Date(),
       type,
       operation,
@@ -77,9 +85,13 @@ class AIActivityLogger {
   }
 
   /**
-   * Log a quick event that doesn't need timing (e.g., internal operations)
+   * Log a quick event that doesn't need timing (e.g., internal operations).
+   *
+   * @param userId - Owner of this event. Required for multi-tenant
+   *   filtering. See {@link startOperation} for sourcing rules.
    */
   logEvent(
+    userId: string,
     type: AIActivityType,
     operation: string,
     input?: AIActivityInput,
@@ -88,6 +100,7 @@ class AIActivityLogger {
   ): void {
     const event: AIActivityEvent = {
       id: this.generateId(),
+      userId,
       timestamp: new Date(),
       type,
       operation,
@@ -132,16 +145,46 @@ class AIActivityLogger {
   }
 
   /**
-   * Get all events (copy of array)
+   * Get events visible to a specific user.
+   *
+   * Multi-tenant invariant: events without a userId or whose userId does
+   * not match are never returned. Pass the userId resolved from
+   * {@link requireUserContext} on every call.
    */
-  getEvents(): AIActivityEvent[] {
+  getEvents(userId: string): AIActivityEvent[] {
+    return this.events.filter(e => e.userId === userId);
+  }
+
+  /**
+   * Get the most recently logged event ID for a specific user. Used by
+   * streaming routes that need to correlate a just-started event back
+   * to the client without leaking other tenants' IDs.
+   */
+  latestEventIdForUser(userId: string): string | undefined {
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      if (this.events[i].userId === userId) {
+        return this.events[i].id;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Internal: get all events regardless of owner. Tests and the in-memory
+   * stats computation use this; **never** surface the result to a HTTP
+   * response.
+   */
+  _getAllEventsUnscoped(): AIActivityEvent[] {
     return [...this.events];
   }
 
   /**
-   * Get statistics about events
+   * Get statistics about events visible to a specific user.
+   *
+   * Stats are computed only over events owned by `userId` so cross-tenant
+   * counts and token totals never leak.
    */
-  getStats(): AIActivityStats {
+  getStats(userId: string): AIActivityStats {
     const byType: Record<AIActivityType, number> = {
       embed: 0,
       ask: 0,
@@ -153,8 +196,11 @@ class AIActivityLogger {
 
     let totalLatency = 0;
     let totalTokens = 0;
+    let count = 0;
 
     for (const event of this.events) {
+      if (event.userId !== userId) continue;
+      count++;
       byType[event.type] = (byType[event.type] || 0) + 1;
       totalLatency += event.latencyMs;
       if (event.output?.tokens) {
@@ -163,8 +209,8 @@ class AIActivityLogger {
     }
 
     return {
-      total: this.events.length,
-      avgLatency: this.events.length > 0 ? Math.round(totalLatency / this.events.length) : 0,
+      total: count,
+      avgLatency: count > 0 ? Math.round(totalLatency / count) : 0,
       totalTokens,
       byType,
     };
@@ -174,16 +220,18 @@ class AIActivityLogger {
    * Update an existing event with client-side metrics.
    * Used to add client-side performance data after streaming completes.
    *
+   * @param userId - Owner of the event. Updates only succeed when the
+   *   event's `userId` matches; cross-user updates are silently dropped.
    * @param eventId - The event ID to update
    * @param clientMetrics - Client-side performance metrics
-   * @returns Whether the event was found and updated
+   * @returns Whether the event was found, owned by `userId`, and updated.
    */
-  updateWithClientMetrics(eventId: string, clientMetrics: {
+  updateWithClientMetrics(userId: string, eventId: string, clientMetrics: {
     firstTokenMs?: number;
     totalMs?: number;
   }): boolean {
     const event = this.events.find((e) => e.id === eventId);
-    if (!event) {
+    if (!event || event.userId !== userId) {
       return false;
     }
 
@@ -204,15 +252,21 @@ class AIActivityLogger {
   }
 
   /**
-   * Clear all events
+   * Clear events. When `userId` is provided, only that user's events are
+   * removed; otherwise the whole buffer is wiped (process-shutdown / tests).
    */
-  clear(): void {
-    this.events = [];
+  clear(userId?: string): void {
+    if (userId) {
+      this.events = this.events.filter(e => e.userId !== userId);
+    } else {
+      this.events = [];
+    }
     // Notify listeners of clear (empty event)
     this.listeners.forEach((listener) => {
       try {
         listener({
           id: 'clear',
+          userId: userId ?? '',
           timestamp: new Date(),
           type: 'internal',
           operation: 'clear',

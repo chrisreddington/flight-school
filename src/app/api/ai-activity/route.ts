@@ -3,14 +3,17 @@
  * GET /api/ai-activity
  * DELETE /api/ai-activity
  *
- * Exposes server-side activity logger events to the client.
- * The activity logger is a server-side singleton that captures all SDK operations.
- * This endpoint enables the client-side Activity Panel to display those events.
+ * Exposes server-side activity logger events **scoped to the caller**.
+ * The activity logger is a server-side singleton that captures all SDK
+ * operations across every user, so this endpoint MUST filter by the
+ * authenticated user — never return the raw buffer.
  */
 
 import { apiSuccess } from '@/lib/api';
+import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
 import { now } from '@/lib/utils/date-utils';
+import { NextResponse } from 'next/server';
 
 export interface AIActivityResponse {
   events: ReturnType<typeof activityLogger.getEvents>;
@@ -19,23 +22,39 @@ export interface AIActivityResponse {
 
 /**
  * GET /api/ai-activity
- * Returns all activity events and stats from the server-side logger.
+ * Returns activity events and stats owned by the authenticated caller.
  */
 export async function GET() {
-  const events = activityLogger.getEvents();
-  const stats = activityLogger.getStats();
+  try {
+    const { userId } = await requireUserContext();
+    const events = activityLogger.getEvents(userId);
+    const stats = activityLogger.getStats(userId);
 
-  return apiSuccess<AIActivityResponse>(
-    { events, stats },
-    { fetchedAt: now(), eventCount: events.length }
-  );
+    return apiSuccess<AIActivityResponse>(
+      { events, stats },
+      { fetchedAt: now(), eventCount: events.length }
+    );
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    throw err;
+  }
 }
 
 /**
  * DELETE /api/ai-activity
- * Clears all activity events from the server-side logger.
+ * Clears activity events owned by the authenticated caller only.
  */
 export async function DELETE() {
-  activityLogger.clear();
-  return apiSuccess({ cleared: true });
+  try {
+    const { userId } = await requireUserContext();
+    activityLogger.clear(userId);
+    return apiSuccess({ cleared: true });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    throw err;
+  }
 }

@@ -5,7 +5,7 @@
  */
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
-import { requireUserContext } from '@/lib/auth/context';
+import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { seedTokenStoreFromJwt } from '@/lib/auth/seed';
 import type {
   ChallengeEvaluationInput,
@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
     id: jobId,
     type: body.type,
     targetId: body.targetId,
+    userId,
     input: body.input as unknown as Record<string, unknown>,
   });
   
@@ -157,16 +158,27 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type');
-  const status = searchParams.get('status');
-  
-  jobStorage.invalidateCache();
-  let jobs = type ? await jobStorage.getByType(type) : await jobStorage.getAll();
-  
-  if (status) {
-    jobs = jobs.filter(job => job.status === status);
+  try {
+    const { userId } = await requireUserContext();
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const status = searchParams.get('status');
+
+    jobStorage.invalidateCache();
+    let jobs = type ? await jobStorage.getByType(type) : await jobStorage.getAll();
+
+    // Multi-tenant invariant: only return jobs owned by the caller.
+    jobs = jobs.filter(job => job.userId === userId);
+
+    if (status) {
+      jobs = jobs.filter(job => job.status === status);
+    }
+
+    return NextResponse.json({ jobs });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    throw err;
   }
-  
-  return NextResponse.json({ jobs });
 }

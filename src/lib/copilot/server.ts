@@ -68,12 +68,13 @@ const log = logger.withTag('Copilot SDK');
  * @example
  * ```typescript
  * const session = await createCoachSession();
- * const logged = wrapSessionWithLogging(session, 'Focus Generation', prompt, 'gpt-5-mini');
+ * const logged = wrapSessionWithLogging(userId, session, 'Focus Generation', prompt, 'gpt-5-mini');
  * const result = await logged.sendAndWait(prompt);
  * // Logging happens automatically - no manual activityLogger calls needed
  * ```
  */
 export function wrapSessionWithLogging(
+  userId: string,
   session: CopilotSession,
   operationName: string,
   inputPrompt: string,
@@ -107,7 +108,7 @@ export function wrapSessionWithLogging(
       });
 
       // Log tool event to activity logger
-      activityLogger.logEvent('tool', `mcp.${data.toolName}`, {
+      activityLogger.logEvent(userId, 'tool', `mcp.${data.toolName}`, {
         metadata: { args: data.arguments },
       });
     }
@@ -137,7 +138,7 @@ export function wrapSessionWithLogging(
         ? ({ ...sessionMetrics } as Record<string, unknown>)
         : undefined;
 
-      complete = activityLogger.startOperation('ask', operationName, {
+      complete = activityLogger.startOperation(userId, 'ask', operationName, {
         prompt: inputPrompt.slice(0, 100),
         model,
         metadata,
@@ -284,6 +285,7 @@ export async function createLoggedCoachSession(
     gitHubToken: identity.gitHubToken,
   }, 'coach:mcp');
   return wrapSessionWithLogging(
+    identity.userId,
     session,
     operationName,
     inputPrompt,
@@ -321,6 +323,7 @@ export async function createLoggedLightweightCoachSession(
     gitHubToken: identity.gitHubToken,
   }, 'coach:lightweight');
   return wrapSessionWithLogging(
+    identity.userId,
     session,
     operationName,
     inputPrompt,
@@ -369,6 +372,7 @@ export async function createLoggedChatSession(
     },
   );
   return wrapSessionWithLogging(
+    identity.userId,
     session,
     operationName,
     inputPrompt,
@@ -419,6 +423,7 @@ export async function createLoggedGitHubChatSession(
     },
   );
   return wrapSessionWithLogging(
+    identity.userId,
     session,
     operationName,
     inputPrompt,

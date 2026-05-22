@@ -22,16 +22,19 @@ describe('jobStorage', () => {
     await jobStorage.create({
       id: 'job-running',
       type: 'chat-response',
+      userId: 'test-user',
       input: {},
     });
     await jobStorage.create({
       id: 'job-pending',
       type: 'chat-response',
+      userId: 'test-user',
       input: {},
     });
     await jobStorage.create({
       id: 'job-completed',
       type: 'chat-response',
+      userId: 'test-user',
       input: {},
     });
 
@@ -51,6 +54,7 @@ describe('jobStorage', () => {
     await jobStorage.create({
       id: 'job-to-fail',
       type: 'chat-response',
+      userId: 'test-user',
       input: {},
     });
 
@@ -66,6 +70,7 @@ describe('jobStorage', () => {
     await jobStorage.create({
       id: 'job-creds-expired',
       type: 'chat-response',
+      userId: 'test-user',
       input: {},
     });
 
@@ -86,6 +91,7 @@ describe('jobStorage', () => {
     await jobStorage.create({
       id: 'job-with-step',
       type: 'challenge-evaluation',
+      userId: 'test-user',
       input: {},
     });
 
