@@ -49,10 +49,10 @@ const STORAGE_DIR = getDefaultStorageDir();
  */
 function safePath(...segments: string[]): string {
   // Resolve the base storage directory to an absolute path
-  const baseDir = path.resolve(STORAGE_DIR);
+  const baseDir = path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
   
   // Join all segments and resolve to absolute path
-  const targetPath = path.resolve(baseDir, ...segments);
+  const targetPath = path.resolve(/* turbopackIgnore: true */ baseDir, ...segments);
   
   // Ensure the resolved path starts with baseDir
   // This check MUST happen after path.resolve() to catch traversal attacks
@@ -123,8 +123,8 @@ export function safeChildPath(baseDir: string, ...segments: string[]): string {
     }
   }
 
-  const resolvedBase = path.resolve(baseDir);
-  const resolvedTarget = path.resolve(resolvedBase, ...segments);
+  const resolvedBase = path.resolve(/* turbopackIgnore: true */ baseDir);
+  const resolvedTarget = path.resolve(/* turbopackIgnore: true */ resolvedBase, ...segments);
 
   if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
     throw new Error(
@@ -400,7 +400,7 @@ export async function deleteDir(subdir: string): Promise<void> {
  * @returns Array of subdirectory names
  */
 export async function listDirs(subdir: string): Promise<string[]> {
-  const dirPath = subdir ? safePath(subdir) : path.resolve(STORAGE_DIR);
+  const dirPath = subdir ? safePath(subdir) : path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
   try {
     await ensureStorageDir();
     if (subdir) await ensureDir(subdir);
