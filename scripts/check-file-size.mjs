@@ -6,11 +6,14 @@ const ROOT = process.cwd();
 const NEW_FILE_LIMIT = 400;
 
 const FILE_LIMITS = {
-  'src/app/api/jobs/job-executors.ts': 522,
+  'src/app/api/jobs/job-executors.ts': 17,
+  'src/app/api/jobs/executors/chat.ts': 200,
+  'src/app/api/jobs/executors/evaluation.ts': 203,
   'src/app/api/jobs/executors/job-identity.ts': 67,
   'src/app/api/jobs/executors/progress.ts': 74,
   'src/app/api/jobs/executors/regeneration.ts': 242,
   'src/app/api/jobs/executors/session-registry.ts': 21,
+  'src/app/api/jobs/executors/thread-consolidation.ts': 69,
   'src/lib/focus/storage.ts': 881,
   'src/components/LearningHistory/index.tsx': 740,
   'src/lib/auth/token-store.ts': 712,
