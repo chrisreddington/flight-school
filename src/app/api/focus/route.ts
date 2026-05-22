@@ -33,6 +33,9 @@ import type { InterleavingHint } from '@/lib/focus/interleaving';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import type { CompactDeveloperProfile } from '@/lib/github/types';
 import { logger } from '@/lib/logger';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { FOCUS_GUARD } from '@/lib/security/route-defaults';
 import type { SkillProfile } from '@/lib/skills/types';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -248,12 +251,21 @@ async function generateFocus(options: {
 
 
 export async function GET() {
-  const result = await generateFocus();
-  return NextResponse.json(result);
+  try {
+    const result = await withUserGuards(
+      { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'GET' } },
+      () => generateFocus(),
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
+    throw error;
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const body = await parseJsonBodyWithFallback<{ 
+  const body = await parseJsonBodyWithFallback<{
     component?: FocusComponent;
     skillProfile?: SkillProfile;
     existingTopicTitles?: string[];
@@ -261,14 +273,23 @@ export async function POST(request: NextRequest) {
     interleavingHint?: InterleavingHint;
     debugMode?: boolean;
   }>(request, {});
-  
-  const result = await generateFocus({ 
-    component: body.component,
-    skillProfile: body.skillProfile,
-    existingTopicTitles: body.existingTopicTitles,
-    reviewTopics: body.reviewTopics,
-    interleavingHint: body.interleavingHint,
-    debugMode: body.debugMode,
-  });
-  return NextResponse.json(result);
+
+  try {
+    const result = await withUserGuards(
+      { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'POST', component: body.component } },
+      () => generateFocus({
+        component: body.component,
+        skillProfile: body.skillProfile,
+        existingTopicTitles: body.existingTopicTitles,
+        reviewTopics: body.reviewTopics,
+        interleavingHint: body.interleavingHint,
+        debugMode: body.debugMode,
+      }),
+    );
+    return NextResponse.json(result);
+  } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
+    throw error;
+  }
 }

@@ -34,6 +34,12 @@ import {
 import { createEvaluationStreamingSession } from '@/lib/copilot/streaming';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
+import { requireUserContext } from '@/lib/auth/context';
+import { auditLog, hashUserId } from '@/lib/security/audit';
+import { guardErrorResponse } from '@/lib/security/http';
+import { checkRateLimit, RateLimitedError } from '@/lib/security/rate-limit';
+import { EVAL_GUARD } from '@/lib/security/route-defaults';
+import { acquireSlot } from '@/lib/security/session-cap';
 import { NextRequest } from 'next/server';
 
 const log = logger.withTag('Evaluate API');
@@ -71,6 +77,22 @@ export async function POST(request: NextRequest) {
 
     const { challenge, files } = parseResult.data;
 
+    const userCtx = await requireUserContext();
+    const userIdHash = hashUserId(userCtx.userId);
+
+    const rl = checkRateLimit(userCtx.userId, EVAL_GUARD.rateLimit.limit, EVAL_GUARD.rateLimit.windowMs);
+    if (!rl.allowed) {
+      auditLog({ type: 'rate-limit.blocked', userIdHash, metadata: { route: '/api/challenge/evaluate', retryAfterMs: rl.retryAfterMs } });
+      throw new RateLimitedError(rl.retryAfterMs ?? EVAL_GUARD.rateLimit.windowMs);
+    }
+
+    const releaseSlot = await acquireSlot(userCtx.userId, EVAL_GUARD.concurrentCap);
+    auditLog({
+      type: 'copilot.session.create',
+      userIdHash,
+      metadata: { route: '/api/challenge/evaluate', challengeTitle: challenge.title },
+    });
+
     log.info(`Evaluating solution for: ${challenge.title} (${files.length} files)`);
 
     // Build the evaluation prompt
@@ -78,11 +100,20 @@ export async function POST(request: NextRequest) {
 
     // Create streaming session with evaluation system prompt
     // Use dedicated evaluation session factory for proper logging separation
-    const { stream, cleanup, model, streamingMetrics } = await createEvaluationStreamingSession(
-      prompt,
-      EVALUATION_SYSTEM_PROMPT,
-      'Challenge Evaluation'
-    );
+    let stream: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['stream'];
+    let cleanup: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['cleanup'];
+    let model: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['model'];
+    let streamingMetrics: Awaited<ReturnType<typeof createEvaluationStreamingSession>>['streamingMetrics'];
+    try {
+      ({ stream, cleanup, model, streamingMetrics } = await createEvaluationStreamingSession(
+        prompt,
+        EVALUATION_SYSTEM_PROMPT,
+        'Challenge Evaluation'
+      ));
+    } catch (error) {
+      releaseSlot();
+      throw error;
+    }
 
     const sessionCreateTime = nowMs() - startTime;
     log.info(`Session created in ${sessionCreateTime}ms`);
@@ -152,10 +183,15 @@ export async function POST(request: NextRequest) {
           const errorMessage = error instanceof Error ? error.message : 'Stream error';
           log.error('Stream error:', errorMessage);
         },
-        cleanup,
+        cleanup: () => {
+          try { cleanup(); } finally { releaseSlot(); }
+        },
       }
     );
   } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to start evaluation';
     log.error(`Error after ${totalTime}ms:`, errorMessage);
