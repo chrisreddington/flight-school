@@ -315,6 +315,32 @@ export const jobStorage = {
   },
   
   /**
+   * Delete every job owned by the given user. Returns the number of
+   * jobs removed. Used by the per-user "delete all my data" endpoint.
+   * Does NOT cancel running jobs — callers should call `cancelRunningJob`
+   * for any jobs that may still be executing in-process.
+   */
+  async deleteForUser(userId: string): Promise<{ deleted: number; ids: string[] }> {
+    if (!userId) {
+      throw new Error('jobStorage.deleteForUser: userId is required');
+    }
+    const schema = await loadJobs();
+    const ids: string[] = [];
+    const remaining: Record<string, BackgroundJob> = {};
+    for (const [id, job] of Object.entries(schema.jobs)) {
+      if (job.userId === userId) {
+        ids.push(id);
+      } else {
+        remaining[id] = job;
+      }
+    }
+    if (ids.length === 0) return { deleted: 0, ids: [] };
+    await saveJobs({ ...schema, jobs: remaining });
+    log.info(`Deleted ${ids.length} jobs for user ${userId}`);
+    return { deleted: ids.length, ids };
+  },
+
+  /**
    * Clear all jobs (for testing).
    */
   async clear(): Promise<void> {
