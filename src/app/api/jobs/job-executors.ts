@@ -5,13 +5,12 @@
  * Each executor runs the AI operation and updates job status in storage.
  */
 
-import { resolveFreshGitHubToken } from '@/lib/auth/token-resolver';
 import {
   buildSingleChallengePrompt,
   buildSingleGoalPrompt,
   buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
-import { createLoggedLightweightCoachSession, type SessionIdentity } from '@/lib/copilot/server';
+import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
 import { createEvaluationStreamingSession, createLearningStreamingSession, createStreamingChatSession } from '@/lib/copilot/streaming';
 import {
   buildEvaluationPrompt,
@@ -38,7 +37,6 @@ import type {
 import { jobStorage } from '@/lib/jobs';
 import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 import { logger } from '@/lib/logger';
-import { auditLog, hashUserId } from '@/lib/security/audit';
 import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
@@ -48,11 +46,14 @@ import { getThreadById, updateThread } from './threads-storage';
 import { readEvaluationStorage, writeEvaluationStorage } from './evaluation-storage';
 import { deleteScratchpad, readScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
 import { registerSession, unregisterSession } from './executors/session-registry';
+import { isJobStillValid, resolveJobIdentity } from './executors/job-identity';
+import { reportStep } from './executors/progress';
 export {
   getRegisteredSession,
   registerSession,
   unregisterSession,
 } from './executors/session-registry';
+export { isJobStillValid } from './executors/job-identity';
 
 const log = logger.withTag('JobExecutors');
 const STREAM_CURSOR = ' ▊';
@@ -73,138 +74,6 @@ function upsertMessageById(
     ? { ...updatedMessages[existingIndex], ...nextMessage }
     : nextMessage;
   return updatedMessages;
-}
-
-/**
- * Resolve a fresh {@link SessionIdentity} for a job at execution time.
- *
- * Background jobs persist `userId` only — never the access token captured
- * at submission. This helper looks up the latest `ghu_` token from the
- * {@link TokenStore} (refreshing if necessary) so the executor always
- * acts on behalf of the user with a non-expired credential, even when the
- * job has been queued for hours.
- *
- * @returns The identity to pass to Copilot SDK / Octokit factories, or
- *   `null` after the helper has already audit-logged the failure and
- *   marked `jobId` as `failed` in storage. Callers MUST bail when this
- *   returns `null`.
- */
-async function resolveJobIdentity(jobId: string, userId: string): Promise<SessionIdentity | null> {
-  try {
-    const token = await resolveFreshGitHubToken(userId);
-    if (!token) {
-      log.warn(`[Job ${jobId}] No stored credentials for user; failing job`);
-      auditLog({
-        type: 'job.credentials_missing',
-        userIdHash: hashUserId(userId),
-        metadata: { jobId },
-      });
-      await jobStorage.markFailed(
-        jobId,
-        'GitHub credentials missing — user must re-authenticate.',
-        'credentials_missing',
-      );
-      await mirrorCredentialsFailureToEvaluation(jobId, userId, 'credentials_missing');
-      return null;
-    }
-    return { userId, gitHubToken: token };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown refresh error';
-    log.error(`[Job ${jobId}] Token refresh failed:`, message);
-    auditLog({
-      type: 'job.credentials_refresh_failed',
-      userIdHash: hashUserId(userId),
-      metadata: { jobId, error: message },
-    });
-    await jobStorage.markFailed(
-      jobId,
-      'GitHub credentials expired — user must re-authenticate.',
-      'credentials_refresh_failed',
-    );
-    await mirrorCredentialsFailureToEvaluation(jobId, userId, 'credentials_refresh_failed');
-    return null;
-  }
-}
-
-/**
- * Update the polling-visible `currentStep` for an in-flight evaluation job.
- *
- * Writes to both the job record (visible via `/api/jobs/[id]`) and, when the
- * job is a challenge evaluation, to the evaluation progress record (visible
- * via `/api/evaluations/[challengeId]`) so the existing sandbox polling
- * client picks up step narration without a second fetch.
- */
-async function reportStep(jobId: string, userId: string, step: string, challengeId?: string): Promise<void> {
-  try {
-    await jobStorage.setCurrentStep(jobId, step);
-    if (challengeId) {
-      const storage = await readEvaluationStorage(userId);
-      const existing = storage.evaluations[challengeId];
-      if (existing) {
-        existing.currentStep = step;
-        existing.updatedAt = now();
-        storage.evaluations[challengeId] = existing;
-        await writeEvaluationStorage(userId, storage);
-      }
-    }
-  } catch (err) {
-    log.debug(`[Job ${jobId}] Failed to report step "${step}":`, err);
-  }
-}
-
-/**
- * Mirror credentials failures into the evaluation storage so the sandbox's
- * evaluation poller surfaces the structured errorCode (and re-auth CTA)
- * without needing a separate /api/jobs/[id] lookup.
- */
-async function mirrorCredentialsFailureToEvaluation(
-  jobId: string,
-  userId: string,
-  errorCode: 'credentials_missing' | 'credentials_refresh_failed',
-): Promise<void> {
-  try {
-    const job = await jobStorage.get(jobId);
-    if (!job || job.type !== 'challenge-evaluation') return;
-    const challengeId =
-      typeof job.targetId === 'string'
-        ? job.targetId
-        : (job.input as { challengeId?: string }).challengeId;
-    if (!challengeId) return;
-    const storage = await readEvaluationStorage(userId);
-    const previous = storage.evaluations[challengeId];
-    storage.evaluations[challengeId] = {
-      ...(previous ?? {
-        challengeId,
-        jobId,
-        streamingFeedback: '',
-      }),
-      challengeId,
-      jobId,
-      status: 'failed',
-      streamingFeedback: previous?.streamingFeedback ?? '',
-      error: job.error,
-      errorCode,
-      updatedAt: now(),
-    };
-    await writeEvaluationStorage(userId, storage);
-  } catch (err) {
-    log.debug(`[Job ${jobId}] Failed to mirror credentials failure:`, err);
-  }
-}
-
-/** Check if job is still valid (exists and not cancelled). */
-export async function isJobStillValid(jobId: string): Promise<boolean> {
-  jobStorage.invalidateCache();
-  const job = await jobStorage.get(jobId);
-  if (!job) {
-    log.info(`[Job ${jobId}] Job no longer exists in storage - stopping`);
-    return false;
-  }
-  if (job.status === 'cancelled') {
-    log.info(`[Job ${jobId}] Job marked as cancelled - stopping`);
-    return false;
-  }
-  return true;
 }
 
 /**
