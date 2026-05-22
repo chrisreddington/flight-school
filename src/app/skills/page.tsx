@@ -41,6 +41,7 @@ import {
 } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './profile-skills.module.css';
+import layoutStyles from '@/styles/two-column-layout.module.css';
 
 /**
  * Skill Profile Page Component
@@ -249,11 +250,11 @@ export default function SkillProfilePage() {
 
   if (isLoading) {
     return (
-      <div className={styles.root}>
+      <div className={layoutStyles.root}>
         <AppHeader />
-        <main className={styles.main}>
-          <aside className={styles.sidebar}>
-            <div className={styles.sidebarCard}>
+        <main className={layoutStyles.main}>
+          <aside className={layoutStyles.sidebar}>
+            <div className={layoutStyles.sidebarCard}>
               <Spinner size="medium" />
             </div>
           </aside>
@@ -275,47 +276,47 @@ export default function SkillProfilePage() {
   const beginnerSkills = profile?.skills.filter(s => s.level === 'beginner').length || 0;
 
   return (
-    <div className={styles.root}>
+    <div className={layoutStyles.root}>
       <AppHeader />
       
-      <main className={styles.main}>
+      <main className={layoutStyles.main}>
         {/* Left Sidebar */}
-        <aside className={styles.sidebar}>
+        <aside className={layoutStyles.sidebar}>
           <ProfileNav />
           
-          <div className={styles.sidebarCard}>
-            <div className={styles.sidebarHeader}>
-              <MortarBoardIcon size={20} className={styles.sidebarIcon} />
-              <p className={styles.sidebarTitle}>Skill Profile</p>
+          <div className={layoutStyles.sidebarCard}>
+            <div className={layoutStyles.sidebarHeader}>
+              <MortarBoardIcon size={20} className={layoutStyles.sidebarIcon} />
+              <p className={layoutStyles.sidebarTitle}>Skill Profile</p>
             </div>
-            <p className={styles.sidebarSubtitle}>Your learning journey</p>
+            <p className={layoutStyles.sidebarSubtitle}>Your learning journey</p>
             
-            <div className={styles.statsGrid}>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{totalSkills}</span>
-                <span className={styles.statLabel}>Total Skills</span>
+            <div className={layoutStyles.statsGrid}>
+              <div className={layoutStyles.statItem}>
+                <span className={layoutStyles.statValue}>{totalSkills}</span>
+                <span className={layoutStyles.statLabel}>Total Skills</span>
               </div>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{advancedSkills}</span>
-                <span className={styles.statLabel}>Advanced</span>
+              <div className={layoutStyles.statItem}>
+                <span className={layoutStyles.statValue}>{advancedSkills}</span>
+                <span className={layoutStyles.statLabel}>Advanced</span>
               </div>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{intermediateSkills}</span>
-                <span className={styles.statLabel}>Intermediate</span>
+              <div className={layoutStyles.statItem}>
+                <span className={layoutStyles.statValue}>{intermediateSkills}</span>
+                <span className={layoutStyles.statLabel}>Intermediate</span>
               </div>
-              <div className={styles.statItem}>
-                <span className={styles.statValue}>{beginnerSkills}</span>
-                <span className={styles.statLabel}>Beginner</span>
+              <div className={layoutStyles.statItem}>
+                <span className={layoutStyles.statValue}>{beginnerSkills}</span>
+                <span className={layoutStyles.statLabel}>Beginner</span>
               </div>
             </div>
           </div>
 
           <LearningPathPanel profile={profile} onAddSkill={handleAddLearningPathSkill} />
 
-          <div className={styles.sidebarCard}>
-            <div className={styles.sidebarHeader}>
-              <CodeIcon size={20} className={styles.sidebarIcon} />
-              <p className={styles.sidebarTitle}>Skill Levels</p>
+          <div className={layoutStyles.sidebarCard}>
+            <div className={layoutStyles.sidebarHeader}>
+              <CodeIcon size={20} className={layoutStyles.sidebarIcon} />
+              <p className={layoutStyles.sidebarTitle}>Skill Levels</p>
             </div>
             <Stack direction="vertical" gap="condensed">
               {(['beginner', 'intermediate', 'advanced'] as SkillLevel[]).map(level => (
