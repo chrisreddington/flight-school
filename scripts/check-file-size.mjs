@@ -26,6 +26,8 @@ const FILE_LIMITS = {
   'src/components/ChallengeSandbox/ChallengeSandbox.tsx': 609,
   'src/hooks/use-learning-chat.ts': 573,
   'src/hooks/use-ai-focus.ts': 558,
+  'src/lib/copilot/mcp-tools.ts': 7,
+  'src/lib/copilot/session-identity.ts': 17,
 };
 
 function isProductionTypeScript(relativePath) {

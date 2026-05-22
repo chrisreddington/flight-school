@@ -29,8 +29,10 @@ import {
     createSessionWithMetrics,
     getConversationSession,
     MODEL_TIERS,
-    getCopilotGithubMcpTools,
 } from './sessions';
+import { getCopilotGithubMcpTools } from './mcp-tools';
+import type { SessionIdentity } from './session-identity';
+import { createSessionIdentity } from './session-identity';
 import type {
     LoggedSessionResult,
     SessionCreationMetrics,
@@ -225,30 +227,7 @@ export function wrapSessionWithLogging(
   };
 }
 
-/**
- * Per-request identity passed to every Copilot session factory. Both fields
- * are propagated to the Copilot SDK so the session acts on behalf of the
- * caller's GitHub user (see `SessionOptions.gitHubToken`). **Never** cache
- * or reuse a `SessionIdentity` across requests — each HTTP request must
- * derive its own from {@link requireUserContext}.
- */
-export interface SessionIdentity {
-  /** Stable GitHub numeric ID (as string) of the calling user; partitions the in-memory session cache. */
-  userId: string;
-  /** Fresh user-to-server (`ghu_...`) access token for that user. */
-  gitHubToken: string;
-}
-
-/**
- * Convert an authenticated request context into the SDK identity object.
- *
- * Centralising this mapping protects the multi-tenant invariant: every
- * Copilot session receives the current request's `userId` and that same
- * user's GitHub user-to-server token.
- */
-export function createSessionIdentity(ctx: { userId: string; accessToken: string }): SessionIdentity {
-  return { userId: ctx.userId, gitHubToken: ctx.accessToken };
-}
+export { createSessionIdentity, type SessionIdentity } from './session-identity';
 
 /**
  * Create a logged coach session **with** GitHub MCP tools (`get_me`,

@@ -28,6 +28,7 @@ import type {
 } from './types';
 import { logger } from '@/lib/logger';
 import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
+import { getCopilotGithubMcpTools } from './mcp-tools';
 
 const log = logger.withTag('Copilot SDK');
 
@@ -46,13 +47,7 @@ export const MODEL_TIERS = {
 /** Override chat model for performance tuning */
 export const CHAT_MODEL = process.env.COPILOT_CHAT_MODEL ?? MODEL_TIERS.fastChat;
 
-/** Parse the optional MCP tool allowlist from env using one shared rule. */
-export function getCopilotGithubMcpTools(): string[] {
-  return process.env.COPILOT_GITHUB_MCP_TOOLS
-    ?.split(',')
-    .map((tool) => tool.trim())
-    .filter(Boolean) ?? [];
-}
+export { getCopilotGithubMcpTools } from './mcp-tools';
 
 const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
   if (request.kind === 'mcp') {
