@@ -40,6 +40,7 @@ vi.mock('@/lib/copilot/server', () => ({
   createLoggedGitHubChatSession: mocks.createLoggedGitHubChatSession,
 }));
 
+import { CopilotWorkerRequiredError } from '@/lib/copilot/execution/worker-required-error';
 import { POST } from './route';
 
 function makeRequest(body: unknown) {
@@ -101,5 +102,18 @@ describe('/api/copilot', () => {
 
     expect(response.status).toBe(400);
     expect(mocks.executeCopilotChat).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe configuration error when the worker is not configured', async () => {
+    mocks.executeCopilotChat.mockRejectedValue(new CopilotWorkerRequiredError());
+
+    const response = await POST(makeRequest({ prompt: 'hello with ghu_user token text' }));
+    const text = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(text).toContain('Copilot worker is required for chat execution');
+    expect(text).not.toContain('ghu_user');
+    expect(mocks.createLoggedChatSession).not.toHaveBeenCalled();
+    expect(mocks.createLoggedGitHubChatSession).not.toHaveBeenCalled();
   });
 });
