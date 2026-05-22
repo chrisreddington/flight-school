@@ -75,7 +75,9 @@ export async function resolveFreshGitHubToken(userId: string): Promise<string | 
 
   const refreshed = await refreshGitHubAccessToken(stored.refreshToken);
   const newExpiresAt = Math.floor(nowMs() / 1000) + refreshed.expires_in;
-  await store.setToken(userId, {
+  // CAS write: if another replica already refreshed concurrently and
+  // persisted a newer record, do not clobber it.
+  await store.setTokenIfNewer(userId, {
     accessToken: refreshed.access_token,
     refreshToken: refreshed.refresh_token ?? stored.refreshToken,
     expiresAt: newExpiresAt,

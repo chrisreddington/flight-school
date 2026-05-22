@@ -81,6 +81,23 @@ export interface TokenStore {
    */
   setToken(userId: string, token: StoredToken): Promise<void>;
   /**
+   * Persist `token` for `userId` **only if** it is strictly newer than the
+   * record currently stored (compared by `expiresAt`). This is the CAS-style
+   * write used by callers that may race with other writers — e.g. two ACA
+   * replicas concurrently refreshing the same user's access token. Without
+   * this guard, an older response can clobber a newer record after the
+   * winner has already rotated GitHub's refresh token.
+   *
+   * @param userId - Stable GitHub numeric ID as a string.
+   * @param token - The candidate token payload.
+   * @returns `true` if `token` was written; `false` if a record with an
+   *   `expiresAt >= token.expiresAt` was already present, or if a concurrent
+   *   writer won the CAS exchange (HTTP 412 / 409 from Cosmos). Never
+   *   throws on the lost-CAS path — callers can treat `false` as "someone
+   *   else already persisted at least this freshness" and move on.
+   */
+  setTokenIfNewer(userId: string, token: StoredToken): Promise<boolean>;
+  /**
    * Remove the token record for `userId`.
    *
    * @param userId - Stable GitHub numeric ID as a string.
@@ -122,6 +139,25 @@ export class InMemoryTokenStore implements TokenStore {
 
   async setToken(userId: string, token: StoredToken): Promise<void> {
     this.tokens.set(userId, token);
+  }
+
+  /**
+   * {@inheritDoc TokenStore.setTokenIfNewer}
+   *
+   * @remarks
+   * Node's event loop gives us cooperative concurrency: between the read
+   * and the write below, no other JavaScript runs on this isolate, so the
+   * compare-then-set is atomic in-process. Across processes the in-memory
+   * store offers no isolation (it's a per-process Map), but the in-memory
+   * store is never used in multi-replica deployments.
+   */
+  async setTokenIfNewer(userId: string, token: StoredToken): Promise<boolean> {
+    const existing = this.tokens.get(userId);
+    if (existing && existing.expiresAt >= token.expiresAt) {
+      return false;
+    }
+    this.tokens.set(userId, token);
+    return true;
   }
 
   async deleteToken(userId: string): Promise<void> {
@@ -339,8 +375,80 @@ export class CosmosTokenStore implements TokenStore {
    * data encryption key (DEK), wraps the DEK with the configured Azure Key
    * Vault KEK (`wrapKey(A256KW)`), and upserts the envelope as a single
    * Cosmos document partitioned by `userId`. The DEK is zeroed in `finally`.
+   * This path is unconditional; callers that need CAS semantics for
+   * concurrent refresh use {@link setTokenIfNewer}.
    */
   async setToken(userId: string, token: StoredToken): Promise<void> {
+    const doc = await this.buildEnvelope(userId, token);
+    await this.container.items.upsert(doc, { disableAutomaticIdGeneration: true });
+  }
+
+  /**
+   * {@inheritDoc TokenStore.setTokenIfNewer}
+   *
+   * @remarks
+   * Uses Cosmos optimistic concurrency:
+   *
+   * 1. Point-read the current document (with its `_etag`).
+   * 2. If `existing.expiresAt >= token.expiresAt`, return `false` without
+   *    encrypting or writing — the stored record is at least as fresh.
+   * 3. Otherwise encrypt a fresh envelope and either `replace` with
+   *    `If-Match: <etag>` (existing record) or `create` (absent record).
+   * 4. A 412 Precondition Failed (replace race) or 409 Conflict (create
+   *    race) means another writer won; return `false`. Any other error
+   *    propagates.
+   *
+   * The compare is on `expiresAt` (cleartext on the document), so we don't
+   * need to decrypt to make the decision — we only pay encryption when we
+   * actually write.
+   */
+  async setTokenIfNewer(userId: string, token: StoredToken): Promise<boolean> {
+    let existing: TokenDocument | undefined;
+    let etag: string | undefined;
+    try {
+      const response = await this.container.item(userId, userId).read<TokenDocument>();
+      existing = response.resource;
+      etag = (response as { etag?: string }).etag;
+    } catch (error) {
+      const status =
+        (error as { code?: number; statusCode?: number }).code ??
+        (error as { statusCode?: number }).statusCode;
+      if (status !== 404) throw error;
+    }
+
+    if (existing && existing.expiresAt >= token.expiresAt) {
+      return false;
+    }
+
+    const doc = await this.buildEnvelope(userId, token);
+    try {
+      if (etag) {
+        await this.container.item(userId, userId).replace(doc, {
+          accessCondition: { type: 'IfMatch', condition: etag },
+        });
+      } else {
+        await this.container.items.create(doc, { disableAutomaticIdGeneration: true });
+      }
+      return true;
+    } catch (error) {
+      const status =
+        (error as { code?: number; statusCode?: number }).code ??
+        (error as { statusCode?: number }).statusCode;
+      if (status === 412 || status === 409) {
+        log.debug('setTokenIfNewer: concurrent writer won, skipping', { userId, status });
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Build the encrypted envelope document for `token`. Extracted so that
+   * {@link setToken} (unconditional upsert) and {@link setTokenIfNewer}
+   * (CAS replace/create) share the encryption path. The DEK is zeroed in
+   * `finally` to limit residency in memory.
+   */
+  private async buildEnvelope(userId: string, token: StoredToken): Promise<TokenDocument> {
     const dek = randomBytes(DEK_LENGTH);
     const iv = randomBytes(IV_LENGTH);
     try {
@@ -360,7 +468,7 @@ export class CosmosTokenStore implements TokenStore {
       const wrap = await this.cryptographyClient.wrapKey(KEY_WRAP_ALG, dek);
       const wrappedDek = Buffer.from(wrap.result);
 
-      const doc: TokenDocument = {
+      return {
         id: userId,
         userId,
         ciphertext: ciphertext.toString('base64'),
@@ -372,7 +480,6 @@ export class CosmosTokenStore implements TokenStore {
         createdAt: Math.floor(nowMs() / 1000),
         expiresAt: token.expiresAt,
       };
-      await this.container.items.upsert(doc, { disableAutomaticIdGeneration: true });
     } finally {
       dek.fill(0);
     }

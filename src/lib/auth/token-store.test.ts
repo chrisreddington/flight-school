@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => {
     unwrapKey: vi.fn(),
     containerItemRead: vi.fn(),
     containerItemDelete: vi.fn(),
+    containerItemReplace: vi.fn(),
     containerItemsUpsert: vi.fn(),
+    containerItemsCreate: vi.fn(),
     containerItemsQueryFetch: vi.fn(),
     containerItemsQueryHasMore: vi.fn(),
   };
@@ -46,6 +48,7 @@ vi.mock('@azure/cosmos', () => {
 interface ItemRef {
   read: typeof mocks.containerItemRead;
   delete: typeof mocks.containerItemDelete;
+  replace: typeof mocks.containerItemReplace;
 }
 
 function buildMockContainer() {
@@ -53,9 +56,11 @@ function buildMockContainer() {
     item: (): ItemRef => ({
       read: mocks.containerItemRead,
       delete: mocks.containerItemDelete,
+      replace: mocks.containerItemReplace,
     }),
     items: {
       upsert: mocks.containerItemsUpsert,
+      create: mocks.containerItemsCreate,
       query: () => ({
         hasMoreResults: mocks.containerItemsQueryHasMore,
         fetchNext: mocks.containerItemsQueryFetch,
@@ -128,6 +133,45 @@ describe('InMemoryTokenStore', () => {
     // Both records still readable.
     await expect(store.getToken('a')).resolves.not.toBeNull();
     await expect(store.getToken('b')).resolves.not.toBeNull();
+  });
+
+  describe('setTokenIfNewer', () => {
+    it('writes when no record exists', async () => {
+      const store = new InMemoryTokenStore();
+      const fresh = { accessToken: 'ghu_x', expiresAt: 100 };
+      await expect(store.setTokenIfNewer('u1', fresh)).resolves.toBe(true);
+      await expect(store.getToken('u1')).resolves.toEqual(fresh);
+    });
+
+    it('writes when incoming.expiresAt is strictly newer than existing', async () => {
+      const store = new InMemoryTokenStore();
+      await store.setToken('u1', { accessToken: 'ghu_old', expiresAt: 50 });
+      const newer = { accessToken: 'ghu_new', expiresAt: 100 };
+      await expect(store.setTokenIfNewer('u1', newer)).resolves.toBe(true);
+      await expect(store.getToken('u1')).resolves.toEqual(newer);
+    });
+
+    it('rejects writes when existing record is the same age (lost race)', async () => {
+      const store = new InMemoryTokenStore();
+      await store.setToken('u1', { accessToken: 'ghu_first', expiresAt: 100 });
+      const competing = { accessToken: 'ghu_second', expiresAt: 100 };
+      await expect(store.setTokenIfNewer('u1', competing)).resolves.toBe(false);
+      await expect(store.getToken('u1')).resolves.toEqual({
+        accessToken: 'ghu_first',
+        expiresAt: 100,
+      });
+    });
+
+    it('rejects writes when existing record is strictly newer (stale overwrite guard)', async () => {
+      const store = new InMemoryTokenStore();
+      await store.setToken('u1', { accessToken: 'ghu_newer', expiresAt: 100 });
+      const older = { accessToken: 'ghu_older', expiresAt: 50 };
+      await expect(store.setTokenIfNewer('u1', older)).resolves.toBe(false);
+      await expect(store.getToken('u1')).resolves.toEqual({
+        accessToken: 'ghu_newer',
+        expiresAt: 100,
+      });
+    });
   });
 });
 
@@ -296,6 +340,119 @@ describe('CosmosTokenStore', () => {
     const removed = await store.cleanupExpired();
     expect(removed).toBe(0);
     expect(mocks.containerItemDelete).not.toHaveBeenCalled();
+  });
+
+  describe('setTokenIfNewer', () => {
+    it('create-path: 404 on read → uses items.create (not upsert) and returns true', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockRejectedValue(
+        Object.assign(new Error('not found'), { code: 404 }),
+      );
+      mocks.containerItemsCreate.mockResolvedValue({ resource: {} });
+
+      const result = await store.setTokenIfNewer('user-42', {
+        accessToken: 'ghu_first',
+        expiresAt: 9999999999,
+      });
+
+      expect(result).toBe(true);
+      expect(mocks.containerItemsCreate).toHaveBeenCalledTimes(1);
+      expect(mocks.containerItemReplace).not.toHaveBeenCalled();
+      expect(mocks.containerItemsUpsert).not.toHaveBeenCalled();
+    });
+
+    it('replace-path: existing older → replace with If-Match etag and returns true', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockResolvedValue({
+        resource: { id: 'user-42', userId: 'user-42', expiresAt: 100 } as Partial<unknown>,
+        etag: 'etag-abc',
+      });
+      mocks.containerItemReplace.mockResolvedValue({ resource: {} });
+
+      const result = await store.setTokenIfNewer('user-42', {
+        accessToken: 'ghu_new',
+        expiresAt: 200,
+      });
+
+      expect(result).toBe(true);
+      expect(mocks.containerItemReplace).toHaveBeenCalledTimes(1);
+      const [, replaceOpts] = mocks.containerItemReplace.mock.calls[0];
+      expect(replaceOpts).toEqual({
+        accessCondition: { type: 'IfMatch', condition: 'etag-abc' },
+      });
+    });
+
+    it('skip-path: existing newer → returns false without encrypting or writing', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockResolvedValue({
+        resource: { id: 'user-42', userId: 'user-42', expiresAt: 200 } as Partial<unknown>,
+        etag: 'etag-newer',
+      });
+
+      const result = await store.setTokenIfNewer('user-42', {
+        accessToken: 'ghu_older',
+        expiresAt: 100,
+      });
+
+      expect(result).toBe(false);
+      // Critical: we never paid the cost of encryption / KV wrapKey for a
+      // write we knew up-front would lose.
+      expect(mocks.wrapKey).not.toHaveBeenCalled();
+      expect(mocks.containerItemReplace).not.toHaveBeenCalled();
+      expect(mocks.containerItemsCreate).not.toHaveBeenCalled();
+    });
+
+    it('skip-path: existing same-age → returns false (no clobber on tie)', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockResolvedValue({
+        resource: { id: 'user-42', userId: 'user-42', expiresAt: 100 } as Partial<unknown>,
+        etag: 'etag-tie',
+      });
+
+      await expect(
+        store.setTokenIfNewer('user-42', { accessToken: 'ghu_same', expiresAt: 100 }),
+      ).resolves.toBe(false);
+    });
+
+    it('race: 412 PreconditionFailed on replace → returns false', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockResolvedValue({
+        resource: { id: 'user-42', userId: 'user-42', expiresAt: 100 } as Partial<unknown>,
+        etag: 'etag-stale',
+      });
+      mocks.containerItemReplace.mockRejectedValue(
+        Object.assign(new Error('precondition failed'), { code: 412 }),
+      );
+
+      await expect(
+        store.setTokenIfNewer('user-42', { accessToken: 'ghu_new', expiresAt: 200 }),
+      ).resolves.toBe(false);
+    });
+
+    it('race: 409 Conflict on create → returns false', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockRejectedValue(
+        Object.assign(new Error('not found'), { code: 404 }),
+      );
+      mocks.containerItemsCreate.mockRejectedValue(
+        Object.assign(new Error('conflict'), { code: 409 }),
+      );
+
+      await expect(
+        store.setTokenIfNewer('user-42', { accessToken: 'ghu_x', expiresAt: 100 }),
+      ).resolves.toBe(false);
+    });
+
+    it('propagates non-precondition Cosmos errors', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      mocks.containerItemRead.mockRejectedValue(
+        Object.assign(new Error('boom'), { code: 500 }),
+      );
+
+      await expect(
+        store.setTokenIfNewer('user-42', { accessToken: 'ghu_x', expiresAt: 100 }),
+      ).rejects.toThrow('boom');
+    });
   });
 });
 

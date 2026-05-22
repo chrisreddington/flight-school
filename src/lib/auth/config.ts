@@ -25,10 +25,14 @@ const log = logger.withTag('Auth');
  * request; the store is what we rely on for server-side refresh and audit.
  * Failures are logged and swallowed so an outage in Cosmos/Key Vault never
  * locks users out of the application.
+ *
+ * Uses {@link TokenStore.setTokenIfNewer} so a slow JWT callback (e.g. on
+ * one ACA replica) cannot clobber a newer record persisted by another
+ * replica that already refreshed.
  */
 async function persistTokenToStore(userId: string, stored: StoredToken): Promise<void> {
   try {
-    await getTokenStore().setToken(userId, stored);
+    await getTokenStore().setTokenIfNewer(userId, stored);
   } catch (error) {
     log.warn('Failed to persist token to token store (continuing with cookie-only)', error);
   }

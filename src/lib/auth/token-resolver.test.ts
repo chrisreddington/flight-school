@@ -4,16 +4,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getTokenMock, setTokenMock, refreshMock } = vi.hoisted(() => ({
+const { getTokenMock, setTokenIfNewerMock, refreshMock } = vi.hoisted(() => ({
   getTokenMock: vi.fn(),
-  setTokenMock: vi.fn(),
+  setTokenIfNewerMock: vi.fn(),
   refreshMock: vi.fn(),
 }));
 
 vi.mock('./token-store', () => ({
   getTokenStore: () => ({
     getToken: getTokenMock,
-    setToken: setTokenMock,
+    setToken: vi.fn(),
+    setTokenIfNewer: setTokenIfNewerMock,
     deleteToken: vi.fn(),
     cleanupExpired: vi.fn(),
   }),
@@ -34,7 +35,7 @@ describe('resolveFreshGitHubToken', () => {
   afterEach(() => {
     vi.useRealTimers();
     getTokenMock.mockReset();
-    setTokenMock.mockReset();
+    setTokenIfNewerMock.mockReset();
     refreshMock.mockReset();
   });
 
@@ -42,7 +43,7 @@ describe('resolveFreshGitHubToken', () => {
     getTokenMock.mockResolvedValue(null);
     await expect(resolveFreshGitHubToken('user-1')).resolves.toBeNull();
     expect(refreshMock).not.toHaveBeenCalled();
-    expect(setTokenMock).not.toHaveBeenCalled();
+    expect(setTokenIfNewerMock).not.toHaveBeenCalled();
   });
 
   it('returns the stored access token when not near expiry', async () => {
@@ -56,7 +57,7 @@ describe('resolveFreshGitHubToken', () => {
 
     await expect(resolveFreshGitHubToken('user-1')).resolves.toBe('ghu_fresh');
     expect(refreshMock).not.toHaveBeenCalled();
-    expect(setTokenMock).not.toHaveBeenCalled();
+    expect(setTokenIfNewerMock).not.toHaveBeenCalled();
   });
 
   it('refreshes and persists when stored token is within the leeway window', async () => {
@@ -78,8 +79,8 @@ describe('resolveFreshGitHubToken', () => {
     const result = await resolveFreshGitHubToken('user-1');
     expect(result).toBe('ghu_new');
     expect(refreshMock).toHaveBeenCalledWith('ghr_old');
-    expect(setTokenMock).toHaveBeenCalledTimes(1);
-    const [persistedUserId, persistedToken] = setTokenMock.mock.calls[0];
+    expect(setTokenIfNewerMock).toHaveBeenCalledTimes(1);
+    const [persistedUserId, persistedToken] = setTokenIfNewerMock.mock.calls[0];
     expect(persistedUserId).toBe('user-1');
     expect(persistedToken.accessToken).toBe('ghu_new');
     expect(persistedToken.refreshToken).toBe('ghr_new');
@@ -121,7 +122,7 @@ describe('resolveFreshGitHubToken', () => {
     });
 
     await resolveFreshGitHubToken('user-1');
-    expect(setTokenMock.mock.calls[0][1].refreshToken).toBe('ghr_existing');
+    expect(setTokenIfNewerMock.mock.calls[0][1].refreshToken).toBe('ghr_existing');
   });
 
   it('throws when the refresh exchange fails', async () => {
@@ -134,7 +135,7 @@ describe('resolveFreshGitHubToken', () => {
     refreshMock.mockRejectedValue(new Error('GitHub token refresh failed: HTTP 401'));
 
     await expect(resolveFreshGitHubToken('user-1')).rejects.toThrow('HTTP 401');
-    expect(setTokenMock).not.toHaveBeenCalled();
+    expect(setTokenIfNewerMock).not.toHaveBeenCalled();
   });
 
   it('throws when stored token needs refresh but no refresh token is available', async () => {
