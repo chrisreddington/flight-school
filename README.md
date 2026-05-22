@@ -53,6 +53,22 @@ GitHub App and supply `AUTH_*` credentials.
 4. Open <http://localhost:3000> — you'll be redirected to GitHub to authorize
    the app, then back to your personalized dashboard.
 
+### Optional local Copilot worker
+
+By default, local development runs Copilot SDK work in the web process. To test
+the out-of-process worker boundary locally, start a worker in one terminal and
+the web app in another:
+
+```bash
+npm run dev:worker
+COPILOT_WORKER_URL=http://localhost:3001 \
+COPILOT_WORKER_SECRET=local-dev-worker-secret \
+npm run dev
+```
+
+`npm run aspire:run` starts both resources and injects the local worker URL into
+the web app automatically.
+
 > **Prerequisites:** Node.js 22+, npm, Git, and a GitHub Copilot subscription
 > (Individual, Business, or Enterprise) for the AI features.
 
@@ -67,7 +83,7 @@ Experimental ACA deployment notes:
   against the ACA FQDN, deploy / rotate / cleanup recipes.
 - [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md) —
   Multi-tenant design (Auth.js → per-request Octokit → Copilot execution
-  boundary → per-session SDK identity).
+  boundary → optional worker → per-session SDK identity).
 
 ### Codespaces
 

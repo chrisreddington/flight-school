@@ -1,12 +1,12 @@
 # Copilot Worker Service Foundation Design
 
-**Status**: Approved for planning
+**Status**: Foundation Implemented
 **Date**: 2026-05-22
 
 ## Resumption Section
 - **Scope**: Add a local Copilot worker service path and production deployment scaffold while preserving the current in-process fallback.
-- **Current Phase**: Design complete; ready for implementation planning.
-- **Next Action**: Write the implementation plan for worker service foundation.
+- **Current Phase**: Foundation implemented.
+- **Next Action**: Validate local worker behavior manually with real GitHub OAuth credentials, then plan durable async worker migration.
 - **Blockers**: None.
 
 ## Job Story

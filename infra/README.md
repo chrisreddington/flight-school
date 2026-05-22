@@ -19,6 +19,7 @@ reference environment for Flight School on **Azure Container Apps (ACA)**.
 | Cosmos DB (NoSQL, **serverless**) | DB `flightschool`, container `sessions` (partition key `/userId`, 30-day TTL) for future server-side session/token store |
 | Key Vault `kv-<appName>-<hash>` | RBAC-enabled; holds Auth.js, GitHub App, Cosmos, and App Insights secrets |
 | Container App `<appName>` | The Next.js + Copilot CLI workload (1 vCPU / 2 GiB, 1–5 replicas) |
+| Container App `<appName>-worker` | Private internal Copilot worker app using the same image (1 vCPU / 2 GiB, 1–3 replicas) |
 
 The Container App runs with a **system-assigned managed identity** that is
 granted the **Key Vault Secrets User** role on the Key Vault so it can resolve
@@ -136,7 +137,7 @@ az role assignment create \
   --scope "$KV_ID"
 ```
 
-Then set the three required secrets:
+Then set the four required secrets:
 
 ```bash
 # Auth.js JWT encryption key — 32 random bytes, base64-encoded.
@@ -150,6 +151,10 @@ az keyvault secret set --vault-name "$KV" \
 # GitHub App client secret.
 az keyvault secret set --vault-name "$KV" \
   --name auth-github-secret --value "<github-app-client-secret>"
+
+# Web-to-worker bearer secret.
+az keyvault secret set --vault-name "$KV" \
+  --name copilot-worker-secret --value "$(openssl rand -base64 32)"
 ```
 
 `cosmos-conn-string` and `appinsights-connection-string` are seeded
@@ -231,6 +236,10 @@ deployed to Azure** as part of authoring this template.
 - **Region default.** Defaults to `uksouth`; pick the region nearest your
   users. Cosmos serverless and ACA are GA in all major regions but double-
   check pricing/availability if you change it.
+- **Copilot worker scaffold.** The template now deploys `<appName>-worker` with
+  internal ingress and injects its internal URL into the public web app via
+  `COPILOT_WORKER_URL`. Background jobs still run through the in-process
+  dispatcher; Service Bus/KEDA worker consumers remain future work.
 - **Registry auth.** This template assumes a **public** registry, or that the
   Container Apps environment has been pre-wired with registry credentials. For
   private ACR with managed-identity pull, add a `registries` block in

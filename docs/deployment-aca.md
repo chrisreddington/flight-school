@@ -24,6 +24,8 @@ The current code has the first seams for that migration:
 `src/lib/copilot/execution/` isolates chat execution,
 `src/app/api/jobs/dispatcher.ts` isolates async job dispatch, and
 `src/lib/copilot/runtime/` defines the prototype per-user runtime-pool contract.
+The next scaffold adds a private `copilot-worker` Container App and configures
+the public web app to call it through `COPILOT_WORKER_URL`.
 
 ## Building the image
 
@@ -102,6 +104,8 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | `AUTH_GITHUB_ID` | Key Vault `auth-github-id` | GitHub App client ID. |
 | `AUTH_GITHUB_SECRET` | Key Vault `auth-github-secret` | GitHub App client secret. |
 | `AUTH_TRUST_HOST` | Env (`true`) | ACA terminates TLS at the edge; required for Auth.js URL resolution. |
+| `COPILOT_WORKER_SECRET` | Key Vault `copilot-worker-secret` | Bearer secret used by the public web app to call the private worker route. |
+| `COPILOT_WORKER_URL` | Bicep output/env | Internal URL of the private worker Container App. Leave unset for in-process fallback. |
 | `AUDIT_SALT` | Key Vault `audit-salt` | Stable hash salt for user IDs in audit logs. Long random string (`openssl rand -hex 32`). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault `appinsights-connection-string` (auto-seeded) | App telemetry. |
 | `COSMOS_CONNECTION_STRING` | Key Vault `cosmos-conn-string` (auto-seeded) | Future server-side session/token store. |
@@ -127,7 +131,8 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | HTTP request traces, GitHub API spans, Copilot session spans | Application Insights (OpenTelemetry export via `@vercel/otel`). |
 | Audit events (`copilot.session.create`, rate-limit denials, cap hits) | Application Insights traces, filterable on `eventType`. User IDs are hashed with `AUDIT_SALT`. |
 | Revision health | `az containerapp revision list` — startup/readiness probes hit `/api/health` (owned by another phase). |
-| Cost / scaling | ACA portal; HTTP concurrency scaler at 50 req/replica, 1–5 replicas. |
+| Worker health | `az containerapp show -n <appName>-worker` — internal ingress only; probes also hit `/api/health`. |
+| Cost / scaling | ACA portal; web HTTP scaler at 50 req/replica, worker HTTP scaler at 20 req/replica. |
 
 ### 4. Rate-limit tuning
 
@@ -157,6 +162,6 @@ the Cosmos session store before lowering the limits.
   bootstrap, redeploy / rotate / cleanup recipes.
 - [`docs/architecture-multitenant.md`](architecture-multitenant.md) —
   Multi-tenancy design (Auth.js → per-request Octokit → Copilot execution
-  boundary → per-session Copilot).
+  boundary → optional worker → per-session Copilot).
 - [`docs/migrations/2025-multitenant-auth.md`](migrations/2025-multitenant-auth.md)
   — Upgrade notes for existing developers.
