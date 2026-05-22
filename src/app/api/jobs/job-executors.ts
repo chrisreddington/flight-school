@@ -77,7 +77,7 @@ async function resolveJobIdentity(jobId: string, userId: string): Promise<Sessio
         'GitHub credentials missing — user must re-authenticate.',
         'credentials_missing',
       );
-      await mirrorCredentialsFailureToEvaluation(jobId, 'credentials_missing');
+      await mirrorCredentialsFailureToEvaluation(jobId, userId, 'credentials_missing');
       return null;
     }
     return { userId, gitHubToken: token };
@@ -94,7 +94,7 @@ async function resolveJobIdentity(jobId: string, userId: string): Promise<Sessio
       'GitHub credentials expired — user must re-authenticate.',
       'credentials_refresh_failed',
     );
-    await mirrorCredentialsFailureToEvaluation(jobId, 'credentials_refresh_failed');
+    await mirrorCredentialsFailureToEvaluation(jobId, userId, 'credentials_refresh_failed');
     return null;
   }
 }
@@ -107,17 +107,17 @@ async function resolveJobIdentity(jobId: string, userId: string): Promise<Sessio
  * via `/api/evaluations/[challengeId]`) so the existing sandbox polling
  * client picks up step narration without a second fetch.
  */
-async function reportStep(jobId: string, step: string, challengeId?: string): Promise<void> {
+async function reportStep(jobId: string, userId: string, step: string, challengeId?: string): Promise<void> {
   try {
     await jobStorage.setCurrentStep(jobId, step);
     if (challengeId) {
-      const storage = await readEvaluationStorage();
+      const storage = await readEvaluationStorage(userId);
       const existing = storage.evaluations[challengeId];
       if (existing) {
         existing.currentStep = step;
         existing.updatedAt = now();
         storage.evaluations[challengeId] = existing;
-        await writeEvaluationStorage(storage);
+        await writeEvaluationStorage(userId, storage);
       }
     }
   } catch (err) {
@@ -132,6 +132,7 @@ async function reportStep(jobId: string, step: string, challengeId?: string): Pr
  */
 async function mirrorCredentialsFailureToEvaluation(
   jobId: string,
+  userId: string,
   errorCode: 'credentials_missing' | 'credentials_refresh_failed',
 ): Promise<void> {
   try {
@@ -142,7 +143,7 @@ async function mirrorCredentialsFailureToEvaluation(
         ? job.targetId
         : (job.input as { challengeId?: string }).challengeId;
     if (!challengeId) return;
-    const storage = await readEvaluationStorage();
+    const storage = await readEvaluationStorage(userId);
     const previous = storage.evaluations[challengeId];
     storage.evaluations[challengeId] = {
       ...(previous ?? {
@@ -158,7 +159,7 @@ async function mirrorCredentialsFailureToEvaluation(
       errorCode,
       updatedAt: now(),
     };
-    await writeEvaluationStorage(storage);
+    await writeEvaluationStorage(userId, storage);
   } catch (err) {
     log.debug(`[Job ${jobId}] Failed to mirror credentials failure:`, err);
   }
@@ -454,7 +455,7 @@ export async function executeChatResponse(
     const identity = await resolveJobIdentity(jobId, userId);
     if (!identity) return;
     
-    const thread = await getThreadById(threadId);
+    const thread = await getThreadById(userId, threadId);
     if (!thread) {
       throw new Error(`Thread ${threadId} not found`);
     }
@@ -491,7 +492,7 @@ export async function executeChatResponse(
     // Helper to save current progress to thread
     const saveProgressToThread = async (isFinal: boolean) => {
       try {
-        const currentThread = await getThreadById(threadId);
+        const currentThread = await getThreadById(userId, threadId);
         if (!currentThread) return;
         
         const userMessageIndex = currentThread.messages.findIndex(
@@ -527,7 +528,7 @@ export async function executeChatResponse(
           ];
         }
         
-        await updateThread({
+        await updateThread(userId, {
           ...currentThread,
           messages: updatedMessages,
           updatedAt: now(),
@@ -632,13 +633,13 @@ export async function executeChallengeEvaluation(
   try {
     log.info(`[Job ${jobId}] Starting evaluation for challenge ${challengeId}`);
 
-    await reportStep(jobId, 'Preparing context…', challengeId);
+    await reportStep(jobId, userId, 'Preparing context…', challengeId);
 
     const identity = await resolveJobIdentity(jobId, userId);
     if (!identity) return;
     
     // Initialize evaluation progress
-    await writeEvaluationStorage({
+    await writeEvaluationStorage(userId, {
       evaluations: {
         [challengeId]: {
           challengeId,
@@ -666,7 +667,7 @@ export async function executeChallengeEvaluation(
       files
     );
 
-    await reportStep(jobId, 'Running tests…', challengeId);
+    await reportStep(jobId, userId, 'Running tests…', challengeId);
     
     // Create streaming session
     const { stream, cleanup } = await createEvaluationStreamingSession(
@@ -686,7 +687,7 @@ export async function executeChallengeEvaluation(
     
     // Helper to save progress
     const saveProgress = async (isFinal: boolean = false) => {
-      const storage = await readEvaluationStorage();
+      const storage = await readEvaluationStorage(userId);
       const currentProgress = storage.evaluations[challengeId] || {
         challengeId,
         jobId,
@@ -702,7 +703,7 @@ export async function executeChallengeEvaluation(
           sentPartial = true;
           currentProgress.partial = partial;
           // First parseable signal — narrate the analysis phase.
-          await reportStep(jobId, 'Analysing results…', challengeId);
+          await reportStep(jobId, userId, 'Analysing results…', challengeId);
           currentProgress.currentStep = 'Analysing results…';
         }
       }
@@ -734,7 +735,7 @@ export async function executeChallengeEvaluation(
       }
       
       storage.evaluations[challengeId] = currentProgress;
-      await writeEvaluationStorage(storage);
+      await writeEvaluationStorage(userId, storage);
     };
     
     let wasCancelled = false;
@@ -768,13 +769,13 @@ export async function executeChallengeEvaluation(
       return;
     }
 
-    await reportStep(jobId, 'Generating feedback…', challengeId);
+    await reportStep(jobId, userId, 'Generating feedback…', challengeId);
     
     // Save final result
     await saveProgress(true);
     
     // Mark job completed
-    const storage = await readEvaluationStorage();
+    const storage = await readEvaluationStorage(userId);
     const finalProgress = storage.evaluations[challengeId];
     
     await jobStorage.markCompleted<ChallengeEvaluationResult>(jobId, {
@@ -796,7 +797,7 @@ export async function executeChallengeEvaluation(
     log.error(`[Job ${jobId}] Evaluation failed:`, errorMessage);
     
     // Update storage with error
-    const storage = await readEvaluationStorage();
+    const storage = await readEvaluationStorage(userId);
     storage.evaluations[challengeId] = {
       challengeId,
       jobId,
@@ -805,7 +806,7 @@ export async function executeChallengeEvaluation(
       error: errorMessage,
       updatedAt: now(),
     };
-    await writeEvaluationStorage(storage);
+    await writeEvaluationStorage(userId, storage);
     
     await jobStorage.markFailed(jobId, errorMessage);
   }

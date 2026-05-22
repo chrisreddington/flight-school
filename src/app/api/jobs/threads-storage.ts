@@ -1,10 +1,22 @@
 /**
- * Thread Storage Utilities (Server-side)
- * 
- * Direct thread storage access for API routes without going through client hooks.
+ * Thread Storage Utilities (Server-side, **per-user**)
+ *
+ * Server-side reads/writes for thread storage used by background job
+ * executors. The HTTP route `/api/threads/storage` writes per-user via
+ * {@link createStorageRoute}, which routes through
+ * `users/{userId}/threads.json` (see `@/lib/storage/user-scope`).
+ * These helpers MUST use the same per-user partitioning so executors
+ * read the same file the client wrote.
+ *
+ * Every function takes `userId` from a server-resolved identity
+ * (Auth.js session or the persisted job payload populated by an
+ * authenticated request). Never accept `userId` from client input.
+ *
+ * @module jobs/threads-storage
  */
 
-import { readStorage, writeStorage } from '@/lib/storage/utils';
+import { readStorage, writeStorage, ensureDir } from '@/lib/storage/utils';
+import { userScopedFilename } from '@/lib/storage/user-scope';
 import type { Thread } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
 
@@ -20,35 +32,36 @@ function validateThreadsSchema(data: unknown): data is ThreadsStorageSchema {
   return Array.isArray(schema.threads);
 }
 
-/** Read threads directly from storage (server-side) */
-export async function readThreadsStorage(): Promise<Thread[]> {
+/** Read threads directly from storage for a specific user. */
+export async function readThreadsStorage(userId: string): Promise<Thread[]> {
   const storage = await readStorage<ThreadsStorageSchema>(
-    'threads.json',
+    userScopedFilename(userId, 'threads.json'),
     DEFAULT_THREADS_SCHEMA,
     validateThreadsSchema
   );
   return storage.threads;
 }
 
-/** Write threads directly to storage (server-side) */
-export async function writeThreadsStorage(threads: Thread[]): Promise<void> {
-  await writeStorage('threads.json', { threads });
+/** Write threads directly to storage for a specific user. */
+export async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<void> {
+  await ensureDir(`users/${userId}`, { mode: 0o700 });
+  await writeStorage(userScopedFilename(userId, 'threads.json'), { threads });
 }
 
-/** Get a thread by ID directly from storage (server-side) */
-export async function getThreadById(threadId: string): Promise<Thread | null> {
-  const threads = await readThreadsStorage();
+/** Get a thread by ID directly from storage for a specific user. */
+export async function getThreadById(userId: string, threadId: string): Promise<Thread | null> {
+  const threads = await readThreadsStorage(userId);
   return threads.find(t => t.id === threadId) ?? null;
 }
 
-/** Update a thread directly in storage (server-side) */
-export async function updateThread(updatedThread: Thread): Promise<void> {
-  const threads = await readThreadsStorage();
+/** Update a thread directly in storage for a specific user. */
+export async function updateThread(userId: string, updatedThread: Thread): Promise<void> {
+  const threads = await readThreadsStorage(userId);
   const index = threads.findIndex(t => t.id === updatedThread.id);
   if (index >= 0) {
     threads[index] = { ...updatedThread, updatedAt: now() };
   } else {
     threads.unshift(updatedThread);
   }
-  await writeThreadsStorage(threads);
+  await writeThreadsStorage(userId, threads);
 }

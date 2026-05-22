@@ -1,11 +1,20 @@
 /**
- * Evaluation Storage
- * 
- * File-based storage for evaluation progress, allowing polling from client.
- * Similar pattern to threads-storage but for evaluation state.
+ * Evaluation Storage (per-user)
+ *
+ * File-based storage for challenge evaluation progress, polled by the
+ * Challenge Sandbox client. Every file is partitioned per authenticated
+ * user via `users/{userId}/evaluations.json` (see
+ * `@/lib/storage/user-scope`).
+ *
+ * `userId` MUST come from a server-resolved identity (Auth.js session
+ * or the persisted job payload populated by an authenticated request),
+ * never from client input.
+ *
+ * @module jobs/evaluation-storage
  */
 
-import { readStorage, writeStorage } from '@/lib/storage/utils';
+import { readStorage, writeStorage, ensureDir } from '@/lib/storage/utils';
+import { userScopedFilename } from '@/lib/storage/user-scope';
 
 /** Evaluation progress stored in file */
 export interface EvaluationProgress {
@@ -54,32 +63,37 @@ function validateSchema(data: unknown): data is EvaluationStorageSchema {
   return typeof obj.evaluations === 'object' && typeof obj.version === 'number';
 }
 
-/** Read evaluation storage */
-export async function readEvaluationStorage(): Promise<EvaluationStorageSchema> {
-  return readStorage<EvaluationStorageSchema>(STORAGE_KEY, DEFAULT_SCHEMA, validateSchema);
+/** Read evaluation storage for a specific user. */
+export async function readEvaluationStorage(userId: string): Promise<EvaluationStorageSchema> {
+  return readStorage<EvaluationStorageSchema>(
+    userScopedFilename(userId, STORAGE_KEY),
+    DEFAULT_SCHEMA,
+    validateSchema
+  );
 }
 
-/** Write evaluation storage */
-export async function writeEvaluationStorage(data: EvaluationStorageSchema): Promise<void> {
-  return writeStorage(STORAGE_KEY, data);
+/** Write evaluation storage for a specific user. */
+export async function writeEvaluationStorage(userId: string, data: EvaluationStorageSchema): Promise<void> {
+  await ensureDir(`users/${userId}`, { mode: 0o700 });
+  return writeStorage(userScopedFilename(userId, STORAGE_KEY), data);
 }
 
-/** Get evaluation progress by challenge ID */
-export async function getEvaluationProgress(challengeId: string): Promise<EvaluationProgress | null> {
-  const storage = await readEvaluationStorage();
+/** Get evaluation progress by challenge ID for a specific user. */
+export async function getEvaluationProgress(userId: string, challengeId: string): Promise<EvaluationProgress | null> {
+  const storage = await readEvaluationStorage(userId);
   return storage.evaluations[challengeId] ?? null;
 }
 
-/** Update evaluation progress */
-export async function updateEvaluationProgress(progress: EvaluationProgress): Promise<void> {
-  const storage = await readEvaluationStorage();
+/** Update evaluation progress for a specific user. */
+export async function updateEvaluationProgress(userId: string, progress: EvaluationProgress): Promise<void> {
+  const storage = await readEvaluationStorage(userId);
   storage.evaluations[progress.challengeId] = progress;
-  await writeEvaluationStorage(storage);
+  await writeEvaluationStorage(userId, storage);
 }
 
-/** Clear evaluation progress for a challenge */
-export async function clearEvaluationProgress(challengeId: string): Promise<void> {
-  const storage = await readEvaluationStorage();
+/** Clear evaluation progress for a challenge owned by a specific user. */
+export async function clearEvaluationProgress(userId: string, challengeId: string): Promise<void> {
+  const storage = await readEvaluationStorage(userId);
   delete storage.evaluations[challengeId];
-  await writeEvaluationStorage(storage);
+  await writeEvaluationStorage(userId, storage);
 }

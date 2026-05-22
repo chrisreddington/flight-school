@@ -20,29 +20,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { readStorage, writeStorage, deleteStorage, ensureDir } from '@/lib/storage/utils';
+import { userScopedFilename } from '@/lib/storage/user-scope';
 import { apiSuccess, validationErrorResponse } from './response-utils';
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import type { logger } from '@/lib/logger';
 
 /**
- * Allowed characters in a userId used as a path segment. GitHub IDs are
- * numeric, but we accept the full alphanumeric + `_-` set so tests and any
- * future non-GitHub identity providers don't have to special-case the
- * factory. Anything outside this set (including `..`, `/`, `.`) is rejected.
- */
-const SAFE_USER_ID = /^[a-zA-Z0-9_-]+$/;
-
-/**
- * Builds the per-user storage path for a logical filename.
+ * Allowed characters in a userId used as a path segment.
+ * Re-exported from {@link "@/lib/storage/user-scope"} for backwards-compat
+ * and to keep the existing test surface stable.
  *
- * @throws {Error} when the userId fails {@link SAFE_USER_ID} validation.
+ * @deprecated Import `SAFE_USER_ID` from `@/lib/storage/user-scope` directly.
  */
-function userScopedFilename(userId: string, filename: string): string {
-  if (!SAFE_USER_ID.test(userId)) {
-    throw new Error(`Refusing unsafe userId for storage path: ${JSON.stringify(userId)}`);
-  }
-  return `users/${userId}/${filename}`;
-}
+export { SAFE_USER_ID } from '@/lib/storage/user-scope';
 
 /**
  * Type for logger instance with tag support.

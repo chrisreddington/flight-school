@@ -2,12 +2,16 @@
  * Evaluation Progress API
  * GET /api/evaluations/[id] - Get evaluation progress for a challenge
  * DELETE /api/evaluations/[id] - Clear evaluation progress
+ *
+ * Authenticated and **per-user**: only returns evaluations owned by the
+ * caller. Storage is partitioned via {@link userScopedFilename}.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  getEvaluationProgress, 
-  clearEvaluationProgress 
+import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import {
+  getEvaluationProgress,
+  clearEvaluationProgress,
 } from '../../jobs/evaluation-storage';
 
 interface RouteContext {
@@ -15,27 +19,43 @@ interface RouteContext {
 }
 
 export async function GET(
-  request: NextRequest, 
+  request: NextRequest,
   context: RouteContext
 ): Promise<NextResponse> {
-  const { id: challengeId } = await context.params;
-  
-  const progress = await getEvaluationProgress(challengeId);
-  
-  if (!progress) {
-    return NextResponse.json(null);
+  try {
+    const { userId } = await requireUserContext();
+    const { id: challengeId } = await context.params;
+
+    const progress = await getEvaluationProgress(userId, challengeId);
+
+    if (!progress) {
+      return NextResponse.json(null);
+    }
+
+    return NextResponse.json(progress);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    throw err;
   }
-  
-  return NextResponse.json(progress);
 }
 
 export async function DELETE(
-  request: NextRequest, 
+  request: NextRequest,
   context: RouteContext
 ): Promise<NextResponse> {
-  const { id: challengeId } = await context.params;
-  
-  await clearEvaluationProgress(challengeId);
-  
-  return NextResponse.json({ success: true });
+  try {
+    const { userId } = await requireUserContext();
+    const { id: challengeId } = await context.params;
+
+    await clearEvaluationProgress(userId, challengeId);
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    throw err;
+  }
 }
