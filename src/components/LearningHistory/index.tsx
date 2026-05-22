@@ -18,11 +18,7 @@ import { computeInsights, type LearningInsights } from '@/lib/focus/analytics';
 import { focusStore } from '@/lib/focus';
 import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
-import type { HabitWithHistory, DailyCheckIn } from '@/lib/habits/types';
-import type {
-  DailyFocusRecord,
-  LearningTopic,
-} from '@/lib/focus/types';
+import type { LearningTopic } from '@/lib/focus/types';
 import {
   CalendarIcon,
 } from '@primer/octicons-react';
@@ -47,8 +43,13 @@ import { GeneratingBanner } from './generating-banner';
 import { HistoryEntryCard } from './history-entry-card';
 import { HistoryFilters } from './history-filters';
 import { DateNavigation, StatsSummary } from './sidebar-components';
-import type { HistoryEntry, HistoryItem, ItemStatus, Stats, StatusFilter, TypeFilter } from './types';
-import { formatDateForDisplay, generate52WeekActivity, getItemStatus, groupEntriesByMonth, matchesSearch } from './utils';
+import type { HistoryEntry, StatusFilter, TypeFilter } from './types';
+import { formatDateForDisplay } from './utils';
+import {
+  buildHistoryEntries,
+  buildLearningHistoryViewModel,
+  countCompletedGoals,
+} from './use-learning-history-view-model';
 
 // ============================================================================
 // Main Component
@@ -170,120 +171,9 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
         
         if (cancelled) return;
 
-        const entries = Object.entries(rawHistory)
-          .map(([dateKey, record]) => {
-            const items: HistoryItem[] = [];
-            const r = record as DailyFocusRecord;
-            let completedCount = 0;
-            let skippedCount = 0;
-
-            // Challenges
-            if (r.challenges) {
-              r.challenges.forEach(c => {
-                if (c.stateHistory && c.stateHistory.length > 0) {
-                  const status = getItemStatus(c.stateHistory);
-                  items.push({
-                    type: 'challenge',
-                    data: c.data,
-                    timestamp: c.stateHistory[0].timestamp,
-                    status,
-                    stateHistory: c.stateHistory,
-                  });
-                  if (status === 'completed') completedCount++;
-                  if (status === 'skipped') skippedCount++;
-                }
-              });
-            }
-
-            // Goals
-            if (r.goals) {
-              r.goals.forEach(g => {
-                if (g.stateHistory && g.stateHistory.length > 0) {
-                  const status = getItemStatus(g.stateHistory);
-                  items.push({
-                    type: 'goal',
-                    data: g.data,
-                    timestamp: g.stateHistory[0].timestamp,
-                    status,
-                    stateHistory: g.stateHistory,
-                  });
-                  if (status === 'completed') completedCount++;
-                  if (status === 'skipped') skippedCount++;
-                }
-              });
-            }
-
-            // Topics
-            if (r.learningTopics) {
-              r.learningTopics.forEach(topicArray => {
-                topicArray.forEach(t => {
-                  if (t.stateHistory && t.stateHistory.length > 0) {
-                    const status = getItemStatus(t.stateHistory);
-                    items.push({
-                      type: 'topic',
-                      data: t.data,
-                      timestamp: t.stateHistory[0].timestamp,
-                      status,
-                      stateHistory: t.stateHistory,
-                    });
-                    if (status === 'completed') completedCount++;
-                    if (status === 'skipped') skippedCount++;
-                  }
-                });
-              });
-            }
-
-            // Habits
-            habitsCollection.habits.forEach((habit: HabitWithHistory) => {
-              const checkInForDate = habit.checkIns.find((c: DailyCheckIn) => c.date === dateKey);
-              const isActiveHabit = habit.state === 'active' || habit.state === 'not-started';
-
-              if (checkInForDate) {
-                const status: ItemStatus = checkInForDate.completed ? 'completed' : 'active';
-                items.push({
-                  type: 'habit',
-                  data: habit,
-                  timestamp: checkInForDate.timestamp,
-                  status,
-                });
-                if (status === 'completed') completedCount++;
-              } else if (dateKey === todayDateKey && isActiveHabit) {
-                items.push({
-                  type: 'habit',
-                  data: habit,
-                  timestamp: new Date().toISOString(),
-                  status: 'active',
-                });
-              }
-            });
-
-            items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-            return {
-              dateKey,
-              displayDate: formatDateForDisplay(dateKey),
-              items,
-              totalCount: items.length,
-              completedCount,
-              skippedCount,
-            };
-          })
-          .filter(entry => entry.items.length > 0)
-          .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
-
+        const entries = buildHistoryEntries(rawHistory, habitsCollection, todayDateKey);
         const computedInsights = computeInsights(rawHistory);
-        let goalsCount = 0;
-        for (const dateKey of Object.keys(rawHistory)) {
-          const record = rawHistory[dateKey];
-          for (const goal of record.goals) {
-            const wasCompleted = goal.stateHistory.some(
-              transition => transition.state === 'completed',
-            );
-            if (wasCompleted) {
-              goalsCount++;
-            }
-          }
-        }
+        const goalsCount = countCompletedGoals(rawHistory);
 
         setAllEntries(entries);
         setInsights(computedInsights);
@@ -300,56 +190,33 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     return () => { cancelled = true; };
   }, [refreshKey, todayDateKey]);
 
-  // Filter entries
-  const filteredEntries = useMemo(() => {
-    return allEntries
-      .filter(entry => {
-        // Date filter from graph or sidebar
-        if (selectedDate && entry.dateKey !== selectedDate) return false;
-        return true;
-      })
-      .map(entry => ({
-        ...entry,
-        items: entry.items.filter(item => {
-          if (typeFilter !== 'all' && item.type !== typeFilter) return false;
-          if (statusFilter !== 'all' && item.status !== statusFilter) return false;
-          if (!matchesSearch(item, searchQuery)) return false;
-          return true;
-        }),
-      }))
-      .filter(entry => entry.items.length > 0 || (entry.dateKey === todayDateKey && activeTopicIds.size > 0));
-  }, [allEntries, selectedDate, typeFilter, statusFilter, searchQuery, todayDateKey, activeTopicIds.size]);
-
-  // Activity data for 52-week graph
-  const activityData = useMemo(() => generate52WeekActivity(allEntries), [allEntries]);
-
-  // Group entries by month for sidebar nav
-  const groupedEntries = useMemo(() => groupEntriesByMonth(allEntries), [allEntries]);
-
-  // Compute stats
-  const stats = useMemo((): Stats => {
-    const relevantEntries = selectedDate 
-      ? allEntries.filter(e => e.dateKey === selectedDate)
-      : allEntries;
-    
-    let total = 0, completed = 0, skipped = 0, active = 0;
-    let challenges = 0, goals = 0, topics = 0, habits = 0;
-    
-    relevantEntries.forEach(entry => {
-      entry.items.forEach(item => {
-        total++;
-        if (item.status === 'completed') completed++;
-        if (item.status === 'skipped') skipped++;
-        if (item.status === 'active') active++;
-        if (item.type === 'challenge') challenges++;
-        if (item.type === 'goal') goals++;
-        if (item.type === 'topic') topics++;
-        if (item.type === 'habit') habits++;
-      });
-    });
-    
-    return { total, completed, skipped, active, challenges, goals, topics, habits };
-  }, [allEntries, selectedDate]);
+  const {
+    activityData,
+    filteredEntries,
+    groupedEntries,
+    hasNoInsightsHistory,
+    stats,
+  } = useMemo(() => buildLearningHistoryViewModel({
+    entries: allEntries,
+    selectedDate,
+    typeFilter,
+    statusFilter,
+    searchQuery,
+    todayDateKey,
+    activeTopicCount: activeTopicIds.size,
+    insights,
+    totalGoalsCompleted,
+  }), [
+    allEntries,
+    selectedDate,
+    typeFilter,
+    statusFilter,
+    searchQuery,
+    todayDateKey,
+    activeTopicIds.size,
+    insights,
+    totalGoalsCompleted,
+  ]);
 
   // Handlers
   const toggleMonth = useCallback((month: string) => {
@@ -369,12 +236,6 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     if (tab === activeTab) return;
     router.replace(`/history?tab=${tab}`);
   }, [activeTab, router]);
-
-  const hasNoInsightsHistory = !insights || (
-    insights.totalChallengesCompleted === 0 &&
-    insights.totalTopicsExplored === 0 &&
-    totalGoalsCompleted === 0
-  );
 
   // Empty state
   if (!isLoading && allEntries.length === 0) {
