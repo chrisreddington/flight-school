@@ -66,13 +66,14 @@ function assertSameOrigin(request: NextRequest): void {
   if (!origin || !host) {
     throw new Response(JSON.stringify({ error: 'Missing Origin header' }), { status: 400 });
   }
+  let url: URL;
   try {
-    const url = new URL(origin);
-    if (url.host !== host) {
-      throw new Response(JSON.stringify({ error: 'Cross-origin requests are not allowed' }), { status: 403 });
-    }
+    url = new URL(origin);
   } catch {
     throw new Response(JSON.stringify({ error: 'Invalid Origin header' }), { status: 400 });
+  }
+  if (url.host !== host) {
+    throw new Response(JSON.stringify({ error: 'Cross-origin requests are not allowed' }), { status: 403 });
   }
 }
 

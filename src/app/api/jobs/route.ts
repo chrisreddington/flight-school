@@ -41,6 +41,23 @@ interface CreateJobRequest {
   input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput | ChallengeEvaluationInput;
 }
 
+const executeByType: Record<JobType, (jobId: string, input: CreateJobRequest['input'], userId: string) => Promise<void>> = {
+  'topic-regeneration': (jobId, input, userId) => executeTopicRegeneration(jobId, input as TopicRegenerationInput, userId),
+  'challenge-regeneration': (jobId, input, userId) => executeChallengeRegeneration(jobId, input as ChallengeRegenerationInput, userId),
+  'goal-regeneration': (jobId, input, userId) => executeGoalRegeneration(jobId, input as GoalRegenerationInput, userId),
+  'chat-response': (jobId, input, userId) => executeChatResponse(jobId, input as ChatResponseInput, userId),
+  'challenge-evaluation': (jobId, input, userId) => executeChallengeEvaluation(jobId, input as ChallengeEvaluationInput, userId),
+};
+
+function enqueueExecution(jobId: string, type: JobType, input: CreateJobRequest['input'], userId: string): void {
+  const executor = executeByType[type];
+  setImmediate(() => {
+    executor(jobId, input, userId).catch((err: unknown) => {
+      log.error(`Unhandled error in job ${jobId}:`, err);
+    });
+  });
+}
+
 /** 
  * Cancel a running job by ID.
  * Marks as cancelled in storage and destroys session if available.
@@ -172,37 +189,7 @@ export async function POST(request: NextRequest) {
   // their payload — the executor resolves a fresh `ghu_` token from the
   // TokenStore at run-time (see resolveFreshGitHubToken) so queued / retried
   // work cannot use a stale access token captured at submission.
-  if (body.type === 'topic-regeneration') {
-    setImmediate(() => {
-      executeTopicRegeneration(jobId, body.input as TopicRegenerationInput, userId).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'challenge-regeneration') {
-    setImmediate(() => {
-      executeChallengeRegeneration(jobId, body.input as ChallengeRegenerationInput, userId).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'goal-regeneration') {
-    setImmediate(() => {
-      executeGoalRegeneration(jobId, body.input as GoalRegenerationInput, userId).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'chat-response') {
-    setImmediate(() => {
-      executeChatResponse(jobId, body.input as ChatResponseInput, userId).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'challenge-evaluation') {
-    setImmediate(() => {
-      executeChallengeEvaluation(jobId, body.input as ChallengeEvaluationInput, userId).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  }
+  enqueueExecution(jobId, body.type, body.input, userId);
   
   return NextResponse.json({
     id: job.id,

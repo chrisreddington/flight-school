@@ -59,6 +59,16 @@ const DEK_CACHE_MAX_ENTRIES = 256;
  */
 const DEK_CACHE_DEFAULT_TTL_MS = 15 * 60 * 1000;
 
+interface StatusCodeError {
+  code?: number;
+  statusCode?: number;
+}
+
+function getStatusCode(error: unknown): number | undefined {
+  const typed = error as StatusCodeError;
+  return typed.code ?? typed.statusCode;
+}
+
 interface CachedDek {
   /** Digest of (kekId || wrappedDekBase64). Guards against using a stale DEK against a re-wrapped envelope. */
   envelopeDigest: string;
@@ -450,7 +460,7 @@ export class CosmosTokenStore implements TokenStore {
       const response = await this.container.item(userId, userId).read<TokenDocument>();
       doc = response.resource;
     } catch (error) {
-      const status = (error as { code?: number; statusCode?: number }).code ?? (error as { statusCode?: number }).statusCode;
+      const status = getStatusCode(error);
       if (status === 404) return null;
       throw error;
     }
@@ -565,9 +575,7 @@ export class CosmosTokenStore implements TokenStore {
       existing = response.resource;
       etag = (response as { etag?: string }).etag;
     } catch (error) {
-      const status =
-        (error as { code?: number; statusCode?: number }).code ??
-        (error as { statusCode?: number }).statusCode;
+      const status = getStatusCode(error);
       if (status !== 404) throw error;
     }
 
@@ -587,9 +595,7 @@ export class CosmosTokenStore implements TokenStore {
       this.invalidateCachedDek(userId);
       return true;
     } catch (error) {
-      const status =
-        (error as { code?: number; statusCode?: number }).code ??
-        (error as { statusCode?: number }).statusCode;
+      const status = getStatusCode(error);
       if (status === 412 || status === 409) {
         log.debug('setTokenIfNewer: concurrent writer won, skipping', { userId, status });
         return false;
@@ -645,7 +651,7 @@ export class CosmosTokenStore implements TokenStore {
     try {
       await this.container.item(userId, userId).delete();
     } catch (error) {
-      const status = (error as { code?: number; statusCode?: number }).code ?? (error as { statusCode?: number }).statusCode;
+      const status = getStatusCode(error);
       if (status === 404) return;
       throw error;
     }
