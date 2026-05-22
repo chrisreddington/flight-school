@@ -179,6 +179,26 @@ export const authConfig: NextAuthConfig = {
       return session;
     },
   },
+  events: {
+    /**
+     * Clear the deletion tombstone after a fresh sign-in so the user
+     * can use the app again. The marker is written by
+     * `DELETE /api/user/data` to block in-flight executors from
+     * recreating per-user data immediately after the wipe; once the
+     * user explicitly signs back in we know the wipe has settled and
+     * future writes are intentional.
+     */
+    async signIn({ user }) {
+      const userId = user?.id;
+      if (typeof userId !== 'string' || userId.length === 0) return;
+      try {
+        const { clearUserTombstone } = await import('@/lib/storage/tombstone');
+        await clearUserTombstone(userId);
+      } catch {
+        // best-effort — tombstone remains and the user can retry sign-in.
+      }
+    },
+  },
 };
 
 /**

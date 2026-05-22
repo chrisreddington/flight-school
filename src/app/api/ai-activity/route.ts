@@ -12,22 +12,32 @@
 import { apiSuccess } from '@/lib/api';
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
+import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import { now } from '@/lib/utils/date-utils';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 export interface AIActivityResponse {
-  events: ReturnType<typeof activityLogger.getEvents>;
+  events: ReturnType<typeof toPublicActivityEvent>[];
   stats: ReturnType<typeof activityLogger.getStats>;
 }
 
 /**
  * GET /api/ai-activity
  * Returns activity events and stats owned by the authenticated caller.
+ *
+ * Events are mapped through {@link toPublicActivityEvent} so
+ * `output.fullResponse` and MCP tool args/results never reach the
+ * browser. The dev-only `?include=full` query unlocks the full
+ * response, gated server-side by `NODE_ENV === 'development'` (the
+ * gate is inside the DTO).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireUserContext();
-    const events = activityLogger.getEvents(userId);
+    const includeFull = request.nextUrl.searchParams.get('include') === 'full';
+    const events = activityLogger.getEvents(userId).map((event) =>
+      toPublicActivityEvent(event, { includeFull }),
+    );
     const stats = activityLogger.getStats(userId);
 
     return apiSuccess<AIActivityResponse>(

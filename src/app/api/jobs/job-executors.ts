@@ -447,7 +447,11 @@ export async function executeChatResponse(
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
   
-  const { threadId, prompt, learningMode = false, useGitHubTools = false, repos } = input;
+  const { threadId, prompt, assistantMessageId: providedAssistantId, learningMode = false, useGitHubTools = false, repos } = input;
+  // Server route is responsible for validating + populating
+  // assistantMessageId on chat-response jobs. Fall back here only as a
+  // defensive guard for any old in-flight job that predates Phase D.
+  const assistantMessageId = providedAssistantId ?? generateMessageId();
   
   try {
     log.info(`[Job ${jobId}] Starting chat response for thread ${threadId}`);
@@ -489,25 +493,22 @@ export async function executeChatResponse(
     let lastSaveTime = Date.now();
     const SAVE_INTERVAL_MS = 400;
     
-    // Helper to save current progress to thread
+    // Helper to save current progress to thread.
+    //
+    // Phase D refactor (rubber-duck #8/#18): use the stable
+    // `assistantMessageId` as the message id throughout — no
+    // streaming-id/final-id swap, no `m.content === prompt` lookup.
+    // The user-message position is no longer needed because we upsert
+    // by id and append at the end if missing.
     const saveProgressToThread = async (isFinal: boolean) => {
       try {
         const currentThread = await getThreadById(userId, threadId);
         if (!currentThread) return;
-        
-        const userMessageIndex = currentThread.messages.findIndex(
-          m => m.role === 'user' && m.content === prompt
-        );
-        
-        if (userMessageIndex === -1) {
-          log.warn(`[Job ${jobId}] Could not find user message with prompt, skipping save`);
-          return;
-        }
-        
-        const existingIndex = currentThread.messages.findIndex(m => m.id === `streaming-${jobId}`);
-        
+
+        const existingIndex = currentThread.messages.findIndex(m => m.id === assistantMessageId);
+
         const streamingMessage: Message = {
-          id: isFinal ? generateMessageId() : `streaming-${jobId}`,
+          id: assistantMessageId,
           role: 'assistant',
           content: fullContent + (isFinal ? '' : ' ▊'),
           timestamp: now(),
@@ -515,26 +516,22 @@ export async function executeChatResponse(
           toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
           hasActionableItem,
         };
-        
+
         let updatedMessages: Message[];
         if (existingIndex >= 0) {
           updatedMessages = [...currentThread.messages];
           updatedMessages[existingIndex] = streamingMessage;
         } else {
-          updatedMessages = [
-            ...currentThread.messages.slice(0, userMessageIndex + 1),
-            streamingMessage,
-            ...currentThread.messages.slice(userMessageIndex + 1)
-          ];
+          updatedMessages = [...currentThread.messages, streamingMessage];
         }
-        
+
         await updateThread(userId, {
           ...currentThread,
           messages: updatedMessages,
           updatedAt: now(),
           isStreaming: !isFinal,
         });
-        
+
         log.debug(`[Job ${jobId}] Saved progress: ${fullContent.length} chars, final=${isFinal}`);
       } catch (err) {
         log.warn(`[Job ${jobId}] Failed to save progress:`, err);

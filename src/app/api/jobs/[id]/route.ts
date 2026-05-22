@@ -9,6 +9,7 @@
  */
 
 import { jobStorage } from '@/lib/jobs';
+import { redactJobForDetail } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { NextRequest, NextResponse } from 'next/server';
@@ -41,7 +42,7 @@ export async function GET(
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    return NextResponse.json(job);
+    return NextResponse.json(redactJobForDetail(job));
   } catch (err) {
     if (err instanceof UnauthorizedError) return unauthorized(err);
     throw err;

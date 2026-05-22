@@ -1,0 +1,18 @@
+.main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--base-size-32, 32px) var(--base-size-16, 16px);
+}
+
+.pageHeading {
+  margin-bottom: var(--base-size-24, 24px);
+}
+
+.sectionHeading {
+  margin-bottom: var(--base-size-8, 8px);
+}
+
+.sectionLead {
+  color: var(--fgColor-muted);
+  margin-bottom: var(--base-size-16, 16px);
+}

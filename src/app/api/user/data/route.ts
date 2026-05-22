@@ -27,8 +27,9 @@ import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
 import { jobStorage } from '@/lib/jobs';
 import { deleteDir } from '@/lib/storage/utils';
+import { markUserDeleted } from '@/lib/storage/tombstone';
 import { logger } from '@/lib/logger';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { cancelRunningJob } from '../../jobs/route';
 
 const log = logger.withTag('UserDataAPI');
@@ -40,11 +41,68 @@ interface DeleteSummary {
   storageDirDeleted: boolean;
 }
 
-export async function DELETE() {
+interface DeleteRequestBody {
+  /**
+   * The caller's GitHub login. Must match the server-resolved
+   * `session.user.login` exactly. Modal-only confirmation is UX, not
+   * security; server enforcement is mandatory (rubber-duck #10).
+   */
+  confirmLogin?: string;
+}
+
+/** Throw if the request's Origin header isn't same-origin with Host. */
+function assertSameOrigin(request: NextRequest): void {
+  const origin = request.headers.get('origin');
+  const host = request.headers.get('host');
+  if (!origin || !host) {
+    throw new Response(JSON.stringify({ error: 'Missing Origin header' }), { status: 400 });
+  }
   try {
-    const { userId } = await requireUserContext();
+    const url = new URL(origin);
+    if (url.host !== host) {
+      throw new Response(JSON.stringify({ error: 'Cross-origin requests are not allowed' }), { status: 403 });
+    }
+  } catch {
+    throw new Response(JSON.stringify({ error: 'Invalid Origin header' }), { status: 400 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    try {
+      assertSameOrigin(request);
+    } catch (resp) {
+      if (resp instanceof Response) return resp;
+      throw resp;
+    }
+
+    const { userId, login } = await requireUserContext();
+
+    // Body confirmation: caller must echo their own GitHub login back to
+    // us. Anything else (missing header, wrong login, no body) is
+    // rejected without touching state.
+    let body: DeleteRequestBody = {};
+    try {
+      body = (await request.json()) as DeleteRequestBody;
+    } catch {
+      return NextResponse.json(
+        { error: 'Request body must include { confirmLogin: "<your GitHub login>" }.' },
+        { status: 400 },
+      );
+    }
+    if (typeof body.confirmLogin !== 'string' || body.confirmLogin !== login) {
+      return NextResponse.json(
+        { error: 'confirmLogin does not match the authenticated user.' },
+        { status: 400 },
+      );
+    }
 
     log.info(`[user ${userId}] Deleting all server-side data on user request`);
+
+    // Set the deletion tombstone FIRST so any in-flight executor that
+    // tries to flush a final delta after cancellation aborts cleanly
+    // instead of recreating the user's directory.
+    await markUserDeleted(userId);
 
     // Cancel any in-flight jobs for this user before removing their records.
     const allJobs = await jobStorage.getAll();
@@ -67,6 +125,12 @@ export async function DELETE() {
     // suggestions, focus, etc.). `deleteDir` is recursive and a no-op
     // when the directory doesn't exist.
     await deleteDir(`users/${userId}`);
+
+    // Restore the tombstone marker after deleteDir wipes it (deleteDir
+    // recursively removes everything under `users/{userId}/` including
+    // `.deleted`). The marker must remain in place until the user signs
+    // in again so any late executor write still aborts.
+    await markUserDeleted(userId);
 
     const summary: DeleteSummary = {
       jobsCancelled,

@@ -16,6 +16,7 @@
  */
 
 import { readStorage, writeStorage, ensureDir } from '@/lib/storage/utils';
+import { isUserDeleted } from '@/lib/storage/tombstone';
 import { userScopedFilename } from '@/lib/storage/user-scope';
 import type { Thread } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
@@ -42,8 +43,16 @@ export async function readThreadsStorage(userId: string): Promise<Thread[]> {
   return storage.threads;
 }
 
-/** Write threads directly to storage for a specific user. */
+/**
+ * Write threads directly to storage for a specific user.
+ *
+ * Aborts silently when the user's deletion tombstone is set so
+ * `DELETE /api/user/data` can't be raced by a late-arriving executor
+ * delta (rubber-duck #6). The tombstone is cleared on next successful
+ * sign-in.
+ */
 export async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<void> {
+  if (await isUserDeleted(userId)) return;
   await ensureDir(`users/${userId}`, { mode: 0o700 });
   await writeStorage(userScopedFilename(userId, 'threads.json'), { threads });
 }

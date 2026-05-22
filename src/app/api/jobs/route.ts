@@ -15,6 +15,7 @@ import type {
   TopicRegenerationInput,
 } from '@/lib/jobs';
 import { jobStorage } from '@/lib/jobs';
+import { redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -28,6 +29,9 @@ import {
 } from './job-executors';
 
 const log = logger.withTag('Jobs API');
+
+/** RFC4122 v4 uuid shape (lowercase hex; 4 in version nibble; 8|9|a|b in variant). */
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type JobType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response' | 'challenge-evaluation';
 
@@ -104,7 +108,58 @@ export async function POST(request: NextRequest) {
   }
 
   const jobId = crypto.randomUUID();
-  
+
+  // Phase D / rubber-duck #9 — server-validated assistantMessageId for
+  // chat jobs. The id is the stable handle the executor's streaming
+  // scratchpad uses to reconcile deltas to a single assistant message,
+  // and the `(threadId, assistantMessageId)` pair is treated as the
+  // per-user idempotency key for this endpoint.
+  if (body.type === 'chat-response') {
+    const chatInput = body.input as ChatResponseInput | undefined;
+    const threadId = chatInput?.threadId;
+    let assistantMessageId = chatInput?.assistantMessageId;
+
+    if (assistantMessageId !== undefined) {
+      if (typeof assistantMessageId !== 'string' || !UUID_V4_RE.test(assistantMessageId)) {
+        return NextResponse.json(
+          { error: 'Invalid assistantMessageId; expected RFC4122 v4 uuid.' },
+          { status: 400 },
+        );
+      }
+    } else {
+      // Backwards-compat fallback for pre-Phase-D clients. Once the
+      // client always sends an id, this branch can be deleted.
+      assistantMessageId = crypto.randomUUID();
+    }
+
+    if (threadId) {
+      const existing = await jobStorage.getAll();
+      const collision = existing.find((j) =>
+        j.userId === userId
+        && j.type === 'chat-response'
+        && (j.status === 'pending' || j.status === 'running')
+        && (j.input as { threadId?: string; assistantMessageId?: string } | undefined)?.threadId === threadId
+        && (j.input as { threadId?: string; assistantMessageId?: string } | undefined)?.assistantMessageId === assistantMessageId,
+      );
+      if (collision) {
+        log.info('Idempotency hit on chat job; returning existing record', {
+          userId,
+          threadId,
+          assistantMessageId,
+          existingJobId: collision.id,
+        });
+        return NextResponse.json({
+          id: collision.id,
+          type: collision.type,
+          status: collision.status,
+          createdAt: collision.createdAt,
+        });
+      }
+    }
+
+    body.input = { ...chatInput, assistantMessageId } as ChatResponseInput;
+  }
+
   const job = await jobStorage.create({
     id: jobId,
     type: body.type,
@@ -174,7 +229,7 @@ export async function GET(request: NextRequest) {
       jobs = jobs.filter(job => job.status === status);
     }
 
-    return NextResponse.json({ jobs });
+    return NextResponse.json({ jobs: jobs.map(redactJobForList) });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });

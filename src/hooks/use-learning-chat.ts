@@ -512,12 +512,18 @@ export function useLearningChat(): UseLearningChatReturn {
       setPendingStreamMessages(prev => new Map([...prev, [targetThreadId, userMessage.id]]));
       
       try {
+        // Generate a stable v4 uuid up-front so streaming deltas can
+        // reconcile by id (rubber-duck #9 / #18). Server validates the
+        // shape and uses (threadId, assistantMessageId) as an idempotency
+        // key.
+        const assistantMessageId = crypto.randomUUID();
         // apiPost handles 402 (banner) and 429 (rate-limit toast) globally.
         const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
           type: 'chat-response',
           input: {
             threadId: targetThreadId,
             prompt: message,
+            assistantMessageId,
             learningMode: true,
             useGitHubTools,
             repos: effectiveRepos?.map(r => r.fullName),

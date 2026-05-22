@@ -8,13 +8,14 @@
 
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
+import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import type { AIActivityEvent } from '@/lib/copilot/activity/types';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(): Promise<Response> {
+export async function GET(request: NextRequest): Promise<Response> {
   let userId: string;
   try {
     ({ userId } = await requireUserContext());
@@ -25,22 +26,29 @@ export async function GET(): Promise<Response> {
     throw err;
   }
 
+  const includeFull = request.nextUrl.searchParams.get('include') === 'full';
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial events scoped to this user.
-      const events = activityLogger.getEvents(userId);
+      // Send initial events scoped to this user — through the public DTO
+      // so `fullResponse` and MCP tool args never leak.
+      const events = activityLogger
+        .getEvents(userId)
+        .map((event) => toPublicActivityEvent(event, { includeFull }));
       const initData = JSON.stringify({ type: 'init', events });
       controller.enqueue(encoder.encode(`data: ${initData}\n\n`));
 
-      // Subscribe to new events — filter to this user before forwarding.
+      // Subscribe to new events — filter by userId AND redact before
+      // forwarding. Both gates are necessary; one without the other
+      // would either leak content or another user's events.
       const unsubscribe = activityLogger.subscribe((event: AIActivityEvent) => {
         if (controller.desiredSize === null) return;
         if (event.userId !== userId) return;
 
         try {
-          const eventData = JSON.stringify({ type: 'event', event });
+          const publicEvent = toPublicActivityEvent(event, { includeFull });
+          const eventData = JSON.stringify({ type: 'event', event: publicEvent });
           controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
         } catch {
           // Stream closed, ignore
