@@ -1,6 +1,6 @@
 import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from '@/lib/copilot/execution/types';
 
-export interface CopilotRuntimeCreationContext {
+interface CopilotRuntimeCreationContext {
   gitHubToken: string;
 }
 
