@@ -32,7 +32,6 @@ import {
 } from './sessions';
 import { getCopilotGithubMcpTools } from './mcp-tools';
 import type { SessionIdentity } from './session-identity';
-import { createSessionIdentity } from './session-identity';
 import type {
     LoggedSessionResult,
     SessionCreationMetrics,

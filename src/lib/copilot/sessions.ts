@@ -28,7 +28,6 @@ import type {
 } from './types';
 import { logger } from '@/lib/logger';
 import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
-import { getCopilotGithubMcpTools } from './mcp-tools';
 
 const log = logger.withTag('Copilot SDK');
 
