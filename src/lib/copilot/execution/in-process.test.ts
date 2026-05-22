@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { executeCopilotChat } from './in-process';
+import { executeCopilotChatInProcess } from './in-process';
 
 const mocks = vi.hoisted(() => ({
   createLoggedChatSession: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('@/lib/copilot/server', () => ({
   createLoggedGitHubChatSession: mocks.createLoggedGitHubChatSession,
 }));
 
-describe('executeCopilotChat', () => {
+describe('executeCopilotChatInProcess', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sendAndWait.mockResolvedValue({
@@ -50,7 +50,7 @@ describe('executeCopilotChat', () => {
   });
 
   it('uses lightweight chat when GitHub tools are not requested', async () => {
-    const result = await executeCopilotChat({
+    const result = await executeCopilotChatInProcess({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'Explain closures',
       useGitHubTools: false,
@@ -72,7 +72,7 @@ describe('executeCopilotChat', () => {
   });
 
   it('uses GitHub chat when GitHub tools are requested', async () => {
-    const result = await executeCopilotChat({
+    const result = await executeCopilotChatInProcess({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'Search my repos',
       useGitHubTools: true,
@@ -93,7 +93,7 @@ describe('executeCopilotChat', () => {
   it('destroys the session when sending fails', async () => {
     mocks.sendAndWait.mockRejectedValue(new Error('send failed'));
 
-    await expect(executeCopilotChat({
+    await expect(executeCopilotChatInProcess({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'Hello',
       useGitHubTools: false,

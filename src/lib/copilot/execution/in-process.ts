@@ -3,7 +3,7 @@ import { now } from '@/lib/utils/date-utils';
 import { needsGitHubTools } from '@/lib/utils/content-detection';
 import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from './types';
 
-export async function executeCopilotChat({
+export async function executeCopilotChatInProcess({
   identity,
   prompt,
   useGitHubTools,
