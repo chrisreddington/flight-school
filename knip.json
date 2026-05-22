@@ -12,5 +12,8 @@
   "ignoreBinaries": [
     "aspire",
     "wait-on"
+  ],
+  "ignoreDependencies": [
+    "tsx"
   ]
 }

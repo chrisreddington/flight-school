@@ -16,6 +16,7 @@ describe('AppHost npm scripts', () => {
 
   it('uses a separate Next dev directory for the worker resource', () => {
     expect(packageJson.scripts?.['dev:worker']).toContain('NEXT_DIST_DIR=.next-worker');
+    expect(packageJson.scripts?.['dev:worker']).toContain('rm -rf .next-worker');
     expect(nextConfigSource).toContain("distDir: process.env.NEXT_DIST_DIR ?? '.next'");
   });
 });

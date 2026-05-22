@@ -8,7 +8,7 @@
  * - Passes authenticated requests through untouched
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type Handler = (req: { auth: unknown; nextUrl: URL }) => unknown;
 
@@ -19,7 +19,7 @@ vi.mock('next-auth', () => {
     default: () => ({
       auth: (handler: Handler) => {
         handlerRef.fn = handler;
-        return handler;
+        return (req: { auth: unknown; nextUrl: URL }) => handler(req);
       },
     }),
   };
@@ -29,12 +29,11 @@ vi.mock('@/lib/auth/edge-config', () => ({
   edgeAuthConfig: {},
 }));
 
-import '@/middleware';
+import middleware from '@/middleware';
 
 if (!handlerRef.fn) {
   throw new Error('middleware did not register a handler');
 }
-const middleware = handlerRef.fn;
 
 function makeRequest(pathname: string, options: { authed?: boolean; search?: string } = {}) {
   const search = options.search ?? '';
@@ -46,6 +45,10 @@ function makeRequest(pathname: string, options: { authed?: boolean; search?: str
 }
 
 describe('middleware gating', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('returns a 401 JSON response for unauthenticated /api/* requests', async () => {
     const res = await middleware(makeRequest('/api/profile'));
     const response = res as Response;
@@ -106,5 +109,27 @@ describe('middleware gating', () => {
     const response = res as Response;
     const loc = new URL(response.headers.get('location') as string);
     expect(loc.searchParams.get('callbackUrl')).toBe('/dashboard?tab=focus');
+  });
+
+  it('blocks non-worker routes when running in worker mode', async () => {
+    vi.stubEnv('COPILOT_WORKER_MODE', '1');
+
+    const root = (await middleware(makeRequest('/'))) as Response;
+    const profile = (await middleware(makeRequest('/api/profile'))) as Response;
+    const auth = (await middleware(makeRequest('/api/auth/signin'))) as Response;
+
+    expect(root.status).toBe(404);
+    expect(profile.status).toBe(404);
+    expect(auth.status).toBe(404);
+    expect(root.headers.get('set-cookie')).toBeNull();
+    expect(profile.headers.get('set-cookie')).toBeNull();
+    expect(auth.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('keeps worker health and internal routes reachable in worker mode', async () => {
+    vi.stubEnv('COPILOT_WORKER_MODE', '1');
+
+    expect(((await middleware(makeRequest('/api/health'))) as Response).status).toBe(200);
+    expect(((await middleware(makeRequest('/api/internal/copilot/execute'))) as Response).status).toBe(200);
   });
 });

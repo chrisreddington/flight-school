@@ -19,6 +19,7 @@ async function main(): Promise<void> {
     .addNextJsApp('copilot-worker', '.', { runScriptName: 'dev:worker' })
     .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
     .withEnvironment('COPILOT_WORKER_ENABLED', '1')
+    .withEnvironment('COPILOT_WORKER_MODE', '1')
     .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
   const workerEndpoint = await copilotWorker.getEndpoint('http');
   const workerUrl = await workerEndpoint.property(EndpointProperty.Url);

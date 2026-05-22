@@ -35,6 +35,13 @@ const PUBLIC_PREFIXES = [
   '/favicon.ico',
 ];
 
+const WORKER_ALLOWED_PREFIXES = [
+  '/api/health',
+  '/api/internal',
+  '/_next',
+  '/favicon.ico',
+];
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return true;
@@ -43,7 +50,14 @@ function isPublicPath(pathname: string): boolean {
   return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
 }
 
-export default auth((req) => {
+function isWorkerAllowedPath(pathname: string): boolean {
+  if (WORKER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return true;
+  }
+  return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
+}
+
+const authMiddleware = auth((req) => {
   const { nextUrl } = req;
   const pathname = nextUrl.pathname;
 
@@ -69,6 +83,16 @@ export default auth((req) => {
   }
   return NextResponse.redirect(signInUrl);
 });
+
+export default function middleware(...args: Parameters<typeof authMiddleware>) {
+  const [req] = args;
+  const pathname = req.nextUrl.pathname;
+  if (process.env.COPILOT_WORKER_MODE === '1' && !isWorkerAllowedPath(pathname)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  return authMiddleware(...args);
+}
 
 export const config = {
   // Match everything except Next internals and obvious static asset files.
