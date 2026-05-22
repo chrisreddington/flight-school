@@ -15,9 +15,7 @@ const LIMITED_EXPORT_FILES = [
 const ALLOWED_EXPORTS: Record<string, string[]> = {
   'src/lib/auth/token-store.ts': [
     'StoredToken',
-    'TokenStore',
     'InMemoryTokenStore',
-    'CosmosTokenStoreConfig',
     'CosmosTokenStore',
     'getTokenStore',
     'createDefaultTokenStore',
