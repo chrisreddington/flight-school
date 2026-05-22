@@ -20,6 +20,10 @@ That is acceptable for this exploratory ACA lab, but it is not the target shape
 for a public multi-user platform. The target architecture is an internal worker
 service with a per-user Copilot runtime pool, described in
 [`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md).
+The current code has the first seams for that migration:
+`src/lib/copilot/execution/` isolates chat execution,
+`src/app/api/jobs/dispatcher.ts` isolates async job dispatch, and
+`src/lib/copilot/runtime/` defines the prototype per-user runtime-pool contract.
 
 ## Building the image
 
@@ -98,7 +102,6 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | `AUTH_GITHUB_ID` | Key Vault `auth-github-id` | GitHub App client ID. |
 | `AUTH_GITHUB_SECRET` | Key Vault `auth-github-secret` | GitHub App client secret. |
 | `AUTH_TRUST_HOST` | Env (`true`) | ACA terminates TLS at the edge; required for Auth.js URL resolution. |
-| `ACA_DEPLOYMENT` | Env (`true`) | Disables the dev-only `gh` CLI token fallback in `src/lib/github/client.ts`. |
 | `AUDIT_SALT` | Key Vault `audit-salt` | Stable hash salt for user IDs in audit logs. Long random string (`openssl rand -hex 32`). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault `appinsights-connection-string` (auto-seeded) | App telemetry. |
 | `COSMOS_CONNECTION_STRING` | Key Vault `cosmos-conn-string` (auto-seeded) | Future server-side session/token store. |
@@ -153,6 +156,7 @@ the Cosmos session store before lowering the limits.
 - [`infra/README.md`](../infra/README.md) — Bicep modules, Key Vault secret
   bootstrap, redeploy / rotate / cleanup recipes.
 - [`docs/architecture-multitenant.md`](architecture-multitenant.md) —
-  Multi-tenancy design (Auth.js → per-request Octokit → per-session Copilot).
+  Multi-tenancy design (Auth.js → per-request Octokit → Copilot execution
+  boundary → per-session Copilot).
 - [`docs/migrations/2025-multitenant-auth.md`](migrations/2025-multitenant-auth.md)
   — Upgrade notes for existing developers.

@@ -13,8 +13,10 @@ Flight School is a sample implementation showing how to build AI-powered develop
 > by passing each authenticated user's GitHub token into every SDK session.
 > It does **not** provide production-grade per-user Copilot CLI process
 > isolation: each app process currently owns a shared in-process SDK runtime.
-> See [Multi-tenant Architecture](docs/architecture-multitenant.md) for the
-> current model and the planned internal worker-pool direction.
+> The codebase now has an internal execution boundary and prototype per-user
+> runtime-pool contracts, but routes still execute in-process. See
+> [Multi-tenant Architecture](docs/architecture-multitenant.md) for the current
+> model and the worker-service target.
 
 ## Getting Started
 
@@ -64,8 +66,8 @@ Experimental ACA deployment notes:
 - [`infra/README.md`](infra/README.md) — Bicep modules, GitHub App setup
   against the ACA FQDN, deploy / rotate / cleanup recipes.
 - [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md) —
-  Multi-tenant design (Auth.js → per-request Octokit → per-session Copilot
-  SDK identity).
+  Multi-tenant design (Auth.js → per-request Octokit → Copilot execution
+  boundary → per-session SDK identity).
 
 ### Codespaces
 

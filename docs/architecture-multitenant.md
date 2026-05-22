@@ -15,6 +15,7 @@ flowchart LR
     subgraph NextProc["Next.js server process"]
         AuthJS["Auth.js v5<br/>GitHub App OAuth"]
         Route["API route<br/>+ withUserGuards"]
+        Exec["Copilot execution boundary<br/>executeCopilotChat()"]
         Ctx["getUserContext()<br/>requireUserContext()"]
         Oct["getOctokitForRequest()<br/>(fresh per request)"]
         Sess["createLoggedChatSession(<br/>{ userId, gitHubToken })"]
@@ -30,7 +31,7 @@ flowchart LR
     AuthJS --> Route
     Route --> Ctx
     Ctx --> Oct --> GH
-    Route --> Sess
+    Route --> Exec --> Sess
     Sess --> Client --> Copilot
     Sess --> MCP --> MCPSrv
 ```
@@ -66,11 +67,13 @@ Target direction:
 
 1. Route code calls an internal Copilot execution boundary instead of direct SDK
    session factories.
-2. A private worker service resolves fresh user credentials from the token store
+2. Background jobs call a dispatcher boundary instead of wiring job executors
+   directly from the route.
+3. A private worker service resolves fresh user credentials from the token store
    at execution time.
-3. The worker owns a per-user Copilot runtime pool, including user-specific
+4. The worker owns a per-user Copilot runtime pool, including user-specific
    `COPILOT_HOME`, runtime TTL, health checks, and eviction.
-4. Web replicas remain responsible for auth, HTTP, UI streaming, and job
+5. Web replicas remain responsible for auth, HTTP, UI streaming, and job
    submission; workers own Copilot runtime lifecycle.
 
 See
@@ -106,9 +109,12 @@ for the worker-pool design.
 | Auth.js session | `src/lib/auth/config.ts` | `auth`, `handlers`, `signIn`, `signOut` |
 | User context in handlers | `src/lib/auth/context.ts` | `getUserContext`, `requireUserContext`, `UnauthorizedError` |
 | Per-request Octokit | `src/lib/github/client.ts` | `getOctokitForRequest`, `getOctokitForToken` |
+| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, `CopilotChatExecutionRequest` |
 | Copilot session factory | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
 | Logged session helpers | `src/lib/copilot/server.ts` | `createLoggedChatSession`, `createLoggedCoachSession`, `SessionIdentity` |
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
+| Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution`, `executeDispatchedJob` |
+| Prototype runtime-pool contracts | `src/lib/copilot/runtime/` | `createPerUserRuntimePool`, `CopilotRuntimePool` |
 | Route guard composition | `src/lib/security/guard.ts` | `withUserGuards` |
 | Audit + abuse controls | `src/lib/security/` | `auditLog`, `checkRateLimit`, `acquireSlot` |
 
@@ -370,10 +376,11 @@ Concretely:
 
 ## Future work: durable async execution
 
-The current background-job executor runs in-process via `setImmediate`,
-which limits horizontal scaling and means a pod-recycle mid-job loses
-the work. The recommended end-state is a Service Bus queue with a
-KEDA-scaled Azure Container Apps Job worker:
+The current background-job executor still runs in-process via a `setImmediate`
+dispatcher boundary, which limits horizontal scaling and means a pod-recycle
+mid-job loses the work. The dispatcher boundary keeps job routes from owning
+executor wiring, but it is not durable execution yet. The recommended end-state
+is a Service Bus queue with a KEDA-scaled Azure Container Apps Job worker:
 
 - `POST /api/jobs` enqueues the job descriptor (still userId-only) to
   Service Bus after `seedTokenStoreFromJwt`.

@@ -12,8 +12,8 @@
 
 ## Resumption Section
 - **Scope**: Implementation foundation for `docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`.
-- **Current Phase**: Plan ready for review/execution.
-- **Next Action**: Execute Task 1.
+- **Current Phase**: Final validation.
+- **Next Action**: Run Task 6 verification commands.
 - **Blockers**: None.
 
 ## From Spec
@@ -477,7 +477,7 @@ export function dispatchJobExecution(request: DispatchJobExecutionRequest): Prom
 }
 ```
 
-- [ ] **Step 3.4: Update jobs route to use dispatcher**
+- [x] **Step 3.4: Update jobs route to use dispatcher**
 
 In `src/app/api/jobs/route.ts`, remove `executeByType` and `enqueueExecution`, import:
 
@@ -502,13 +502,13 @@ dispatchJobExecution({
 });
 ```
 
-- [ ] **Step 3.5: Run focused job tests**
+- [x] **Step 3.5: Run focused job tests**
 
 Run: `npm test -- --run src/app/api/jobs/dispatcher.test.ts src/app/api/jobs/route.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 3.6: Commit Task 3**
+- [x] **Step 3.6: Commit Task 3**
 
 ```bash
 git add src/app/api/jobs/dispatcher.ts src/app/api/jobs/dispatcher.test.ts src/app/api/jobs/route.ts
@@ -523,7 +523,7 @@ git commit -m "refactor: add worker-ready job dispatcher" -m "Co-authored-by: Co
 - Create: `src/lib/copilot/runtime/index.ts`
 - Create: `src/lib/copilot/runtime/per-user-pool.test.ts`
 
-- [ ] **Step 4.1: Write fake runtime pool tests**
+- [x] **Step 4.1: Write fake runtime pool tests**
 
 Create `src/lib/copilot/runtime/per-user-pool.test.ts`:
 
@@ -558,13 +558,13 @@ describe('createPerUserRuntimePool', () => {
 });
 ```
 
-- [ ] **Step 4.2: Run test to verify it fails**
+- [x] **Step 4.2: Run test to verify it fails**
 
 Run: `npm test -- --run src/lib/copilot/runtime/per-user-pool.test.ts`
 
 Expected: FAIL because runtime modules do not exist.
 
-- [ ] **Step 4.3: Add runtime types**
+- [x] **Step 4.3: Add runtime types**
 
 Create `src/lib/copilot/runtime/types.ts`:
 
@@ -587,7 +587,7 @@ export interface CreatePerUserRuntimePoolOptions {
 }
 ```
 
-- [ ] **Step 4.4: Add per-user pool**
+- [x] **Step 4.4: Add per-user pool**
 
 Create `src/lib/copilot/runtime/per-user-pool.ts`:
 
@@ -654,7 +654,7 @@ export function createPerUserRuntimePool({
 }
 ```
 
-- [ ] **Step 4.5: Add runtime exports**
+- [x] **Step 4.5: Add runtime exports**
 
 Create `src/lib/copilot/runtime/index.ts`:
 
@@ -663,13 +663,13 @@ export { createPerUserRuntimePool } from './per-user-pool';
 export type { CopilotRuntime, CopilotRuntimePool, CreatePerUserRuntimePoolOptions } from './types';
 ```
 
-- [ ] **Step 4.6: Run runtime tests**
+- [x] **Step 4.6: Run runtime tests**
 
 Run: `npm test -- --run src/lib/copilot/runtime/per-user-pool.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 4.7: Commit Task 4**
+- [x] **Step 4.7: Commit Task 4**
 
 ```bash
 git add src/lib/copilot/runtime
@@ -683,7 +683,7 @@ git commit -m "feat: add copilot runtime pool contracts" -m "Co-authored-by: Cop
 - Modify: `docs/deployment-aca.md`
 - Modify: `docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`
 
-- [ ] **Step 5.1: Document new boundary**
+- [x] **Step 5.1: Document new boundary**
 
 In `docs/architecture-multitenant.md`, add a short subsection under the current runtime limitation:
 
@@ -696,7 +696,7 @@ adapter still runs in-process, preserving current behavior while making the rout
 layer independent of the runtime location.
 ```
 
-- [ ] **Step 5.2: Document dispatcher boundary**
+- [x] **Step 5.2: Document dispatcher boundary**
 
 In `docs/deployment-aca.md`, add:
 
@@ -710,7 +710,7 @@ with Service Bus or another private worker transport without changing the job AP
 payload contract.
 ```
 
-- [ ] **Step 5.3: Mark spec implementation status**
+- [x] **Step 5.3: Mark spec implementation status**
 
 In `docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`, update status line:
 

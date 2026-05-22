@@ -1,12 +1,12 @@
 # Copilot Worker Pool Design
 
-**Status**: Review
+**Status**: Foundation Implemented
 **Date**: 2026-05-22
 
 ## Resumption Section
 - **Scope**: Document the target architecture for moving Flight School from a shared in-process Copilot runtime to an internal worker service with per-user runtime isolation.
-- **Current Phase**: Design review.
-- **Next Action**: Turn this design into an implementation plan after review approval.
+- **Current Phase**: Foundation implemented.
+- **Next Action**: Extract the in-process boundaries into an internal worker service when infrastructure work starts.
 - **Blockers**: None.
 
 ## Job Story
@@ -33,7 +33,7 @@ When Flight School is offered to arbitrary GitHub users, we want AI work to run 
 - Introducing shared sessions between users.
 - Making Flight School production-ready in this spec alone.
 - Selecting a final queue provider beyond the Azure-oriented direction already used by the repo.
-- Implementing runtime pool code as part of this design document.
+- Shipping the full worker service or spawning isolated Copilot CLI processes.
 
 ## User Stories
 
@@ -118,6 +118,11 @@ flowchart LR
 - User runtime eviction gracefully disconnects sessions and clears in-memory handles.
 - Runtime crashes are scoped to the owning user and surface as retryable or re-auth-required job failures.
 - Telemetry captures runtime start, reuse, eviction, crash, session create, and send durations.
+
+## Foundation Implemented
+- `src/lib/copilot/execution/` routes chat through an execution boundary while preserving current in-process SDK behavior.
+- `src/app/api/jobs/dispatcher.ts` moves background-job executor routing behind a dispatch boundary while keeping job payloads token-free.
+- `src/lib/copilot/runtime/` defines prototype per-user runtime-pool contracts with user-keyed reuse, idle TTL eviction, capacity eviction, and lifecycle events.
 
 ## Specialist Sign-Off
 | Specialist | Status | Notes |
