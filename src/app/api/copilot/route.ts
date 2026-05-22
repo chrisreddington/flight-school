@@ -8,17 +8,17 @@
  */
 
 import { parseJsonBody } from '@/lib/api';
-import { now, nowMs } from '@/lib/utils/date-utils';
+import { nowMs } from '@/lib/utils/date-utils';
 import {
     type CopilotChatRequest,
     validateCopilotChatRequest,
 } from '@/lib/copilot/api-requests';
-import { createLoggedChatSession, createLoggedGitHubChatSession, createSessionIdentity } from '@/lib/copilot/server';
+import { executeCopilotChat } from '@/lib/copilot/execution';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { logger } from '@/lib/logger';
 import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
 import { CHAT_GUARD } from '@/lib/security/route-defaults';
-import { needsGitHubTools } from '@/lib/utils/content-detection';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Copilot API');
@@ -43,42 +43,17 @@ export async function POST(request: NextRequest) {
       { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
       async (ctx) => {
         const identity = createSessionIdentity(ctx);
-        const enableGitHub = useGitHubTools === true || needsGitHubTools(prompt);
-        const sessionType = enableGitHub ? 'GitHub Chat' : 'Chat (fast)';
-
-        log.info(`${sessionType} - ${enableGitHub ? 'with MCP' : 'lightweight'}`);
-
-        const loggedSession = enableGitHub
-          ? await createLoggedGitHubChatSession(identity, sessionType, prompt, conversationId)
-          : await createLoggedChatSession(identity, sessionType, prompt, conversationId);
-
-        const result = await loggedSession.sendAndWait(prompt);
-
-        loggedSession.destroy();
+        const result = await executeCopilotChat({
+          identity,
+          prompt,
+          useGitHubTools,
+          conversationId,
+        });
 
         const totalTime = nowMs() - startTime;
         log.info(`Total: ${totalTime}ms`);
 
-        return NextResponse.json({
-          response: result.responseText,
-          toolCalls: result.toolCalls.map(t => ({
-            name: t.name,
-            args: t.args,
-            result: t.result,
-            duration: t.endTime ? t.endTime - t.startTime : undefined,
-          })),
-          meta: {
-            generatedAt: now(),
-            model: loggedSession.model,
-            toolsUsed: result.toolCalls.map(t => t.name),
-            totalTimeMs: result.totalTimeMs,
-            usedGitHubTools: enableGitHub,
-            sessionCreateMs: loggedSession.sessionMetrics?.sessionCreateMs ?? null,
-            sessionPoolHit: loggedSession.sessionMetrics ? !loggedSession.sessionMetrics.createdNew : null,
-            mcpEnabled: loggedSession.sessionMetrics?.mcpEnabled ?? null,
-            sessionReused: loggedSession.sessionMetrics?.reusedConversation ?? null,
-          },
-        });
+        return NextResponse.json(result);
       },
     );
   } catch (error) {
