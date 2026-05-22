@@ -10,9 +10,11 @@ type Boundary =
   | 'withUserGuards'
   | 'createStorageRoute'
   | 'getOctokitForRequest'
-  | 'verifyCronRequest';
+  | 'verifyCronRequest'
+  | 'internalWorkerSecret';
 
 const ROUTE_BOUNDARIES: Record<string, Boundary> = {
+  '_internal/copilot/execute/route.ts': 'internalWorkerSecret',
   'ai-activity/metrics/route.ts': 'requireUserContext',
   'ai-activity/route.ts': 'requireUserContext',
   'ai-activity/stream/route.ts': 'requireUserContext',
@@ -53,6 +55,7 @@ const SOURCE_MARKERS: Record<Boundary, string | null> = {
   createStorageRoute: 'createStorageRoute(',
   getOctokitForRequest: 'getOctokitForRequest(',
   verifyCronRequest: 'verifyCronRequest(',
+  internalWorkerSecret: 'COPILOT_WORKER_SECRET',
 };
 
 function routeFiles(dir = API_ROUTE_ROOT): string[] {
