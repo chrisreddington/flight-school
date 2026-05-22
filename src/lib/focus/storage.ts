@@ -55,6 +55,7 @@ import type {
     LearningTopic,
 } from './types';
 import { getTodaysFocusFromHistory, saveFocusToHistory } from './history';
+import { markTopicReviewedInHistory } from './review-schedule';
 
 const log = logger.withTag('FocusStore');
 
@@ -383,23 +384,18 @@ class LocalStorageFocusStore implements FocusStoreInterface {
    */
   async markTopicReviewed(dateKey: string, topicId: string): Promise<void> {
     const schema = await this.getStorage();
-    const record = schema.history[dateKey];
+    const recordExists = Boolean(schema.history[dateKey]);
+    const updated = markTopicReviewedInHistory(schema.history, dateKey, topicId, now());
 
-    if (!record) {
+    if (!recordExists) {
       log.warn('Attempted to mark topic reviewed for non-existent date', { dateKey, topicId });
       return;
     }
 
-    for (let i = 0; i < record.learningTopics.length; i++) {
-      const topicArray = record.learningTopics[i];
-      const topicIndex = topicArray.findIndex((topic) => topic.data.id === topicId);
-
-      if (topicIndex !== -1) {
-        topicArray[topicIndex].data.lastReviewedAt = now();
-        await this.setStorage(schema);
-        log.debug('Topic marked as reviewed', { dateKey, topicId });
-        return;
-      }
+    if (updated) {
+      await this.setStorage(schema);
+      log.debug('Topic marked as reviewed', { dateKey, topicId });
+      return;
     }
 
     log.warn('Topic not found for review tracking', { dateKey, topicId });
