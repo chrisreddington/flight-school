@@ -8,7 +8,7 @@
  * @see {@link createRepository} for the underlying implementation
  */
 
-import { parseJsonBody, validationErrorResponse } from '@/lib/api';
+import { authErrorResponse, parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import {
@@ -18,6 +18,7 @@ import {
 import { getOctokitForRequest } from '@/lib/github/client';
 import { generateLearningReadme } from '@/lib/github/readme';
 import { createRepository, getFileShaWithRetry, updateRepoFile } from '@/lib/github/repos';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -98,7 +99,7 @@ export async function POST(
   try {
     const octokit = await getOctokitForRequest();
     const ctx = await requireUserContext();
-    const identity = { userId: ctx.userId, gitHubToken: ctx.accessToken };
+    const identity = createSessionIdentity(ctx);
 
     // Start README generation immediately if a topic was provided — it only needs
     // request data so it can run concurrently with repository creation.
@@ -191,6 +192,8 @@ export async function POST(
       },
     } satisfies RepoResponse);
   } catch (error) {
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse as NextResponse<ErrorResponse>;
     return handleApiError(error, 'Repos API', startTime);
   }
 }

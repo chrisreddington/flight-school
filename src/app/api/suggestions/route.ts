@@ -1,4 +1,5 @@
 import { parseJsonBodyWithFallback } from '@/lib/api';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { generateWhatsNext, getWhatsNextFallback, type WhatsNextResult } from '@/lib/copilot/suggestions';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { getOctokitForRequest } from '@/lib/github/client';
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 
         try {
           const result: WhatsNextResult = await generateWhatsNext(
-            { userId: ctx.userId, gitHubToken: ctx.accessToken },
+            createSessionIdentity(ctx),
             completedChallenge,
             profileContext
           );

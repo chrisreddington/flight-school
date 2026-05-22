@@ -8,7 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { handleUnauthorizedError } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import {
   getEvaluationProgress,
   clearEvaluationProgress,
@@ -34,10 +35,7 @@ export async function GET(
 
     return NextResponse.json(progress);
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
-    throw err;
+    return handleUnauthorizedError(err);
   }
 }
 
@@ -53,9 +51,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
-    throw err;
+    return handleUnauthorizedError(err);
   }
 }

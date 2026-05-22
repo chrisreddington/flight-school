@@ -33,7 +33,7 @@ import {
 const log = logger.withTag('useThreads');
 
 /** State returned by the useThreads hook */
-export interface UseThreadsState {
+interface UseThreadsState {
   /** All threads, ordered by most recently updated */
   threads: Thread[];
   /** Currently active thread (null if none selected) */
@@ -45,7 +45,7 @@ export interface UseThreadsState {
 }
 
 /** Actions provided by the useThreads hook */
-export interface UseThreadsActions {
+interface UseThreadsActions {
   /** Create a new thread and optionally make it active */
   createThread: (options?: CreateThreadOptions, makeActive?: boolean) => Promise<Thread>;
   /** Select a thread by ID */

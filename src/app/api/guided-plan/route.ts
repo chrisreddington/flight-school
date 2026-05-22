@@ -1,5 +1,6 @@
-import { parseJsonBodyWithFallback } from '@/lib/api';
+import { authErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateGuidedPlan, getGuidedPlanFallback } from '@/lib/copilot/guided-mode';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { requireUserContext } from '@/lib/auth/context';
 import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import { getOctokitForRequest } from '@/lib/github/client';
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const ctx = await requireUserContext();
     const plan = await generateGuidedPlan(
-      { userId: ctx.userId, gitHubToken: ctx.accessToken },
+      createSessionIdentity(ctx),
       challenge,
       profileContext
     );
@@ -53,6 +54,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // fallback so the UI can show the upgrade banner.
     const entitlementResponse = copilotEntitlementErrorResponse(error);
     if (entitlementResponse) return entitlementResponse;
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
     log.error('Failed to generate guided plan', error);
     return NextResponse.json(getGuidedPlanFallback(challenge));
   }

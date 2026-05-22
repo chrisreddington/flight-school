@@ -23,6 +23,7 @@ import {
   type MutableRefObject,
 } from 'react';
 import styles from './ChallengeAuthoring.module.css';
+import type { AuthoringMessage } from './types';
 import type { TemplateSelection } from './quick-templates';
 import { AuthoringMessageList } from './authoring-message-list';
 import { AuthoringInputForm } from './authoring-input-form';
@@ -38,16 +39,6 @@ function stripJsonFromChatContent(content: string): string {
     return inner.startsWith('{') || inner.startsWith('[') ? '' : match;
   });
   return stripped.replace(/\n{3,}/g, '\n\n').trim();
-}
-
-/**
- * Message in the authoring conversation.
- */
-export interface AuthoringMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
 }
 
 /**

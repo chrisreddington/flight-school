@@ -170,15 +170,3 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
       return { icon: '🛠️', summary: `Running ${code(name)}` };
   }
 }
-
-/**
- * Compact completion line used once a tool finishes. Keeps the same icon so the
- * eye doesn't have to re-anchor between running and complete states.
- */
-export function toolCompletionLabel(name: string, args?: unknown): ToolSummaryResult {
-  const { icon, summary } = toolSummary(name, args);
-  // Reuse the running summary verbatim — "Searched code in foo for bar" reads
-  // awkwardly past-tense for many of our mappings, so we keep the present-tense
-  // line and rely on the ✓ glyph + duration to convey completion.
-  return { icon, summary };
-}

@@ -5,7 +5,8 @@
  * **Per-user**: a user can only update metrics on their own events.
  */
 
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { authErrorResponse } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -43,9 +44,8 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ success: true, eventId });
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return authResponse;
     const errorMessage = err instanceof Error ? err.message : 'Failed to update activity metrics';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

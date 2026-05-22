@@ -42,6 +42,10 @@ vi.mock('@/lib/auth/context', () => ({
 vi.mock('@/lib/copilot/server', () => ({
   createLoggedLightweightCoachSession: hoisted.createLoggedLightweightCoachSessionMock,
   createLoggedCoachSession: hoisted.createLoggedCoachSessionMock,
+  createSessionIdentity: (ctx: { userId: string; accessToken: string }) => ({
+    userId: ctx.userId,
+    gitHubToken: ctx.accessToken,
+  }),
 }));
 
 vi.mock('@/lib/copilot/guided-mode', async () => {

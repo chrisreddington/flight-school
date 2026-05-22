@@ -21,9 +21,10 @@
  * @see SPEC-006 for custom challenge authoring requirements (S1, AC1.1-AC1.4)
  */
 
-import { createSSEResponse, parseJsonBody } from '@/lib/api';
+import { authErrorResponse, createSSEResponse, parseJsonBody } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { nowMs } from '@/lib/utils/date-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
 import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-parser';
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
     const { prompt, conversationId, context, action } = parseResult.data;
 
     const { userId, accessToken } = await requireUserContext();
-    const identity = { userId, gitHubToken: accessToken };
+    const identity = createSessionIdentity({ userId, accessToken });
 
     log.info(`Authoring request: ${action || 'auto'} (conv: ${conversationId ? 'existing' : 'new'})`);
 
@@ -132,6 +133,8 @@ export async function POST(request: NextRequest) {
     // the upgrade banner instead of a generic 500.
     const entitlementResponse = copilotEntitlementErrorResponse(error);
     if (entitlementResponse) return entitlementResponse;
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
 
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to start authoring session';

@@ -1,5 +1,6 @@
-import { parseJsonBodyWithFallback } from '@/lib/api';
+import { authErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateTopicQuiz, type QuizResult } from '@/lib/copilot/quiz';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { requireUserContext } from '@/lib/auth/context';
 import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import { getOctokitForRequest } from '@/lib/github/client';
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await requireUserContext();
     const quiz = await generateTopicQuiz(
-      { userId: ctx.userId, gitHubToken: ctx.accessToken },
+      createSessionIdentity(ctx),
       topicTitle,
       topicDescription,
       profileContext
@@ -81,6 +82,8 @@ export async function POST(request: NextRequest) {
     // placeholder quiz (that's for deployments with no AI configured).
     const entitlementResponse = copilotEntitlementErrorResponse(error);
     if (entitlementResponse) return entitlementResponse;
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
     if (isAIUnavailableError(error)) {
       return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
     }
@@ -88,4 +91,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
   }
 }
-

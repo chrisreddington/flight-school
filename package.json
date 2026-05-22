@@ -50,6 +50,7 @@
     "@primer/octicons-react": "^19.25.0",
     "@primer/react": "^38.23.0",
     "@vercel/otel": "^2.0.0",
+    "jose": "^6.2.3",
     "next": "16.2.6",
     "next-auth": "^5.0.0-beta.31",
     "octokit": "^5.0.5",
@@ -57,7 +58,7 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "vscode-jsonrpc": "8.2.1"
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -74,9 +75,7 @@
     "jsdom": "^29.1.1",
     "knip": "^6.13.1",
     "madge": "^8.0.0",
-    "nodemon": "^3.1.14",
     "ts-prune": "^0.10.3",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1",
     "vitest": "^4.0.18"

@@ -6,13 +6,7 @@
  */
 
 import type { Octokit } from 'octokit';
-import type { CreateIssueInput, CreatedIssue } from './types';
-
-export interface OpenIssueSummary {
-  title: string;
-  repo: string;
-  labels: string[];
-}
+import type { CreateIssueInput, CreatedIssue, OpenIssueSummary } from './types';
 
 /**
  * Creates a new issue in the specified repository.

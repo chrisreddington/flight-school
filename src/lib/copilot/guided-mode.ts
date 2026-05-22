@@ -3,7 +3,7 @@ import { createLoggedLightweightCoachSession, type SessionIdentity } from './ser
 import type { GuidedPlan, GuidedStep, ScaffoldLevel } from './guided-mode-types';
 import { getGuidedPlanFallback } from './guided-mode-types';
 
-export type { GuidedPlan, GuidedStep, ScaffoldLevel };
+export type { GuidedPlan };
 export { getGuidedPlanFallback };
 
 interface RawGuidedPlan {

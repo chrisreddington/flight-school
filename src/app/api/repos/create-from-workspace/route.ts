@@ -8,7 +8,7 @@
  * @see {@link createRepository} for the underlying implementation
  */
 
-import { parseJsonBody, validationErrorResponse } from '@/lib/api';
+import { authErrorResponse, parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import {
@@ -97,6 +97,8 @@ export async function POST(
     const user = await getAuthenticatedUser(octokit);
     owner = user.login;
   } catch (error) {
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse as NextResponse<ExportErrorResponse>;
     const errorStatus = (error as { status?: number })?.status;
     const responseMessage = `Failed to authenticate with GitHub. ${
       errorStatus === 401 ? 'Token may be invalid or expired.' : 'Please check your token.'
@@ -234,6 +236,8 @@ export async function POST(
       },
     } satisfies ExportSuccessResponse);
   } catch (error) {
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse as NextResponse<ExportErrorResponse>;
     const errorStatus = (error as { status?: number })?.status;
     const errorMessage = error instanceof Error ? error.message : String(error);
     log.error(`Workspace export failed: status=${errorStatus}, message=${errorMessage}`, error);

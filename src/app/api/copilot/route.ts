@@ -13,7 +13,7 @@ import {
     type CopilotChatRequest,
     validateCopilotChatRequest,
 } from '@/lib/copilot/api-requests';
-import { createLoggedChatSession, createLoggedGitHubChatSession } from '@/lib/copilot/server';
+import { createLoggedChatSession, createLoggedGitHubChatSession, createSessionIdentity } from '@/lib/copilot/server';
 import { logger } from '@/lib/logger';
 import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     return await withUserGuards(
       { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
       async (ctx) => {
-        const identity = { userId: ctx.userId, gitHubToken: ctx.accessToken };
+        const identity = createSessionIdentity(ctx);
         const enableGitHub = useGitHubTools === true || needsGitHubTools(prompt);
         const sessionType = enableGitHub ? 'GitHub Chat' : 'Chat (fast)';
 

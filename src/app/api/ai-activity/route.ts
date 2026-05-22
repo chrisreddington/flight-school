@@ -9,12 +9,12 @@
  * authenticated user — never return the raw buffer.
  */
 
-import { apiSuccess } from '@/lib/api';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { apiSuccess, handleUnauthorizedError } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
 import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import { now } from '@/lib/utils/date-utils';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 export interface AIActivityResponse {
   events: ReturnType<typeof toPublicActivityEvent>[];
@@ -45,10 +45,7 @@ export async function GET(request: NextRequest) {
       { fetchedAt: now(), eventCount: events.length }
     );
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
-    throw err;
+    return handleUnauthorizedError(err);
   }
 }
 
@@ -62,9 +59,6 @@ export async function DELETE() {
     activityLogger.clear(userId);
     return apiSuccess({ cleared: true });
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
-    throw err;
+    return handleUnauthorizedError(err);
   }
 }

@@ -45,7 +45,7 @@ export function validateCreateRepoRequest(body: unknown): string | null {
 // =============================================================================
 
 /** Request body for creating a generic issue */
-export interface CreateIssueRequest {
+interface CreateIssueRequest {
   type: 'generic';
   owner: string;
   repo: string;
@@ -55,7 +55,7 @@ export interface CreateIssueRequest {
 }
 
 /** Request body for creating a learning goal issue */
-export interface CreateLearningGoalRequest {
+interface CreateLearningGoalRequest {
   type: 'learning-goal';
   owner: string;
   repo: string;

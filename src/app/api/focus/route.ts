@@ -19,6 +19,7 @@ import {
     buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
 import {
+    createSessionIdentity,
     createLoggedLightweightCoachSession,
     type SessionIdentity,
 } from '@/lib/copilot/server';
@@ -277,7 +278,7 @@ export async function GET() {
   try {
     const result = await withUserGuards(
       { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'GET' } },
-      (ctx) => generateFocus({ userId: ctx.userId, gitHubToken: ctx.accessToken }),
+      (ctx) => generateFocus(createSessionIdentity(ctx)),
     );
     return NextResponse.json(result);
   } catch (error) {
@@ -300,7 +301,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await withUserGuards(
       { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'POST', component: body.component } },
-      (ctx) => generateFocus({ userId: ctx.userId, gitHubToken: ctx.accessToken }, {
+      (ctx) => generateFocus(createSessionIdentity(ctx), {
         component: body.component,
         skillProfile: body.skillProfile,
         existingTopicTitles: body.existingTopicTitles,

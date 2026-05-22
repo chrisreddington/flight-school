@@ -14,8 +14,8 @@ import { recordAiOperation } from '@/lib/observability/telemetry';
 import { activityLogger } from './activity/logger';
 import {
   CHAT_MODEL,
+  getCopilotGithubMcpTools,
   getConversationSession,
-  LEARNING_LENS_SYSTEM_PROMPT,
 } from './sessions';
 import type {
   StreamEvent,
@@ -26,6 +26,27 @@ import type {
 // =============================================================================
 // Internal Types
 // =============================================================================
+
+/**
+ * Learning lens system prompt for educational chat sessions.
+ *
+ * Implements the learning-focused response pattern from copilot-instructions.md:
+ * - Explains reasoning step-by-step
+ * - Suggests follow-up questions and experiments
+ * - Connects concepts to user's repositories when relevant
+ * - Builds understanding rather than just providing solutions
+ *
+ * @see SPEC-001 AC3.1, AC3.2
+ */
+const LEARNING_LENS_SYSTEM_PROMPT = `You are a developer learning companion.
+
+When responding:
+1. Explain your reasoning step-by-step
+2. Suggest 2-3 follow-up questions or experiments
+3. Reference the user's code when relevant
+4. Be conversational but focused
+
+If user wants a quick answer, skip the explanations.`;
 
 /** Configuration for creating a streaming session */
 interface StreamingSessionConfig {
@@ -73,12 +94,13 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   const poolKey = useGitHubTools ? `${poolKeyPrefix}:mcp` : `${poolKeyPrefix}:lightweight`;
 
   // Create session with or without MCP tools
+  const githubMcpTools = getCopilotGithubMcpTools();
   const { session, metrics } = useGitHubTools
     ? await getConversationSession(userId, conversationId, poolKey, {
         includeMcpTools: true,
         model,
-        ...(process.env.COPILOT_GITHUB_MCP_TOOLS
-          ? { tools: process.env.COPILOT_GITHUB_MCP_TOOLS.split(',').map((tool) => tool.trim()).filter(Boolean) }
+        ...(githubMcpTools.length > 0
+          ? { tools: githubMcpTools }
           : {}),
         systemMessage,
         userId,

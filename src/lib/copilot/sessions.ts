@@ -46,6 +46,14 @@ export const MODEL_TIERS = {
 /** Override chat model for performance tuning */
 export const CHAT_MODEL = process.env.COPILOT_CHAT_MODEL ?? MODEL_TIERS.fastChat;
 
+/** Parse the optional MCP tool allowlist from env using one shared rule. */
+export function getCopilotGithubMcpTools(): string[] {
+  return process.env.COPILOT_GITHUB_MCP_TOOLS
+    ?.split(',')
+    .map((tool) => tool.trim())
+    .filter(Boolean) ?? [];
+}
+
 const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
   if (request.kind === 'mcp') {
     return { kind: 'approve-once' };
@@ -417,28 +425,3 @@ export async function warmCopilotClient(): Promise<void> {
   log.info('Client warmed', { durationMs: duration });
   log.info('Conversation caching active for multi-turn chat performance');
 }
-
-// =============================================================================
-// Learning-Focused Sessions (S3)
-// =============================================================================
-
-/**
- * Learning lens system prompt for educational chat sessions.
- *
- * Implements the learning-focused response pattern from copilot-instructions.md:
- * - Explains reasoning step-by-step
- * - Suggests follow-up questions and experiments
- * - Connects concepts to user's repositories when relevant
- * - Builds understanding rather than just providing solutions
- *
- * @see SPEC-001 AC3.1, AC3.2
- */
-export const LEARNING_LENS_SYSTEM_PROMPT = `You are a developer learning companion.
-
-When responding:
-1. Explain your reasoning step-by-step
-2. Suggest 2-3 follow-up questions or experiments
-3. Reference the user's code when relevant
-4. Be conversational but focused
-
-If user wants a quick answer, skip the explanations.`;

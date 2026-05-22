@@ -24,6 +24,7 @@ import { parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import { validateHintRequest } from '@/lib/challenge/request-validators';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { getHint } from '@/lib/copilot/hints';
 import type { ChallengeDef, HintResult } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
@@ -129,7 +130,7 @@ export async function POST(
       { ...EVAL_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/challenge/hint', challengeTitle: challenge.title } },
       async (ctx) => {
         const hintResult: HintResult = await getHint(
-          { userId: ctx.userId, gitHubToken: ctx.accessToken },
+          createSessionIdentity(ctx),
           challenge,
           question,
           currentCode

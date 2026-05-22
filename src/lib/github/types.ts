@@ -5,10 +5,7 @@
  * Centralized location for all GitHub-related types to avoid duplication.
  */
 
-import type { OpenIssueSummary } from './issues';
-
-// Import WorkPatternSummary so it can be re-exported and used in CompactDeveloperProfile
-export type { WorkPatternSummary } from './work-patterns';
+import type { WorkPatternSummary } from './work-patterns';
 
 // ============================================================================
 // Compact Profile Types (Token-Efficient)
@@ -102,7 +99,7 @@ export interface CompactDeveloperProfile {
   /** Star interest signals: languages + topics from recently starred repos (F5) */
   si?: string[];
   /** Work patterns from recent PRs/issues: dominant activity types (F6) */
-  wp?: import('./work-patterns').WorkPatternSummary;
+  wp?: WorkPatternSummary;
   /** Recently updated open issues authored by the user */
   openIssues?: OpenIssueSummary[];
 }
@@ -218,6 +215,12 @@ export interface ActivityMetrics {
 // ============================================================================
 // Issue Types
 // ============================================================================
+
+export interface OpenIssueSummary {
+  title: string;
+  repo: string;
+  labels: string[];
+}
 
 /**
  * Issue creation input parameters

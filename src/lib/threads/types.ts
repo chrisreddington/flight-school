@@ -14,7 +14,7 @@
 // =============================================================================
 
 /** Role of the message author */
-export type MessageRole = 'user' | 'assistant' | 'system';
+type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
  * Status of a single tool call in an assistant message.
@@ -22,7 +22,7 @@ export type MessageRole = 'user' | 'assistant' | 'system';
  * `running` is the in-flight state surfaced live to the user; `complete` is
  * the settled state once the SDK emits `tool.execution_complete`.
  */
-export type ToolCallStatus = 'running' | 'complete';
+type ToolCallStatus = 'running' | 'complete';
 
 /**
  * Rich record of a single MCP/Copilot tool call.

@@ -29,6 +29,7 @@ import {
     createSessionWithMetrics,
     getConversationSession,
     MODEL_TIERS,
+    getCopilotGithubMcpTools,
 } from './sessions';
 import type {
     LoggedSessionResult,
@@ -239,6 +240,17 @@ export interface SessionIdentity {
 }
 
 /**
+ * Convert an authenticated request context into the SDK identity object.
+ *
+ * Centralising this mapping protects the multi-tenant invariant: every
+ * Copilot session receives the current request's `userId` and that same
+ * user's GitHub user-to-server token.
+ */
+export function createSessionIdentity(ctx: { userId: string; accessToken: string }): SessionIdentity {
+  return { userId: ctx.userId, gitHubToken: ctx.accessToken };
+}
+
+/**
  * Create a logged coach session **with** GitHub MCP tools (`get_me`,
  * `list_user_repositories`) for focus generation.
  *
@@ -408,7 +420,7 @@ export async function createLoggedGitHubChatSession(
   inputPrompt = '',
   conversationId?: string
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const chatTools = process.env.COPILOT_GITHUB_MCP_TOOLS?.split(',').map((tool) => tool.trim()).filter(Boolean);
+  const chatTools = getCopilotGithubMcpTools();
   const { session, metrics } = await getConversationSession(
     identity.userId,
     conversationId,

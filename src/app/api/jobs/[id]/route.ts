@@ -11,7 +11,8 @@
 import { jobStorage } from '@/lib/jobs';
 import { redactJobForDetail } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { handleUnauthorizedError } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { NextRequest, NextResponse } from 'next/server';
 import { cancelRunningJob } from '../route';
 
@@ -19,10 +20,6 @@ const log = logger.withTag('Jobs API');
 
 interface RouteContext {
   params: Promise<{ id: string }>;
-}
-
-function unauthorized(err: UnauthorizedError): NextResponse {
-  return NextResponse.json({ error: err.message }, { status: 401 });
 }
 
 export async function GET(
@@ -44,8 +41,7 @@ export async function GET(
 
     return NextResponse.json(redactJobForDetail(job));
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorized(err);
-    throw err;
+    return handleUnauthorizedError(err);
   }
 }
 
@@ -85,7 +81,6 @@ export async function DELETE(
       deletedFromStorage: deleted,
     });
   } catch (err) {
-    if (err instanceof UnauthorizedError) return unauthorized(err);
-    throw err;
+    return handleUnauthorizedError(err);
   }
 }

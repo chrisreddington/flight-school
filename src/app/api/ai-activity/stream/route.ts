@@ -6,11 +6,12 @@
  * **Per-user**: only events owned by the authenticated caller are emitted.
  */
 
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { handleUnauthorizedError } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
 import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import type { AIActivityEvent } from '@/lib/copilot/activity/types';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,10 +21,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   try {
     ({ userId } = await requireUserContext());
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
-    throw err;
+    return handleUnauthorizedError(err);
   }
 
   const includeFull = request.nextUrl.searchParams.get('include') === 'full';

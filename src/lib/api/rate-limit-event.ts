@@ -48,7 +48,7 @@ export interface RateLimitedEventDetail {
 export const DEFAULT_RETRY_AFTER_SECONDS = 30;
 
 /** Header the server sets to distinguish rate-limit vs session-cap. */
-export const RATE_LIMIT_REASON_HEADER = 'X-RateLimit-Reason';
+const RATE_LIMIT_REASON_HEADER = 'X-RateLimit-Reason';
 
 /**
  * Error thrown by the client fetch helper when the server returns 429.

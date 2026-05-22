@@ -35,7 +35,7 @@ const githubRequestCounter = meter.createCounter('flight_school.github.requests'
   description: 'Count of GitHub API requests by outcome',
 });
 
-export function startSpan(name: string, attributes?: Attributes): Span {
+function startSpan(name: string, attributes?: Attributes): Span {
   return tracer.startSpan(name, {
     attributes,
   });

@@ -31,6 +31,7 @@ import {
     parsePartialEvaluation,
     type WorkspaceFileInput,
 } from '@/lib/copilot/evaluation';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { createEvaluationStreamingSession } from '@/lib/copilot/streaming';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
         // Create streaming session with evaluation system prompt
         // Use dedicated evaluation session factory for proper logging separation
         const { stream, cleanup, model, streamingMetrics } = await createEvaluationStreamingSession(
-          { userId: userCtx.userId, gitHubToken: userCtx.accessToken },
+          createSessionIdentity(userCtx),
           prompt,
           EVALUATION_SYSTEM_PROMPT,
           'Challenge Evaluation'

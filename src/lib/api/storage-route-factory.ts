@@ -26,15 +26,6 @@ import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import type { logger } from '@/lib/logger';
 
 /**
- * Allowed characters in a userId used as a path segment.
- * Re-exported from {@link "@/lib/storage/user-scope"} for backwards-compat
- * and to keep the existing test surface stable.
- *
- * @deprecated Import `SAFE_USER_ID` from `@/lib/storage/user-scope` directly.
- */
-export { SAFE_USER_ID } from '@/lib/storage/user-scope';
-
-/**
  * Type for logger instance with tag support.
  */
 type LoggerInstance = ReturnType<typeof logger.withTag>;

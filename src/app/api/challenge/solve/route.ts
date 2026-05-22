@@ -21,14 +21,14 @@
  * Supports multi-file workspaces (e.g., solution.ts + solution.test.ts).
  */
 
-import { parseJsonBody } from '@/lib/api';
+import { authErrorResponse, parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
 import { validateSolveRequest } from '@/lib/challenge/request-validators';
 import {
     buildSolutionPrompt,
     SOLUTION_GENERATION_PROMPT,
 } from '@/lib/challenge/solution-generation';
-import { createLoggedCoachSession } from '@/lib/copilot/server';
+import { createLoggedCoachSession, createSessionIdentity } from '@/lib/copilot/server';
 import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { requireUserContext } from '@/lib/auth/context';
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     const { challenge, files } = parseResult.data;
 
     const ctx = await requireUserContext();
-    const identity = { userId: ctx.userId, gitHubToken: ctx.accessToken };
+    const identity = createSessionIdentity(ctx);
 
     log.info(`Generating solution for: ${challenge.title} (${files.length} files)`);
 
@@ -147,13 +147,15 @@ export async function POST(request: NextRequest) {
       );
     } finally {
       // Clean up the session
-      await session.destroy();
+      session.destroy();
     }
   } catch (error) {
     // D2: Map missing-Copilot-entitlement to 402 so the UI can render the
     // upgrade banner instead of seeing a generic 500.
     const entitlementResponse = copilotEntitlementErrorResponse(error);
     if (entitlementResponse) return entitlementResponse;
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
 
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to generate solution';

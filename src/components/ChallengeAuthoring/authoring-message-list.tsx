@@ -12,7 +12,7 @@ import { CheckIcon, CopilotIcon, PersonIcon } from '@primer/octicons-react';
 import { Avatar, Button, Stack } from '@primer/react';
 import type { DailyChallenge } from '@/lib/focus/types';
 import styles from './ChallengeAuthoring.module.css';
-import type { AuthoringMessage } from './authoring-chat';
+import type { AuthoringMessage } from './types';
 
 interface AuthoringMessageListProps {
   messages: AuthoringMessage[];

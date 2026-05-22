@@ -7,9 +7,6 @@
  * For creative AI generation, use the Copilot SDK in `@/lib/copilot`.
  */
 
-// Client
-export { getOctokitForRequest, getOctokitForToken } from './client';
-
 // User
 export {
     calculateExperienceLevel,
@@ -22,6 +19,3 @@ export { getLanguageStats, getUserRepositories } from './repos';
 
 // Activity
 export { calculateActivityMetrics, getUserEvents } from './activity';
-
-// Language Colors
-export { getLanguageColor } from './language-colors';

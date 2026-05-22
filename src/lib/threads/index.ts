@@ -20,8 +20,7 @@ export type {
     RepoReference,
     Thread,
     ThreadContext,
-    ToolCallEvent,
-    ToolCallStatus
+    ToolCallEvent
 } from './types';
 
 // Storage

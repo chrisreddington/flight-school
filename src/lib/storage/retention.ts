@@ -172,7 +172,7 @@ export async function sweepThreadsForUser(
  * — they're handled by {@link sweepStaleRunningJobs} on the matching
  * job record.
  */
-export async function sweepEvaluationsForUser(
+async function sweepEvaluationsForUser(
   userId: string,
   nowMs: number,
   ttlMs: number = RETENTION_TTL.evaluationMs,
@@ -232,7 +232,7 @@ export async function sweepEvaluationsForUser(
  * the scratchpad TTL. Belt-and-braces in case the in-process
  * consolidation step on terminal state failed to delete the file.
  */
-export async function sweepJobScratchpadsForUser(
+async function sweepJobScratchpadsForUser(
   userId: string,
   nowMs: number,
   ttlMs: number = RETENTION_TTL.scratchpadMs,

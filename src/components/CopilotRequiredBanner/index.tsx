@@ -22,7 +22,7 @@ import {
   type CopilotRequiredEventDetail,
 } from '@/lib/copilot/required-event';
 
-export const COPILOT_SIGN_UP_URL = 'https://github.com/features/copilot';
+const COPILOT_SIGN_UP_URL = 'https://github.com/features/copilot';
 
 const DEFAULT_MESSAGE =
   'AI features need a GitHub Copilot subscription. Sign up to unlock learning chat, daily focus, and challenge feedback.';
@@ -76,5 +76,3 @@ export function CopilotRequiredBanner() {
     </div>
   );
 }
-
-export default CopilotRequiredBanner;

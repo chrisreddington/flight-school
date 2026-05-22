@@ -282,7 +282,7 @@ function buildAAD(parts: {
  *   `AZURE_COSMOS_CONTAINER`, `AZURE_KEY_VAULT_URL`, `AZURE_KEY_VAULT_KEY_NAME`)
  *   are missing.
  */
-export function readCosmosConfigFromEnv(): CosmosTokenStoreConfig | null {
+function readCosmosConfigFromEnv(): CosmosTokenStoreConfig | null {
   const cosmosEndpoint = process.env.AZURE_COSMOS_ENDPOINT;
   const databaseId = process.env.AZURE_COSMOS_DATABASE;
   const containerId = process.env.AZURE_COSMOS_CONTAINER;
@@ -670,22 +670,43 @@ let defaultStore: TokenStore | null = null;
 
 /**
  * Returns the process-wide default token store. The implementation is chosen
- * by {@link createDefaultTokenStore} in `./token-store-factory.ts`.
+ * by {@link createDefaultTokenStore}.
  *
- * This function lazily initialises via the factory to avoid an import cycle.
+ * This function lazily initialises the store so local tests can import store
+ * classes without constructing Azure clients.
  */
 export function getTokenStore(): TokenStore {
   if (!defaultStore) {
-    // Lazy require avoids a circular import between this module and the
-    // factory (factory imports `InMemoryTokenStore`/`CosmosTokenStore`).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const factory = require('./token-store-factory') as typeof import('./token-store-factory');
-    defaultStore = factory.createDefaultTokenStore();
+    defaultStore = createDefaultTokenStore();
   }
   return defaultStore;
 }
 
-/** Test-only override for the default token store. */
-export function setTokenStore(store: TokenStore | null): void {
-  defaultStore = store;
+/**
+ * Create the default token store for this process.
+ *
+ * @throws If `NODE_ENV=production` and no `AZURE_COSMOS_ENDPOINT` is set.
+ */
+export function createDefaultTokenStore(): TokenStore {
+  const cosmosConfig = readCosmosConfigFromEnv();
+
+  if (cosmosConfig) {
+    log.info('Using CosmosTokenStore (Azure Cosmos DB + Key Vault envelope encryption)');
+    return new CosmosTokenStore(cosmosConfig);
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    const message =
+      'Refusing to start: AZURE_COSMOS_ENDPOINT is not set in production. ' +
+      'An encrypted, persistent token store is required. Configure Cosmos DB + Key Vault, ' +
+      'or set NODE_ENV !== "production" to opt into the in-memory store.';
+    log.error(message);
+    throw new Error(message);
+  }
+
+  log.warn(
+    'Using InMemoryTokenStore — tokens are kept in-process and lost on restart. ' +
+      'This is fine for local development; do NOT use in production.',
+  );
+  return new InMemoryTokenStore();
 }

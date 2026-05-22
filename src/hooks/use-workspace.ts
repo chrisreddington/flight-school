@@ -49,7 +49,7 @@ const log = logger.withTag('useWorkspace');
 // =============================================================================
 
 /** State returned by useWorkspace */
-export interface UseWorkspaceState {
+interface UseWorkspaceState {
   /** All files in the workspace */
   files: WorkspaceFile[];
   /** Currently active file */
@@ -65,7 +65,7 @@ export interface UseWorkspaceState {
 }
 
 /** Actions provided by useWorkspace */
-export interface UseWorkspaceActions {
+interface UseWorkspaceActions {
   /** Set the active file by ID */
   setActiveFile: (fileId: string) => void;
   /** Update the content of a file */

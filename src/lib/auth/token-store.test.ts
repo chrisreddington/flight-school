@@ -605,7 +605,7 @@ describe('createDefaultTokenStore (factory guard)', () => {
     delete process.env.AZURE_COSMOS_ENDPOINT;
     process.env.NODE_ENV = 'development';
     vi.resetModules();
-    const { createDefaultTokenStore } = await import('./token-store-factory');
+    const { createDefaultTokenStore } = await import('./token-store');
     const { InMemoryTokenStore: InMem } = await import('./token-store');
     expect(createDefaultTokenStore()).toBeInstanceOf(InMem);
   });
@@ -614,7 +614,7 @@ describe('createDefaultTokenStore (factory guard)', () => {
     delete process.env.AZURE_COSMOS_ENDPOINT;
     process.env.NODE_ENV = 'production';
     vi.resetModules();
-    const { createDefaultTokenStore } = await import('./token-store-factory');
+    const { createDefaultTokenStore } = await import('./token-store');
     expect(() => createDefaultTokenStore()).toThrow(/AZURE_COSMOS_ENDPOINT/);
   });
 
@@ -626,7 +626,7 @@ describe('createDefaultTokenStore (factory guard)', () => {
     process.env.AZURE_KEY_VAULT_KEY_NAME = 'flight-school-kek';
     process.env.NODE_ENV = 'production';
     vi.resetModules();
-    const { createDefaultTokenStore } = await import('./token-store-factory');
+    const { createDefaultTokenStore } = await import('./token-store');
     const { CosmosTokenStore: Cosmos } = await import('./token-store');
     expect(createDefaultTokenStore()).toBeInstanceOf(Cosmos);
   });
