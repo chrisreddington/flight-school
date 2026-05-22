@@ -5,12 +5,6 @@
  * Each executor runs the AI operation and updates job status in storage.
  */
 
-import {
-  buildSingleChallengePrompt,
-  buildSingleGoalPrompt,
-  buildSingleTopicPrompt,
-} from '@/lib/copilot/prompts';
-import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
 import { createEvaluationStreamingSession, createLearningStreamingSession, createStreamingChatSession } from '@/lib/copilot/streaming';
 import {
   buildEvaluationPrompt,
@@ -19,20 +13,11 @@ import {
   parseEvaluationResponse,
   parsePartialEvaluation,
 } from '@/lib/copilot/evaluation';
-import { getOctokitForToken } from '@/lib/github/client';
-import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
-import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import type {
   ChallengeEvaluationInput,
   ChallengeEvaluationResult,
-  ChallengeRegenerationInput,
-  ChallengeRegenerationResult,
   ChatResponseInput,
   ChatResponseResult,
-  GoalRegenerationInput,
-  GoalRegenerationResult,
-  TopicRegenerationInput,
-  TopicRegenerationResult,
 } from '@/lib/jobs';
 import { jobStorage } from '@/lib/jobs';
 import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
@@ -41,7 +26,6 @@ import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
-import { extractJSON } from '@/lib/utils/json-utils';
 import { getThreadById, updateThread } from './threads-storage';
 import { readEvaluationStorage, writeEvaluationStorage } from './evaluation-storage';
 import { deleteScratchpad, readScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
@@ -54,6 +38,11 @@ export {
   unregisterSession,
 } from './executors/session-registry';
 export { isJobStillValid } from './executors/job-identity';
+export {
+  executeChallengeRegeneration,
+  executeGoalRegeneration,
+  executeTopicRegeneration,
+} from './executors/regeneration';
 
 const log = logger.withTag('JobExecutors');
 const STREAM_CURSOR = ' ▊';
@@ -74,243 +63,6 @@ function upsertMessageById(
     ? { ...updatedMessages[existingIndex], ...nextMessage }
     : nextMessage;
   return updatedMessages;
-}
-
-/**
- * Execute a topic regeneration job.
- */
-export async function executeTopicRegeneration(
-  jobId: string,
-  input: TopicRegenerationInput,
-  userId: string
-): Promise<void> {
-  await jobStorage.markRunning(jobId);
-  
-  try {
-    if (!await isJobStillValid(jobId)) return;
-
-    const identity = await resolveJobIdentity(jobId, userId);
-    if (!identity) return;
-    
-    // Build context
-    let serializedContext = '';
-    try {
-      const octokit = getOctokitForToken(identity.gitHubToken);
-      const compactProfile = await buildCompactContext(octokit, 1000);
-      serializedContext = serializeContext(compactProfile);
-    } catch (err) {
-      log.warn('Failed to build context:', err);
-    }
-    
-    if (!await isJobStillValid(jobId)) return;
-    
-    // Build and send prompt
-    const prompt = buildSingleTopicPrompt(
-      serializedContext, 
-      input.existingTopicTitles, 
-      input.skillProfile
-    );
-    
-    const loggedSession = await createLoggedLightweightCoachSession(
-      identity,
-      'Job: topic-regeneration',
-      prompt.slice(0, 50)
-    );
-    
-    registerSession(jobId, loggedSession);
-    
-    log.info(`[Job ${jobId}] Sending prompt (${prompt.length} chars)...`);
-    const result = await loggedSession.sendAndWait(prompt);
-    
-    unregisterSession(jobId);
-    
-    if (!await isJobStillValid(jobId)) {
-      await loggedSession.destroy();
-      return;
-    }
-    
-    loggedSession.destroy();
-    
-    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
-    
-    // Parse result
-    const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.responseText);
-    if (!parsed?.learningTopic) {
-      throw new Error('Failed to parse topic response');
-    }
-    
-    if (!parsed.learningTopic.id) {
-      parsed.learningTopic.id = crypto.randomUUID();
-    }
-    
-    await jobStorage.markCompleted<TopicRegenerationResult>(jobId, {
-      learningTopic: parsed.learningTopic,
-    });
-    
-    log.info(`[Job ${jobId}] Completed successfully`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log.error(`[Job ${jobId}] Failed:`, errorMessage);
-    await jobStorage.markFailed(jobId, errorMessage);
-  }
-}
-
-/**
- * Execute a challenge regeneration job.
- */
-export async function executeChallengeRegeneration(
-  jobId: string,
-  input: ChallengeRegenerationInput,
-  userId: string
-): Promise<void> {
-  await jobStorage.markRunning(jobId);
-  
-  try {
-    if (!await isJobStillValid(jobId)) return;
-
-    const identity = await resolveJobIdentity(jobId, userId);
-    if (!identity) return;
-    
-    // Build context
-    let serializedContext = '';
-    try {
-      const octokit = getOctokitForToken(identity.gitHubToken);
-      const compactProfile = await buildCompactContext(octokit, 1000);
-      serializedContext = serializeContext(compactProfile);
-    } catch (err) {
-      log.warn('Failed to build context:', err);
-    }
-    
-    if (!await isJobStillValid(jobId)) return;
-    
-    // Build and send prompt
-    const prompt = buildSingleChallengePrompt(
-      serializedContext, 
-      input.existingChallengeTitles, 
-      input.skillProfile
-    );
-    
-    const loggedSession = await createLoggedLightweightCoachSession(
-      identity,
-      'Job: challenge-regeneration',
-      prompt.slice(0, 50)
-    );
-    
-    registerSession(jobId, loggedSession);
-    
-    log.info(`[Job ${jobId}] Sending challenge prompt (${prompt.length} chars)...`);
-    const result = await loggedSession.sendAndWait(prompt);
-    
-    unregisterSession(jobId);
-    
-    if (!await isJobStillValid(jobId)) {
-      await loggedSession.destroy();
-      return;
-    }
-    
-    loggedSession.destroy();
-    
-    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
-    
-    // Parse result
-    const parsed = extractJSON<{ challenge: DailyChallenge }>(result.responseText);
-    if (!parsed?.challenge) {
-      throw new Error('Failed to parse challenge response');
-    }
-    
-    if (!parsed.challenge.id) {
-      parsed.challenge.id = crypto.randomUUID();
-    }
-    
-    await jobStorage.markCompleted<ChallengeRegenerationResult>(jobId, {
-      challenge: parsed.challenge,
-    });
-    
-    log.info(`[Job ${jobId}] Completed successfully`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log.error(`[Job ${jobId}] Failed:`, errorMessage);
-    await jobStorage.markFailed(jobId, errorMessage);
-  }
-}
-
-/**
- * Execute a goal regeneration job.
- */
-export async function executeGoalRegeneration(
-  jobId: string,
-  input: GoalRegenerationInput,
-  userId: string
-): Promise<void> {
-  await jobStorage.markRunning(jobId);
-  
-  try {
-    if (!await isJobStillValid(jobId)) return;
-
-    const identity = await resolveJobIdentity(jobId, userId);
-    if (!identity) return;
-    
-    // Build context
-    let serializedContext = '';
-    try {
-      const octokit = getOctokitForToken(identity.gitHubToken);
-      const compactProfile = await buildCompactContext(octokit, 1000);
-      serializedContext = serializeContext(compactProfile);
-    } catch (err) {
-      log.warn('Failed to build context:', err);
-    }
-    
-    if (!await isJobStillValid(jobId)) return;
-    
-    // Build and send prompt
-    const prompt = buildSingleGoalPrompt(
-      serializedContext, 
-      input.existingGoalTitles, 
-      input.skillProfile
-    );
-    
-    const loggedSession = await createLoggedLightweightCoachSession(
-      identity,
-      'Job: goal-regeneration',
-      prompt.slice(0, 50)
-    );
-    
-    registerSession(jobId, loggedSession);
-    
-    log.info(`[Job ${jobId}] Sending goal prompt (${prompt.length} chars)...`);
-    const result = await loggedSession.sendAndWait(prompt);
-    
-    unregisterSession(jobId);
-    
-    if (!await isJobStillValid(jobId)) {
-      await loggedSession.destroy();
-      return;
-    }
-    
-    loggedSession.destroy();
-    
-    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
-    
-    // Parse result
-    const parsed = extractJSON<{ goal: DailyGoal }>(result.responseText);
-    if (!parsed?.goal) {
-      throw new Error('Failed to parse goal response');
-    }
-    
-    if (!parsed.goal.id) {
-      parsed.goal.id = crypto.randomUUID();
-    }
-    
-    await jobStorage.markCompleted<GoalRegenerationResult>(jobId, {
-      goal: parsed.goal,
-    });
-    
-    log.info(`[Job ${jobId}] Completed successfully`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log.error(`[Job ${jobId}] Failed:`, errorMessage);
-    await jobStorage.markFailed(jobId, errorMessage);
-  }
 }
 
 /**
