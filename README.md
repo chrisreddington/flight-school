@@ -51,24 +51,30 @@ GitHub App and supply `AUTH_*` credentials.
    npm run dev
    ```
 4. Open <http://localhost:3000> — you'll be redirected to GitHub to authorize
-   the app, then back to your personalized dashboard.
+   the app, then back to your personalized dashboard. This starts the Aspire
+   AppHost, including the required Copilot worker.
 
 ### Optional local Copilot worker
 
-By default, local development runs Copilot SDK work in the web process. To test
-the out-of-process worker boundary locally, start a worker in one terminal and
-the web app in another:
+Local AI chat requires the Copilot worker. `npm run dev` is the recommended
+path because it starts both the web app and worker through Aspire. To run the
+two processes manually, start a worker in one terminal and the web app in
+another:
 
 ```bash
 npm run dev:worker
 COPILOT_WORKER_URL=http://localhost:3001 \
 COPILOT_WORKER_SECRET=local-dev-worker-secret \
-npm run dev
+npm run dev:web-worker
 ```
 
 `npm run aspire:run` starts both resources and injects the local worker URL into
 the web app automatically. In worker mode, each GitHub user gets a separate
 SDK-spawned Copilot CLI child process and a separate `COPILOT_HOME`.
+
+For UI-only work that does not exercise Copilot chat, use `npm run dev:web-only`.
+AI chat routes intentionally fail fast in that mode unless you configure
+`COPILOT_WORKER_URL`.
 
 Runtime controls:
 
@@ -148,7 +154,10 @@ The chat and challenge evaluation experiences stream feedback in real-time using
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server |
+| `npm run dev` | Start Aspire AppHost with web + required Copilot worker |
+| `npm run dev:web-only` | Start only the web app; AI chat requires `COPILOT_WORKER_URL` |
+| `npm run dev:worker` | Start only the local Copilot worker on port 3001 |
+| `npm run dev:web-worker` | Start web app pointed at a manually started local worker |
 | `npm run build` | Create production build |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests |
@@ -173,7 +182,7 @@ Start the local dashboard and app:
 
 ```bash
 npm run dashboard
-npm run dev
+npm run dev:web-only
 ```
 
 By default, the dashboard listens on:

@@ -1,12 +1,12 @@
 # Mandatory Copilot Worker Design
 
-**Status**: Approved for planning
+**Status**: Foundation Implemented
 **Date**: 2026-05-22
 
 ## Resumption Section
 - **Scope**: Remove the public in-process Copilot execution fallback and make the worker boundary mandatory for Copilot chat.
-- **Current Phase**: Design approved; ready for implementation planning.
-- **Next Action**: Write the implementation plan.
+- **Current Phase**: Foundation implemented.
+- **Next Action**: Smoke-test `npm run dev` with real OAuth/Copilot credentials.
 - **Blockers**: None.
 
 ## Job Story

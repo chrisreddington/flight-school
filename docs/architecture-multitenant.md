@@ -85,9 +85,9 @@ for the worker-pool design.
 The first worker-service slice adds an optional HTTP worker transport for chat
 execution:
 
-- If `COPILOT_WORKER_URL` is unset, `executeCopilotChat()` uses the in-process
-  adapter.
-- If `COPILOT_WORKER_URL` is set, the web process posts to
+- Public chat execution requires `COPILOT_WORKER_URL`; if it is unset,
+  `/api/copilot` fails fast instead of running in the web process.
+- When configured, the web process posts to
   `/api/_internal/copilot/execute` on the worker with a bearer secret and a
   timeout.
 - The worker route executes chat through a per-user runtime pool. Each runtime
@@ -131,7 +131,7 @@ SDK rejects `cliUrl` combined with `gitHubToken` / `useLoggedInUser`.
 | Auth.js session | `src/lib/auth/config.ts` | `auth`, `handlers`, `signIn`, `signOut` |
 | User context in handlers | `src/lib/auth/context.ts` | `getUserContext`, `requireUserContext`, `UnauthorizedError` |
 | Per-request Octokit | `src/lib/github/client.ts` | `getOctokitForRequest`, `getOctokitForToken` |
-| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, worker HTTP client, in-process fallback |
+| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, worker HTTP client, worker-required guard |
 | Copilot session factory | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
 | Logged session helpers | `src/lib/copilot/server.ts` | `createLoggedChatSession`, `createLoggedCoachSession`, `SessionIdentity` |
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
