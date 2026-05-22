@@ -25,7 +25,6 @@
  * ```
  */
 
-import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey, now } from '@/lib/utils/date-utils';
 import {
@@ -55,6 +54,7 @@ import type {
     LearningTopic,
 } from './types';
 import { getTodaysFocusFromHistory, saveFocusToHistory } from './history';
+import { clearFocusStorage, readFocusStorage, writeFocusStorage } from './persistence';
 import { markTopicReviewedInHistory } from './review-schedule';
 
 const log = logger.withTag('FocusStore');
@@ -106,42 +106,11 @@ class LocalStorageFocusStore implements FocusStoreInterface {
    * Reads and parses storage data from API.
    */
   private async getStorage(): Promise<FocusStorageSchema> {
-    if (typeof window === 'undefined') {
-      return { history: {} };
-    }
-
-    try {
-      const schema = await apiGet<FocusStorageSchema>('/api/focus/storage');
-      return schema;
-    } catch (error) {
-      log.error('Failed to load focus storage, using empty schema', error);
-      return { history: {} };
-    }
+    return readFocusStorage();
   }
 
   private async setStorage(schema: FocusStorageSchema): Promise<void> {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    try {
-      await apiPost<void>('/api/focus/storage', schema);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // Network-level failures (page navigation, body too large for keepalive, AbortError)
-      // are non-fatal — the save will succeed on the next interaction.
-      const isNetworkError =
-        error instanceof Error &&
-        (error.name === 'AbortError' ||
-          message === 'Load failed' ||
-          message === 'Failed to fetch' ||
-          message.startsWith('NetworkError'));
-      if (isNetworkError) {
-        log.warn('Storage save skipped (network unavailable)', message);
-        return;
-      }
-      log.error('Failed to save to storage', message);
-      throw error;
-    }
+    await writeFocusStorage(schema);
   }
 
   /**
@@ -174,11 +143,8 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   }
 
   async clear(): Promise<void> {
-    if (typeof window === 'undefined') {
-      return;
-    }
     try {
-      await apiDelete<void>('/api/focus/storage');
+      await clearFocusStorage();
       log.debug('Focus storage cleared successfully');
     } catch (error) {
       log.error('Failed to clear focus storage', { error });
