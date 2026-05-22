@@ -1,5 +1,8 @@
+'use client';
+
 import { MarkGithubIcon } from '@primer/octicons-react';
 import { Button, Heading, Text } from '@primer/react';
+import { use } from 'react';
 
 import { signInWithGitHub } from './actions';
 import styles from './sign-in.module.css';
@@ -8,11 +11,10 @@ interface SignInPageProps {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }
 
-export default async function SignInPage({ searchParams }: SignInPageProps) {
-  const { callbackUrl, error } = await searchParams;
+export default function SignInPage({ searchParams }: SignInPageProps) {
+  const { callbackUrl, error } = use(searchParams);
 
   async function action(): Promise<void> {
-    'use server';
     await signInWithGitHub(callbackUrl);
   }
 

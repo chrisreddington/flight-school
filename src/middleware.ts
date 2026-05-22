@@ -12,6 +12,18 @@ import { NextResponse } from 'next/server';
 
 import { edgeAuthConfig } from '@/lib/auth/edge-config';
 
+if (!process.env.AUTH_SECRET) {
+  // Without AUTH_SECRET, NextAuth's edge middleware silently no-ops: every
+  // request bypasses the gate and unauthenticated UI/API traffic reaches the
+  // app. Fail loudly at boot so this footgun never makes it to a running
+  // server, in any environment.
+  throw new Error(
+    'AUTH_SECRET is not set. Generate one with `openssl rand -base64 32` and ' +
+      'add it (plus AUTH_GITHUB_ID and AUTH_GITHUB_SECRET) to .env.local. See ' +
+      'docs/migrations/2025-multitenant-auth.md.'
+  );
+}
+
 const { auth } = NextAuth(edgeAuthConfig);
 
 const PUBLIC_PREFIXES = [

@@ -6,6 +6,9 @@
 
 import '@testing-library/jest-dom/vitest';
 
+// Tests don't go through a real OAuth flow, but middleware now requires this.
+process.env.AUTH_SECRET ??= 'test-auth-secret-do-not-use-in-prod';
+
 // Mock fetch globally for API tests
 global.fetch = vi.fn();
 
