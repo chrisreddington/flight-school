@@ -113,6 +113,21 @@ module cronIdentity 'modules/cron-identity.bicep' = {
   }
 }
 
+module copilotWorker 'modules/copilot-worker-app.bicep' = {
+  scope: rg
+  name: 'copilot-worker-app'
+  params: {
+    location: location
+    appName: appName
+    tags: tags
+    imageTag: imageTag
+    acrLoginServer: acrLoginServer
+    containerAppEnvironmentId: env.outputs.environmentId
+    keyVaultName: keyVault.outputs.keyVaultName
+    keyVaultUri: keyVault.outputs.keyVaultUri
+  }
+}
+
 module containerApp 'modules/container-app.bicep' = {
   scope: rg
   name: 'container-app'
@@ -129,6 +144,7 @@ module containerApp 'modules/container-app.bicep' = {
     cronTenantId: tenantId
     cronAudience: 'api://${appName}-cron'
     cronAllowedAppId: cronIdentity.outputs.clientId
+    copilotWorkerUrl: 'https://${copilotWorker.outputs.fqdn}'
   }
 }
 
@@ -161,6 +177,15 @@ module keyVaultRoleAssignment 'modules/key-vault-role-assignment.bicep' = {
   }
 }
 
+module keyVaultRoleAssignmentWorker 'modules/key-vault-role-assignment.bicep' = {
+  scope: rg
+  name: 'key-vault-role-assignment-worker'
+  params: {
+    keyVaultName: keyVault.outputs.keyVaultName
+    principalId: copilotWorker.outputs.principalId
+  }
+}
+
 output containerAppFqdn string = containerApp.outputs.fqdn
 output containerAppUrl string = 'https://${containerApp.outputs.fqdn}'
 output keyVaultName string = keyVault.outputs.keyVaultName
@@ -169,3 +194,4 @@ output appInsightsName string = appInsights.outputs.name
 output resourceGroupName string = rg.name
 output cronJobName string = cronJob.outputs.jobName
 output cronUamiClientId string = cronIdentity.outputs.clientId
+output copilotWorkerFqdn string = copilotWorker.outputs.fqdn

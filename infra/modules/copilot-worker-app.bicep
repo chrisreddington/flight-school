@@ -1,17 +1,15 @@
 // =============================================================================
-// Flight School Container App
+// Flight School Copilot Worker Container App
 // =============================================================================
-// - External ingress on port 3000, sticky sessions enabled.
+// - Internal ingress only on port 3000.
+// - Same image as the web app, with COPILOT_WORKER_ENABLED=1.
 // - System-assigned managed identity used to resolve Key Vault secret refs.
-// - 1.0 vCPU / 2.0Gi memory to give the Copilot CLI subprocess headroom.
-// - Min 1 replica (avoids cold starts for SSE), max 5 replicas.
-// - Health probe wired to /api/health (endpoint to be added in a later phase).
 // =============================================================================
 
 @description('Azure region.')
 param location string
 
-@description('Short app name; used as the Container App name and DNS label.')
+@description('Short app name; used as the base Container App name and DNS label.')
 param appName string
 
 @description('Resource tags.')
@@ -32,31 +30,18 @@ param keyVaultName string
 @description('URI of the Key Vault (e.g. https://kv-xxx.vault.azure.net/).')
 param keyVaultUri string
 
-@description('GitHub App client ID (informational; surfaced as env var for debug logs).')
-param githubAppId string = ''
-
-@description('Entra tenant id for cron JWT verification. Empty string disables cron auth (route will reject all calls).')
-param cronTenantId string = ''
-
-@description('Expected `aud` claim on cron-job AAD tokens (e.g. api://flightschool-cron).')
-param cronAudience string = ''
-
-@description('Comma-separated allowlist of caller appids (cron-job UAMI client id).')
-param cronAllowedAppId string = ''
-
-@description('Internal URL of the Copilot worker app. Empty string keeps in-process execution.')
-param copilotWorkerUrl string = ''
-
+var workerName = '${appName}-worker'
 var image = '${acrLoginServer}/${appName}:${imageTag}'
 
-// Helper to build a Key Vault secret reference URI.
 func kvSecretUri(vaultUri string, secretName string) string =>
   '${vaultUri}secrets/${secretName}'
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: appName
+resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: workerName
   location: location
-  tags: tags
+  tags: union(tags, {
+    role: 'copilot-worker'
+  })
   identity: {
     type: 'SystemAssigned'
   }
@@ -66,15 +51,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
-        external: true
+        external: false
         targetPort: 3000
         exposedPort: 0
-        transport: 'auto'
+        transport: 'http'
         allowInsecure: false
         clientCertificateMode: 'ignore'
-        stickySessions: {
-          affinity: 'sticky'
-        }
         traffic: [
           {
             latestRevision: true
@@ -82,9 +64,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
         ]
       }
-      // Secrets sourced from Key Vault using the container app's
-      // system-assigned managed identity. The "Key Vault Secrets User" role
-      // assignment is created by key-vault-role-assignment.bicep.
       secrets: [
         {
           name: 'auth-secret'
@@ -121,7 +100,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     template: {
       containers: [
         {
-          name: appName
+          name: 'copilot-worker'
           image: image
           resources: {
             cpu: json('1.0')
@@ -132,12 +111,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ACA_DEPLOYMENT', value: 'true' }
             { name: 'AUTH_TRUST_HOST', value: 'true' }
             { name: 'PORT', value: '3000' }
-            { name: 'GITHUB_APP_ID', value: githubAppId }
             { name: 'KEY_VAULT_NAME', value: keyVaultName }
-            { name: 'CRON_TENANT_ID', value: cronTenantId }
-            { name: 'CRON_AUDIENCE', value: cronAudience }
-            { name: 'CRON_ALLOWED_APPIDS', value: cronAllowedAppId }
-            { name: 'COPILOT_WORKER_URL', value: copilotWorkerUrl }
+            { name: 'COPILOT_WORKER_ENABLED', value: '1' }
             { name: 'AUTH_SECRET', secretRef: 'auth-secret' }
             { name: 'AUTH_GITHUB_ID', secretRef: 'auth-github-id' }
             { name: 'AUTH_GITHUB_SECRET', secretRef: 'auth-github-secret' }
@@ -190,13 +165,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       scale: {
         minReplicas: 1
-        maxReplicas: 5
+        maxReplicas: 3
         rules: [
           {
             name: 'http-concurrency'
             http: {
               metadata: {
-                concurrentRequests: '50'
+                concurrentRequests: '20'
               }
             }
           }
@@ -206,7 +181,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-output name string = containerApp.name
-output fqdn string = containerApp.properties.configuration.ingress.fqdn
+output name string = workerApp.name
+output fqdn string = workerApp.properties.configuration.ingress.fqdn
 @description('Principal ID of the system-assigned managed identity (used for KV RBAC).')
-output principalId string = containerApp.identity.principalId
+output principalId string = workerApp.identity.principalId

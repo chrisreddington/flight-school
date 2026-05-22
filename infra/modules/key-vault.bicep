@@ -10,6 +10,7 @@
 //   - auth-secret               (Auth.js JWT encryption key; `openssl rand -base64 32`)
 //   - auth-github-id            (GitHub App client ID)
 //   - auth-github-secret        (GitHub App client secret)
+//   - copilot-worker-secret     (web-to-worker bearer secret; `openssl rand -base64 32`)
 // =============================================================================
 
 @description('Azure region.')
