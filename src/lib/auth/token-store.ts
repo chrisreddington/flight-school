@@ -58,10 +58,15 @@ export interface TokenStore {
    *
    * @param userId - Stable GitHub numeric ID as a string.
    * @returns The {@link StoredToken}, or `null` when no record exists for
-   *   the user **or** when the stored record has already expired
-   *   (`expiresAt * 1000 <= now`). Callers must treat "not found" and
-   *   "expired" identically — both mean "refresh / re-auth required".
-   *   Never throws for missing users.
+   *   the user. **Returns expired records as well** — the access token in
+   *   the record may already be past `expiresAt`, but the accompanying
+   *   refresh token is typically still valid (GitHub refresh tokens last
+   *   6 months vs the 8h access token). Filtering expired records here
+   *   would prevent {@link resolveFreshGitHubToken} from doing its job
+   *   (refresh at execution time). Callers are responsible for checking
+   *   `expiresAt` and exchanging the refresh token via
+   *   {@link refreshGitHubAccessToken} as needed. Never throws for
+   *   missing users.
    */
   getToken(userId: string): Promise<StoredToken | null>;
   /**
@@ -84,10 +89,19 @@ export interface TokenStore {
    */
   deleteToken(userId: string): Promise<void>;
   /**
-   * Best-effort sweep of expired records. Implementations that do not retain
-   * expired records may no-op.
+   * Best-effort sweep of stale records.
    *
    * @returns The number of records removed during this sweep.
+   *
+   * @remarks
+   * Currently a no-op. Sweeping by access-token expiry would delete
+   * records whose refresh tokens are still valid for months, which would
+   * break re-auth-less recovery. A proper sweep needs the refresh-token
+   * expiry to be persisted (GitHub returns `refresh_token_expires_in` on
+   * the OAuth callback; we don't yet plumb it through). Until then the
+   * only deletion path is explicit sign-out via {@link deleteToken}.
+   * Records are bounded per user (one row per user), so growth scales
+   * with user count, not request count.
    */
   cleanupExpired(): Promise<number>;
 }
@@ -100,12 +114,10 @@ export class InMemoryTokenStore implements TokenStore {
   private readonly tokens = new Map<string, StoredToken>();
 
   async getToken(userId: string): Promise<StoredToken | null> {
-    const token = this.tokens.get(userId);
-    if (!token) return null;
-    if (this.isExpired(token)) {
-      return null;
-    }
-    return token;
+    // Return refreshable records as well; the caller decides whether the
+    // access token is fresh enough or whether to refresh. See the
+    // TokenStore.getToken contract for the rationale.
+    return this.tokens.get(userId) ?? null;
   }
 
   async setToken(userId: string, token: StoredToken): Promise<void> {
@@ -116,21 +128,11 @@ export class InMemoryTokenStore implements TokenStore {
     this.tokens.delete(userId);
   }
 
+  /**
+   * {@inheritDoc TokenStore.cleanupExpired}
+   */
   async cleanupExpired(): Promise<number> {
-    let removed = 0;
-    for (const [userId, token] of this.tokens) {
-      if (this.isExpired(token)) {
-        this.tokens.delete(userId);
-        removed += 1;
-      }
-    }
-    return removed;
-  }
-
-  private isExpired(token: StoredToken): boolean {
-    // Fail-closed: expiresAt of 0 (unset/unknown) is treated as expired so the
-    // caller refreshes rather than reusing a token of indeterminate age.
-    return token.expiresAt * 1000 <= nowMs();
+    return 0;
   }
 }
 
@@ -299,9 +301,9 @@ export class CosmosTokenStore implements TokenStore {
       return null;
     }
 
-    if (doc.expiresAt > 0 && doc.expiresAt * 1000 <= nowMs()) {
-      return null;
-    }
+    // Note: we deliberately do NOT filter expired records here. See the
+    // TokenStore.getToken contract — the caller (resolveFreshGitHubToken)
+    // needs the refresh token even when the access token is expired.
 
     const wrappedDek = Buffer.from(doc.wrappedDek, 'base64');
     const iv = Buffer.from(doc.iv, 'base64');
@@ -386,28 +388,11 @@ export class CosmosTokenStore implements TokenStore {
     }
   }
 
+  /**
+   * {@inheritDoc TokenStore.cleanupExpired}
+   */
   async cleanupExpired(): Promise<number> {
-    const nowSec = Math.floor(nowMs() / 1000);
-    const iterator = this.container.items.query<{ id: string; userId: string }>({
-      query: 'SELECT c.id, c.userId FROM c WHERE c.expiresAt > 0 AND c.expiresAt <= @now',
-      parameters: [{ name: '@now', value: nowSec }],
-    });
-
-    let removed = 0;
-    while (iterator.hasMoreResults()) {
-      const page = await iterator.fetchNext();
-      for (const row of page.resources ?? []) {
-        try {
-          await this.container.item(row.id, row.userId).delete();
-          removed += 1;
-        } catch (error) {
-          const status = (error as { code?: number; statusCode?: number }).code ?? (error as { statusCode?: number }).statusCode;
-          if (status === 404) continue;
-          log.warn('Failed to delete expired token document', { userId: row.userId, error });
-        }
-      }
-    }
-    return removed;
+    return 0;
   }
 }
 

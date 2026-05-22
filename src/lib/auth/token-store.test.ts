@@ -82,10 +82,22 @@ describe('InMemoryTokenStore', () => {
     });
   });
 
-  it('treats expired tokens as missing', async () => {
+  it('returns expired records so callers can refresh via the refresh token', async () => {
     const store = new InMemoryTokenStore();
-    await store.setToken('u1', { accessToken: 'ghu_x', expiresAt: 1 });
-    await expect(store.getToken('u1')).resolves.toBeNull();
+    await store.setToken('u1', {
+      accessToken: 'ghu_old',
+      refreshToken: 'ghr_still_valid',
+      expiresAt: 1,
+    });
+    // getToken returns the record even when the access token is expired.
+    // The caller (e.g. resolveFreshGitHubToken) is responsible for checking
+    // expiresAt and exchanging the refresh token. Returning null here would
+    // make refresh-at-execution impossible.
+    await expect(store.getToken('u1')).resolves.toEqual({
+      accessToken: 'ghu_old',
+      refreshToken: 'ghr_still_valid',
+      expiresAt: 1,
+    });
   });
 
   it('deletes tokens', async () => {
@@ -98,18 +110,24 @@ describe('InMemoryTokenStore', () => {
     await expect(store.getToken('u1')).resolves.toBeNull();
   });
 
-  it('cleanupExpired removes only expired records', async () => {
+  it('cleanupExpired is a no-op until refresh-token expiry is tracked', async () => {
+    // We cannot derive refresh-token expiry from the access-token expiresAt,
+    // so sweeping by access-token expiry would delete records whose refresh
+    // tokens are still valid for months. Until we plumb refresh-token expiry
+    // through the OAuth callback, cleanup is a no-op and the only deletion
+    // path is explicit sign-out (deleteToken). Records are bounded per user
+    // (one row per user), so unbounded growth scales with user count, not
+    // request count — acceptable for now. Tracked as follow-up.
     const store = new InMemoryTokenStore();
     const past = 1;
     const future = Math.floor(Date.now() / 1000) + 3600;
-    await store.setToken('expired', { accessToken: 'ghu_a', expiresAt: past });
-    await store.setToken('fresh', { accessToken: 'ghu_b', expiresAt: future });
+    await store.setToken('a', { accessToken: 'ghu_a', expiresAt: past });
+    await store.setToken('b', { accessToken: 'ghu_b', expiresAt: future });
     const removed = await store.cleanupExpired();
-    expect(removed).toBe(1);
-    await expect(store.getToken('fresh')).resolves.toEqual({
-      accessToken: 'ghu_b',
-      expiresAt: future,
-    });
+    expect(removed).toBe(0);
+    // Both records still readable.
+    await expect(store.getToken('a')).resolves.not.toBeNull();
+    await expect(store.getToken('b')).resolves.not.toBeNull();
   });
 });
 
@@ -248,12 +266,14 @@ describe('CosmosTokenStore', () => {
     await expect(store.getToken('nobody')).resolves.toBeNull();
   });
 
-  it('get: returns null for expired tokens without unwrapping the DEK', async () => {
+  it('get: returns expired records so callers can refresh', async () => {
+    // Cosmos store must mirror InMemoryTokenStore: do not hide refreshable
+    // records behind a null. The resolver decides whether to refresh.
     const store = new CosmosTokenStore(baseConfig);
-    const doc = encryptForTest({ accessToken: 'ghu_old', expiresAt: 1 }, FAKE_DEK, 'user-42');
+    const token = { accessToken: 'ghu_old', refreshToken: 'ghr_valid', expiresAt: 1 };
+    const doc = encryptForTest(token, FAKE_DEK, 'user-42');
     mocks.containerItemRead.mockResolvedValue({ resource: doc });
-    await expect(store.getToken('user-42')).resolves.toBeNull();
-    expect(mocks.unwrapKey).not.toHaveBeenCalled();
+    await expect(store.getToken('user-42')).resolves.toEqual(token);
   });
 
   it('delete: removes the Cosmos document', async () => {
@@ -268,21 +288,14 @@ describe('CosmosTokenStore', () => {
     await expect(store.deleteToken('user-42')).resolves.toBeUndefined();
   });
 
-  it('cleanupExpired: deletes only expired rows', async () => {
+  it('cleanupExpired: is a no-op until refresh-token expiry is tracked', async () => {
+    // See the InMemoryTokenStore equivalent test for the rationale. Cosmos
+    // mirrors the same behaviour: never delete a record based on access-token
+    // expiry alone, because the refresh token is likely still valid.
     const store = new CosmosTokenStore(baseConfig);
-    // One page of expired rows, then done.
-    mocks.containerItemsQueryHasMore.mockReturnValueOnce(true).mockReturnValueOnce(false);
-    mocks.containerItemsQueryFetch.mockResolvedValueOnce({
-      resources: [
-        { id: 'a', userId: 'a' },
-        { id: 'b', userId: 'b' },
-      ],
-    });
-
     const removed = await store.cleanupExpired();
-
-    expect(removed).toBe(2);
-    expect(mocks.containerItemDelete).toHaveBeenCalledTimes(2);
+    expect(removed).toBe(0);
+    expect(mocks.containerItemDelete).not.toHaveBeenCalled();
   });
 });
 
