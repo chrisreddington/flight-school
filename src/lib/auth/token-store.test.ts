@@ -454,6 +454,139 @@ describe('CosmosTokenStore', () => {
       ).rejects.toThrow('boom');
     });
   });
+
+  describe('DEK cache', () => {
+    it('skips Key Vault unwrapKey on a second read of the same envelope', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      const token = { accessToken: 'ghu_cached', expiresAt: 9999999999 };
+      const doc = encryptForTest(token, FAKE_DEK, 'user-42');
+      mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+      await store.getToken('user-42');
+      await store.getToken('user-42');
+
+      // First read unwraps; second read MUST hit the cache.
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-unwraps when the envelope changes (record rewritten with a new DEK)', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      const token = { accessToken: 'ghu_one', expiresAt: 9999999999 };
+      const docV1 = encryptForTest(token, FAKE_DEK, 'user-42');
+      mocks.containerItemRead.mockResolvedValueOnce({ resource: docV1 });
+      await store.getToken('user-42');
+
+      // Simulate a rotation: a fresh DEK + a different wrappedDek on the doc.
+      const NEW_DEK = randomBytes(32);
+      const docV2 = encryptForTest(token, NEW_DEK, 'user-42');
+      // Mutate wrappedDek so the envelope digest differs.
+      docV2.wrappedDek = Buffer.from('different-wrapped-blob').toString('base64');
+      mocks.containerItemRead.mockResolvedValueOnce({ resource: docV2 });
+      mocks.unwrapKey.mockResolvedValueOnce({ result: NEW_DEK });
+
+      await store.getToken('user-42');
+
+      // First read unwrapped, second read also unwrapped because envelope changed.
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates the cache on setToken so a subsequent read re-unwraps', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      const token = { accessToken: 'ghu_first', expiresAt: 9999999999 };
+      const doc = encryptForTest(token, FAKE_DEK, 'user-42');
+      mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+      await store.getToken('user-42');
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(1);
+
+      // setToken for the same user should drop the cached DEK.
+      await store.setToken('user-42', { accessToken: 'ghu_second', expiresAt: 9999999999 });
+
+      await store.getToken('user-42');
+      // Cache invalidated → second read unwraps again.
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates the cache on deleteToken', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      const token = { accessToken: 'ghu_d', expiresAt: 9999999999 };
+      const doc = encryptForTest(token, FAKE_DEK, 'user-42');
+      mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+      await store.getToken('user-42');
+      await store.deleteToken('user-42');
+      await store.getToken('user-42');
+
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates the cache on a successful setTokenIfNewer CAS write', async () => {
+      const store = new CosmosTokenStore(baseConfig);
+      const token = { accessToken: 'ghu_old', expiresAt: 100 };
+      const doc = encryptForTest(token, FAKE_DEK, 'user-42');
+      mocks.containerItemRead.mockResolvedValue({ resource: doc, etag: 'etag-1' });
+
+      await store.getToken('user-42');
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(1);
+
+      mocks.containerItemReplace.mockResolvedValueOnce({ resource: {} });
+      await store.setTokenIfNewer('user-42', { accessToken: 'ghu_new', expiresAt: 200 });
+
+      await store.getToken('user-42');
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('honours dekCacheMaxEntries=0 (cache fully disabled)', async () => {
+      const store = new CosmosTokenStore({ ...baseConfig, dekCacheMaxEntries: 0 });
+      const token = { accessToken: 'ghu_a', expiresAt: 9999999999 };
+      const doc = encryptForTest(token, FAKE_DEK, 'user-42');
+      mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+      await store.getToken('user-42');
+      await store.getToken('user-42');
+
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(2);
+    });
+
+    it('honours dekCacheTtlMs (entry expires and is re-fetched)', async () => {
+      vi.useFakeTimers();
+      try {
+        const store = new CosmosTokenStore({ ...baseConfig, dekCacheTtlMs: 1000 });
+        const token = { accessToken: 'ghu_ttl', expiresAt: 9999999999 };
+        const doc = encryptForTest(token, FAKE_DEK, 'user-42');
+        mocks.containerItemRead.mockResolvedValue({ resource: doc });
+
+        await store.getToken('user-42');
+        vi.advanceTimersByTime(1500);
+        await store.getToken('user-42');
+
+        expect(mocks.unwrapKey).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('evicts the oldest entry when the size cap is exceeded', async () => {
+      const store = new CosmosTokenStore({ ...baseConfig, dekCacheMaxEntries: 2 });
+      const make = (uid: string) => {
+        const doc = encryptForTest({ accessToken: `ghu_${uid}`, expiresAt: 9999999999 }, FAKE_DEK, uid);
+        return doc;
+      };
+      mocks.containerItemRead
+        .mockResolvedValueOnce({ resource: make('a') })
+        .mockResolvedValueOnce({ resource: make('b') })
+        .mockResolvedValueOnce({ resource: make('c') })
+        .mockResolvedValueOnce({ resource: make('a') });
+
+      await store.getToken('a');
+      await store.getToken('b');
+      await store.getToken('c'); // evicts 'a'
+      await store.getToken('a'); // must re-unwrap
+
+      // 4 reads, 4 unwraps (no cache hits because 'a' was evicted by 'c').
+      expect(mocks.unwrapKey).toHaveBeenCalledTimes(4);
+    });
+  });
 });
 
 describe('createDefaultTokenStore (factory guard)', () => {

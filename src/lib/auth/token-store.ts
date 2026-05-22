@@ -19,7 +19,7 @@
  * to swap implementations without behavioural change.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
 import { CryptographyClient, KnownEncryptionAlgorithms } from '@azure/keyvault-keys';
 import { CosmosClient, type Container } from '@azure/cosmos';
@@ -42,6 +42,31 @@ const AUTH_TAG_LENGTH = 16;
 const ENVELOPE_ALG = 'AES-256-GCM/A256KW';
 /** Key Vault key-wrap algorithm. */
 const KEY_WRAP_ALG = KnownEncryptionAlgorithms.A256KW;
+
+/**
+ * Default ceiling on the number of unwrapped DEKs the CosmosTokenStore
+ * keeps in memory at any one time. Sized for typical concurrent-user
+ * counts in a single replica; configurable per-instance.
+ */
+const DEK_CACHE_MAX_ENTRIES = 256;
+
+/**
+ * Default TTL (ms) for a cached unwrapped DEK. Capped well below the
+ * GitHub access-token lifetime (~8h) so that revocation or a sign-out
+ * is naturally honoured within a short window without an explicit
+ * purge — the next decrypt will go to Key Vault and observe whatever
+ * the persisted document now says.
+ */
+const DEK_CACHE_DEFAULT_TTL_MS = 15 * 60 * 1000;
+
+interface CachedDek {
+  /** Digest of (kekId || wrappedDekBase64). Guards against using a stale DEK against a re-wrapped envelope. */
+  envelopeDigest: string;
+  /** The unwrapped DEK bytes. Lives only in this cache and the in-flight decipher. */
+  dek: Buffer;
+  /** Wall-clock ms at which this entry must be re-fetched from Key Vault. */
+  expiresAtMs: number;
+}
 
 export interface StoredToken {
   /** The GitHub user-to-server access token (`ghu_...`). */
@@ -187,6 +212,17 @@ export interface CosmosTokenStoreConfig {
   container?: Container;
   /** Override CryptographyClient (tests). */
   cryptographyClient?: CryptographyClient;
+  /**
+   * Max entries to keep in the unwrapped-DEK cache.
+   * Defaults to {@link DEK_CACHE_MAX_ENTRIES}. Set to `0` to disable the
+   * cache entirely (every `getToken` will round-trip to Key Vault).
+   */
+  dekCacheMaxEntries?: number;
+  /**
+   * TTL (ms) for each unwrapped-DEK cache entry.
+   * Defaults to {@link DEK_CACHE_DEFAULT_TTL_MS}.
+   */
+  dekCacheTtlMs?: number;
 }
 
 /** Shape of the persisted Cosmos document. */
@@ -286,6 +322,19 @@ export class CosmosTokenStore implements TokenStore {
   private readonly container: Container;
   private readonly cryptographyClient: CryptographyClient;
   private readonly kekId: string;
+  /**
+   * Bounded LRU+TTL cache of unwrapped DEKs, keyed by `userId`. Eliminates
+   * a Key Vault `unwrapKey` round-trip on the hot getToken path while
+   * keeping the blast radius small: entries are size-bounded, TTL-bounded,
+   * invalidated on every write for the same user, and verified against the
+   * envelope digest before reuse so a rotated record can never be
+   * decrypted with a stale DEK.
+   *
+   * LRU is implemented via Map insertion order (re-inserted on each hit).
+   */
+  private readonly dekCache: Map<string, CachedDek>;
+  private readonly dekCacheMaxEntries: number;
+  private readonly dekCacheTtlMs: number;
 
   constructor(config: CosmosTokenStoreConfig) {
     const credential = config.credential ?? new DefaultAzureCredential();
@@ -302,6 +351,87 @@ export class CosmosTokenStore implements TokenStore {
       : `${config.keyVaultUrl.replace(/\/$/, '')}/keys/${config.keyName}`;
     this.kekId = keyIdentifier;
     this.cryptographyClient = config.cryptographyClient ?? new CryptographyClient(keyIdentifier, credential);
+
+    this.dekCacheMaxEntries = config.dekCacheMaxEntries ?? DEK_CACHE_MAX_ENTRIES;
+    this.dekCacheTtlMs = config.dekCacheTtlMs ?? DEK_CACHE_DEFAULT_TTL_MS;
+    this.dekCache = new Map();
+  }
+
+  /**
+   * Compute the cache-validation digest for an envelope. Binds the cached
+   * DEK to the exact `(kekId, wrappedDek)` pair so that a record rewritten
+   * with a fresh DEK invalidates an in-memory cache entry on the very next
+   * lookup — no chance of decrypting new ciphertext with an old key.
+   */
+  private envelopeDigest(kekId: string, wrappedDekBase64: string): string {
+    return createHash('sha256').update(`${kekId}|${wrappedDekBase64}`).digest('base64');
+  }
+
+  /**
+   * Return a cached unwrapped DEK for `userId` if and only if it has not
+   * expired and the envelope on the current record still matches. Touches
+   * insertion order on a hit so the entry survives the next LRU eviction.
+   */
+  private getCachedDek(userId: string, expectedDigest: string): Buffer | null {
+    const entry = this.dekCache.get(userId);
+    if (!entry) return null;
+    if (entry.expiresAtMs <= nowMs()) {
+      this.dekCache.delete(userId);
+      entry.dek.fill(0);
+      return null;
+    }
+    if (entry.envelopeDigest !== expectedDigest) {
+      // Record was rewritten with a fresh DEK; the cached one is for a
+      // previous envelope and must not be reused.
+      this.dekCache.delete(userId);
+      entry.dek.fill(0);
+      return null;
+    }
+    // Re-insert to move to most-recently-used position.
+    this.dekCache.delete(userId);
+    this.dekCache.set(userId, entry);
+    return entry.dek;
+  }
+
+  /**
+   * Store an unwrapped DEK in the cache, evicting the oldest entry when
+   * the size cap would be exceeded. The cached buffer is the same reference
+   * the in-flight decipher uses; we deliberately do NOT zero it on store
+   * because the cache is its current owner. It is zeroed on eviction,
+   * invalidation, or TTL expiry.
+   */
+  private putCachedDek(userId: string, envelopeDigest: string, dek: Buffer): void {
+    if (this.dekCacheMaxEntries <= 0) return;
+    // Replace any existing entry first (and zero its DEK).
+    const existing = this.dekCache.get(userId);
+    if (existing) {
+      existing.dek.fill(0);
+      this.dekCache.delete(userId);
+    }
+    while (this.dekCache.size >= this.dekCacheMaxEntries) {
+      const oldestKey = this.dekCache.keys().next().value as string | undefined;
+      if (oldestKey === undefined) break;
+      const oldest = this.dekCache.get(oldestKey);
+      this.dekCache.delete(oldestKey);
+      if (oldest) oldest.dek.fill(0);
+    }
+    this.dekCache.set(userId, {
+      envelopeDigest,
+      dek,
+      expiresAtMs: nowMs() + this.dekCacheTtlMs,
+    });
+  }
+
+  /**
+   * Drop any cached DEK for `userId`. Called from every write path so a
+   * sign-out / refresh / rotation cannot leave a usable DEK in memory
+   * tied to a since-superseded envelope.
+   */
+  private invalidateCachedDek(userId: string): void {
+    const entry = this.dekCache.get(userId);
+    if (!entry) return;
+    entry.dek.fill(0);
+    this.dekCache.delete(userId);
   }
 
   /**
@@ -346,8 +476,18 @@ export class CosmosTokenStore implements TokenStore {
     const authTag = Buffer.from(doc.authTag, 'base64');
     const ciphertext = Buffer.from(doc.ciphertext, 'base64');
 
-    const unwrap = await this.cryptographyClient.unwrapKey(KEY_WRAP_ALG, wrappedDek);
-    const dek = Buffer.from(unwrap.result);
+    const digest = this.envelopeDigest(doc.kekId, doc.wrappedDek);
+    const cachedDek = this.getCachedDek(userId, digest);
+    let dek: Buffer;
+    let cacheHit = false;
+    if (cachedDek) {
+      dek = cachedDek;
+      cacheHit = true;
+    } else {
+      const unwrap = await this.cryptographyClient.unwrapKey(KEY_WRAP_ALG, wrappedDek);
+      dek = Buffer.from(unwrap.result);
+    }
+    let promotedToCache = false;
     try {
       const decipher = createDecipheriv(AEAD_ALG, dek, iv);
       decipher.setAuthTag(authTag);
@@ -361,9 +501,23 @@ export class CosmosTokenStore implements TokenStore {
       );
       const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       const parsed = JSON.parse(plaintext.toString('utf8')) as StoredToken;
+      // Promote the DEK to the cache only after a successful decrypt
+      // proves the envelope is intact. Ownership transfers to the cache,
+      // which is responsible for zeroing on eviction.
+      if (!cacheHit && this.dekCacheMaxEntries > 0) {
+        this.putCachedDek(userId, digest, dek);
+        promotedToCache = true;
+      }
       return parsed;
     } finally {
-      dek.fill(0);
+      // Zero the DEK whenever this method still owns it:
+      // - cache miss + cache disabled (we own the freshly unwrapped DEK)
+      // - cache miss + decrypt threw before promotion (no other owner)
+      // Cache-hit DEKs and successfully-promoted DEKs are owned by the
+      // cache and must not be zeroed here.
+      if (!cacheHit && !promotedToCache) {
+        dek.fill(0);
+      }
     }
   }
 
@@ -381,6 +535,7 @@ export class CosmosTokenStore implements TokenStore {
   async setToken(userId: string, token: StoredToken): Promise<void> {
     const doc = await this.buildEnvelope(userId, token);
     await this.container.items.upsert(doc, { disableAutomaticIdGeneration: true });
+    this.invalidateCachedDek(userId);
   }
 
   /**
@@ -429,6 +584,7 @@ export class CosmosTokenStore implements TokenStore {
       } else {
         await this.container.items.create(doc, { disableAutomaticIdGeneration: true });
       }
+      this.invalidateCachedDek(userId);
       return true;
     } catch (error) {
       const status =
@@ -493,6 +649,7 @@ export class CosmosTokenStore implements TokenStore {
       if (status === 404) return;
       throw error;
     }
+    this.invalidateCachedDek(userId);
   }
 
   /**
