@@ -45,6 +45,7 @@ import { generateMessageId } from '@/lib/utils/id-generator';
 import { extractJSON } from '@/lib/utils/json-utils';
 import { getThreadById, updateThread } from './threads-storage';
 import { readEvaluationStorage, writeEvaluationStorage } from './evaluation-storage';
+import { deleteScratchpad, readScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
 
 const log = logger.withTag('JobExecutors');
 
@@ -437,6 +438,64 @@ export async function executeGoalRegeneration(
 }
 
 /**
+ * Best-effort: read the per-job scratchpad from disk and merge it into
+ * `users/{userId}/threads.json` as a finalised assistant message,
+ * then delete the scratchpad. Used by both the happy-path
+ * consolidation and the catch-block fallback (where the in-memory
+ * stream state isn't reachable).
+ *
+ * Upserts by `assistantMessageId`, so re-running is idempotent.
+ * Silently no-ops when there's no scratchpad (e.g. the executor
+ * crashed before the first delta).
+ */
+async function consolidateScratchpadToThread(
+  userId: string,
+  jobId: string,
+  isFinal: boolean,
+): Promise<void> {
+  const scratchpad = await readScratchpad(userId, jobId);
+  if (!scratchpad) return;
+  const { threadId, assistantMessageId, content, toolEvents, hasActionableItem } = scratchpad;
+
+  const currentThread = await getThreadById(userId, threadId);
+  if (!currentThread) {
+    // Thread was deleted while the job was running — drop the scratchpad.
+    await deleteScratchpad(userId, jobId);
+    return;
+  }
+
+  const consolidatedMessage: Message = {
+    id: assistantMessageId,
+    role: 'assistant',
+    content: content + (isFinal ? '' : ' ▊'),
+    timestamp: now(),
+    toolEvents: toolEvents && toolEvents.length > 0 ? toolEvents.map((e) => ({ ...e })) : undefined,
+    hasActionableItem,
+  };
+
+  const existingIndex = currentThread.messages.findIndex((m) => m.id === assistantMessageId);
+  let updatedMessages: Message[];
+  if (existingIndex >= 0) {
+    updatedMessages = [...currentThread.messages];
+    updatedMessages[existingIndex] = {
+      ...updatedMessages[existingIndex],
+      ...consolidatedMessage,
+    };
+  } else {
+    updatedMessages = [...currentThread.messages, consolidatedMessage];
+  }
+
+  await updateThread(userId, {
+    ...currentThread,
+    messages: updatedMessages,
+    updatedAt: now(),
+    isStreaming: !isFinal,
+  });
+
+  await deleteScratchpad(userId, jobId);
+}
+
+/**
  * Execute a chat response job.
  * Generates AI response and saves it incrementally to thread storage.
  */
@@ -493,21 +552,37 @@ export async function executeChatResponse(
     let lastSaveTime = Date.now();
     const SAVE_INTERVAL_MS = 400;
     
-    // Helper to save current progress to thread.
-    //
-    // Phase D refactor (rubber-duck #8/#18): use the stable
-    // `assistantMessageId` as the message id throughout — no
-    // streaming-id/final-id swap, no `m.content === prompt` lookup.
-    // The user-message position is no longer needed because we upsert
-    // by id and append at the end if missing.
-    const saveProgressToThread = async (isFinal: boolean) => {
+    // Helper to flush the current in-flight state to the per-job
+    // scratchpad. Hot path during streaming — rewrites a tiny
+    // single-message file instead of the entire threads.json. The
+    // threads route hydrates from the scratchpad on read so the UI
+    // still sees live deltas (see `hydrateThreadsWithScratchpads`).
+    const flushScratchpad = async (status: 'streaming' | 'completed' | 'failed') => {
+      try {
+        await writeScratchpad(userId, jobId, {
+          threadId,
+          assistantMessageId,
+          content: fullContent,
+          toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
+          hasActionableItem,
+          status,
+        });
+      } catch (err) {
+        log.warn(`[Job ${jobId}] Failed to flush scratchpad:`, err);
+      }
+    };
+
+    // Consolidate the in-flight stream into the canonical threads.json
+    // and clear the scratchpad. Called once on terminal state (final,
+    // cancel, or error). Uses `assistantMessageId` as the upsert key
+    // so re-running consolidation is idempotent.
+    const consolidateToThread = async (isFinal: boolean) => {
       try {
         const currentThread = await getThreadById(userId, threadId);
         if (!currentThread) return;
 
         const existingIndex = currentThread.messages.findIndex(m => m.id === assistantMessageId);
-
-        const streamingMessage: Message = {
+        const consolidatedMessage: Message = {
           id: assistantMessageId,
           role: 'assistant',
           content: fullContent + (isFinal ? '' : ' ▊'),
@@ -520,9 +595,9 @@ export async function executeChatResponse(
         let updatedMessages: Message[];
         if (existingIndex >= 0) {
           updatedMessages = [...currentThread.messages];
-          updatedMessages[existingIndex] = streamingMessage;
+          updatedMessages[existingIndex] = consolidatedMessage;
         } else {
-          updatedMessages = [...currentThread.messages, streamingMessage];
+          updatedMessages = [...currentThread.messages, consolidatedMessage];
         }
 
         await updateThread(userId, {
@@ -532,9 +607,14 @@ export async function executeChatResponse(
           isStreaming: !isFinal,
         });
 
-        log.debug(`[Job ${jobId}] Saved progress: ${fullContent.length} chars, final=${isFinal}`);
+        // Scratchpad is now redundant — the canonical store has the
+        // final message. Delete it so the retention sweep doesn't
+        // have to. If this fails the sweep will clean it within 1h.
+        await deleteScratchpad(userId, jobId);
+
+        log.debug(`[Job ${jobId}] Consolidated to thread: ${fullContent.length} chars, final=${isFinal}`);
       } catch (err) {
-        log.warn(`[Job ${jobId}] Failed to save progress:`, err);
+        log.warn(`[Job ${jobId}] Failed to consolidate to thread:`, err);
       }
     };
 
@@ -551,7 +631,7 @@ export async function executeChatResponse(
         
         const nowMs = Date.now();
         if (nowMs - lastSaveTime >= SAVE_INTERVAL_MS) {
-          await saveProgressToThread(false);
+          await flushScratchpad('streaming');
           lastSaveTime = nowMs;
         }
       } else if (event.type === 'tool_start') {
@@ -564,7 +644,7 @@ export async function executeChatResponse(
         });
         // Persist immediately so the UI surfaces the running state without
         // waiting for the next 400ms save tick.
-        await saveProgressToThread(false);
+        await flushScratchpad('streaming');
         lastSaveTime = Date.now();
       } else if (event.type === 'tool_complete') {
         // Match the most recent running event by name (SDK has no correlation id).
@@ -579,7 +659,7 @@ export async function executeChatResponse(
             break;
           }
         }
-        await saveProgressToThread(false);
+        await flushScratchpad('streaming');
         lastSaveTime = Date.now();
       } else if (event.type === 'done') {
         hasActionableItem = detectActionableContent(fullContent);
@@ -593,10 +673,14 @@ export async function executeChatResponse(
     
     if (wasCancelled) {
       log.info(`[Job ${jobId}] Chat response cancelled after ${fullContent.length} chars`);
+      // Consolidate whatever we have so far into the canonical store
+      // and remove the scratchpad, otherwise the cancelled message
+      // would linger in scratchpad-land until the next retention sweep.
+      await consolidateToThread(true);
       return;
     }
     
-    await saveProgressToThread(true);
+    await consolidateToThread(true);
     
     await jobStorage.markCompleted<ChatResponseResult>(jobId, {
       threadId,
@@ -610,6 +694,16 @@ export async function executeChatResponse(
     unregisterSession(jobId);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     log.error(`[Job ${jobId}] Chat response failed:`, errorMessage);
+    // Best-effort: read the scratchpad (which holds the latest delta
+    // state flushed before we threw) and write whatever we have into
+    // the canonical thread so the user sees the truncated reply.
+    // Failures here are non-fatal — the retention sweep is the safety
+    // net for the orphaned scratchpad.
+    try {
+      await consolidateScratchpadToThread(userId, jobId, true);
+    } catch (consolidationErr) {
+      log.warn(`[Job ${jobId}] Failed to consolidate after error:`, consolidationErr);
+    }
     await jobStorage.markFailed(jobId, errorMessage);
   }
 }

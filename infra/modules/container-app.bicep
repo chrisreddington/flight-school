@@ -35,6 +35,15 @@ param keyVaultUri string
 @description('GitHub App client ID (informational; surfaced as env var for debug logs).')
 param githubAppId string = ''
 
+@description('Entra tenant id for cron JWT verification. Empty string disables cron auth (route will reject all calls).')
+param cronTenantId string = ''
+
+@description('Expected `aud` claim on cron-job AAD tokens (e.g. api://flightschool-cron).')
+param cronAudience string = ''
+
+@description('Comma-separated allowlist of caller appids (cron-job UAMI client id).')
+param cronAllowedAppId string = ''
+
 var image = '${acrLoginServer}/${appName}:${imageTag}'
 
 // Helper to build a Key Vault secret reference URI.
@@ -117,6 +126,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'PORT', value: '3000' }
             { name: 'GITHUB_APP_ID', value: githubAppId }
             { name: 'KEY_VAULT_NAME', value: keyVaultName }
+            { name: 'CRON_TENANT_ID', value: cronTenantId }
+            { name: 'CRON_AUDIENCE', value: cronAudience }
+            { name: 'CRON_ALLOWED_APPIDS', value: cronAllowedAppId }
             { name: 'AUTH_SECRET', secretRef: 'auth-secret' }
             { name: 'AUTH_GITHUB_ID', secretRef: 'auth-github-id' }
             { name: 'AUTH_GITHUB_SECRET', secretRef: 'auth-github-secret' }

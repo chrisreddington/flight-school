@@ -38,6 +38,15 @@ param resourceGroupName string = 'rg-${appName}'
 @description('Environment tag for cost/ownership tracking.')
 param environment string = 'prod'
 
+@description('Entra tenant ID. Required for cron-job JWT verification. Defaults to the tenant of the deployment principal.')
+param tenantId string = subscription().tenantId
+
+@description('Cron schedule expression for the retention sweeper job. Default = every 15 minutes.')
+param cronSchedule string = '*/15 * * * *'
+
+@description('Public hostname the cron Job should call (e.g. flightschool.example.com). If empty, falls back to the container app FQDN minted during deployment.')
+param cronHostname string = ''
+
 var tags = {
   app: appName
   environment: environment
@@ -94,6 +103,16 @@ module keyVault 'modules/key-vault.bicep' = {
   }
 }
 
+module cronIdentity 'modules/cron-identity.bicep' = {
+  scope: rg
+  name: 'cron-identity'
+  params: {
+    location: location
+    appName: appName
+    tags: tags
+  }
+}
+
 module containerApp 'modules/container-app.bicep' = {
   scope: rg
   name: 'container-app'
@@ -107,6 +126,27 @@ module containerApp 'modules/container-app.bicep' = {
     keyVaultName: keyVault.outputs.keyVaultName
     keyVaultUri: keyVault.outputs.keyVaultUri
     githubAppId: githubAppId
+    cronTenantId: tenantId
+    cronAudience: 'api://${appName}-cron'
+    cronAllowedAppId: cronIdentity.outputs.clientId
+  }
+}
+
+var resolvedCronHostname = empty(cronHostname) ? containerApp.outputs.fqdn : cronHostname
+
+module cronJob 'modules/cron-job.bicep' = {
+  scope: rg
+  name: 'cron-job'
+  params: {
+    location: location
+    appName: appName
+    tags: tags
+    containerAppEnvironmentId: env.outputs.environmentId
+    cronEndpointUrl: 'https://${resolvedCronHostname}/api/cron/sweep'
+    cronAudience: 'api://${appName}-cron'
+    schedule: cronSchedule
+    uamiResourceId: cronIdentity.outputs.resourceId
+    uamiClientId: cronIdentity.outputs.clientId
   }
 }
 
@@ -127,3 +167,5 @@ output keyVaultName string = keyVault.outputs.keyVaultName
 output cosmosAccountName string = cosmos.outputs.accountName
 output appInsightsName string = appInsights.outputs.name
 output resourceGroupName string = rg.name
+output cronJobName string = cronJob.outputs.jobName
+output cronUamiClientId string = cronIdentity.outputs.clientId

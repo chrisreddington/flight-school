@@ -53,6 +53,14 @@ interface StorageRouteConfig<T> {
   logger: LoggerInstance;
   /** Type guard function to validate schema structure */
   validateSchema: (data: unknown) => data is T;
+  /**
+   * Optional async hook invoked on GET after the storage file is read,
+   * allowing the route to mutate the response body before it's
+   * serialized. Used by threads storage to merge in per-job streaming
+   * scratchpads. Failures here are caught and logged; the raw storage
+   * payload is returned on hook error.
+   */
+  transformRead?: (userId: string, data: T) => Promise<T> | T;
 }
 
 /**
@@ -78,7 +86,7 @@ interface StorageRouteConfig<T> {
  * ```
  */
 export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
-  const { filename, defaultSchema, logger, validateSchema } = config;
+  const { filename, defaultSchema, logger, validateSchema, transformRead } = config;
 
   /**
    * Resolves the per-user storage path or returns an HTTP response describing
@@ -87,7 +95,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
    * a restrictive mode so the first write doesn't fail with ENOENT.
    */
   async function resolveScopedPath(): Promise<
-    { ok: true; path: string } | { ok: false; response: NextResponse }
+    { ok: true; path: string; userId: string } | { ok: false; response: NextResponse }
   > {
     let userId: string;
     try {
@@ -111,7 +119,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
     }
 
     await ensureDir(`users/${userId}`, { mode: 0o700 });
-    return { ok: true, path: scopedPath };
+    return { ok: true, path: scopedPath, userId };
   }
 
   /**
@@ -122,11 +130,18 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
     if (!scoped.ok) return scoped.response;
 
     try {
-      const storage = await readStorage<T>(
+      let storage = await readStorage<T>(
         scoped.path,
         defaultSchema,
         validateSchema
       );
+      if (transformRead) {
+        try {
+          storage = await transformRead(scoped.userId, storage);
+        } catch (error) {
+          logger.warn('transformRead hook failed; returning raw storage', { error });
+        }
+      }
       return NextResponse.json(storage);
     } catch (error) {
       logger.error(`GET failed`, { error });

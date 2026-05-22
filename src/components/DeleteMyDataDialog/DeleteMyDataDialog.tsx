@@ -14,9 +14,10 @@
  * an account that no longer has data.
  */
 
-import { apiDelete } from '@/lib/api-client';
+import { ApiError, apiDelete } from '@/lib/api-client';
 import { Banner, Dialog, FormControl, Stack, Text, TextInput } from '@primer/react';
 import React, { useCallback, useState } from 'react';
+import { signIn } from 'next-auth/react';
 
 export interface DeleteMyDataDialogProps {
   /** Caller's GitHub login as known to the authenticated session. */
@@ -44,6 +45,15 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
       });
       onConfirmed();
     } catch (err) {
+      if (err instanceof ApiError && err.context?.code === 'recent_auth_required') {
+        // Sudo-mode style: bounce through a fresh sign-in then return to
+        // /settings so the user can retry the deletion within the window.
+        const callbackUrl = typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : '/settings';
+        await signIn('github', { callbackUrl });
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to delete data. Try again.');
     } finally {
       setSubmitting(false);

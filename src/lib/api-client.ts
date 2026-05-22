@@ -35,7 +35,7 @@ interface ApiRequestOptions extends RequestInit {
 /**
  * Custom error class for API failures with status code and context.
  */
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
@@ -195,7 +195,20 @@ async function apiRequest<T>(
           if (!response.ok) {
             const errorMessage = data.error || `HTTP ${response.status}`;
             if (throwOnError) {
-              throw new ApiError(errorMessage, response.status, data.meta);
+              // Surface body-level fields (e.g. `code`, `windowSeconds`) on
+              // the error context so call sites can branch on them without
+              // having to re-parse the response.
+              const context = {
+                ...(data.meta && typeof data.meta === 'object' ? data.meta : {}),
+                ...(typeof data === 'object' && data !== null
+                  ? Object.fromEntries(
+                      Object.entries(data).filter(
+                        ([k]) => k !== 'error' && k !== 'meta',
+                      ),
+                    )
+                  : {}),
+              };
+              throw new ApiError(errorMessage, response.status, context);
             }
             return data as T;
           }

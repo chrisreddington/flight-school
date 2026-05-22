@@ -9,10 +9,39 @@ async function main(): Promise<void> {
   const acaEnv = await builder.addAzureContainerAppEnvironment('aca-env');
   await acaEnv.withAzdResourceNaming();
 
-  await builder
+  // In production, the cron Job is provisioned via Bicep (see
+  // `infra/modules/cron-job.bicep`) and authenticated with an Entra-issued
+  // bearer token. Locally we expose a "Sweep retention" custom dashboard
+  // command that POSTs to the cron endpoint with `CRON_SKIP_AUTH=1`; the
+  // route honours the bypass only when `NODE_ENV !== 'production'`.
+  const flightSchool = await builder
     .addNextJsApp('flight-school', '.', { runScriptName: 'dev' })
     .withHttpEndpoint({ port: 3000, targetPort: 3000, isProxied: false })
-    .withExternalHttpEndpoints();
+    .withExternalHttpEndpoints()
+    .withEnvironment('CRON_SKIP_AUTH', '1');
+
+  await flightSchool.withCommand(
+    'sweep-retention',
+    'Run retention sweep',
+    async (ctx) => {
+      const endpoint = await flightSchool.getEndpoint('http');
+      const url = await endpoint.url();
+      try {
+        const res = await fetch(`${url}/api/cron/sweep`, { method: 'POST' });
+        const body = await res.text();
+        if (!res.ok) {
+          return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
+        }
+        ctx.logger?.logInformation?.(`Retention sweep complete: ${body}`);
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
 
   await builder.build().run();
 }

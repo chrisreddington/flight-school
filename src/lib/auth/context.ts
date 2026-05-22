@@ -50,6 +50,13 @@ export interface RawJwtCredentials {
   accessToken: string;
   refreshToken?: string;
   expiresAt?: number;
+  /**
+   * Unix seconds when the user last actually signed in via the OAuth flow
+   * (not the rolling JWT `iat`, which moves every re-encode). Used by
+   * security-sensitive routes (e.g. `DELETE /api/user/data`) to enforce
+   * a "recent auth" requirement.
+   */
+  lastSignInAt?: number;
 }
 
 /**
@@ -73,6 +80,7 @@ export async function readCredentialsFromJwt(): Promise<RawJwtCredentials | null
     accessToken: jwt.accessToken,
     refreshToken: typeof jwt.refreshToken === 'string' ? jwt.refreshToken : undefined,
     expiresAt: typeof jwt.expiresAt === 'number' ? jwt.expiresAt : undefined,
+    lastSignInAt: typeof jwt.lastSignInAt === 'number' ? jwt.lastSignInAt : undefined,
   };
 }
 

@@ -56,8 +56,8 @@ function getJwks(tenantId: string): ReturnType<typeof createRemoteJWKSet> {
   return jwks;
 }
 
-function isTestEnv(): boolean {
-  return process.env.NODE_ENV === 'test';
+function isNonProdEnv(): boolean {
+  return process.env.NODE_ENV !== 'production';
 }
 
 /**
@@ -71,13 +71,14 @@ function isTestEnv(): boolean {
  */
 export async function verifyCronRequest(request: Request): Promise<JWTPayload> {
   if (process.env.CRON_SKIP_AUTH === '1') {
-    if (!isTestEnv()) {
+    if (!isNonProdEnv()) {
       // Fail closed: a stray `CRON_SKIP_AUTH=1` in production must not
-      // turn this destructive endpoint into an open relay.
-      log.error('CRON_SKIP_AUTH set outside NODE_ENV=test — refusing');
+      // turn this destructive endpoint into an open relay. Only honoured
+      // in non-production environments (tests, local Aspire dev, etc.).
+      log.error('CRON_SKIP_AUTH set in production — refusing');
       throw new CronAuthError('Cron auth bypass not permitted in this environment');
     }
-    return { sub: 'test-bypass' };
+    return { sub: 'dev-bypass' };
   }
 
   const tenantId = process.env.CRON_TENANT_ID;

@@ -42,6 +42,12 @@ declare module 'next-auth/jwt' {
     expiresAt?: number;
     userId?: string;
     login?: string;
+    /**
+     * Unix seconds when the user last actually signed in via OAuth (not
+     * the rolling JWT `iat`). Set only in the `account` branch of the
+     * JWT callback. Used to enforce "recent auth" on destructive routes.
+     */
+    lastSignInAt?: number;
     error?: 'RefreshAccessTokenError' | 'RefreshTokenMissing';
   }
 }

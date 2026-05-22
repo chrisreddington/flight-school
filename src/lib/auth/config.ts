@@ -104,6 +104,11 @@ export const authConfig: NextAuthConfig = {
           typeof account.expires_at === 'number'
             ? account.expires_at
             : Math.floor(Date.now() / 1000) + (typeof account.expires_in === 'number' ? account.expires_in : 0);
+        // Record the actual sign-in moment (NOT the token-refresh moment).
+        // `iat` on the JWT itself moves every time NextAuth re-encodes the
+        // cookie, so it can't be used as a "recently signed in" signal.
+        // `lastSignInAt` is only ever written here, in the `account` branch.
+        token.lastSignInAt = Math.floor(Date.now() / 1000);
         if (profile && typeof profile === 'object') {
           const ghProfile = profile as { id?: number | string; login?: string };
           if (ghProfile.id !== undefined) token.userId = String(ghProfile.id);

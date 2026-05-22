@@ -23,7 +23,7 @@
  * filtered by the server-resolved `userId` from {@link requireUserContext}.
  */
 
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { requireUserContext, UnauthorizedError, readCredentialsFromJwt } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
 import { jobStorage } from '@/lib/jobs';
 import { deleteDir } from '@/lib/storage/utils';
@@ -33,6 +33,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cancelRunningJob } from '../../jobs/route';
 
 const log = logger.withTag('UserDataAPI');
+
+/**
+ * How recently the user must have signed in for a `DELETE /api/user/data`
+ * call to be honoured. Re-using a long-lived browser session for a
+ * destructive, irreversible action would let an attacker who phished a
+ * single cookie destroy a year of user data. 5 minutes matches the GitHub
+ * sudo-mode window for sensitive actions on github.com.
+ */
+const RECENT_AUTH_WINDOW_SECONDS = 5 * 60;
 
 interface DeleteSummary {
   jobsCancelled: number;
@@ -77,6 +86,28 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { userId, login } = await requireUserContext();
+
+    // Recent-auth gate: the destructive nature of this endpoint warrants
+    // a sudo-style time window. Anything older than RECENT_AUTH_WINDOW
+    // forces the user to sign in again before we'll proceed. The dialog
+    // handles `code: 'recent_auth_required'` by sending the user through
+    // a fresh sign-in flow.
+    const creds = await readCredentialsFromJwt();
+    const lastSignInAt = creds?.lastSignInAt;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (typeof lastSignInAt !== 'number' || nowSec - lastSignInAt > RECENT_AUTH_WINDOW_SECONDS) {
+      log.info(`[user ${userId}] Delete-all rejected: stale auth`, {
+        ageSec: typeof lastSignInAt === 'number' ? nowSec - lastSignInAt : null,
+      });
+      return NextResponse.json(
+        {
+          error: 'Please sign in again to confirm this destructive action.',
+          code: 'recent_auth_required',
+          windowSeconds: RECENT_AUTH_WINDOW_SECONDS,
+        },
+        { status: 401 },
+      );
+    }
 
     // Body confirmation: caller must echo their own GitHub login back to
     // us. Anything else (missing header, wrong login, no body) is

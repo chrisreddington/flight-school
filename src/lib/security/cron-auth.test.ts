@@ -35,15 +35,23 @@ afterEach(() => {
 });
 
 describe('verifyCronRequest', () => {
-  it('honours CRON_SKIP_AUTH=1 only when NODE_ENV=test', async () => {
+  it('honours CRON_SKIP_AUTH=1 when NODE_ENV is non-production (test/dev/Aspire)', async () => {
     process.env.CRON_SKIP_AUTH = '1';
     process.env.NODE_ENV = 'test';
 
     const payload = await verifyCronRequest(mkRequest());
-    expect(payload).toMatchObject({ sub: 'test-bypass' });
+    expect(payload).toMatchObject({ sub: 'dev-bypass' });
   });
 
-  it('rejects CRON_SKIP_AUTH=1 outside NODE_ENV=test', async () => {
+  it('also honours CRON_SKIP_AUTH=1 in NODE_ENV=development (Aspire dashboard)', async () => {
+    process.env.CRON_SKIP_AUTH = '1';
+    process.env.NODE_ENV = 'development';
+
+    const payload = await verifyCronRequest(mkRequest());
+    expect(payload).toMatchObject({ sub: 'dev-bypass' });
+  });
+
+  it('rejects CRON_SKIP_AUTH=1 in NODE_ENV=production', async () => {
     process.env.CRON_SKIP_AUTH = '1';
     process.env.NODE_ENV = 'production';
 
