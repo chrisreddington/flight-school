@@ -31,6 +31,7 @@
     "debt:exports": "ts-prune --project tsconfig.json",
     "debt:deps": "depcheck --ignores='@types/*,eslint-*,@eslint/*,vitest,@vitest/*'",
     "debt:circular": "madge --circular --extensions ts,tsx src/",
+    "maintainability:check": "npm run debt:unused -- --reporter compact && npm run debt:deps && npm run debt:circular && node scripts/check-file-size.mjs",
     "aspire:lint": "eslint apphost.mts",
     "aspire:build": "tsc -p tsconfig.apphost.json",
     "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
