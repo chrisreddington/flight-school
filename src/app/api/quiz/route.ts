@@ -1,8 +1,7 @@
-import { authErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
+import { knownApiErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateTopicQuiz, type QuizResult } from '@/lib/copilot/quiz';
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { requireUserContext } from '@/lib/auth/context';
-import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
@@ -77,13 +76,8 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json(quiz);
   } catch (error) {
-    // D2: Per-user Copilot-entitlement failures must surface as 402 so the
-    // UI can render the upgrade banner — never as the static "unavailable"
-    // placeholder quiz (that's for deployments with no AI configured).
-    const entitlementResponse = copilotEntitlementErrorResponse(error);
-    if (entitlementResponse) return entitlementResponse;
-    const authResponse = authErrorResponse(error);
-    if (authResponse) return authResponse;
+    const knownResponse = knownApiErrorResponse(error);
+    if (knownResponse) return knownResponse;
     if (isAIUnavailableError(error)) {
       return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
     }

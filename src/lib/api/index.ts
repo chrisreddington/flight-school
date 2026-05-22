@@ -8,7 +8,7 @@
  */
 
 // Request handling
-export { authErrorResponse, handleUnauthorizedError } from './auth-errors';
+export { authErrorResponse, handleUnauthorizedError, knownApiErrorResponse } from './auth-errors';
 export { parseJsonBody, parseJsonBodyWithFallback } from './request-utils';
 
 // Response handling
