@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const workerUrl = await workerEndpoint.property(EndpointProperty.Url);
 
   const flightSchool = await builder
-    .addNextJsApp('flight-school', '.', { runScriptName: 'dev' })
+    .addNextJsApp('flight-school', '.', { runScriptName: 'dev:web-only' })
     .withHttpEndpoint({ port: 3000, targetPort: 3000, isProxied: false })
     .withExternalHttpEndpoints()
     .withEnvironment('CRON_SKIP_AUTH', '1')

@@ -11,10 +11,10 @@
   "bugs": {
     "url": "https://github.com/chrisreddington/flight-club/issues"
   },
-    "scripts": {
+  "scripts": {
     "dev": "npm run aspire:run",
     "dev:web-only": "next dev",
-    "dev:worker": "next dev --port 3001",
+    "dev:worker": "NEXT_DIST_DIR=.next-worker next dev --port 3001",
     "dev:web-worker": "COPILOT_WORKER_URL=http://localhost:3001 COPILOT_WORKER_SECRET=local-dev-worker-secret npm run dev:web-only",
     "build": "next build",
     "start": "next start",
@@ -80,6 +80,7 @@
     "knip": "^6.13.1",
     "madge": "^8.0.0",
     "ts-prune": "^0.10.3",
+    "tsx": "^4.22.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1",
     "vitest": "^4.0.18"
