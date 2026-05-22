@@ -1,22 +1,10 @@
 /**
  * Retention sweepers — pure, time-driven cleanup primitives.
  *
- * This module is the single source of truth for the data-retention
- * policy across every server-side store that holds user-generated AI
- * conversation content. It's intentionally a collection of small, pure
- * functions:
- *
- *   - Each sweeper accepts an explicit `nowMs` so unit tests can drive a
- *     deterministic clock.
- *   - No sweeper triggers itself; they're invoked by the cron route
- *     (`POST /api/cron/sweep`) that runs as an external schedule
- *     against an ACA Job, authenticated via Entra ID.
- *   - No sweeper auto-creates files. Every read uses `readFile` /
- *     `listFiles` (which return null / [] on ENOENT), so a sweep over
- *     `users/` never seeds empty `threads.json` for users who never
- *     wrote one.
- *   - Sweepers return counts so the cron handler can log aggregate
- *     activity without seeing individual user content.
+ * This module is the single source of truth for server-side data-retention
+ * policy. Each sweeper accepts an explicit `nowMs` for deterministic tests,
+ * avoids creating files during cleanup, and returns aggregate counts so the
+ * cron handler never needs to inspect raw user content.
  *
  * ## Retention policy (single source of truth — keep in sync with plan.md)
  *
@@ -29,32 +17,8 @@
  * | `BackgroundJob` records (running) considered stale | 6h with no progress     |
  * | Orphan `BackgroundJob` records (no `userId`)     | deleted on next sweep     |
  *
- * ## Inventory of server-side prompt/response stores (Phase B1)
- *
- * The full set of places we hold raw conversation content. Anything
- * added here must also gain a sweep or a redaction step.
- *
- *   1. `BackgroundJob.input` (incl. `input.prompt`) and
- *      `BackgroundJob.result.content` — covered by terminal-state
- *      redaction wired through {@link redactTerminalJobs} below.
- *   2. `AIActivityEvent.input.prompt` and `AIActivityEvent.output.text`
- *      / `output.fullResponse` — kept in an in-memory circular buffer
- *      capped at 100 events per process. No on-disk persistence; the
- *      `/api/ai-activity` route surfaces a redacted DTO via
- *      `toPublicActivityEvent` (Phase B3). No sweeper needed because
- *      process restart wipes the buffer.
- *   3. `users/{userId}/threads.json` — covered by
- *      {@link sweepThreadsForUser}.
- *   4. `users/{userId}/evaluations.json` (incl. files, brokenCode in
- *      the originating challenge prompt) — covered by
- *      {@link sweepEvaluationsForUser}.
- *   5. `users/{userId}/jobs/{jobId}.json` scratchpads (Phase D) —
- *      covered by {@link sweepJobScratchpadsForUser}.
- *   6. SDK on-disk session-state under `~/.copilot/session-state/{id}/`
- *      — see Phase C decision in `docs/copilot-sdk-persistence.md`.
- *   7. Structured logs and traces — covered by audit during Phase B1;
- *      no raw prompt content is supposed to leak into serialized log
- *      records.
+ * Anything that adds a new on-disk prompt/response store must add a sweeper
+ * here or an explicit redaction step.
  *
  * @module storage/retention
  */
@@ -105,10 +69,26 @@ interface ScratchpadShape {
   lastUpdated?: string;
 }
 
+type UserSweepKey = 'threads' | 'evaluations' | 'scratchpads';
+
 function parseTimestamp(input: unknown): number | null {
   if (typeof input !== 'string' || input.length === 0) return null;
   const ms = Date.parse(input);
   return Number.isFinite(ms) ? ms : null;
+}
+
+function isOlderThanTtl(timestamp: unknown, nowMs: number, ttlMs: number): boolean {
+  const ts = parseTimestamp(timestamp);
+  return ts !== null && nowMs - ts > ttlMs;
+}
+
+function isTerminalStatus(status: string | undefined): boolean {
+  return status === 'completed' || status === 'failed';
+}
+
+function addSweepResult(target: SweepResult, source: SweepResult): void {
+  target.deleted += source.deleted;
+  target.inspected += source.inspected;
 }
 
 /**
@@ -144,9 +124,7 @@ export async function sweepThreadsForUser(
   const inspected = threads.length;
 
   const kept = threads.filter((t) => {
-    const ts = parseTimestamp(t.updatedAt);
-    if (ts === null) return true; // unknown timestamp → keep (fail-safe)
-    return nowMs - ts <= ttlMs;
+    return !isOlderThanTtl(t.updatedAt, nowMs, ttlMs);
   });
 
   const deleted = inspected - kept.length;
@@ -202,9 +180,7 @@ async function sweepEvaluationsForUser(
   let deleted = 0;
   for (const id of ids) {
     const entry = evaluations[id];
-    const isTerminal = entry.status === 'completed' || entry.status === 'failed';
-    const ts = parseTimestamp(entry.updatedAt);
-    if (isTerminal && ts !== null && nowMs - ts > ttlMs) {
+    if (isTerminalStatus(entry.status) && isOlderThanTtl(entry.updatedAt, nowMs, ttlMs)) {
       deleted += 1;
       continue;
     }
@@ -256,9 +232,7 @@ async function sweepJobScratchpadsForUser(
     } catch {
       continue;
     }
-    const ts = parseTimestamp(parsed.lastUpdated);
-    if (ts === null) continue;
-    if (nowMs - ts <= ttlMs) continue;
+    if (!isOlderThanTtl(parsed.lastUpdated, nowMs, ttlMs)) continue;
     await deleteFile(subdir, filename);
     deleted += 1;
   }
@@ -325,6 +299,32 @@ export async function sweepOrphanJobs(): Promise<SweepResult> {
   return { deleted, inspected: all.length };
 }
 
+function needsInputRedaction(input: Record<string, unknown> | undefined): boolean {
+  return typeof input?.prompt === 'string' && input.prompt !== '[redacted]';
+}
+
+function isRedactedResult(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && '__redacted' in result;
+}
+
+function needsResultRedaction(result: unknown): boolean {
+  return Boolean(result && !isRedactedResult(result));
+}
+
+function redactJobInput(input: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!input) return input;
+  return {
+    ...input,
+    prompt: '[redacted]',
+  };
+}
+
+function redactJobResult<T>(result: T, nowMs: number): T {
+  return result
+    ? ({ __redacted: true, redactedAt: new Date(nowMs).toISOString() } as T)
+    : result;
+}
+
 /**
  * Overwrite raw prompt/result content on terminal jobs so the existing
  * 1h-until-delete window in `jobStorage.cleanup()` only ever holds
@@ -339,22 +339,13 @@ export async function redactTerminalJobs(): Promise<SweepResult> {
   const all = await jobStorage.getAll();
   let redacted = 0;
   for (const job of all) {
-    if (job.status !== 'completed' && job.status !== 'failed') continue;
+    if (!isTerminalStatus(job.status)) continue;
     const input = job.input as Record<string, unknown> | undefined;
     const result = job.result as unknown;
-    const needsInput = input && (typeof input.prompt === 'string' && input.prompt !== '[redacted]');
-    const needsResult = result && !(typeof result === 'object' && result !== null
-      && '__redacted' in (result as Record<string, unknown>));
-    if (!needsInput && !needsResult) continue;
+    if (!needsInputRedaction(input) && !needsResultRedaction(result)) continue;
     await jobStorage.update(job.id, {
-      input: input
-        ? { ...input, prompt: '[redacted]', ...(input.assistantMessageId
-            ? { assistantMessageId: input.assistantMessageId }
-            : {}) }
-        : input,
-      result: result
-        ? ({ __redacted: true, redactedAt: new Date(nowMsForUpdate()).toISOString() } as unknown as typeof result)
-        : result,
+      input: redactJobInput(input),
+      result: redactJobResult(result, nowMsForUpdate()),
     });
     redacted += 1;
   }
@@ -376,9 +367,9 @@ function nowMsForUpdate(): number {
  */
 export async function sweepAllUsers(
   nowMs: number,
-): Promise<Record<'threads' | 'evaluations' | 'scratchpads', SweepResult>> {
+): Promise<Record<UserSweepKey, SweepResult>> {
   const userDirs = await listDirs('users');
-  const aggregate = {
+  const aggregate: Record<UserSweepKey, SweepResult> = {
     threads: { deleted: 0, inspected: 0 },
     evaluations: { deleted: 0, inspected: 0 },
     scratchpads: { deleted: 0, inspected: 0 },
@@ -389,14 +380,11 @@ export async function sweepAllUsers(
       continue;
     }
     const t = await sweepThreadsForUser(userId, nowMs);
-    aggregate.threads.deleted += t.deleted;
-    aggregate.threads.inspected += t.inspected;
+    addSweepResult(aggregate.threads, t);
     const e = await sweepEvaluationsForUser(userId, nowMs);
-    aggregate.evaluations.deleted += e.deleted;
-    aggregate.evaluations.inspected += e.inspected;
+    addSweepResult(aggregate.evaluations, e);
     const s = await sweepJobScratchpadsForUser(userId, nowMs);
-    aggregate.scratchpads.deleted += s.deleted;
-    aggregate.scratchpads.inspected += s.inspected;
+    addSweepResult(aggregate.scratchpads, s);
   }
   return aggregate;
 }

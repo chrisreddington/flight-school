@@ -33,6 +33,7 @@ const FILE_LIMITS = {
   'src/lib/operations/active-operations.ts': 625,
   'src/lib/operations/job-polling.ts': 33,
   'src/lib/operations/operation-results.ts': 61,
+  'src/lib/storage/retention.ts': 390,
   'src/hooks/use-challenge-sandbox.ts': 628,
   'src/components/ChallengeSandbox/ChallengeSandbox.tsx': 553,
   'src/components/ChallengeSandbox/monaco-config.ts': 79,
