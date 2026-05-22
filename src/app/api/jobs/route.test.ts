@@ -11,6 +11,7 @@ const {
   jobStorageMock,
   setImmediateMock,
   auditLogMock,
+  seedTokenStoreFromJwtMock,
 } = vi.hoisted(() => ({
   requireUserContextMock: vi.fn(),
   resolveFreshGitHubTokenMock: vi.fn(),
@@ -27,10 +28,15 @@ const {
   },
   setImmediateMock: vi.fn(),
   auditLogMock: vi.fn(),
+  seedTokenStoreFromJwtMock: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/context', () => ({
   requireUserContext: requireUserContextMock,
+}));
+
+vi.mock('@/lib/auth/seed', () => ({
+  seedTokenStoreFromJwt: seedTokenStoreFromJwtMock,
 }));
 
 vi.mock('@/lib/auth/token-resolver', () => ({
@@ -96,6 +102,42 @@ describe('POST /api/jobs', () => {
       input: {},
       createdAt: new Date().toISOString(),
     }));
+    seedTokenStoreFromJwtMock.mockResolvedValue({ status: 'ok' });
+  });
+
+  it('seeds the token store before enqueueing work', async () => {
+    await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+    expect(seedTokenStoreFromJwtMock).toHaveBeenCalledWith('user-1');
+    // Seed call must come before storage write.
+    const seedOrder = seedTokenStoreFromJwtMock.mock.invocationCallOrder[0];
+    const createOrder = jobStorageMock.create.mock.invocationCallOrder[0];
+    expect(seedOrder).toBeLessThan(createOrder);
+  });
+
+  it('returns 503 and does NOT enqueue when the token-store seed fails', async () => {
+    seedTokenStoreFromJwtMock.mockResolvedValue({
+      status: 'error',
+      error: new Error('cosmos down'),
+    });
+
+    const response = await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+
+    expect(response.status).toBe(503);
+    expect(jobStorageMock.create).not.toHaveBeenCalled();
+    expect(executorMocks.executeTopicRegeneration).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when seed reports a newer record already exists (CAS lost)', async () => {
+    seedTokenStoreFromJwtMock.mockResolvedValue({ status: 'skipped-newer-exists' });
+    await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+    expect(jobStorageMock.create).toHaveBeenCalledTimes(1);
+    expect(executorMocks.executeTopicRegeneration).toHaveBeenCalledTimes(1);
+  });
+
+  it('proceeds when JWT carries no expiresAt (executor will surface re-auth)', async () => {
+    seedTokenStoreFromJwtMock.mockResolvedValue({ status: 'skipped-no-expiry' });
+    await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+    expect(jobStorageMock.create).toHaveBeenCalledTimes(1);
   });
 
   it('persists the job with no access token field on the payload', async () => {

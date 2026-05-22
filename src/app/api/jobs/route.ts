@@ -6,6 +6,7 @@
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
+import { seedTokenStoreFromJwt } from '@/lib/auth/seed';
 import type {
   ChallengeEvaluationInput,
   ChallengeRegenerationInput,
@@ -79,7 +80,29 @@ export async function POST(request: NextRequest) {
   if (!body.type) {
     return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
   }
-  
+
+  // Hard precondition: ensure the shared TokenStore has a refresh-capable
+  // record for this user before we enqueue any work. Background executors
+  // resolve a fresh `ghu_` token from the store at run-time (see
+  // resolveFreshGitHubToken); if the store is unwritable now, the executor
+  // will have no credentials later and the job will silently fail. Returning
+  // 503 here lets the caller retry with backoff.
+  const seedResult = await seedTokenStoreFromJwt(userId);
+  if (seedResult.status === 'error') {
+    log.error('Refusing to enqueue job: token-store seed failed', {
+      userId,
+      type: body.type,
+      message: seedResult.error.message,
+    });
+    return NextResponse.json(
+      {
+        error: 'Credential store temporarily unavailable. Please retry.',
+        meta: { reason: 'token-store-seed-failed' },
+      },
+      { status: 503 },
+    );
+  }
+
   const jobId = crypto.randomUUID();
   
   const job = await jobStorage.create({

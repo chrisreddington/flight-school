@@ -41,12 +41,24 @@ export class UnauthorizedError extends Error {
 }
 
 /**
- * Read the access token from the raw encrypted JWT cookie. Server-only.
- * Never leaks into client-reachable session JSON.
+ * Internal shape we pull out of the raw encrypted JWT cookie. Exposed for
+ * the token-store seed path (see `src/lib/auth/seed.ts`). Server-only.
  *
  * @internal
  */
-async function readAccessTokenFromJwt(): Promise<string | null> {
+export interface RawJwtCredentials {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+}
+
+/**
+ * Read the access token and refresh credentials from the raw encrypted JWT
+ * cookie. Server-only. Never leaks into client-reachable session JSON.
+ *
+ * @internal
+ */
+export async function readCredentialsFromJwt(): Promise<RawJwtCredentials | null> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return null;
   const req: { headers: Headers } = { headers: await headers() };
@@ -57,7 +69,22 @@ async function readAccessTokenFromJwt(): Promise<string | null> {
     // based on the request URL. NextAuth defaults are correct here.
   });
   if (!jwt || typeof jwt.accessToken !== 'string') return null;
-  return jwt.accessToken;
+  return {
+    accessToken: jwt.accessToken,
+    refreshToken: typeof jwt.refreshToken === 'string' ? jwt.refreshToken : undefined,
+    expiresAt: typeof jwt.expiresAt === 'number' ? jwt.expiresAt : undefined,
+  };
+}
+
+/**
+ * Read just the access token from the raw encrypted JWT cookie. Server-only.
+ * Never leaks into client-reachable session JSON.
+ *
+ * @internal
+ */
+async function readAccessTokenFromJwt(): Promise<string | null> {
+  const creds = await readCredentialsFromJwt();
+  return creds?.accessToken ?? null;
 }
 
 /**
