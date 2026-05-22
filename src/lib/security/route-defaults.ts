@@ -20,7 +20,10 @@ function num(name: string, fallback: number): number {
 
 export const FOCUS_GUARD = {
   rateLimit: { limit: num('RATE_LIMIT_FOCUS_PER_MIN', 10), windowMs: 60_000 },
-  concurrentCap: num('RATE_LIMIT_FOCUS_CAP', 2),
+  // Dashboard fan-out: the focus hook fires `challenge`, `goal`, and
+  // `learningTopics` in parallel via Promise.allSettled, so the cap must
+  // accommodate at least 3 simultaneous requests per user.
+  concurrentCap: num('RATE_LIMIT_FOCUS_CAP', 3),
 } as const;
 
 export const CHAT_GUARD = {
