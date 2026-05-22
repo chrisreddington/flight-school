@@ -32,7 +32,8 @@ async function main(): Promise<void> {
         if (!res.ok) {
           return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
         }
-        ctx.logger?.logInformation?.(`Retention sweep complete: ${body}`);
+        const commandLogger = await ctx.logger.get();
+        await commandLogger.logInformation(`Retention sweep complete: ${body}`);
         return { success: true };
       } catch (err) {
         return {
