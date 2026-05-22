@@ -520,7 +520,6 @@ git commit -m "refactor: add worker-ready job dispatcher" -m "Co-authored-by: Co
 **Files:**
 - Create: `src/lib/copilot/runtime/types.ts`
 - Create: `src/lib/copilot/runtime/per-user-pool.ts`
-- Create: `src/lib/copilot/runtime/index.ts`
 - Create: `src/lib/copilot/runtime/per-user-pool.test.ts`
 
 - [x] **Step 4.1: Write fake runtime pool tests**
@@ -654,14 +653,10 @@ export function createPerUserRuntimePool({
 }
 ```
 
-- [x] **Step 4.5: Add runtime exports**
+- [x] **Step 4.5: Keep runtime exports lean**
 
-Create `src/lib/copilot/runtime/index.ts`:
-
-```ts
-export { createPerUserRuntimePool } from './per-user-pool';
-export type { CopilotRuntime, CopilotRuntimePool, CreatePerUserRuntimePoolOptions } from './types';
-```
+Avoid a runtime barrel until production code imports the pool; the maintainability
+gate treats unused public barrels as dead surface area.
 
 - [x] **Step 4.6: Run runtime tests**
 

@@ -9,7 +9,7 @@ export interface CopilotRuntimePool {
   shutdown: () => Promise<void>;
 }
 
-export type CopilotRuntimeLifecycleEvent =
+type CopilotRuntimeLifecycleEvent =
   | { type: 'created'; userId: string }
   | { type: 'reused'; userId: string }
   | { type: 'evicted'; userId: string; reason: 'capacity' | 'idle' | 'manual' | 'shutdown' };
