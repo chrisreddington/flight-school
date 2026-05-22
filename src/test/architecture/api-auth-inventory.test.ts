@@ -14,7 +14,7 @@ type Boundary =
   | 'internalWorkerSecret';
 
 const ROUTE_BOUNDARIES: Record<string, Boundary> = {
-  '_internal/copilot/execute/route.ts': 'internalWorkerSecret',
+  'internal/copilot/execute/route.ts': 'internalWorkerSecret',
   'ai-activity/metrics/route.ts': 'requireUserContext',
   'ai-activity/route.ts': 'requireUserContext',
   'ai-activity/stream/route.ts': 'requireUserContext',

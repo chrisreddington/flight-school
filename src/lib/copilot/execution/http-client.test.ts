@@ -34,7 +34,7 @@ describe('executeCopilotChatViaWorker', () => {
     );
 
     expect(result.response).toBe('answer');
-    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/api/_internal/copilot/execute', expect.objectContaining({
+    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/api/internal/copilot/execute', expect.objectContaining({
       method: 'POST',
       headers: expect.objectContaining({ authorization: 'Bearer local-secret' }),
     }));

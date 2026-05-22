@@ -4,7 +4,7 @@
 
 **Goal:** Remove the public in-process Copilot fallback so public AI chat requires the worker boundary.
 
-**Architecture:** `executeCopilotChat()` becomes worker-only and throws a typed configuration error when `COPILOT_WORKER_URL` is missing. The worker-internal runtime/session helpers remain available for `/api/_internal/copilot/execute`, while local scripts and docs make Aspire/web+worker mode the default path.
+**Architecture:** `executeCopilotChat()` becomes worker-only and throws a typed configuration error when `COPILOT_WORKER_URL` is missing. The worker-internal runtime/session helpers remain available for `/api/internal/copilot/execute`, while local scripts and docs make Aspire/web+worker mode the default path.
 
 **Tech Stack:** Next.js App Router API routes, TypeScript, Vitest, npm scripts, existing Copilot worker HTTP client.
 

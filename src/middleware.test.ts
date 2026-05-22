@@ -77,8 +77,8 @@ describe('middleware gating', () => {
     expect(response.status).toBe(200);
   });
 
-  it('allows unauthenticated /api/_internal/* requests to reach route-specific auth', async () => {
-    const res = await middleware(makeRequest('/api/_internal/copilot/execute'));
+  it('allows unauthenticated /api/internal/* requests to reach route-specific auth', async () => {
+    const res = await middleware(makeRequest('/api/internal/copilot/execute'));
     const response = res as Response;
     expect(response.status).toBe(200);
   });

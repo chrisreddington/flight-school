@@ -49,7 +49,7 @@ When running Flight School locally with the worker service, we want each GitHub 
   - AC1.3: Runtime logs lifecycle events without logging GitHub tokens.
 
 - [ ] **S2**: As a maintainer, I want worker chat execution to use the runtime pool.
-  - AC2.1: `/api/_internal/copilot/execute` calls a worker runtime executor.
+  - AC2.1: `/api/internal/copilot/execute` calls a worker runtime executor.
   - AC2.2: The executor reuses an existing runtime for the same user.
   - AC2.3: Different users do not share a `CopilotClient` or `COPILOT_HOME`.
 
@@ -89,7 +89,7 @@ When running Flight School locally with the worker service, we want each GitHub 
 
 ```mermaid
 flowchart LR
-  Web[Web app] --> WorkerRoute[/api/_internal/copilot/execute]
+  Web[Web app] --> WorkerRoute[/api/internal/copilot/execute]
   WorkerRoute --> Executor[Worker chat executor]
   Executor --> Pool[Per-user runtime pool]
   Pool --> RuntimeA[Runtime user A]
@@ -131,5 +131,5 @@ flowchart LR
 ## Handoff for Planning
 - **Affected Domains**: [x] Test [ ] E2E [ ] Accessibility [x] Performance [x] Code Quality [x] Technical Writing [x] Code Documentation [ ] Infrastructure
 - **Migration Strategy**: Wire runtime pool into worker route only; keep web fallback unchanged.
-- **Files**: `src/lib/copilot/runtime/*`, `src/lib/copilot/execution/*`, `src/app/api/_internal/copilot/execute/route.ts`, worker docs.
+- **Files**: `src/lib/copilot/runtime/*`, `src/lib/copilot/execution/*`, `src/app/api/internal/copilot/execute/route.ts`, worker docs.
 - **Risks**: If SDK constructor behavior changes in a future release, `cliUrl + token` compatibility must be rechecked before switching away from SDK-spawned runtimes.

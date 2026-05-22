@@ -11,7 +11,7 @@ vi.mock('@/lib/copilot/runtime/worker-executor', () => ({
 import { POST } from './route';
 
 function makeRequest(body: unknown, token = 'local-secret') {
-  return new Request('http://localhost/api/_internal/copilot/execute', {
+  return new Request('http://localhost/api/internal/copilot/execute', {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
@@ -21,7 +21,7 @@ function makeRequest(body: unknown, token = 'local-secret') {
   }) as never;
 }
 
-describe('/api/_internal/copilot/execute', () => {
+describe('/api/internal/copilot/execute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('COPILOT_WORKER_SECRET', 'local-secret');

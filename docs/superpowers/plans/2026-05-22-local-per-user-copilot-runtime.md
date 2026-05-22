@@ -4,7 +4,7 @@
 
 **Goal:** Make local worker mode execute Copilot chat through one SDK-spawned CLI process and `COPILOT_HOME` per GitHub user.
 
-**Architecture:** Extend the existing runtime pool so each runtime owns a user-scoped `CopilotClient`, then route worker chat execution through that pool. The web fallback remains unchanged: only `/api/_internal/copilot/execute` uses the per-user runtime executor.
+**Architecture:** Extend the existing runtime pool so each runtime owns a user-scoped `CopilotClient`, then route worker chat execution through that pool. The web fallback remains unchanged: only `/api/internal/copilot/execute` uses the per-user runtime executor.
 
 **Tech Stack:** Next.js App Router API routes, TypeScript, Vitest, `@github/copilot-sdk@1.0.0-beta.4`, existing Copilot session/logging helpers.
 
@@ -31,7 +31,7 @@
 | F5 | `src/lib/copilot/execution/in-process.ts` | Fallback adapter | Reuse `session-executor` to avoid drift. |
 | F6 | `src/lib/copilot/runtime/user-runtime.ts` | Per-user runtime | Create SDK `CopilotClient`, sessions, and shutdown logic. |
 | F7 | `src/lib/copilot/runtime/worker-executor.ts` | Worker entry point | Get runtime from pool and execute chat. |
-| F8 | `src/app/api/_internal/copilot/execute/route.ts` | Internal route | Call worker runtime executor instead of in-process adapter. |
+| F8 | `src/app/api/internal/copilot/execute/route.ts` | Internal route | Call worker runtime executor instead of in-process adapter. |
 | F9 | `README.md`, `docs/architecture-multitenant.md`, design spec | Docs | Document actual local per-user runtime behavior and SDK constraints. |
 
 ## Implementation Steps
@@ -292,8 +292,8 @@ git commit -m "feat: add sdk-backed per-user copilot runtime" -m "Co-authored-by
 **Files:**
 - Create: `src/lib/copilot/runtime/worker-executor.ts`
 - Create: `src/lib/copilot/runtime/worker-executor.test.ts`
-- Modify: `src/app/api/_internal/copilot/execute/route.ts`
-- Modify: `src/app/api/_internal/copilot/execute/route.test.ts`
+- Modify: `src/app/api/internal/copilot/execute/route.ts`
+- Modify: `src/app/api/internal/copilot/execute/route.test.ts`
 
 - [ ] **Step 4.1: Write failing worker executor tests**
 
@@ -338,7 +338,7 @@ Update tests to mock `@/lib/copilot/runtime/worker-executor`.
 Run:
 
 ```bash
-npm test -- --run src/lib/copilot/runtime/worker-executor.test.ts src/app/api/_internal/copilot/execute/route.test.ts src/lib/copilot/runtime/per-user-pool.test.ts
+npm test -- --run src/lib/copilot/runtime/worker-executor.test.ts src/app/api/internal/copilot/execute/route.test.ts src/lib/copilot/runtime/per-user-pool.test.ts
 ```
 
 Expected: PASS.
@@ -346,7 +346,7 @@ Expected: PASS.
 - [ ] **Step 4.6: Commit Task 4**
 
 ```bash
-git add src/lib/copilot/runtime src/app/api/_internal/copilot/execute/route.ts src/app/api/_internal/copilot/execute/route.test.ts
+git add src/lib/copilot/runtime src/app/api/internal/copilot/execute/route.ts src/app/api/internal/copilot/execute/route.test.ts
 git commit -m "feat: route worker chat through per-user runtime pool" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 ```
 
@@ -396,7 +396,7 @@ git commit -m "docs: document local per-user copilot runtimes" -m "Co-authored-b
 | 3.2 | `npm test -- --run src/lib/copilot/runtime/user-runtime.test.ts` | FAIL before module |
 | 3.5 | `npm test -- --run src/lib/copilot/runtime/user-runtime.test.ts src/lib/copilot/runtime/per-user-pool.test.ts` | PASS |
 | 4.2 | `npm test -- --run src/lib/copilot/runtime/worker-executor.test.ts` | FAIL before module |
-| 4.5 | `npm test -- --run src/lib/copilot/runtime/worker-executor.test.ts src/app/api/_internal/copilot/execute/route.test.ts src/lib/copilot/runtime/per-user-pool.test.ts` | PASS |
+| 4.5 | `npm test -- --run src/lib/copilot/runtime/worker-executor.test.ts src/app/api/internal/copilot/execute/route.test.ts src/lib/copilot/runtime/per-user-pool.test.ts` | PASS |
 | 5.3 | Full final gate command | PASS |
 
 ## Rollback Plan

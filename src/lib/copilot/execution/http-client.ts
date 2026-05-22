@@ -2,7 +2,7 @@ import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from './
 import type { CopilotWorkerConfig } from './config';
 import { parseCopilotWorkerChatResult } from './protocol';
 
-const WORKER_CHAT_PATH = '/api/_internal/copilot/execute';
+const WORKER_CHAT_PATH = '/api/internal/copilot/execute';
 
 interface ExecuteViaWorkerOptions {
   signal?: AbortSignal;

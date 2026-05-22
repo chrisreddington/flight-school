@@ -138,7 +138,7 @@ flowchart LR
 ## Testing Strategy
 - Unit test worker protocol parsing and failure responses.
 - Unit test execution client selection: worker URL set vs unset.
-- Unit test middleware allows `/api/_internal/*` through to the route-specific bearer-secret gate.
+- Unit test middleware allows `/api/internal/*` through to the route-specific bearer-secret gate.
 - Unit test worker client timeout/abort handling.
 - Route tests continue to assert `/api/copilot` delegates through the execution boundary.
 - Infra validation runs `az bicep build --file infra/main.bicep --stdout >/dev/null`.
