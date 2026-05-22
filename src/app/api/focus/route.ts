@@ -47,6 +47,30 @@ const log = logger.withTag('Focus API');
 
 type FocusComponent = 'challenge' | 'goal' | 'learningTopics' | 'singleTopic';
 
+function createFallbackMeta(totalTimeMs: number) {
+  return {
+    generatedAt: now(),
+    aiEnabled: false,
+    model: 'fallback',
+    toolsUsed: [],
+    totalTimeMs,
+    usedCachedProfile: false,
+  };
+}
+
+function createFallbackFocusResult(component: FocusComponent | undefined, totalTimeMs: number) {
+  const meta = createFallbackMeta(totalTimeMs);
+  if (component === 'challenge') return { challenge: getFallbackChallenge(), meta };
+  if (component === 'goal') return { goal: getFallbackGoal(), meta };
+  if (component === 'learningTopics') return { learningTopics: getFallbackLearningTopics(), meta };
+  return {
+    challenge: getFallbackChallenge(),
+    goal: getFallbackGoal(),
+    learningTopics: getFallbackLearningTopics(),
+    meta,
+  };
+}
+
 /**
  * Generate a single focus component with minimal prompt.
  */
@@ -253,23 +277,7 @@ async function generateFocus(identity: SessionIdentity, options: {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     log.error(`Error after ${totalTime}ms:`, errorMessage);
 
-    // Return component-specific fallback or full fallback
-    if (component === 'challenge') {
-      return { challenge: getFallbackChallenge(), meta: { generatedAt: now(), aiEnabled: false, model: 'fallback', toolsUsed: [], totalTimeMs: totalTime, usedCachedProfile: false } };
-    }
-    if (component === 'goal') {
-      return { goal: getFallbackGoal(), meta: { generatedAt: now(), aiEnabled: false, model: 'fallback', toolsUsed: [], totalTimeMs: totalTime, usedCachedProfile: false } };
-    }
-    if (component === 'learningTopics') {
-      return { learningTopics: getFallbackLearningTopics(), meta: { generatedAt: now(), aiEnabled: false, model: 'fallback', toolsUsed: [], totalTimeMs: totalTime, usedCachedProfile: false } };
-    }
-    
-    return {
-      challenge: getFallbackChallenge(),
-      goal: getFallbackGoal(),
-      learningTopics: getFallbackLearningTopics(),
-      meta: { generatedAt: now(), aiEnabled: false, model: 'fallback', toolsUsed: [], totalTimeMs: totalTime, usedCachedProfile: false },
-    };
+    return createFallbackFocusResult(component, totalTime);
   }
 }
 

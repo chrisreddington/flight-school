@@ -151,6 +151,24 @@ describe('AI route entitlement mapping (D2)', () => {
       expect(body.meta?.aiEnabled).toBe(false);
       expect(body.goal).toBeDefined();
     });
+
+    it.each([
+      ['challenge', 'challenge'],
+      ['goal', 'goal'],
+      ['learningTopics', 'learningTopics'],
+    ] as const)('returns only the requested %s fallback component for unrelated errors', async (component, key) => {
+      hoisted.createLoggedLightweightCoachSessionMock.mockRejectedValue(new Error('boom'));
+      const { POST } = await import('@/app/api/focus/route');
+      const res = await POST(jsonRequest('http://localhost/api/focus', { component }));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.meta).toMatchObject({ aiEnabled: false, model: 'fallback' });
+      expect(body[key]).toBeDefined();
+      for (const otherKey of ['challenge', 'goal', 'learningTopics'].filter((candidate) => candidate !== key)) {
+        expect(body).not.toHaveProperty(otherKey);
+      }
+    });
   });
 
   describe('POST /api/guided-plan', () => {
