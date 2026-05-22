@@ -7,6 +7,7 @@
  */
 
 import { getOctokitForRequest } from '@/lib/github/client';
+import { knownApiErrorResponse } from '@/lib/api/auth-errors';
 import { nowMs } from '@/lib/utils/date-utils';
 import {
     calculateActivityMetrics,
@@ -103,7 +104,14 @@ export async function GET() {
   const startTime = nowMs();
   log.info('Request started');
 
-  const octokit = await getOctokitForRequest();
+  let octokit: Awaited<ReturnType<typeof getOctokitForRequest>>;
+  try {
+    octokit = await getOctokitForRequest();
+  } catch (error) {
+    const knownResponse = knownApiErrorResponse(error);
+    if (knownResponse) return knownResponse;
+    throw error;
+  }
 
   // Fetch user first so we can scope the cache by login
   let user;

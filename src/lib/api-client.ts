@@ -22,6 +22,7 @@ import {
   dispatchRateLimited,
   RateLimitedClientError,
 } from '@/lib/api/rate-limit-event';
+import { signOut } from 'next-auth/react';
 
 interface ApiRequestOptions extends RequestInit {
   /** Request timeout in milliseconds (default: 30000) */
@@ -80,6 +81,16 @@ function isCopilotRequiredBody(body: unknown): boolean {
     body !== null &&
     (body as { error?: unknown }).error === 'copilot_required'
   );
+}
+
+async function redirectToSignInAfterAuthFailure(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === '/sign-in') return;
+
+  await signOut({ redirect: false });
+  const callbackPath = `${window.location.pathname}${window.location.search}`;
+  const signInUrl = `/sign-in?callbackUrl=${encodeURIComponent(callbackPath || '/')}`;
+  window.location.assign(signInUrl);
 }
 
 // Request deduplication cache for GET requests
@@ -162,6 +173,10 @@ async function apiRequest<T>(
           // can react without each call site having to handle it.
           if (response.status === 402 && isCopilotRequiredBody(data)) {
             dispatchCopilotRequired(data, url);
+          }
+
+          if (response.status === 401) {
+            await redirectToSignInAfterAuthFailure();
           }
 
           // F5: 429 → broadcast so the global rate-limit toast/hook can

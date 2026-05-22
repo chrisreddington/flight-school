@@ -129,7 +129,12 @@ describe('middleware gating', () => {
   it('keeps worker health and internal routes reachable in worker mode', async () => {
     vi.stubEnv('COPILOT_WORKER_MODE', '1');
 
-    expect(((await middleware(makeRequest('/api/health'))) as Response).status).toBe(200);
-    expect(((await middleware(makeRequest('/api/internal/copilot/execute'))) as Response).status).toBe(200);
+    const health = (await middleware(makeRequest('/api/health'))) as Response;
+    const internal = (await middleware(makeRequest('/api/internal/copilot/execute'))) as Response;
+
+    expect(health.status).toBe(200);
+    expect(internal.status).toBe(200);
+    expect(health.headers.get('set-cookie')).toBeNull();
+    expect(internal.headers.get('set-cookie')).toBeNull();
   });
 });

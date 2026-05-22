@@ -3,6 +3,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const authMocks = vi.hoisted(() => ({
+  signOut: vi.fn(),
+}));
+
+vi.mock('next-auth/react', () => ({
+  signOut: authMocks.signOut,
+}));
+
 import { apiGet, apiPost, apiDelete } from './api-client';
 
 // =============================================================================
@@ -16,6 +25,7 @@ describe('API Client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    authMocks.signOut.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -158,6 +168,46 @@ describe('API Client', () => {
       });
 
       await expect(apiGet('/api/error')).rejects.toThrow('HTTP 500');
+    });
+
+    it('signs out and redirects to sign-in on 401 in the browser', async () => {
+      const originalLocation = window.location;
+      const assign = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          pathname: '/dashboard',
+          search: '?tab=focus',
+          assign,
+        },
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Authentication required' }),
+      });
+
+      await expect(apiGet('/api/profile')).rejects.toThrow('Authentication required');
+
+      expect(authMocks.signOut).toHaveBeenCalledWith({ redirect: false });
+      expect(assign).toHaveBeenCalledWith('/sign-in?callbackUrl=%2Fdashboard%3Ftab%3Dfocus');
+
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    });
+
+    it('does not redirect to sign-in for 403 responses', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error: 'Forbidden' }),
+      });
+
+      await expect(apiGet('/api/forbidden')).rejects.toThrow('Forbidden');
+
+      expect(authMocks.signOut).not.toHaveBeenCalled();
     });
   });
 

@@ -87,8 +87,10 @@ const authMiddleware = auth((req) => {
 export default function middleware(...args: Parameters<typeof authMiddleware>) {
   const [req] = args;
   const pathname = req.nextUrl.pathname;
-  if (process.env.COPILOT_WORKER_MODE === '1' && !isWorkerAllowedPath(pathname)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (process.env.COPILOT_WORKER_MODE === '1') {
+    return isWorkerAllowedPath(pathname)
+      ? NextResponse.next()
+      : NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
   return authMiddleware(...args);
