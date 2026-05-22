@@ -99,7 +99,7 @@ Experimental ACA deployment notes:
   against the ACA FQDN, deploy / rotate / cleanup recipes.
 - [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md) —
   Multi-tenant design (Auth.js → per-request Octokit → Copilot execution
-  boundary → optional worker → per-session SDK identity).
+  boundary → required worker → per-user runtime).
 
 ### Codespaces
 

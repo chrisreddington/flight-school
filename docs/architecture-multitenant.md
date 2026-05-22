@@ -82,8 +82,8 @@ for the worker-pool design.
 
 ### Worker service foundation
 
-The first worker-service slice adds an optional HTTP worker transport for chat
-execution:
+The worker-service slice makes the HTTP worker transport mandatory for public
+chat execution:
 
 - Public chat execution requires `COPILOT_WORKER_URL`; if it is unset,
   `/api/copilot` fails fast instead of running in the web process.

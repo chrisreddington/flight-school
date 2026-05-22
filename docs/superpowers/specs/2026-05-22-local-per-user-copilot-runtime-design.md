@@ -24,7 +24,7 @@ When running Flight School locally with the worker service, we want each GitHub 
 2. Give each runtime a user-specific `COPILOT_HOME` under a local data root.
 3. Keep runtime creation, reuse, eviction, and shutdown observable in logs/tests.
 4. Execute worker chat requests through the user runtime rather than the worker's shared adapter.
-5. Preserve the web-process in-process fallback when `COPILOT_WORKER_URL` is unset.
+5. Preserve web-process behavior for non-chat surfaces while public chat requires the worker.
 
 ## Non-Goals
 - Service Bus/KEDA async job workers.
@@ -83,7 +83,7 @@ When running Flight School locally with the worker service, we want each GitHub 
 | DD2 | Keep per-session `gitHubToken` when creating sessions | Maintains current identity semantics and is consistent with SDK multitenancy docs. |
 | DD3 | Put local runtime homes under `${FLIGHT_SCHOOL_DATA_DIR}/copilot-runtimes/{safeUserId}` or an OS temp fallback | Keeps state out of the repo and makes local inspection easy. |
 | DD4 | Extend the existing runtime pool instead of creating a second pool | Reuses tested TTL/capacity behavior and reduces new surface area. |
-| DD5 | Only worker mode uses per-user runtime clients initially | The web in-process fallback remains simple and low-risk. |
+| DD5 | Only worker mode uses per-user runtime clients initially | Public chat now requires the worker; non-chat Copilot surfaces are outside this slice. |
 
 ## Target Architecture
 

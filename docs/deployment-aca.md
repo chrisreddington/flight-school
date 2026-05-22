@@ -105,7 +105,7 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | `AUTH_GITHUB_SECRET` | Key Vault `auth-github-secret` | GitHub App client secret. |
 | `AUTH_TRUST_HOST` | Env (`true`) | ACA terminates TLS at the edge; required for Auth.js URL resolution. |
 | `COPILOT_WORKER_SECRET` | Key Vault `copilot-worker-secret` | Bearer secret used by the public web app to call the private worker route. |
-| `COPILOT_WORKER_URL` | Bicep output/env | Internal URL of the private worker Container App. Leave unset for in-process fallback. |
+| `COPILOT_WORKER_URL` | Bicep output/env | Internal URL of the private worker Container App. Required for public Copilot chat execution. |
 | `AUDIT_SALT` | Key Vault `audit-salt` | Stable hash salt for user IDs in audit logs. Long random string (`openssl rand -hex 32`). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Key Vault `appinsights-connection-string` (auto-seeded) | App telemetry. |
 | `COSMOS_CONNECTION_STRING` | Key Vault `cosmos-conn-string` (auto-seeded) | Future server-side session/token store. |
@@ -162,6 +162,6 @@ the Cosmos session store before lowering the limits.
   bootstrap, redeploy / rotate / cleanup recipes.
 - [`docs/architecture-multitenant.md`](architecture-multitenant.md) —
   Multi-tenancy design (Auth.js → per-request Octokit → Copilot execution
-  boundary → optional worker → per-session Copilot).
+  boundary → required worker → per-user runtime).
 - [`docs/migrations/2025-multitenant-auth.md`](migrations/2025-multitenant-auth.md)
   — Upgrade notes for existing developers.
