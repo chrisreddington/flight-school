@@ -28,6 +28,7 @@ import type {
 } from './types';
 import { logger } from '@/lib/logger';
 import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
+import { createNewSessionMetrics, createReusedSessionMetrics } from './session-metrics';
 
 const log = logger.withTag('Copilot SDK');
 
@@ -266,14 +267,12 @@ export async function createSessionWithMetrics(
 
         return {
           session,
-          metrics: {
+          metrics: createNewSessionMetrics({
             poolKey,
-            createdNew: true,
             sessionCreateMs,
             mcpEnabled: Boolean(mcpConfig),
             model,
-            reusedConversation: false,
-          },
+          }),
         };
       } catch (error) {
         recordAiOperation('createSession', Date.now() - startTime, model, 'error');
@@ -342,12 +341,7 @@ export async function getConversationSession(
     cached.lastUsed = Date.now();
     return {
       session: cached.session,
-      metrics: {
-        ...cached.metrics,
-        createdNew: false,
-        sessionCreateMs: 0,
-        reusedConversation: true,
-      },
+      metrics: createReusedSessionMetrics(cached.metrics),
     };
   }
 
