@@ -1,12 +1,12 @@
 # Local Per-user Copilot Runtime Design
 
-**Status**: Approved for planning
+**Status**: Foundation Implemented
 **Date**: 2026-05-22
 
 ## Resumption Section
 - **Scope**: Make the local worker exercise actual per-user Copilot CLI process and state isolation.
-- **Current Phase**: Design approved; ready for implementation planning.
-- **Next Action**: Write the implementation plan.
+- **Current Phase**: Foundation implemented.
+- **Next Action**: Manually exercise `npm run aspire:run` with two signed-in users and inspect runtime homes/processes.
 - **Blockers**: None.
 
 ## Job Story

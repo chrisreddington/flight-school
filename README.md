@@ -67,7 +67,17 @@ npm run dev
 ```
 
 `npm run aspire:run` starts both resources and injects the local worker URL into
-the web app automatically.
+the web app automatically. In worker mode, each GitHub user gets a separate
+SDK-spawned Copilot CLI child process and a separate `COPILOT_HOME`.
+
+Runtime controls:
+
+```bash
+# Defaults shown
+COPILOT_RUNTIME_IDLE_TTL_MS=600000
+COPILOT_RUNTIME_MAX_ACTIVE=3
+COPILOT_RUNTIME_HOME_ROOT=$FLIGHT_SCHOOL_DATA_DIR/copilot-runtimes
+```
 
 > **Prerequisites:** Node.js 22+, npm, Git, and a GitHub Copilot subscription
 > (Individual, Business, or Enterprise) for the AI features.

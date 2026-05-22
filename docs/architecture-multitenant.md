@@ -90,12 +90,17 @@ execution:
 - If `COPILOT_WORKER_URL` is set, the web process posts to
   `/api/_internal/copilot/execute` on the worker with a bearer secret and a
   timeout.
+- The worker route executes chat through a per-user runtime pool. Each runtime
+  owns a separate SDK-spawned `CopilotClient`/CLI child process and
+  user-specific `COPILOT_HOME`.
 - Middleware allows `/api/_internal/*` through Auth.js so the route-specific
   bearer-secret gate can run.
 - The public web Container App does **not** set `COPILOT_WORKER_ENABLED`; only
   the private worker app does.
 
 Durable async job execution through Service Bus remains future work.
+External `cliUrl` runtime servers also remain deferred because the installed
+SDK rejects `cliUrl` combined with `gitHubToken` / `useLoggedInUser`.
 
 ## Cross-cutting guarantees
 
