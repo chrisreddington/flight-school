@@ -12,9 +12,10 @@
     "url": "https://github.com/chrisreddington/flight-club/issues"
   },
     "scripts": {
-    "dev": "next dev",
+    "dev": "npm run aspire:run",
+    "dev:web-only": "next dev",
     "dev:worker": "next dev --port 3001",
-    "dev:web-worker": "COPILOT_WORKER_URL=http://localhost:3001 COPILOT_WORKER_SECRET=local-dev-worker-secret npm run dev",
+    "dev:web-worker": "COPILOT_WORKER_URL=http://localhost:3001 COPILOT_WORKER_SECRET=local-dev-worker-secret npm run dev:web-only",
     "build": "next build",
     "start": "next start",
     "dashboard": "aspire dashboard run --allow-anonymous",
