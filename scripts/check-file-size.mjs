@@ -30,7 +30,7 @@ const FILE_LIMITS = {
   'src/lib/auth/token-store/factory.ts': 78,
   'src/lib/auth/token-store/in-memory.ts': 34,
   'src/lib/auth/token-store/types.ts': 16,
-  'src/lib/operations/active-operations.ts': 625,
+  'src/lib/operations/active-operations.ts': 605,
   'src/lib/operations/job-polling.ts': 33,
   'src/lib/operations/operation-results.ts': 61,
   'src/lib/storage/retention.ts': 390,

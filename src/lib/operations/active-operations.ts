@@ -10,26 +10,6 @@
  * 2. Server executes the AI operation asynchronously
  * 3. Client polls /api/jobs/[id] for status until complete
  * 4. Results are persisted server-side, retrieved on any page
- *
- * @example
- * ```typescript
- * import { operationsManager } from '@/lib/operations';
- *
- * // Start an operation that survives navigation
- * operationsManager.startBackgroundJob({
- *   type: 'topic-regeneration',
- *   targetId: 'topic-123',
- *   input: { existingTopicTitles: ['Topic A'] },
- *   onComplete: async (result) => {
- *     await focusStore.saveTodaysFocus(result);
- *   },
- * });
- *
- * // Check if operation is active
- * if (operationsManager.isActiveForTarget('topic-123')) {
- *   // Show skeleton
- * }
- * ```
  */
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
