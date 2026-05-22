@@ -8,6 +8,13 @@ Flight School is a sample implementation showing how to build AI-powered develop
 > **Exploratory project — not production ready.**
 > Flight School is an experiment for trying the latest capabilities across **GitHub**, the **Copilot SDK**, **Aspire**, and related tooling.
 > It is **not recommended for production use**.
+>
+> The current Copilot SDK integration provides **per-user identity isolation**
+> by passing each authenticated user's GitHub token into every SDK session.
+> It does **not** provide production-grade per-user Copilot CLI process
+> isolation: each app process currently owns a shared in-process SDK runtime.
+> See [Multi-tenant Architecture](docs/architecture-multitenant.md) for the
+> current model and the planned internal worker-pool direction.
 
 ## Getting Started
 

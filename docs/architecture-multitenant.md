@@ -35,7 +35,7 @@ flowchart LR
     Sess --> MCP --> MCPSrv
 ```
 
-## Why one `CopilotClient` can serve every user
+## Current Copilot runtime model and limitation
 
 The Copilot SDK supports per-session GitHub identity via
 [`SessionOptions.gitHubToken`](https://github.com/github/copilot-sdk). Because
@@ -52,7 +52,30 @@ of that, we construct **one** `CopilotClient` per Node process (see
   requests carry the requesting user's `Authorization` header.
 
 Result: a single long-lived Copilot CLI subprocess multiplexes work for many
-users without ever mixing their tokens.
+users without sharing their GitHub identity.
+
+This is an **exploratory shared-runtime design**, not the strongest
+multi-tenant isolation pattern from the Copilot SDK scaling guidance. It gives
+per-session identity isolation for quota, model routing, content exclusion, and
+MCP calls, but it does not isolate Copilot CLI process memory, crashes, or
+session-state files per user. A production-oriented public platform should move
+Copilot execution behind an internal worker service with a per-user runtime pool
+before claiming production-grade multi-tenant isolation.
+
+Target direction:
+
+1. Route code calls an internal Copilot execution boundary instead of direct SDK
+   session factories.
+2. A private worker service resolves fresh user credentials from the token store
+   at execution time.
+3. The worker owns a per-user Copilot runtime pool, including user-specific
+   `COPILOT_HOME`, runtime TTL, health checks, and eviction.
+4. Web replicas remain responsible for auth, HTTP, UI streaming, and job
+   submission; workers own Copilot runtime lifecycle.
+
+See
+[`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md)
+for the worker-pool design.
 
 ## Cross-cutting guarantees
 

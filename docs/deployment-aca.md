@@ -9,6 +9,18 @@ This doc covers the **container image** half of deploying Flight School. The
 full Azure Container Apps deployment (infra, identity, secrets wiring) is
 tracked in P8.
 
+## Current Copilot runtime limitation
+
+The current container runs the Next.js app and the Copilot SDK's auto-managed
+CLI runtime in the same app process/container. User identity is isolated at the
+SDK session level by passing the authenticated user's GitHub token into each
+session, but Copilot CLI process state is shared per app replica.
+
+That is acceptable for this exploratory ACA lab, but it is not the target shape
+for a public multi-user platform. The target architecture is an internal worker
+service with a per-user Copilot runtime pool, described in
+[`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md).
+
 ## Building the image
 
 The repo ships a multi-stage `Dockerfile` at the root. It produces a
