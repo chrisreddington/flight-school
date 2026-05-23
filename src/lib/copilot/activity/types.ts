@@ -76,6 +76,12 @@ export interface AIActivityOutput {
 export interface AIActivityEvent {
   /** Unique identifier for this event */
   id: string;
+  /**
+   * Owner of this event for multi-tenant filtering. Populated from the
+   * server-resolved {@link requireUserContext}. Events without a userId
+   * are treated as orphaned and never returned via `/api/ai-activity`.
+   */
+  userId: string;
   /** When the event occurred */
   timestamp: Date;
   /** Type of SDK operation */

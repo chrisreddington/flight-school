@@ -1,6 +1,6 @@
 'use client';
 
-import { HabitCard } from '@/components/FocusItem/HabitCard';
+import { HabitCard } from '@/components/FocusItem';
 import { HabitCreationDialog } from '@/components/Habits/HabitCreationDialog';
 import { habitStore } from '@/lib/habits';
 import { logger } from '@/lib/logger';

@@ -8,17 +8,10 @@
  */
 
 import type { MCPServerConfig } from '@github/copilot-sdk';
-import { getGitHubToken } from '../github/client';
-import { logger } from '../logger';
-
-const log = logger.withTag('Copilot SDK');
 
 // =============================================================================
 // MCP Server Configuration
 // =============================================================================
-
-/** Cached MCP server configs keyed by tool list */
-const cachedMcpConfigs = new Map<string, MCPServerConfig>();
 
 /**
  * Default MCP tool set.
@@ -35,33 +28,30 @@ const DEFAULT_MCP_TOOLS = [
 ] as const;
 
 /**
- * Get MCP server configuration for GitHub tools.
- * Uses official Remote GitHub MCP Server hosted by GitHub.
+ * Build an MCP server configuration for GitHub tools.
  *
- * Uses the same centralized GitHub token as Octokit auth so MCP tool
- * authorization matches repository access in the rest of the app.
+ * Uses the official Remote GitHub MCP Server hosted by GitHub. The caller
+ * must supply the GitHub token to use for this request; the config is
+ * built fresh per call so tokens are never shared across users.
  *
- * @param tools - Array of MCP tools to enable (defaults to all)
- * @returns MCP server config
+ * @param params - Per-request token and optional tool allowlist
+ * @returns MCP server config bound to the supplied token
+ * @throws If no token is supplied
  *
  * @see https://github.com/github/github-mcp-server
  */
-export async function getMcpServerConfig(
-  tools: string[] = [...DEFAULT_MCP_TOOLS]
-): Promise<MCPServerConfig | null> {
-  const toolKey = tools.join(',');
-  const cached = cachedMcpConfigs.get(toolKey);
-  if (cached) {
-    return cached;
-  }
-
-  const token = await getGitHubToken();
+export function getMcpServerConfig({
+  token,
+  tools = [...DEFAULT_MCP_TOOLS],
+}: {
+  token: string;
+  tools?: string[];
+}): MCPServerConfig {
   if (!token) {
-    log.warn('No GitHub token available - MCP tools will be disabled');
-    return null;
+    throw new Error('MCP config requires a GitHub token');
   }
 
-  const config: MCPServerConfig = {
+  return {
     type: 'http',
     url: 'https://api.githubcopilot.com/mcp/',
     headers: {
@@ -69,7 +59,4 @@ export async function getMcpServerConfig(
     },
     tools,
   };
-
-  cachedMcpConfigs.set(toolKey, config);
-  return config;
 }

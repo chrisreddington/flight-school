@@ -2,6 +2,16 @@
 
 Thank you for your interest in contributing to Flight School! This guide will help you get started with local development or using GitHub Codespaces.
 
+> [!WARNING]
+> **Exploratory project — not a reference.** Flight School is a
+> single-developer side project for trying out GitHub, the Copilot SDK,
+> Aspire, and adjacent tooling. The codebase is **mid-flight** and
+> intentionally noisy — expect half-finished refactors, antipatterns, and
+> decisions that will likely change. Do not treat anything here as a
+> recommended pattern, and do not copy it into production systems without
+> independent review. Issues and PRs are welcome, but there is no SLA,
+> roadmap, or stability guarantee.
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior through the channels described in the Code of Conduct.
@@ -55,18 +65,28 @@ The fastest way to get started is using GitHub Codespaces, which provides a full
    ```
 
 3. **Configure Environment**
-   
-   If you have the GitHub CLI installed and authenticated (`gh auth login`), the app can use your CLI token automatically. This shares authentication with GitHub Copilot, requiring no additional setup.
-   
-    **Alternative: Use Personal Access Token**
 
-   Create a `.env.local` file in the project root:
-   ```bash
-   # Required: GitHub token for API access
-   # Create at https://github.com/settings/tokens
-   # Required scopes: repo, read:user
-   GITHUB_TOKEN=your_github_pat_here
-   ```
+   Flight School authenticates every user via a GitHub App OAuth flow
+   (Auth.js v5). You need an `.env.local` for local development.
+
+   1. Register a GitHub App at <https://github.com/settings/apps/new>:
+      - **Homepage URL:** `http://localhost:3000`
+      - **Callback URL:** `http://localhost:3000/api/auth/callback/github`
+      - Enable **"Request user authorization (OAuth) during installation"**.
+      - Generate a client secret.
+   2. Copy `.env.example` to `.env.local` and fill in the required vars:
+
+      ```bash
+      AUTH_SECRET=                  # openssl rand -base64 32
+      AUTH_GITHUB_ID=               # GitHub App client id
+      AUTH_GITHUB_SECRET=           # GitHub App client secret
+      AUTH_TRUST_HOST=true
+      ```
+
+   > **No ambient auth fallbacks.** `GITHUB_TOKEN` env vars and `gh auth login`
+   > are not used anywhere in the app — local dev signs in via the same
+   > GitHub App OAuth flow as production. If you are not signed in, every
+   > API route returns 401.
 
 4. **Start the Development Server**
    ```bash
@@ -114,7 +134,7 @@ src/
 ### Key Patterns
 
 - **API routes** in `src/app/api/` handle all GitHub and AI provider calls server-side
-- **Authentication**: Always use `getGitHubToken()` from `@/lib/github/client`
+- **Authentication**: resolve the user in handlers via `requireUserContext()` from `@/lib/auth/context`, then use `getOctokitForRequest()` from `@/lib/github/client`. For AI-backed routes prefer `withUserGuards` from `@/lib/security/guard`. See [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md).
 - **Component organization**: Each component in its own folder with co-located styles
 
 ## Making Changes

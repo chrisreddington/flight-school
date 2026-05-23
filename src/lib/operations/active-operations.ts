@@ -10,32 +10,18 @@
  * 2. Server executes the AI operation asynchronously
  * 3. Client polls /api/jobs/[id] for status until complete
  * 4. Results are persisted server-side, retrieved on any page
- *
- * @example
- * ```typescript
- * import { operationsManager } from '@/lib/operations';
- *
- * // Start an operation that survives navigation
- * operationsManager.startBackgroundJob({
- *   type: 'topic-regeneration',
- *   targetId: 'topic-123',
- *   input: { existingTopicTitles: ['Topic A'] },
- *   onComplete: async (result) => {
- *     await focusStore.saveTodaysFocus(result);
- *   },
- * });
- *
- * // Check if operation is active
- * if (operationsManager.isActiveForTarget('topic-123')) {
- *   // Show skeleton
- * }
- * ```
  */
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
+import {
+  completeClientTriggerMetadata,
+  type PartialClientTriggerMetadata,
+} from '@/lib/observability/job-trigger-builders';
 import { now } from '@/lib/utils/date-utils';
 import { activeOperationsStore, type ActiveOperationItemType } from './active-operations-store';
+import { getJobPollingDecision } from './job-polling';
+import { buildOperationState } from './operation-results';
 import type {
     ActiveOperation,
     OperationsListener,
@@ -56,6 +42,7 @@ interface BackgroundJobOptions<T> {
   type: 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response';
   targetId: string;
   input: Record<string, unknown>;
+  clientTrigger?: PartialClientTriggerMetadata;
   onComplete?: (result: T) => void | Promise<void>;
   onError?: (error: Error) => void;
 }
@@ -86,10 +73,8 @@ const ITEM_TYPE_TO_JOB_TYPE: Record<ActiveOperationItemType, OperationType> = {
 class ActiveOperationsManager {
   /** All tracked operations by ID */
   private operations = new Map<string, ActiveOperation>();
-
   /** Subscribers to be notified on changes */
   private listeners = new Set<OperationsListener>();
-
   /** Cached snapshots for useSyncExternalStore (must be stable references) */
   private cachedSnapshot: OperationsSnapshot = {
     topicRegenerations: new Map(),
@@ -108,10 +93,8 @@ class ActiveOperationsManager {
 
   /** Active polling intervals by job ID */
   private pollingIntervals = new Map<string, ReturnType<typeof setInterval>>();
-
   /** Job ID to operation ID mapping */
   private jobToOperation = new Map<string, string>();
-
   /** Whether we've initialized from backend */
   private initialized = false;
 
@@ -139,17 +122,13 @@ class ActiveOperationsManager {
     this.initialized = true;
 
     try {
-      // On client, fetch active jobs from server API
-      // On server, use local storage (though this rarely happens)
       let entries: { jobId: string; itemId: string; itemType: ActiveOperationItemType; startedAt: string }[] = [];
       
       if (typeof window !== 'undefined') {
-        // Client-side: fetch from API
         try {
           const response = await fetch('/api/jobs');
           if (response.ok) {
             const data = await response.json();
-            // Transform API response to our entry format - only pending/running jobs
             entries = (data.jobs || [])
               .filter((job: { status: string }) => job.status === 'pending' || job.status === 'running')
               .map((job: { id: string; targetId?: string; type: string; createdAt: string }) => ({
@@ -163,7 +142,6 @@ class ActiveOperationsManager {
           log.warn('Failed to fetch active jobs from API:', err);
         }
       } else {
-        // Server-side: use local store
         const storeEntries = await activeOperationsStore.getEntries();
         entries = storeEntries;
       }
@@ -208,14 +186,17 @@ class ActiveOperationsManager {
    * This is the preferred method for operations that must survive navigation.
    */
   async startBackgroundJob<T>(options: BackgroundJobOptions<T>): Promise<string | null> {
-    const { type, targetId, input, onComplete, onError } = options;
+    const { type, targetId, input, clientTrigger, onComplete, onError } = options;
 
     try {
+      const triggerMetadata = completeClientTriggerMetadata(clientTrigger, targetId);
       // Create job on the backend
       const response = await apiPost<JobResponse>('/api/jobs', {
         type,
         targetId,
         input,
+      }, {
+        clientTrigger: triggerMetadata,
       });
 
       if (!response?.id) {
@@ -284,15 +265,21 @@ class ActiveOperationsManager {
       try {
         const job = await apiGet<JobResponse>(`/api/jobs/${jobId}`);
 
-        if (!job) {
+        const decision = getJobPollingDecision({
+          job,
+          elapsedMs: Date.now() - startTime,
+          timeoutMs: MAX_POLL_TIME_MS,
+        });
+
+        if (decision.kind === 'missing') {
           log.warn(`Job ${jobId} not found`);
           this.stopPolling(jobId);
-          this.updateStatus(operationId, 'failed', 'Job not found');
-          onError?.(new Error('Job not found'));
+          this.updateStatus(operationId, 'failed', decision.error);
+          onError?.(new Error(decision.error));
           return;
         }
 
-        if (job.status === 'completed') {
+        if (decision.kind === 'completed') {
           log.info(`Job ${jobId} completed`);
           this.stopPolling(jobId);
 
@@ -335,28 +322,27 @@ class ActiveOperationsManager {
           return;
         }
 
-        if (job.status === 'cancelled') {
+        if (decision.kind === 'cancelled') {
           log.info(`Job ${jobId} was cancelled externally`);
           this.stopPolling(jobId);
           this.cleanup(operationId);
           return;
         }
 
-        if (job.status === 'failed') {
+        if (decision.kind === 'failed') {
           log.error(`Job ${jobId} failed:`, job.error);
           this.stopPolling(jobId);
-          this.updateStatus(operationId, 'failed', job.error);
-          onError?.(new Error(job.error || 'Job failed'));
+          this.updateStatus(operationId, 'failed', decision.error);
+          onError?.(new Error(decision.error || 'Job failed'));
           setTimeout(() => this.cleanup(operationId), 5000);
           return;
         }
 
-        // Check for timeout
-        if (Date.now() - startTime > MAX_POLL_TIME_MS) {
+        if (decision.kind === 'timed-out') {
           log.warn(`Job ${jobId} polling timed out`);
           this.stopPolling(jobId);
-          this.updateStatus(operationId, 'failed', 'Operation timed out');
-          onError?.(new Error('Operation timed out'));
+          this.updateStatus(operationId, 'failed', decision.error);
+          onError?.(new Error(decision.error));
           setTimeout(() => this.cleanup(operationId), 5000);
           return;
         }
@@ -483,55 +469,9 @@ class ActiveOperationsManager {
    * Update the cached snapshot when operations change.
    */
   private updateSnapshot(): void {
-    const topicRegenerations = new Map<string, ActiveOperation>();
-    const challengeRegenerations = new Map<string, ActiveOperation>();
-    const goalRegenerations = new Map<string, ActiveOperation>();
-    const chatMessages = new Map<string, ActiveOperation>();
-
-    // Also build active ID sets
-    const activeTopicIds = new Set<string>();
-    const activeChallengeIds = new Set<string>();
-    const activeGoalIds = new Set<string>();
-    const activeChatIds = new Set<string>();
-
-    for (const [id, op] of this.operations) {
-      const isActive = op.status === 'in-progress';
-      const targetId = op.meta.targetId || id;
-
-      switch (op.meta.type) {
-        case 'topic-regeneration':
-          topicRegenerations.set(id, op);
-          if (isActive) activeTopicIds.add(targetId);
-          break;
-        case 'challenge-regeneration':
-          challengeRegenerations.set(id, op);
-          if (isActive) activeChallengeIds.add(targetId);
-          break;
-        case 'goal-regeneration':
-          goalRegenerations.set(id, op);
-          if (isActive) activeGoalIds.add(targetId);
-          break;
-        case 'chat-message':
-          chatMessages.set(id, op);
-          if (isActive) activeChatIds.add(id);
-          break;
-      }
-    }
-
-    this.cachedSnapshot = {
-      topicRegenerations,
-      challengeRegenerations,
-      goalRegenerations,
-      chatMessages,
-    };
-
-    // Update cached active ID sets
-    this.cachedActiveIds = {
-      topics: activeTopicIds,
-      challenges: activeChallengeIds,
-      goals: activeGoalIds,
-      chat: activeChatIds,
-    };
+    const state = buildOperationState(this.operations);
+    this.cachedSnapshot = state.snapshot;
+    this.cachedActiveIds = state.activeIds;
   }
 
   /**

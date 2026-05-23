@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPost } from '@/lib/api-client';
 import type { QuizQuestion, QuizResult } from '@/lib/copilot/quiz';
 import { CheckCircleIcon } from '@primer/octicons-react';
 import { Button, FormControl, Heading, Radio, RadioGroup, Spinner, Stack, Text } from '@primer/react';
@@ -48,7 +49,11 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load cached quiz on mount — skip the generation step if available
+  // Load cached quiz on mount/topicTitle change — skip generation if cached.
+  // Reconciling local state with an external (sessionStorage) cache is a
+  // legitimate effect use; the rule's preferred alternatives (lazy init,
+  // useSyncExternalStore) don't fit a prop-driven re-read pattern.
+  /* eslint-disable react-hooks/set-state-in-effect -- hydrate from session cache on topicTitle change */
   useEffect(() => {
     const cached = readQuizCache(topicTitle);
     if (cached) {
@@ -58,6 +63,7 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
       setViewState('question');
     }
   }, [topicTitle]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const currentQuestion: QuizQuestion | null = quiz?.questions[currentIndex] ?? null;
   const reinforcedConcepts = useMemo(() => {
@@ -72,26 +78,16 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
     setCurrentIndex(0);
 
     try {
-      const response = await fetch('/api/quiz', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topicTitle,
-          topicDescription,
-        }),
+      const data = await apiPost<QuizResult>('/api/quiz', {
+        topicTitle,
+        topicDescription,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate quiz');
-      }
-
-      const data = (await response.json()) as QuizResult;
       writeQuizCache(topicTitle, data);
       setQuiz(data);
       setViewState('question');
     } catch {
+      // 402 already broadcast to the banner via apiPost.
       setErrorMessage('Could not load practice quiz right now. Please try again.');
       setViewState('idle');
     }

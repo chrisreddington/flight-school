@@ -6,7 +6,7 @@
  * Supports package.json, requirements.txt, go.mod, and Cargo.toml.
  */
 
-import { getOctokit } from './client';
+import type { Octokit } from 'octokit';
 import { nowMs } from '@/lib/utils/date-utils';
 
 // =============================================================================
@@ -39,13 +39,16 @@ const depsCache = new Map<string, CachedDeps>();
  *
  * @remarks
  * Tries files in order: package.json → requirements.txt → go.mod → Cargo.toml.
- * Returns on first successful parse. Results are cached 24 hours.
+ * Returns on first successful parse. Results are cached 24 hours per repo
+ * (cache key is `owner/repo`, so this is safe across users).
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param owner - Repository owner
  * @param repo - Repository name
  * @returns Array of dependency names (up to MAX_DEPS)
  */
 export async function getRepoDependencies(
+  octokit: Octokit,
   owner: string,
   repo: string
 ): Promise<string[]> {
@@ -55,7 +58,7 @@ export async function getRepoDependencies(
     return cached.deps;
   }
 
-  const deps = await fetchDeps(owner, repo);
+  const deps = await fetchDeps(octokit, owner, repo);
   depsCache.set(cacheKey, { deps, timestamp: nowMs() });
   return deps;
 }
@@ -64,9 +67,11 @@ export async function getRepoDependencies(
 // Internal helpers
 // =============================================================================
 
-async function fetchDeps(owner: string, repo: string): Promise<string[]> {
-  const octokit = await getOctokit();
-
+async function fetchDeps(
+  octokit: Octokit,
+  owner: string,
+  repo: string
+): Promise<string[]> {
   const parsers: Array<{ path: string; parse: (content: string) => string[] }> = [
     { path: 'package.json', parse: parsePackageJson },
     { path: 'requirements.txt', parse: parseRequirementsTxt },

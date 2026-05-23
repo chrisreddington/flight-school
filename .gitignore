@@ -15,10 +15,12 @@
 
 # next.js
 /.next/
+/.next-worker/
 /out/
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -32,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -46,3 +49,4 @@ next-env.d.ts
 
 # Keeping this entry in case anyone adds it to the local repo
 .data/
+.playwright-cli/

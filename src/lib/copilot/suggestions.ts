@@ -1,4 +1,4 @@
-import { createLoggedLightweightCoachSession } from './server';
+import { createLoggedLightweightCoachSession, type SessionIdentity } from './server';
 import { extractJSON } from '@/lib/utils/json-utils';
 
 export interface RelatedSuggestion {
@@ -109,6 +109,7 @@ export function getWhatsNextFallback(
 }
 
 export async function generateWhatsNext(
+  identity: SessionIdentity,
   completedChallenge: { title: string; language: string; difficulty: string },
   profileContext: string
 ): Promise<WhatsNextResult> {
@@ -122,6 +123,7 @@ JSON only:
 {"suggestions":[{"id":"","title":"","reason":"Building on your ${completedChallenge.difficulty} ${completedChallenge.language} work, this next step will...","difficulty":"","language":""}]}`;
 
   const loggedSession = await createLoggedLightweightCoachSession(
+    identity,
     'What Next Suggestions',
     completedChallenge.title
   );

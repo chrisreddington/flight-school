@@ -20,7 +20,7 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-vi.mock('@/components/FocusItem/HabitCard', () => ({
+vi.mock('@/components/FocusItem', () => ({
   HabitCard: ({ habit }: { habit: HabitWithHistory }) => <div>{habit.title}</div>,
 }));
 

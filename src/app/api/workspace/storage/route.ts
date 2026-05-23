@@ -1,49 +1,121 @@
 /**
  * Workspace Storage API Route
- * 
- * Server-side file-based persistence for challenge workspaces.
- * 
- * Storage structure:
+ *
+ * Server-side file-based persistence for challenge workspaces, **partitioned
+ * per authenticated user**. Each authenticated request resolves its GitHub
+ * identity via {@link requireUserContext} and the workspace tree lives under
+ * `users/{userId}/workspaces/...` — User A cannot reach User B's workspaces.
+ *
+ * Storage structure (per user):
  * ```
- * .data/workspaces/
+ * users/{userId}/workspaces/
  *   {challengeId}/
  *     _workspace.json    # metadata only
  *     solution.ts        # actual file content
  * ```
- * 
+ *
  * Endpoints:
  * - GET ?challengeId=X           - Read workspace (full or metadata only)
  * - POST                         - Save workspace
  * - DELETE ?challengeId=X        - Delete specific workspace
- * - DELETE (no params)           - Delete all workspaces
+ * - DELETE (no params)           - Delete all workspaces for this user
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  readFile, 
-  writeFile, 
-  deleteFile, 
-  deleteDir, 
+import {
+  readFile,
+  writeFile,
+  deleteFile,
+  deleteDir,
   listFiles,
-  ensureDir 
+  ensureDir,
+  safeChildPath
 } from '@/lib/storage/utils';
 import type { ChallengeWorkspace, WorkspaceFile, WorkspaceMetadata } from '@/lib/workspace/types';
-import { 
-  WORKSPACES_DIR, 
-  METADATA_FILENAME, 
-  toFileMetadata, 
-  toWorkspaceFile 
+import {
+  WORKSPACES_DIR,
+  METADATA_FILENAME,
+  toFileMetadata,
+  toWorkspaceFile
 } from '@/lib/workspace/storage';
+import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { validationErrorResponse } from '@/lib/api/response-utils';
 import { logger } from '@/lib/logger';
 
 const log = logger.withTag('Workspace Storage API');
+
+/**
+ * Matches values that are safe to embed verbatim into a filesystem path
+ * segment. Used to defensively reject userIds and challenge IDs that could
+ * otherwise escape the per-user workspace directory.
+ */
+const SAFE_PATH_SEGMENT = /^[a-zA-Z0-9_-]+$/;
+
+/** Maximum length allowed for a workspace filename (incl. any subpath). */
+const MAX_WORKSPACE_FILENAME_LENGTH = 255;
+
+/**
+ * Validates that `name` is a safe workspace filename: it may consist of one or
+ * more `/`-separated segments, each matching a conservative character class,
+ * and the resolved path must stay under `workspaceDir`. Throws on rejection.
+ */
+function assertSafeWorkspaceFilename(workspaceDir: string, name: unknown): void {
+  if (typeof name !== 'string') {
+    throw new Error('filename must be a string');
+  }
+  if (name.length === 0 || name.length > MAX_WORKSPACE_FILENAME_LENGTH) {
+    throw new Error('filename length out of bounds');
+  }
+  const segments = name.split('/');
+  const segmentPattern = /^[a-zA-Z0-9._-]+$/;
+  for (const segment of segments) {
+    if (!segmentPattern.test(segment)) {
+      throw new Error(`invalid filename segment "${segment}"`);
+    }
+  }
+  // Structural + containment check (rejects `..`, `\`, NUL, absolute, etc.).
+  safeChildPath(workspaceDir, ...segments);
+}
 
 // =============================================================================
 // Utility Functions
 // =============================================================================
 
-function getWorkspaceDir(challengeId: string): string {
-  return `${WORKSPACES_DIR}/${challengeId}`;
+/**
+ * Resolves the authenticated user's workspaces root, or returns an HTTP
+ * response describing why the request can't proceed.
+ */
+async function resolveUserWorkspacesDir(): Promise<
+  { ok: true; userId: string; root: string } | { ok: false; response: NextResponse }
+> {
+  let userId: string;
+  try {
+    ({ userId } = await requireUserContext());
+  } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: 'Authentication required' }, { status: 401 }),
+      };
+    }
+    throw error;
+  }
+
+  if (!SAFE_PATH_SEGMENT.test(userId)) {
+    log.warn('Rejected unsafe userId', { userId });
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Invalid user identifier' }, { status: 400 }),
+    };
+  }
+
+  const root = `users/${userId}/${WORKSPACES_DIR}`;
+  await ensureDir(`users/${userId}`, { mode: 0o700 });
+  return { ok: true, userId, root };
+}
+
+function getWorkspaceDir(workspacesRoot: string, challengeId: string): string {
+  return `${workspacesRoot}/${challengeId}`;
 }
 
 // =============================================================================
@@ -51,6 +123,9 @@ function getWorkspaceDir(challengeId: string): string {
 // =============================================================================
 
 export async function GET(request: NextRequest) {
+  const scoped = await resolveUserWorkspacesDir();
+  if (!scoped.ok) return scoped.response;
+
   const { searchParams } = new URL(request.url);
   const challengeId = searchParams.get('challengeId');
   const metadataOnly = searchParams.get('metadataOnly') === 'true';
@@ -58,11 +133,13 @@ export async function GET(request: NextRequest) {
   if (!challengeId) {
     return NextResponse.json({ error: 'challengeId required' }, { status: 400 });
   }
+  if (!SAFE_PATH_SEGMENT.test(challengeId)) {
+    return NextResponse.json({ error: 'Invalid challengeId' }, { status: 400 });
+  }
 
   try {
-    const workspaceDir = getWorkspaceDir(challengeId);
-    
-    // Read metadata
+    const workspaceDir = getWorkspaceDir(scoped.root, challengeId);
+
     const metadataJson = await readFile(workspaceDir, METADATA_FILENAME);
     if (!metadataJson) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
@@ -74,9 +151,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(metadata);
     }
 
-    // Read file contents
     const files: WorkspaceFile[] = await Promise.all(
       metadata.files.map(async (fileMeta) => {
+        // Defence in depth: reject filenames that escape the workspace
+        // subtree (in case any were persisted before validation was added).
+        try {
+          assertSafeWorkspaceFilename(workspaceDir, fileMeta.name);
+        } catch (validationError) {
+          log.warn('Skipping workspace file with unsafe name on read', {
+            challengeId,
+            name: fileMeta.name,
+            error: validationError instanceof Error ? validationError.message : String(validationError),
+          });
+          return toWorkspaceFile(fileMeta, '');
+        }
         const content = await readFile(workspaceDir, fileMeta.name) ?? '';
         return toWorkspaceFile(fileMeta, content);
       })
@@ -103,36 +191,51 @@ export async function GET(request: NextRequest) {
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+  const scoped = await resolveUserWorkspacesDir();
+  if (!scoped.ok) return scoped.response;
+
   try {
     const workspace: ChallengeWorkspace = await request.json();
-    
+
     if (!workspace.challengeId || !workspace.files) {
       return NextResponse.json({ error: 'Invalid workspace data' }, { status: 400 });
     }
+    if (!SAFE_PATH_SEGMENT.test(workspace.challengeId)) {
+      return NextResponse.json({ error: 'Invalid challengeId' }, { status: 400 });
+    }
 
-    const workspaceDir = getWorkspaceDir(workspace.challengeId);
-    
-    // Ensure directory exists
+    const workspaceDir = getWorkspaceDir(scoped.root, workspace.challengeId);
+
+    // Validate every caller-supplied filename BEFORE touching the filesystem.
+    // Any rejection -> 400 and no partial writes.
+    try {
+      for (const file of workspace.files) {
+        assertSafeWorkspaceFilename(workspaceDir, file?.name);
+      }
+    } catch (validationError) {
+      log.warn('Rejected workspace POST with unsafe filename', {
+        challengeId: workspace.challengeId,
+        error: validationError instanceof Error ? validationError.message : String(validationError),
+      });
+      return validationErrorResponse('Invalid file name');
+    }
+
     await ensureDir(workspaceDir);
 
-    // Get existing files to detect deletions
     const existingFiles = await listFiles(workspaceDir);
     const newFileNames = new Set(workspace.files.map(f => f.name));
-    newFileNames.add(METADATA_FILENAME); // Don't delete metadata
+    newFileNames.add(METADATA_FILENAME);
 
-    // Delete files that no longer exist
     for (const existingFile of existingFiles) {
       if (!newFileNames.has(existingFile)) {
         await deleteFile(workspaceDir, existingFile);
       }
     }
 
-    // Write each file
     await Promise.all(
       workspace.files.map(file => writeFile(workspaceDir, file.name, file.content))
     );
 
-    // Write metadata (without file content)
     const metadata: WorkspaceMetadata = {
       version: workspace.version,
       challengeId: workspace.challengeId,
@@ -156,19 +259,24 @@ export async function POST(request: NextRequest) {
 // =============================================================================
 
 export async function DELETE(request: NextRequest) {
+  const scoped = await resolveUserWorkspacesDir();
+  if (!scoped.ok) return scoped.response;
+
   const { searchParams } = new URL(request.url);
   const challengeId = searchParams.get('challengeId');
 
   try {
     if (challengeId) {
-      // Delete specific workspace
-      const workspaceDir = getWorkspaceDir(challengeId);
+      if (!SAFE_PATH_SEGMENT.test(challengeId)) {
+        return NextResponse.json({ error: 'Invalid challengeId' }, { status: 400 });
+      }
+      const workspaceDir = getWorkspaceDir(scoped.root, challengeId);
       await deleteDir(workspaceDir);
       log.debug('Deleted workspace', { challengeId });
     } else {
-      // Delete all workspaces
-      await deleteDir(WORKSPACES_DIR);
-      log.debug('Deleted all workspaces');
+      // Delete all workspaces for this user only — never touch other users.
+      await deleteDir(scoped.root);
+      log.debug('Deleted all workspaces for user');
     }
 
     return NextResponse.json({ success: true });

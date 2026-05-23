@@ -5,7 +5,7 @@
  * All calculations are performed locally — no LLM overhead.
  */
 
-import { getOctokit } from './client';
+import type { Octokit } from 'octokit';
 import { now } from '@/lib/utils/date-utils';
 import type { ActivityMetrics, GitHubEvent } from './types';
 
@@ -18,15 +18,16 @@ import type { ActivityMetrics, GitHubEvent } from './types';
  * from leaking into AI-generated content. Only events from repos where
  * the owner matches the authenticated user are included.
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param username - GitHub username
  * @param perPage - Number of events to fetch
  * @returns Array of event data from user-owned repos only
  */
 export async function getUserEvents(
+  octokit: Octokit,
   username: string,
   perPage = 100
 ): Promise<GitHubEvent[]> {
-  const octokit = await getOctokit();
   const { data } = await octokit.rest.activity.listEventsForAuthenticatedUser({
     username,
     per_page: perPage,

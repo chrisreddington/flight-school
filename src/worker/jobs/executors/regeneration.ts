@@ -1,0 +1,242 @@
+import {
+  buildSingleChallengePrompt,
+  buildSingleGoalPrompt,
+  buildSingleTopicPrompt,
+} from '@/lib/copilot/prompts';
+import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
+import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
+import { getOctokitForToken } from '@/lib/github/client';
+import { buildCompactContext, serializeContext } from '@/lib/github/profile';
+import { jobStorage } from '@/lib/jobs';
+import type {
+  ChallengeRegenerationInput,
+  ChallengeRegenerationResult,
+  GoalRegenerationInput,
+  GoalRegenerationResult,
+  TopicRegenerationInput,
+  TopicRegenerationResult,
+} from '@/lib/jobs';
+import { logger } from '@/lib/logger';
+import { extractJSON } from '@/lib/utils/json-utils';
+import { isJobStillValid, resolveJobIdentity } from './job-identity';
+import { registerSession, unregisterSession } from './session-registry';
+
+const log = logger.withTag('JobRegeneration');
+
+async function buildSerializedContext(gitHubToken: string): Promise<string> {
+  try {
+    const octokit = getOctokitForToken(gitHubToken);
+    const compactProfile = await buildCompactContext(octokit, 1000);
+    return serializeContext(compactProfile);
+  } catch (err) {
+    log.warn('Failed to build context:', err);
+    return '';
+  }
+}
+
+/**
+ * Execute a topic regeneration job.
+ */
+export async function executeTopicRegeneration(
+  jobId: string,
+  input: TopicRegenerationInput,
+  userId: string,
+): Promise<void> {
+  await jobStorage.markRunning(jobId);
+
+  try {
+    if (!await isJobStillValid(jobId)) return;
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
+
+    const serializedContext = await buildSerializedContext(identity.gitHubToken);
+
+    if (!await isJobStillValid(jobId)) return;
+
+    const prompt = buildSingleTopicPrompt(
+      serializedContext,
+      input.existingTopicTitles,
+      input.skillProfile,
+    );
+
+    const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
+      'Job: topic-regeneration',
+      prompt.slice(0, 50),
+    );
+
+    registerSession(jobId, loggedSession);
+
+    log.info(`[Job ${jobId}] Sending prompt (${prompt.length} chars)...`);
+    const result = await loggedSession.sendAndWait(prompt);
+
+    unregisterSession(jobId);
+
+    if (!await isJobStillValid(jobId)) {
+      await loggedSession.destroy();
+      return;
+    }
+
+    loggedSession.destroy();
+
+    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
+
+    const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.responseText);
+    if (!parsed?.learningTopic) {
+      throw new Error('Failed to parse topic response');
+    }
+
+    if (!parsed.learningTopic.id) {
+      parsed.learningTopic.id = crypto.randomUUID();
+    }
+
+    await jobStorage.markCompleted<TopicRegenerationResult>(jobId, {
+      learningTopic: parsed.learningTopic,
+    });
+
+    log.info(`[Job ${jobId}] Completed successfully`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error(`[Job ${jobId}] Failed:`, errorMessage);
+    await jobStorage.markFailed(jobId, errorMessage);
+  }
+}
+
+/**
+ * Execute a challenge regeneration job.
+ */
+export async function executeChallengeRegeneration(
+  jobId: string,
+  input: ChallengeRegenerationInput,
+  userId: string,
+): Promise<void> {
+  await jobStorage.markRunning(jobId);
+
+  try {
+    if (!await isJobStillValid(jobId)) return;
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
+
+    const serializedContext = await buildSerializedContext(identity.gitHubToken);
+
+    if (!await isJobStillValid(jobId)) return;
+
+    const prompt = buildSingleChallengePrompt(
+      serializedContext,
+      input.existingChallengeTitles,
+      input.skillProfile,
+    );
+
+    const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
+      'Job: challenge-regeneration',
+      prompt.slice(0, 50),
+    );
+
+    registerSession(jobId, loggedSession);
+
+    log.info(`[Job ${jobId}] Sending challenge prompt (${prompt.length} chars)...`);
+    const result = await loggedSession.sendAndWait(prompt);
+
+    unregisterSession(jobId);
+
+    if (!await isJobStillValid(jobId)) {
+      await loggedSession.destroy();
+      return;
+    }
+
+    loggedSession.destroy();
+
+    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
+
+    const parsed = extractJSON<{ challenge: DailyChallenge }>(result.responseText);
+    if (!parsed?.challenge) {
+      throw new Error('Failed to parse challenge response');
+    }
+
+    if (!parsed.challenge.id) {
+      parsed.challenge.id = crypto.randomUUID();
+    }
+
+    await jobStorage.markCompleted<ChallengeRegenerationResult>(jobId, {
+      challenge: parsed.challenge,
+    });
+
+    log.info(`[Job ${jobId}] Completed successfully`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error(`[Job ${jobId}] Failed:`, errorMessage);
+    await jobStorage.markFailed(jobId, errorMessage);
+  }
+}
+
+/**
+ * Execute a goal regeneration job.
+ */
+export async function executeGoalRegeneration(
+  jobId: string,
+  input: GoalRegenerationInput,
+  userId: string,
+): Promise<void> {
+  await jobStorage.markRunning(jobId);
+
+  try {
+    if (!await isJobStillValid(jobId)) return;
+
+    const identity = await resolveJobIdentity(jobId, userId);
+    if (!identity) return;
+
+    const serializedContext = await buildSerializedContext(identity.gitHubToken);
+
+    if (!await isJobStillValid(jobId)) return;
+
+    const prompt = buildSingleGoalPrompt(
+      serializedContext,
+      input.existingGoalTitles,
+      input.skillProfile,
+    );
+
+    const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
+      'Job: goal-regeneration',
+      prompt.slice(0, 50),
+    );
+
+    registerSession(jobId, loggedSession);
+
+    log.info(`[Job ${jobId}] Sending goal prompt (${prompt.length} chars)...`);
+    const result = await loggedSession.sendAndWait(prompt);
+
+    unregisterSession(jobId);
+
+    if (!await isJobStillValid(jobId)) {
+      await loggedSession.destroy();
+      return;
+    }
+
+    loggedSession.destroy();
+
+    log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
+
+    const parsed = extractJSON<{ goal: DailyGoal }>(result.responseText);
+    if (!parsed?.goal) {
+      throw new Error('Failed to parse goal response');
+    }
+
+    if (!parsed.goal.id) {
+      parsed.goal.id = crypto.randomUUID();
+    }
+
+    await jobStorage.markCompleted<GoalRegenerationResult>(jobId, {
+      goal: parsed.goal,
+    });
+
+    log.info(`[Job ${jobId}] Completed successfully`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error(`[Job ${jobId}] Failed:`, errorMessage);
+    await jobStorage.markFailed(jobId, errorMessage);
+  }
+}

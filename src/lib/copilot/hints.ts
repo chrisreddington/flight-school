@@ -13,7 +13,7 @@
  * @see SPEC-002 for acceptance criteria (AC3.1-AC3.4)
  */
 
-import { createLoggedLightweightCoachSession } from './server';
+import { createLoggedLightweightCoachSession, type SessionIdentity } from './server';
 import { extractJSON } from '@/lib/utils/json-utils';
 import type { ChallengeDef, HintResult } from './types';
 
@@ -135,6 +135,7 @@ function parseHintResponse(responseText: string): HintResult {
  * ```
  */
 export async function getHint(
+  identity: SessionIdentity,
   challenge: ChallengeDef,
   question: string,
   currentCode: string
@@ -143,6 +144,7 @@ export async function getHint(
   const prompt = buildHintPrompt(question, currentCode, challengeContext);
 
   const loggedSession = await createLoggedLightweightCoachSession(
+    identity,
     'Single Hint',
     `Hint for ${challenge.title}`
   );

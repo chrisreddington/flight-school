@@ -1,11 +1,18 @@
 /**
  * Jobs API - Get/Delete Individual Job
- * GET /api/jobs/[id] - Get job status and result
- * DELETE /api/jobs/[id] - Delete/cancel a job
+ * GET /api/jobs/[id] - Get job status and result (caller must own the job)
+ * DELETE /api/jobs/[id] - Cancel/delete a job (caller must own the job)
+ *
+ * Both endpoints enforce multi-tenant ownership: jobs belonging to another
+ * user return `404 Not Found` (not 403) to avoid leaking job-id existence
+ * across tenants.
  */
 
 import { jobStorage } from '@/lib/jobs';
+import { redactJobForDetail } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
+import { handleUnauthorizedError } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { NextRequest, NextResponse } from 'next/server';
 import { cancelRunningJob } from '../route';
 
@@ -19,46 +26,61 @@ export async function GET(
   _request: NextRequest,
   context: RouteContext
 ) {
-  const { id } = await context.params;
-  
-  // Invalidate cache to get fresh data from disk
-  jobStorage.invalidateCache();
-  const job = await jobStorage.get(id);
-  
-  if (!job) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+  try {
+    const { userId } = await requireUserContext();
+    const { id } = await context.params;
+
+    jobStorage.invalidateCache();
+    const job = await jobStorage.get(id);
+
+    // Treat "not found" and "not yours" identically to avoid leaking
+    // existence of jobs across tenants.
+    if (!job || job.userId !== userId) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(redactJobForDetail(job));
+  } catch (err) {
+    return handleUnauthorizedError(err);
   }
-  
-  return NextResponse.json(job);
 }
 
 export async function DELETE(
   _request: NextRequest,
   context: RouteContext
 ) {
-  const { id } = await context.params;
-  
-  log.info(`[Job ${id}] DELETE request received - attempting cancellation`);
-  
-  // First try to cancel if still running
-  const wasCancelled = await cancelRunningJob(id);
-  if (wasCancelled) {
-    log.info(`[Job ${id}] Successfully cancelled running job`);
+  try {
+    const { userId } = await requireUserContext();
+    const { id } = await context.params;
+
+    log.info(`[Job ${id}] DELETE request received - attempting cancellation`);
+
+    const existing = await jobStorage.get(id);
+    if (!existing || existing.userId !== userId) {
+      // Refuse to cancel/delete jobs we don't own; 404 not 403 to avoid leakage.
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    const wasCancelled = await cancelRunningJob(id);
+    if (wasCancelled) {
+      log.info(`[Job ${id}] Successfully cancelled running job`);
+    }
+
+    const deleted = await jobStorage.delete(id);
+
+    if (!deleted && !wasCancelled) {
+      log.warn(`[Job ${id}] Job not found in storage or running jobs`);
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    log.info(`[Job ${id}] Job cancelled/deleted successfully (wasCancelled: ${wasCancelled}, deletedFromStorage: ${deleted})`);
+
+    return NextResponse.json({
+      success: true,
+      cancelled: wasCancelled,
+      deletedFromStorage: deleted,
+    });
+  } catch (err) {
+    return handleUnauthorizedError(err);
   }
-  
-  // Then delete from storage
-  const deleted = await jobStorage.delete(id);
-  
-  if (!deleted && !wasCancelled) {
-    log.warn(`[Job ${id}] Job not found in storage or running jobs`);
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-  }
-  
-  log.info(`[Job ${id}] Job cancelled/deleted successfully (wasCancelled: ${wasCancelled}, deletedFromStorage: ${deleted})`);
-  
-  return NextResponse.json({ 
-    success: true,
-    cancelled: wasCancelled,
-    deletedFromStorage: deleted,
-  });
 }

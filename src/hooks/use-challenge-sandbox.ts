@@ -38,7 +38,7 @@
 
 'use client';
 
-import { apiPost } from '@/lib/api-client';
+import { apiGet, apiPost } from '@/lib/api-client';
 import { now } from '@/lib/utils/date-utils';
 import { generateHintId } from '@/lib/utils/id-generator';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -68,6 +68,16 @@ export interface HintMessage {
   timestamp: string;
 }
 
+/**
+ * Structured failure classifications surfaced from the jobs API so the
+ * UI can route credentials-expired errors to a re-auth CTA instead of a
+ * generic error banner.
+ */
+export type EvaluationErrorCode =
+  | 'credentials_missing'
+  | 'credentials_refresh_failed'
+  | 'unknown';
+
 /** Evaluation state during streaming */
 export interface EvaluationState {
   /** Whether evaluation is in progress */
@@ -80,6 +90,12 @@ export interface EvaluationState {
   result: EvaluationResult | null;
   /** Error message if evaluation failed */
   error: string | null;
+  /** Structured error classification (e.g. credentials_missing). */
+  errorCode: EvaluationErrorCode | null;
+  /** Short label describing the current executor phase. */
+  currentStep: string | null;
+  /** True while a stop request is in flight (optimistic UI). */
+  isCancelling: boolean;
 }
 
 /** State returned by the useChallengeSandbox hook */
@@ -135,6 +151,9 @@ const initialEvaluationState: EvaluationState = {
   streamingFeedback: '',
   result: null,
   error: null,
+  errorCode: null,
+  currentStep: null,
+  isCancelling: false,
 };
 
 // ============================================================================
@@ -197,11 +216,19 @@ export function useChallengeSandbox(
     
     const poll = async () => {
       try {
-        // Check evaluation progress
-        const response = await fetch(`/api/evaluations/${challengeId}`);
-        if (!response.ok) return;
-        
-        const progress = await response.json();
+        // Check evaluation progress. apiGet with throwOnError:false avoids
+        // tearing down the poll loop on transient errors; 402 is still
+        // broadcast to the global banner.
+        const progress = await apiGet<{
+          status?: string;
+          partial?: PartialEvaluationResult | null;
+          streamingFeedback?: string;
+          result?: EvaluationResult | null;
+          error?: string;
+          errorCode?: EvaluationErrorCode;
+          currentStep?: string;
+          jobId?: string;
+        } | null>(`/api/evaluations/${challengeId}`, { throwOnError: false });
         if (!progress) return;
         
         if (progress.status === 'streaming' || progress.status === 'pending') {
@@ -210,6 +237,7 @@ export function useChallengeSandbox(
             isLoading: true,
             partialResult: progress.partial || prev.partialResult,
             streamingFeedback: progress.streamingFeedback || prev.streamingFeedback,
+            currentStep: progress.currentStep ?? prev.currentStep,
           }));
         } else if (progress.status === 'completed') {
           // Stop polling
@@ -225,6 +253,9 @@ export function useChallengeSandbox(
             streamingFeedback: progress.streamingFeedback || '',
             result: progress.result || null,
             error: null,
+            errorCode: null,
+            currentStep: null,
+            isCancelling: false,
           });
         } else if (progress.status === 'failed') {
           // Stop polling
@@ -240,6 +271,9 @@ export function useChallengeSandbox(
             streamingFeedback: '',
             result: null,
             error: progress.error || 'Evaluation failed',
+            errorCode: progress.errorCode ?? null,
+            currentStep: null,
+            isCancelling: false,
           });
         }
       } catch {
@@ -259,18 +293,28 @@ export function useChallengeSandbox(
     const checkExistingEvaluation = async () => {
       try {
         // Check evaluation storage for existing progress
-        const response = await fetch(`/api/evaluations/${challengeId}`);
-        if (response.ok) {
-          const progress = await response.json();
-          if (progress && (progress.status === 'pending' || progress.status === 'streaming')) {
+        const progress = await apiGet<{
+          status?: string;
+          partial?: PartialEvaluationResult | null;
+          streamingFeedback?: string;
+          result?: EvaluationResult | null;
+          error?: string;
+          errorCode?: EvaluationErrorCode;
+          currentStep?: string;
+          jobId?: string;
+        } | null>(`/api/evaluations/${challengeId}`, { throwOnError: false });
+        if (progress && (progress.status === 'pending' || progress.status === 'streaming')) {
             // Resume polling for this evaluation
-            evaluationJobIdRef.current = progress.jobId;
+            evaluationJobIdRef.current = progress.jobId ?? null;
             setEvaluation({
               isLoading: true,
               partialResult: progress.partial || null,
               streamingFeedback: progress.streamingFeedback || '',
               result: null,
               error: null,
+              errorCode: null,
+              currentStep: progress.currentStep ?? null,
+              isCancelling: false,
             });
             startPolling();
           } else if (progress?.status === 'completed' && progress.result) {
@@ -280,9 +324,22 @@ export function useChallengeSandbox(
               streamingFeedback: progress.streamingFeedback || '',
               result: progress.result,
               error: null,
+              errorCode: null,
+              currentStep: null,
+              isCancelling: false,
+            });
+          } else if (progress?.status === 'failed') {
+            setEvaluation({
+              isLoading: false,
+              partialResult: null,
+              streamingFeedback: '',
+              result: null,
+              error: progress.error || 'Evaluation failed',
+              errorCode: progress.errorCode ?? null,
+              currentStep: null,
+              isCancelling: false,
             });
           }
-        }
       } catch {
         // No existing evaluation, that's fine
       }
@@ -305,6 +362,9 @@ export function useChallengeSandbox(
       streamingFeedback: '',
       result: null,
       error: null,
+      errorCode: null,
+      currentStep: 'Preparing context…',
+      isCancelling: false,
     });
 
     // Build files array for evaluation
@@ -346,6 +406,9 @@ export function useChallengeSandbox(
         streamingFeedback: '',
         result: null,
         error: err instanceof Error ? err.message : 'Failed to start evaluation',
+        errorCode: null,
+        currentStep: null,
+        isCancelling: false,
       });
     }
   }, [challenge, workspace.files, evaluation.isLoading, challengeId, startPolling]);
@@ -354,6 +417,10 @@ export function useChallengeSandbox(
    * Stop the current evaluation.
    */
   const stopEvaluation = useCallback(async () => {
+    // Optimistic "Cancelling…" — the polling loop will clear isLoading when
+    // it observes the final status, or we clear below if no job ever started.
+    setEvaluation((prev) => ({ ...prev, isCancelling: true }));
+
     // Stop polling
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -373,6 +440,8 @@ export function useChallengeSandbox(
     setEvaluation((prev) => ({
       ...prev,
       isLoading: false,
+      isCancelling: false,
+      currentStep: null,
     }));
   }, []);
 

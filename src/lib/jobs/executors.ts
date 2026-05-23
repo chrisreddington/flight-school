@@ -42,6 +42,19 @@ export interface GoalRegenerationResult {
 export interface ChatResponseInput {
   threadId: string;
   prompt: string;
+  /**
+   * Stable client-generated v4 uuid identifying the assistant message
+   * this job will produce. Sent by the client up-front so:
+   *   - Streaming deltas can be reconciled by id, not by prompt-match.
+   *   - Duplicate-prompt resends don't overwrite earlier replies.
+   *   - `(threadId, assistantMessageId)` acts as a per-user idempotency
+   *     key for `/api/jobs` POST.
+   *
+   * Validated by the server as RFC4122 v4 shape. The server falls back
+   * to `generateMessageId()` only for backwards compatibility with
+   * pre-Phase-D clients that haven't started sending the field yet.
+   */
+  assistantMessageId?: string;
   /** Repository full names (e.g., 'owner/repo') to focus MCP tools on */
   repos?: string[];
   learningMode?: boolean;

@@ -1,16 +1,13 @@
 /**
  * Tests for API error handler.
  *
- * Covers status code mapping and token invalidation logic.
+ * Covers status code mapping and response envelope shape. Token invalidation
+ * is intentionally absent — the multi-tenant runtime has no process-wide
+ * token cache (see `src/lib/auth/context.ts`).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleApiError } from './api-error';
-
-// Mock dependencies
-vi.mock('@/lib/github/client', () => ({
-  invalidateTokenCache: vi.fn(),
-}));
 
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -19,8 +16,6 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-// Import mocked functions for assertions
-import { invalidateTokenCache } from '@/lib/github/client';
 import { logger } from '@/lib/logger';
 
 describe('handleApiError', () => {
@@ -28,7 +23,6 @@ describe('handleApiError', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock Date.now() for consistent timing
     vi.spyOn(Date, 'now').mockReturnValue(1500);
   });
 
@@ -98,7 +92,7 @@ describe('handleApiError', () => {
       const response = handleApiError(error, 'TEST', startTime);
       const body = await response.json();
 
-      expect(body.meta.totalTimeMs).toBe(500); // 1500 - 1000
+      expect(body.meta.totalTimeMs).toBe(500);
     });
 
     it('should allow custom response message', async () => {
@@ -117,48 +111,6 @@ describe('handleApiError', () => {
       const body = await response.json();
 
       expect(body.error).toBe('Unknown error');
-    });
-  });
-
-  describe('token invalidation', () => {
-    it.each([
-      { message: 'Unauthorized', status: 401 },
-      { message: 'Access forbidden', status: 403 },
-      { message: 'Authentication failed', status: 401 },
-      { message: 'Bad credentials', status: 401 },
-    ])(
-      'should invalidate token for "$message"',
-      ({ message }) => {
-        const error = new Error(message);
-        handleApiError(error, 'TEST', startTime);
-
-        expect(invalidateTokenCache).toHaveBeenCalled();
-        expect(logger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('Invalidating token cache'),
-          'TEST'
-        );
-      }
-    );
-
-    it('should invalidate token when error.status is 401', () => {
-      const error = Object.assign(new Error('Custom'), { status: 401 });
-      handleApiError(error, 'TEST', startTime);
-
-      expect(invalidateTokenCache).toHaveBeenCalled();
-    });
-
-    it('should invalidate token when error.status is 403', () => {
-      const error = Object.assign(new Error('Custom'), { status: 403 });
-      handleApiError(error, 'TEST', startTime);
-
-      expect(invalidateTokenCache).toHaveBeenCalled();
-    });
-
-    it('should not invalidate token for other errors', () => {
-      const error = new Error('Something went wrong');
-      handleApiError(error, 'TEST', startTime);
-
-      expect(invalidateTokenCache).not.toHaveBeenCalled();
     });
   });
 

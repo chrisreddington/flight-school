@@ -33,6 +33,7 @@ import {
 } from '@primer/react';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './habits.module.css';
+import layoutStyles from '@/styles/two-column-layout.module.css';
 import dynamic from 'next/dynamic';
 
 // Lazy-load dialog components — they are only needed on first user interaction,
@@ -186,12 +187,12 @@ export default function HabitsPage() {
 
   if (isLoading) {
     return (
-      <div className={styles.root}>
+      <div className={layoutStyles.root}>
         <AppHeader />
-        <main className={styles.main}>
-          <aside className={styles.sidebar}>
+        <main className={layoutStyles.main}>
+          <aside className={layoutStyles.sidebar}>
             <ProfileNav />
-            <div className={styles.sidebarCard}>
+            <div className={layoutStyles.sidebarCard}>
               <Spinner size="medium" />
             </div>
           </aside>
@@ -207,12 +208,12 @@ export default function HabitsPage() {
   }
 
   return (
-    <div className={styles.root}>
+    <div className={layoutStyles.root}>
       <AppHeader />
 
-      <main className={styles.main}>
+      <main className={layoutStyles.main}>
         {/* Left Sidebar */}
-        <aside className={styles.sidebar}>
+        <aside className={layoutStyles.sidebar}>
           <ProfileNav />
 
           <HabitStatsSection
@@ -223,7 +224,7 @@ export default function HabitsPage() {
             onNewHabitClick={() => setIsCreateDialogOpen(true)}
           />
 
-          <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
+          <div className={`${layoutStyles.sidebarCard} ${styles.tipCard}`}>
             <p className={styles.tipTitle}>
               <LightBulbIcon size={12} /> Pro Tip
             </p>

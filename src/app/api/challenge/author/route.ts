@@ -21,7 +21,9 @@
  * @see SPEC-006 for custom challenge authoring requirements (S1, AC1.1-AC1.4)
  */
 
-import { createSSEResponse, parseJsonBody } from '@/lib/api';
+import { createSSEResponse, knownApiErrorResponse, parseJsonBody } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { nowMs } from '@/lib/utils/date-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
 import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-parser';
@@ -68,6 +70,9 @@ export async function POST(request: NextRequest) {
 
     const { prompt, conversationId, context, action } = parseResult.data;
 
+    const { userId, accessToken } = await requireUserContext();
+    const identity = createSessionIdentity({ userId, accessToken });
+
     log.info(`Authoring request: ${action || 'auto'} (conv: ${conversationId ? 'existing' : 'new'})`);
 
     // Create streaming session for authoring
@@ -76,6 +81,7 @@ export async function POST(request: NextRequest) {
       conversationId,
       context,
       action,
+      identity,
     });
 
     const sessionCreateTime = nowMs() - startTime;
@@ -122,6 +128,9 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error) {
+    const knownResponse = knownApiErrorResponse(error);
+    if (knownResponse) return knownResponse;
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to start authoring session';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

@@ -8,16 +8,18 @@
  * @see {@link createRepository} for the underlying implementation
  */
 
-import { parseJsonBody, serviceUnavailableResponse, validationErrorResponse } from '@/lib/api';
+import { authErrorResponse, parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import {
   type CreateRepoRequest,
   validateCreateRepoRequest,
 } from '@/lib/github/api-requests';
-import { isGitHubConfigured } from '@/lib/github/client';
+import { getOctokitForRequest } from '@/lib/github/client';
 import { generateLearningReadme } from '@/lib/github/readme';
 import { createRepository, getFileShaWithRetry, updateRepoFile } from '@/lib/github/repos';
+import { createSessionIdentity } from '@/lib/copilot/server';
+import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -77,14 +79,6 @@ export async function POST(
   const startTime = nowMs();
   log.info('POST request started');
 
-  // Check GitHub configuration
-  if (!(await isGitHubConfigured())) {
-    log.warn('GitHub not configured');
-    return serviceUnavailableResponse('GitHub authentication not configured', {
-      totalTimeMs: nowMs() - startTime,
-    });
-  }
-
   // Parse and validate request body
   const parseResult = await parseJsonBody<CreateRepoRequest>(request);
   if (!parseResult.success) {
@@ -103,11 +97,15 @@ export async function POST(
   const req = parseResult.data;
 
   try {
+    const octokit = await getOctokitForRequest();
+    const ctx = await requireUserContext();
+    const identity = createSessionIdentity(ctx);
+
     // Start README generation immediately if a topic was provided — it only needs
     // request data so it can run concurrently with repository creation.
     const readmePromise = req.topic
       ? (log.info(`Generating README for topic: ${req.topic}`),
-         generateLearningReadme({
+         generateLearningReadme(identity, {
            repoName: req.name,
            topic: req.topic,
            description: req.description,
@@ -116,7 +114,7 @@ export async function POST(
 
     // Create the repository (runs in parallel with README generation above)
     log.info(`Creating repository: ${req.name}`);
-    const repo = await createRepository({
+    const repo = await createRepository(octokit, {
       name: req.name,
       description: req.description,
       isPrivate: req.isPrivate ?? false,
@@ -156,10 +154,11 @@ export async function POST(
     // Get the SHA of the existing README (created by auto_init)
     const [owner, repoName] = repo.fullName.split('/');
     
-    const sha = await getFileShaWithRetry(owner, repoName, 'README.md');
+    const sha = await getFileShaWithRetry(octokit, owner, repoName, 'README.md');
 
     // Update the README with AI-generated content
     await updateRepoFile(
+      octokit,
       owner,
       repoName,
       'README.md',
@@ -193,6 +192,8 @@ export async function POST(
       },
     } satisfies RepoResponse);
   } catch (error) {
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse as NextResponse<ErrorResponse>;
     return handleApiError(error, 'Repos API', startTime);
   }
 }

@@ -13,6 +13,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AIActivityEvent, AIActivityStats } from '@/lib/copilot/activity/types';
+import { buildActivityStreamUrl } from './use-ai-activity';
 
 // Test the core logic patterns used by useAIActivity
 
@@ -22,6 +23,14 @@ describe('useAIActivity core logic', () => {
   });
 
   describe('SSE connection lifecycle', () => {
+    it('builds stream URL without cursor when no event id is known', () => {
+      expect(buildActivityStreamUrl(null)).toBe('/api/ai-activity/stream');
+    });
+
+    it('builds stream URL with cursor when last event id is known', () => {
+      expect(buildActivityStreamUrl('evt-123')).toBe('/api/ai-activity/stream?cursor=evt-123');
+    });
+
     it('should close connection when paused', () => {
       const isPaused = true;
       const mockEventSource = {

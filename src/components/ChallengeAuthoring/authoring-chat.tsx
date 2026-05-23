@@ -11,6 +11,7 @@
  */
 
 import { now, nowMs } from '@/lib/utils/date-utils';
+import { dispatchRateLimited } from '@/lib/api/rate-limit-event';
 import type { DailyChallenge } from '@/lib/focus/types';
 import {
   forwardRef,
@@ -22,6 +23,7 @@ import {
   type MutableRefObject,
 } from 'react';
 import styles from './ChallengeAuthoring.module.css';
+import type { AuthoringMessage } from './types';
 import type { TemplateSelection } from './quick-templates';
 import { AuthoringMessageList } from './authoring-message-list';
 import { AuthoringInputForm } from './authoring-input-form';
@@ -37,16 +39,6 @@ function stripJsonFromChatContent(content: string): string {
     return inner.startsWith('{') || inner.startsWith('[') ? '' : match;
   });
   return stripped.replace(/\n{3,}/g, '\n\n').trim();
-}
-
-/**
- * Message in the authoring conversation.
- */
-export interface AuthoringMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
 }
 
 /**
@@ -174,6 +166,17 @@ export const AuthoringChat = forwardRef<HTMLTextAreaElement, AuthoringChatProps>
           });
 
           if (!response.ok) {
+            if (response.status === 429) {
+              // Surface the global rate-limit toast for streaming endpoints
+              // that don't go through `apiPost`.
+              let body: unknown = {};
+              try {
+                body = await response.clone().json();
+              } catch {
+                /* ignore */
+              }
+              dispatchRateLimited(response, body, '/api/challenge/author');
+            }
             throw new Error(`HTTP ${response.status}`);
           }
 

@@ -21,10 +21,11 @@ const profileCache = new Map<string, CachedProfile>();
 /**
  * Retrieves cached profile data if it's still valid.
  *
+ * @param login - GitHub login of the user
  * @returns Cached profile or null if missing/expired
  */
-export function getCachedProfile(): CachedProfile | null {
-  const cached = profileCache.get('me');
+export function getCachedProfile(login: string): CachedProfile | null {
+  const cached = profileCache.get(login);
   if (cached && nowMs() - cached.fetchedAt < PROFILE_CACHE_TTL_MS) {
     return cached;
   }
@@ -34,9 +35,10 @@ export function getCachedProfile(): CachedProfile | null {
 /**
  * Caches the latest profile data.
  *
+ * @param login - GitHub login of the user
  * @param user - Authenticated user
  * @param repos - User repositories
  */
-export function setCachedProfile(user: GitHubUser, repos: GitHubRepo[]): void {
-  profileCache.set('me', { user, repos, fetchedAt: nowMs() });
+export function setCachedProfile(login: string, user: GitHubUser, repos: GitHubRepo[]): void {
+  profileCache.set(login, { user, repos, fetchedAt: nowMs() });
 }

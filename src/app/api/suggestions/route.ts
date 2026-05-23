@@ -1,7 +1,13 @@
 import { parseJsonBodyWithFallback } from '@/lib/api';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { generateWhatsNext, getWhatsNextFallback, type WhatsNextResult } from '@/lib/copilot/suggestions';
+import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
+import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { SUGGESTIONS_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Suggestions API');
@@ -25,19 +31,40 @@ export async function POST(request: NextRequest) {
     difficulty: body.challengeDifficulty?.trim() || 'beginner',
   };
 
-  let profileContext = '';
   try {
-    const compactContext = await buildCompactContext(1000);
-    profileContext = serializeContext(compactContext);
-  } catch (error) {
-    log.warn('Failed to build profile context for suggestions', error);
-  }
+    return await withUserGuards(
+      { ...SUGGESTIONS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/suggestions' } },
+      async (ctx) => {
+        let profileContext = '';
+        try {
+          const octokit = await getOctokitForRequest();
+          const compactContext = await buildCompactContext(octokit, 1000);
+          profileContext = serializeContext(compactContext);
+        } catch (error) {
+          log.warn('Failed to build profile context for suggestions', error);
+        }
 
-  try {
-    const result: WhatsNextResult = await generateWhatsNext(completedChallenge, profileContext);
-    return NextResponse.json(result);
+        try {
+          const result: WhatsNextResult = await generateWhatsNext(
+            createSessionIdentity(ctx),
+            completedChallenge,
+            profileContext
+          );
+          return NextResponse.json(result);
+        } catch (error) {
+          // D2: Re-throw entitlement errors so the outer guardErrorResponse
+          // maps them to 402. Static fallback is only for unrelated failures.
+          if (isCopilotEntitlementError(error)) {
+            throw error;
+          }
+          log.error('Failed to generate suggestions', error);
+          return NextResponse.json(getWhatsNextFallback(completedChallenge));
+        }
+      },
+    );
   } catch (error) {
-    log.error('Failed to generate suggestions', error);
-    return NextResponse.json(getWhatsNextFallback(completedChallenge));
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
+    throw error;
   }
 }

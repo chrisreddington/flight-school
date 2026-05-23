@@ -5,37 +5,21 @@
  * Uses Octokit directly for deterministic API calls.
  */
 
-import { getOctokit } from './client';
-import type { CreateIssueInput, CreatedIssue } from './types';
-
-export interface OpenIssueSummary {
-  title: string;
-  repo: string;
-  labels: string[];
-}
+import type { Octokit } from 'octokit';
+import type { CreateIssueInput, CreatedIssue, OpenIssueSummary } from './types';
 
 /**
  * Creates a new issue in the specified repository.
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param input - Issue creation parameters
  * @returns Created issue data with URL
  * @throws Error if repository not found or user lacks permission
- *
- * @example
- * ```typescript
- * const issue = await createIssue({
- *   owner: 'chrisreddington',
- *   repo: 'my-project',
- *   title: 'Add error handling',
- *   body: '## Context\nImprove error handling in the API layer.',
- *   labels: ['enhancement', 'learning-goal'],
- * });
- * console.log(`Created: ${issue.htmlUrl}`);
- * ```
  */
-export async function createIssue(input: CreateIssueInput): Promise<CreatedIssue> {
-  const octokit = await getOctokit();
-
+export async function createIssue(
+  octokit: Octokit,
+  input: CreateIssueInput
+): Promise<CreatedIssue> {
   const { data } = await octokit.rest.issues.create({
     owner: input.owner,
     repo: input.repo,
@@ -55,23 +39,15 @@ export async function createIssue(input: CreateIssueInput): Promise<CreatedIssue
 /**
  * Creates a learning goal issue with pre-filled template.
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param owner - Repository owner
  * @param repo - Repository name
  * @param topic - Learning topic to track
  * @param description - Optional description of the learning goal
  * @returns Created issue data
- *
- * @example
- * ```typescript
- * const issue = await createLearningGoalIssue(
- *   'chrisreddington',
- *   'my-project',
- *   'TypeScript Generics',
- *   'Learn advanced generic patterns for type-safe APIs'
- * );
- * ```
  */
 export async function createLearningGoalIssue(
+  octokit: Octokit,
   owner: string,
   repo: string,
   topic: string,
@@ -92,7 +68,7 @@ ${description ? `### Description\n${description}\n` : ''}
 ---
 *Created via Flight School*`;
 
-  return createIssue({
+  return createIssue(octokit, {
     owner,
     repo,
     title: `📚 Learning Goal: ${topic}`,
@@ -103,11 +79,11 @@ ${description ? `### Description\n${description}\n` : ''}
 
 /** Fetches the user's recently updated open issues (gracefully returns [] on failure). */
 export async function getOpenIssues(
+  octokit: Octokit,
   username: string,
   limit = 8
 ): Promise<OpenIssueSummary[]> {
   try {
-    const octokit = await getOctokit();
     const { data } = await octokit.rest.search.issuesAndPullRequests({
       q: `is:open is:issue author:${username} user:${username}`,
       sort: 'updated',

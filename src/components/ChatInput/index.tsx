@@ -4,6 +4,7 @@ import { PaperAirplaneIcon, StopIcon } from '@primer/octicons-react';
 import { FormControl, IconButton, Stack, Textarea } from '@primer/react';
 import type React from 'react';
 import { useCallback, useRef, useState } from 'react';
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
 import styles from './ChatInput.module.css';
 
 /**
@@ -49,10 +50,12 @@ export function ChatInput({
 }: ChatInputProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { disabled: rateLimited, retryInSeconds } = useRateLimitCountdown();
+  const effectivelyDisabled = disabled || rateLimited;
 
   const handleSubmit = useCallback(() => {
     const trimmedValue = value.trim();
-    if (!trimmedValue || disabled) return;
+    if (!trimmedValue || effectivelyDisabled) return;
     
     onSend(trimmedValue);
     setValue('');
@@ -61,7 +64,7 @@ export function ChatInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [value, disabled, onSend]);
+  }, [value, effectivelyDisabled, onSend]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Submit on Enter (without Shift)
@@ -84,13 +87,13 @@ export function ChatInput({
     }
   }, [maxLength]);
 
-  const canSubmit = value.trim().length > 0 && !disabled;
+  const canSubmit = value.trim().length > 0 && !effectivelyDisabled;
   const charCount = value.length;
   const showCharCount = charCount > maxLength * 0.8;
 
   return (
     <div className={styles.container}>
-      <FormControl disabled={disabled}>
+      <FormControl disabled={effectivelyDisabled}>
         <FormControl.Label visuallyHidden>Message input</FormControl.Label>
         <Stack direction="horizontal" gap="condensed" align="center">
           <div className={styles.textareaWrapper}>
@@ -100,7 +103,7 @@ export function ChatInput({
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
-              disabled={disabled}
+              disabled={effectivelyDisabled}
               rows={1}
               block
               resize="none"
@@ -128,7 +131,13 @@ export function ChatInput({
           ) : (
             <IconButton
               icon={PaperAirplaneIcon}
-              aria-label={canSubmit ? 'Send message (Enter)' : 'Type a message to send'}
+              aria-label={
+                rateLimited
+                  ? `Sending paused. Retry in ${retryInSeconds}s`
+                  : canSubmit
+                  ? 'Send message (Enter)'
+                  : 'Type a message to send'
+              }
               variant="primary"
               size="medium"
               disabled={!canSubmit}
@@ -138,7 +147,9 @@ export function ChatInput({
           )}
         </Stack>
         <FormControl.Caption className={styles.caption}>
-          Press Enter to send, Shift+Enter for new line
+          {rateLimited
+            ? `Sending paused. Retry in ${retryInSeconds}s.`
+            : 'Press Enter to send, Shift+Enter for new line'}
         </FormControl.Caption>
       </FormControl>
     </div>

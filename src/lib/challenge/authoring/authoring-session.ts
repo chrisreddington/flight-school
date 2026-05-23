@@ -153,7 +153,7 @@ function buildAuthoringPrompt(config: AuthoringSessionConfig): string {
 export async function createGenericStreamingSession(
   config: AuthoringSessionConfig
 ): Promise<AuthoringStreamingSession> {
-  const { prompt, conversationId, action } = config;
+  const { prompt, conversationId, action, identity } = config;
   const startTime = nowMs();
 
   const model = CHAT_MODEL;
@@ -169,12 +169,15 @@ export async function createGenericStreamingSession(
 
   // Get or create session (reuses session for same conversation)
   const { session, metrics } = await getConversationSession(
+    identity.userId,
     newConversationId,
     poolKey,
     {
       includeMcpTools: false, // Authoring doesn't need GitHub tools
       model,
       systemMessage,
+      userId: identity.userId,
+      gitHubToken: identity.gitHubToken,
     }
   );
 
@@ -187,7 +190,7 @@ export async function createGenericStreamingSession(
   };
 
   // Start activity logging
-  const complete = activityLogger.startOperation('ask', 'Challenge Authoring', {
+  const complete = activityLogger.startOperation(identity.userId, 'ask', 'Challenge Authoring', {
     prompt: prompt.slice(0, 100),
     model,
     sessionMetrics: {
@@ -198,9 +201,8 @@ export async function createGenericStreamingSession(
     },
   });
 
-  // Capture activity event ID
-  const activityEvents = activityLogger.getEvents();
-  streamingMetrics.activityEventId = activityEvents[activityEvents.length - 1]?.id;
+  // Capture activity event ID (scoped to this user)
+  streamingMetrics.activityEventId = activityLogger.latestEventIdForUser(identity.userId);
 
   // Track content
   let totalContent = '';

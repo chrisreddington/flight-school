@@ -10,12 +10,16 @@
  */
 
 import { logger } from '@/lib/logger';
-import { recordAiOperation } from '@/lib/observability/telemetry';
+import {
+  recordAiOperation,
+  recordAiStreamMetrics,
+} from '@/lib/observability/telemetry';
+import { context, SpanStatusCode, trace } from '@opentelemetry/api';
 import { activityLogger } from './activity/logger';
 import {
   CHAT_MODEL,
+  getCopilotGithubMcpTools,
   getConversationSession,
-  LEARNING_LENS_SYSTEM_PROMPT,
 } from './sessions';
 import type {
   StreamEvent,
@@ -26,6 +30,27 @@ import type {
 // =============================================================================
 // Internal Types
 // =============================================================================
+
+/**
+ * Learning lens system prompt for educational chat sessions.
+ *
+ * Implements the learning-focused response pattern from copilot-instructions.md:
+ * - Explains reasoning step-by-step
+ * - Suggests follow-up questions and experiments
+ * - Connects concepts to user's repositories when relevant
+ * - Builds understanding rather than just providing solutions
+ *
+ * @see SPEC-001 AC3.1, AC3.2
+ */
+const LEARNING_LENS_SYSTEM_PROMPT = `You are a developer learning companion.
+
+When responding:
+1. Explain your reasoning step-by-step
+2. Suggest 2-3 follow-up questions or experiments
+3. Reference the user's code when relevant
+4. Be conversational but focused
+
+If user wants a quick answer, skip the explanations.`;
 
 /** Configuration for creating a streaming session */
 interface StreamingSessionConfig {
@@ -43,6 +68,10 @@ interface StreamingSessionConfig {
   poolKeyPrefix: string;
   /** Log prefix for console messages */
   logPrefix: string;
+  /** GitHub user ID (partitions session cache per-identity) */
+  userId: string;
+  /** Per-session GitHub token forwarded to the SDK */
+  gitHubToken: string;
 }
 
 // =============================================================================
@@ -58,7 +87,7 @@ interface StreamingSessionConfig {
  * @internal
  */
 async function createGenericStreamingSession(config: StreamingSessionConfig): Promise<StreamingSession> {
-  const { prompt, useGitHubTools, operationName, conversationId, systemMessage, poolKeyPrefix, logPrefix } = config;
+  const { prompt, useGitHubTools, operationName, conversationId, systemMessage, poolKeyPrefix, logPrefix, userId, gitHubToken } = config;
   const startTime = Date.now();
   
   const log = logger.withTag(logPrefix);
@@ -69,19 +98,24 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   const poolKey = useGitHubTools ? `${poolKeyPrefix}:mcp` : `${poolKeyPrefix}:lightweight`;
 
   // Create session with or without MCP tools
+  const githubMcpTools = getCopilotGithubMcpTools();
   const { session, metrics } = useGitHubTools
-    ? await getConversationSession(conversationId, poolKey, {
+    ? await getConversationSession(userId, conversationId, poolKey, {
         includeMcpTools: true,
         model,
-        ...(process.env.COPILOT_GITHUB_MCP_TOOLS
-          ? { tools: process.env.COPILOT_GITHUB_MCP_TOOLS.split(',').map((tool) => tool.trim()).filter(Boolean) }
+        ...(githubMcpTools.length > 0
+          ? { tools: githubMcpTools }
           : {}),
         systemMessage,
+        userId,
+        gitHubToken,
       })
-    : await getConversationSession(conversationId, poolKey, {
+    : await getConversationSession(userId, conversationId, poolKey, {
         includeMcpTools: false,
         model,
         systemMessage,
+        userId,
+        gitHubToken,
       });
 
   // Track tool calls
@@ -89,7 +123,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   let totalContent = '';
 
   // Start activity logging
-  const complete = activityLogger.startOperation('ask', operationName, {
+  const complete = activityLogger.startOperation(userId, 'ask', operationName, {
     prompt: prompt.slice(0, 100),
     model,
     sessionMetrics: metrics ? {
@@ -106,17 +140,27 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   });
 
   // Capture the activity event ID so we can return it to the client
-  // The client will use this to update the event with client-side metrics
-  const activityEvents = activityLogger.getEvents();
-  const activityEventId = activityEvents[activityEvents.length - 1]?.id;
+  // The client will use this to update the event with client-side metrics.
+  // Scoped to this user to avoid leaking other tenants' event IDs.
+  const activityEventId = activityLogger.latestEventIdForUser(userId);
 
   // Create async generator for streaming events
   const streamingMetrics = {
     firstDeltaMs: null as number | null,
     activityEventId, // Pass this to the client
   };
+  const tracer = trace.getTracer('flight-school');
 
   async function* generateStream(): AsyncGenerator<StreamEvent, void, unknown> {
+    const streamSpan = tracer.startSpan('ai.stream', {
+      attributes: {
+        'ai.model': model,
+        'ai.operation': operationName,
+        'ai.mcp_enabled': useGitHubTools,
+      },
+    });
+    streamSpan.addEvent('stream.started');
+
     let resolveIdle: (() => void) | null = null;
     let rejectWithError: ((err: Error) => void) | null = null;
     const idlePromise = new Promise<void>((resolve, reject) => {
@@ -127,6 +171,8 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
     // Queue for delta events
     const eventQueue: StreamEvent[] = [];
     let queueResolver: (() => void) | null = null;
+    let deltaCount = 0;
+    let deltaBytes = 0;
 
     // Set up event listener
     const unsubscribe = session.on((event) => {
@@ -137,7 +183,12 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         if (data.deltaContent) {
           if (streamingMetrics.firstDeltaMs === null) {
             streamingMetrics.firstDeltaMs = Date.now() - startTime;
+            streamSpan.addEvent('first_token', {
+              'ai.stream.first_delta_ms': streamingMetrics.firstDeltaMs,
+            });
           }
+          deltaCount += 1;
+          deltaBytes += Buffer.byteLength(data.deltaContent);
           totalContent += data.deltaContent;
           eventQueue.push({ type: 'delta', content: data.deltaContent });
           queueResolver?.();
@@ -145,6 +196,9 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       } else if (eventType === 'tool.execution_start') {
         const data = event.data as { toolName: string; arguments: unknown };
         log.debug(`Tool start: ${data.toolName}`);
+        streamSpan.addEvent('tool.start', {
+          'tool.name': data.toolName,
+        });
         toolCalls.push({
           name: data.toolName,
           args: data.arguments,
@@ -155,7 +209,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         queueResolver?.();
 
         // Log to activity logger
-        activityLogger.logEvent('tool', `mcp.${data.toolName}`, {
+        activityLogger.logEvent(userId, 'tool', `mcp.${data.toolName}`, {
           metadata: { args: data.arguments },
         });
       } else if (eventType === 'tool.execution_complete') {
@@ -166,6 +220,10 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
           lastCall.endTime = Date.now();
           const duration = lastCall.endTime - lastCall.startTime;
           log.debug(`Tool complete: ${lastCall.name} (${duration}ms)`);
+          streamSpan.addEvent('tool.complete', {
+            'tool.name': lastCall.name,
+            'tool.duration_ms': duration,
+          });
           eventQueue.push({
             type: 'tool_complete',
             name: lastCall.name,
@@ -184,7 +242,10 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
 
     try {
       // Send the message (non-blocking)
-      await session.send({ prompt });
+      const activeContext = trace.setSpan(context.active(), streamSpan);
+      await context.with(activeContext, async () => {
+        await session.send({ prompt });
+      });
 
       // Yield events as they arrive
       while (true) {
@@ -230,7 +291,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       
       // Update server metrics in the event input
       if (activityEventId) {
-        const events = activityLogger['getEvents']();
+        const events = activityLogger.getEvents(userId);
         const event = events.find(e => e.id === activityEventId);
         if (event && event.input?.serverMetrics) {
           event.input.serverMetrics.firstTokenMs = streamingMetrics.firstDeltaMs;
@@ -238,7 +299,24 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         }
       }
 
+      recordAiStreamMetrics({
+        model,
+        mcpEnabled: useGitHubTools,
+        poolHit: metrics ? !metrics.createdNew : null,
+        firstTokenMs: streamingMetrics.firstDeltaMs,
+        durationMs,
+        deltaCount,
+        deltaBytes,
+        toolCalls: toolCalls.length,
+        terminalState: 'completed',
+      });
       recordAiOperation('streamSession', durationMs, model, 'ok');
+      streamSpan.addEvent('stream.completed', {
+        'ai.stream.delta_count': deltaCount,
+        'ai.stream.delta_bytes': deltaBytes,
+        'ai.stream.tool_calls': toolCalls.length,
+      });
+      streamSpan.setStatus({ code: SpanStatusCode.OK });
 
       // Yield final done event
       yield {
@@ -249,11 +327,31 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      recordAiOperation('streamSession', Date.now() - startTime, model, 'error');
+      const durationMs = Date.now() - startTime;
+      recordAiOperation('streamSession', durationMs, model, 'error');
+      recordAiStreamMetrics({
+        model,
+        mcpEnabled: useGitHubTools,
+        poolHit: metrics ? !metrics.createdNew : null,
+        firstTokenMs: streamingMetrics.firstDeltaMs,
+        durationMs,
+        deltaCount,
+        deltaBytes,
+        toolCalls: toolCalls.length,
+        terminalState: 'error',
+      });
+      streamSpan.addEvent('stream.failed', {
+        message: errorMessage,
+      });
+      if (error instanceof Error) {
+        streamSpan.recordException(error);
+      }
+      streamSpan.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
       complete(undefined, errorMessage);
       yield { type: 'error', message: errorMessage };
     } finally {
       unsubscribe();
+      streamSpan.end();
     }
   }
 
@@ -299,6 +397,7 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
  * ```
  */
 export async function createStreamingChatSession(
+  identity: { userId: string; gitHubToken: string },
   prompt: string,
   useGitHubTools: boolean,
   operationName = 'Chat',
@@ -319,6 +418,8 @@ Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
     systemMessage,
     poolKeyPrefix: 'chat',
     logPrefix: 'Copilot Streaming',
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
   });
 }
 
@@ -341,6 +442,7 @@ Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
  * @see SPEC-001 for learning chat requirements (AC3.1, AC3.2)
  */
 export async function createLearningStreamingSession(
+  identity: { userId: string; gitHubToken: string },
   prompt: string,
   useGitHubTools: boolean,
   operationName = 'Learning Chat',
@@ -363,6 +465,8 @@ Always use GitHub tools to look up real information rather than guessing.`
     systemMessage,
     poolKeyPrefix: 'learning',
     logPrefix: 'Copilot Learning',
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
   });
 }
 
@@ -381,6 +485,7 @@ Always use GitHub tools to look up real information rather than guessing.`
  * @see SPEC-002 for challenge evaluation requirements
  */
 export async function createEvaluationStreamingSession(
+  identity: { userId: string; gitHubToken: string },
   prompt: string,
   systemMessage: string,
   operationName = 'Challenge Evaluation'
@@ -393,5 +498,7 @@ export async function createEvaluationStreamingSession(
     systemMessage,
     poolKeyPrefix: 'evaluation',
     logPrefix: 'Copilot Evaluation',
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
   });
 }

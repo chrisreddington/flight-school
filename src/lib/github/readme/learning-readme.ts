@@ -4,7 +4,7 @@
  * Uses the Copilot SDK to generate README files for learning repositories.
  */
 
-import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
+import { createLoggedLightweightCoachSession, type SessionIdentity } from '@/lib/copilot/server';
 import { logger } from '@/lib/logger';
 import { extractJSON } from '@/lib/utils/json-utils';
 
@@ -109,6 +109,7 @@ ${description || `A repository for learning and practicing ${topic}.`}
  * @returns Generated or fallback README content
  */
 export async function generateLearningReadme(
+  identity: SessionIdentity,
   options: ReadmeGenerationOptions
 ): Promise<string> {
   const { repoName, topic, description } = options;
@@ -121,6 +122,7 @@ export async function generateLearningReadme(
 
   try {
     const loggedSession = await createLoggedLightweightCoachSession(
+      identity,
       'README Generation',
       'Generate README for learning repository'
     );

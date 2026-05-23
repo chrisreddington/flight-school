@@ -4,76 +4,120 @@
 
 Flight School is a sample implementation showing how to build AI-powered developer tools using the [GitHub Copilot SDK](https://github.com/github/copilot-sdk). It's a learning platform where developers practice coding challenges, receive real-time AI evaluation, and get personalized guidance all powered by GitHub Copilot.
 
+> [!WARNING]
+> **Exploratory project — not a reference, not production-ready.**
+>
+> Flight School is a single-developer side project used to explore the latest
+> capabilities across **GitHub**, the **Copilot SDK**, **Aspire**, and related
+> tooling. It is **mid-flight**: actively iterated on, intentionally noisy in
+> places, and almost certainly contains antipatterns, half-finished
+> refactors, and decisions I'd make differently next time.
+>
+> - **Do not** treat this codebase as a reference example or a recommended
+>   architecture.
+> - **Do not** copy patterns from here into production systems without
+>   independent review.
+> - Issues, PRs, and observations are welcome, but there is no SLA, roadmap
+>   commitment, or stability guarantee on anything in this repo.
+>
+> The current Copilot SDK integration provides **per-user identity isolation**
+> by passing each authenticated user's GitHub token into every SDK session.
+> It does **not** provide production-grade per-user Copilot CLI process
+> isolation: each app process currently owns a shared in-process SDK runtime.
+> The codebase now has an internal execution boundary and prototype per-user
+> runtime-pool contracts, but routes still execute in-process. See
+> [Multi-tenant Architecture](docs/architecture-multitenant.md) for the current
+> model and the worker-service target.
+
 ## Getting Started
 
-The fastest way to run Flight School is with **GitHub Codespaces** — everything is pre-configured:
+Flight School is multi-tenant: it authenticates each developer via a
+[GitHub App](https://docs.github.com/en/apps) OAuth flow (Auth.js v5) and
+threads the resulting user-to-server (`ghu_`) token through every GitHub API
+call and Copilot SDK session. To run it locally you need to register a
+GitHub App and supply `AUTH_*` credentials.
 
-1. Click **Code** → **Codespaces** → **Create codespace on main**
-2. Wait for setup to complete (installs dependencies and tools automatically)
-3. Run `gh auth login` to authenticate with GitHub
-4. Run `npm run dev` to start the app
+### Local dev quickstart
 
-That's it! Open the preview URL and you're ready to go.
+1. **Register a GitHub App** at <https://github.com/settings/apps/new>:
+   - **Homepage URL:** `http://localhost:3000`
+   - **Callback URL:** `http://localhost:3000/api/auth/callback/github`
+   - Enable **"Request user authorization (OAuth) during installation"**.
+   - Generate a client secret.
+2. **Configure environment.** Copy `.env.example` to `.env.local` and fill
+   in:
 
-### Running Locally
+   ```bash
+   AUTH_SECRET=                  # openssl rand -base64 32
+   AUTH_GITHUB_ID=               # GitHub App client id
+   AUTH_GITHUB_SECRET=           # GitHub App client secret
+   AUTH_TRUST_HOST=true
+   ```
+3. **Install and run:**
 
-To run Flight School on your own machine, you'll need:
+   ```bash
+   git clone https://github.com/chrisreddington/flight-school.git
+   cd flight-school
+   npm install
+   npm run dev
+   ```
+4. Open <http://localhost:3000> — you'll be redirected to GitHub to authorize
+   the app, then back to your personalized dashboard. This starts the Aspire
+   AppHost, including the required Copilot worker.
 
-- **Node.js 22+** — [Download here](https://nodejs.org/)
-- **GitHub CLI** — [Installation guide](https://cli.github.com/)
-- **GitHub Copilot CLI** — Required for AI features
-- **GitHub Copilot access** — Individual, Business, or Enterprise subscription
+### Optional local Copilot worker
 
-#### Step 1: Install and authenticate GitHub CLI
-
-```bash
-# Install GitHub CLI (if not already installed)
-# macOS
-brew install gh
-
-# Windows
-winget install GitHub.cli
-
-# Then authenticate
-gh auth login
-```
-
-#### Step 2: Install GitHub Copilot CLI extension
-
-The Copilot SDK uses the Copilot CLI for AI features. Install it as a GitHub CLI extension:
-
-```bash
-gh extension install github/gh-copilot
-```
-
-#### Step 3: Clone and run
-
-```bash
-git clone https://github.com/chrisreddington/flight-school.git
-cd flight-school
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) — you should see your GitHub profile loaded automatically.
-
-### Alternative: Using a Personal Access Token
-
-If you prefer not to use the GitHub CLI, you can authenticate with a Personal Access Token (PAT):
-
-1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
-2. Click **Generate new token (classic)**
-3. Select these scopes:
-   - `repo` — Access your repositories
-   - `read:user` — Read your profile information
-   - `read:org` — Read organization membership (optional)
-4. Create a `.env.local` file in the project root:
+Local AI chat requires the Copilot worker. `npm run dev` is the recommended
+path because it starts both the web app and worker through Aspire. To run the
+two processes manually, start a worker in one terminal and the web app in
+another:
 
 ```bash
-GITHUB_TOKEN=ghp_your_token_here
+npm run dev:worker
+COPILOT_WORKER_URL=http://localhost:3001 \
+COPILOT_WORKER_SECRET=local-dev-worker-secret \
+npm run dev:web-worker
 ```
 
-> **Note:** You'll still need the GitHub Copilot CLI installed for AI-powered features like challenges, hints, and coaching. The token only handles GitHub API access for profile and repository data.
+`npm run aspire:run` starts both resources and injects the local worker URL into
+the web app automatically. In worker mode, each GitHub user gets a separate
+SDK-spawned Copilot CLI child process and a separate `COPILOT_HOME`.
+
+For UI-only work that does not exercise Copilot chat, use `npm run dev:web-only`.
+AI chat routes intentionally fail fast in that mode unless you configure
+`COPILOT_WORKER_URL`.
+
+Runtime controls:
+
+```bash
+# Defaults shown
+COPILOT_RUNTIME_IDLE_TTL_MS=600000
+COPILOT_RUNTIME_MAX_ACTIVE=3
+COPILOT_RUNTIME_HOME_ROOT=$FLIGHT_SCHOOL_DATA_DIR/copilot-runtimes
+```
+
+> **Prerequisites:** Node.js 22+, npm, Git, and a GitHub Copilot subscription
+> (Individual, Business, or Enterprise) for the AI features.
+
+### Deploy to Azure Container Apps (experimental)
+
+Experimental ACA deployment notes:
+
+- [`docs/deployment-aca.md`](docs/deployment-aca.md) — Container image build,
+  ACA deployment checklist for lab/test environments (env vars, Key Vault secrets, monitoring,
+  rate-limit tuning).
+- [`infra/README.md`](infra/README.md) — Bicep modules, GitHub App setup
+  against the ACA FQDN, deploy / rotate / cleanup recipes.
+- [`docs/architecture-multitenant.md`](docs/architecture-multitenant.md) —
+  Multi-tenant design (Auth.js → per-request Octokit → Copilot execution
+  boundary → required worker → per-user runtime).
+
+### Codespaces
+
+Click **Code → Codespaces → Create codespace on main**. The dev container
+installs dependencies automatically; you still need to register a GitHub App
+(callback `https://<codespace-host>/api/auth/callback/github`) and populate
+`.env.local` before running `npm run dev`.
 
 ## Vision
 
@@ -121,7 +165,10 @@ The chat and challenge evaluation experiences stream feedback in real-time using
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server |
+| `npm run dev` | Start Aspire AppHost with web + required Copilot worker |
+| `npm run dev:web-only` | Start only the web app; AI chat requires `COPILOT_WORKER_URL` |
+| `npm run dev:worker` | Start only the local Copilot worker on port 3001 |
+| `npm run dev:web-worker` | Start web app pointed at a manually started local worker |
 | `npm run build` | Create production build |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests |
@@ -146,7 +193,7 @@ Start the local dashboard and app:
 
 ```bash
 npm run dashboard
-npm run dev
+npm run dev:web-only
 ```
 
 By default, the dashboard listens on:

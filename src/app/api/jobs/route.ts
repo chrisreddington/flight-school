@@ -5,6 +5,8 @@
  */
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
+import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { buildWorkerDispatchCredentials, seedTokenStoreFromJwt } from '@/lib/auth/seed';
 import type {
   ChallengeEvaluationInput,
   ChallengeRegenerationInput,
@@ -13,26 +15,50 @@ import type {
   TopicRegenerationInput,
 } from '@/lib/jobs';
 import { jobStorage } from '@/lib/jobs';
+import { redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
-import { NextRequest, NextResponse } from 'next/server';
+import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import {
-  executeChallengeEvaluation,
-  executeChallengeRegeneration,
-  executeChatResponse,
-  executeGoalRegeneration,
-  executeTopicRegeneration,
-  getRegisteredSession,
-  unregisterSession,
-} from './job-executors';
+  parseClientTriggerFromHeaders,
+  toClientTriggerSpanAttributes,
+  type ClientTriggerMetadata,
+} from '@/lib/observability/trigger-metadata';
+import { trace } from '@opentelemetry/api';
+import { NextRequest, NextResponse } from 'next/server';
+import { dispatchJobExecution, type DispatchableJobInput, type DispatchableJobType } from './dispatcher';
+import { cancelWorkerJob } from './worker-client';
 
 const log = logger.withTag('Jobs API');
 
-type JobType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response' | 'challenge-evaluation';
+/** RFC4122 v4 uuid shape (lowercase hex; 4 in version nibble; 8|9|a|b in variant). */
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+type JobType = DispatchableJobType;
+type JobTraceContext = ReturnType<typeof captureTracePropagationHeaders>;
 
 interface CreateJobRequest {
   type: JobType;
   targetId?: string;
   input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput | ChallengeEvaluationInput;
+}
+
+function hasTraceContext(traceContext: JobTraceContext): boolean {
+  return Object.keys(traceContext).length > 0;
+}
+
+function toJobCausalityContext(
+  traceContext: JobTraceContext,
+  trigger?: ClientTriggerMetadata,
+) {
+  if (!hasTraceContext(traceContext) && !trigger) {
+    return undefined;
+  }
+
+  return {
+    ...traceContext,
+    capturedAt: new Date().toISOString(),
+    ...(trigger ? { trigger } : {}),
+  };
 }
 
 /** 
@@ -53,72 +79,128 @@ export async function cancelRunningJob(jobId: string): Promise<boolean> {
   
   log.info(`[Job ${jobId}] Marking job as cancelled in storage`);
   await jobStorage.markCancelled(jobId);
-  
-  const session = getRegisteredSession(jobId);
-  if (session) {
-    log.info(`[Job ${jobId}] Destroying Copilot SDK session...`);
-    try {
-      await session.destroy();
-      log.info(`[Job ${jobId}] Copilot SDK session destroyed successfully`);
-    } catch (err) {
-      log.warn(`[Job ${jobId}] Error destroying session:`, err);
-    }
-    unregisterSession(jobId);
-  } else {
-    log.debug(`[Job ${jobId}] No active session to destroy (may be between stages)`);
+
+  try {
+    await cancelWorkerJob(jobId);
+  } catch (err) {
+    log.warn(`[Job ${jobId}] Failed to forward cancellation to worker`, err);
   }
   
   return true;
 }
 
 export async function POST(request: NextRequest) {
+  const { userId } = await requireUserContext();
   const body = await parseJsonBodyWithFallback<CreateJobRequest>(request, {} as CreateJobRequest);
   
   if (!body.type) {
     return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
   }
-  
+
+  // Hard precondition: ensure the shared TokenStore has a refresh-capable
+  // record for this user before we enqueue any work. Background executors
+  // resolve a fresh `ghu_` token from the store at run-time (see
+  // resolveFreshGitHubToken); if the store is unwritable now, the executor
+  // will have no credentials later and the job will silently fail. Returning
+  // 503 here lets the caller retry with backoff.
+  const seedResult = await seedTokenStoreFromJwt(userId);
+  if (seedResult.status === 'error') {
+    log.error('Refusing to enqueue job: token-store seed failed', {
+      userId,
+      type: body.type,
+      message: seedResult.error.message,
+    });
+    return NextResponse.json(
+      {
+        error: 'Credential store temporarily unavailable. Please retry.',
+        meta: { reason: 'token-store-seed-failed' },
+      },
+      { status: 503 },
+    );
+  }
+
   const jobId = crypto.randomUUID();
-  
+  const traceContext = captureTracePropagationHeaders();
+  const triggerMetadata = parseClientTriggerFromHeaders(request.headers);
+  if (triggerMetadata) {
+    trace.getActiveSpan()?.setAttributes(
+      toClientTriggerSpanAttributes(triggerMetadata),
+    );
+  }
+  const causality = toJobCausalityContext(traceContext, triggerMetadata);
+
+  // Phase D / rubber-duck #9 — server-validated assistantMessageId for
+  // chat jobs. The id is the stable handle the executor's streaming
+  // scratchpad uses to reconcile deltas to a single assistant message,
+  // and the `(threadId, assistantMessageId)` pair is treated as the
+  // per-user idempotency key for this endpoint.
+  if (body.type === 'chat-response') {
+    const chatInput = body.input as ChatResponseInput | undefined;
+    const threadId = chatInput?.threadId;
+    let assistantMessageId = chatInput?.assistantMessageId;
+
+    if (assistantMessageId !== undefined) {
+      if (typeof assistantMessageId !== 'string' || !UUID_V4_RE.test(assistantMessageId)) {
+        return NextResponse.json(
+          { error: 'Invalid assistantMessageId; expected RFC4122 v4 uuid.' },
+          { status: 400 },
+        );
+      }
+    } else {
+      // Backwards-compat fallback for pre-Phase-D clients. Once the
+      // client always sends an id, this branch can be deleted.
+      assistantMessageId = crypto.randomUUID();
+    }
+
+    if (threadId) {
+      const existing = await jobStorage.getAll();
+      const collision = existing.find((j) =>
+        j.userId === userId
+        && j.type === 'chat-response'
+        && (j.status === 'pending' || j.status === 'running')
+        && (j.input as { threadId?: string; assistantMessageId?: string } | undefined)?.threadId === threadId
+        && (j.input as { threadId?: string; assistantMessageId?: string } | undefined)?.assistantMessageId === assistantMessageId,
+      );
+      if (collision) {
+        log.info('Idempotency hit on chat job; returning existing record', {
+          userId,
+          threadId,
+          assistantMessageId,
+          existingJobId: collision.id,
+        });
+        return NextResponse.json({
+          id: collision.id,
+          type: collision.type,
+          status: collision.status,
+          createdAt: collision.createdAt,
+        });
+      }
+    }
+
+    body.input = { ...chatInput, assistantMessageId } as ChatResponseInput;
+  }
+
   const job = await jobStorage.create({
     id: jobId,
     type: body.type,
     targetId: body.targetId,
+    userId,
+    causality,
     input: body.input as unknown as Record<string, unknown>,
   });
   
-  // Start execution async (fire and forget)
-  if (body.type === 'topic-regeneration') {
-    setImmediate(() => {
-      executeTopicRegeneration(jobId, body.input as TopicRegenerationInput).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'challenge-regeneration') {
-    setImmediate(() => {
-      executeChallengeRegeneration(jobId, body.input as ChallengeRegenerationInput).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'goal-regeneration') {
-    setImmediate(() => {
-      executeGoalRegeneration(jobId, body.input as GoalRegenerationInput).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'chat-response') {
-    setImmediate(() => {
-      executeChatResponse(jobId, body.input as ChatResponseInput).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  } else if (body.type === 'challenge-evaluation') {
-    setImmediate(() => {
-      executeChallengeEvaluation(jobId, body.input as ChallengeEvaluationInput).catch(err => {
-        log.error(`Unhandled error in job ${jobId}:`, err);
-      });
-    });
-  }
+  // Start execution async (fire and forget). Jobs carry only the userId on
+  // their payload — the executor resolves a fresh `ghu_` token from the
+  // TokenStore at run-time (see resolveFreshGitHubToken) so queued / retried
+  // work cannot use a stale access token captured at submission.
+  dispatchJobExecution({
+    jobId,
+    type: body.type,
+    input: body.input as DispatchableJobInput,
+    userId,
+    credentials: await getWorkerDispatchCredentials(),
+    traceContext: hasTraceContext(traceContext) ? traceContext : undefined,
+  });
   
   return NextResponse.json({
     id: job.id,
@@ -128,17 +210,40 @@ export async function POST(request: NextRequest) {
   });
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const type = searchParams.get('type');
-  const status = searchParams.get('status');
-  
-  jobStorage.invalidateCache();
-  let jobs = type ? await jobStorage.getByType(type) : await jobStorage.getAll();
-  
-  if (status) {
-    jobs = jobs.filter(job => job.status === status);
+async function getWorkerDispatchCredentials() {
+  const dispatchCredentialsEnabled =
+    process.env.NODE_ENV !== 'production'
+    || process.env.COPILOT_WORKER_DISPATCH_CREDENTIALS === '1';
+
+  if (!dispatchCredentialsEnabled) {
+    return undefined;
   }
-  
-  return NextResponse.json({ jobs });
+
+  return (await buildWorkerDispatchCredentials()) ?? undefined;
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { userId } = await requireUserContext();
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const status = searchParams.get('status');
+
+    jobStorage.invalidateCache();
+    let jobs = type ? await jobStorage.getByType(type) : await jobStorage.getAll();
+
+    // Multi-tenant invariant: only return jobs owned by the caller.
+    jobs = jobs.filter(job => job.userId === userId);
+
+    if (status) {
+      jobs = jobs.filter(job => job.status === status);
+    }
+
+    return NextResponse.json({ jobs: jobs.map(redactJobForList) });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
+    throw err;
+  }
 }

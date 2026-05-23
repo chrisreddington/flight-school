@@ -12,11 +12,12 @@ import type { LearningTopic } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 import { TopicQuiz } from '../TopicQuiz';
-import { BookIcon, CheckIcon, PlusIcon, SkipIcon, StopIcon } from '@primer/octicons-react';
-import { Button, Heading, Label, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { BookIcon, CheckIcon, PlusIcon, SkipIcon } from '@primer/octicons-react';
+import { Button, Heading, Label, Stack } from '@primer/react';
 import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './FocusItem.module.css';
+import { SkippingCard } from './SkippingCard';
 
 interface TopicCardProps {
   topic: LearningTopic;
@@ -105,32 +106,7 @@ export function TopicCard({
 
   // Show loading state while regenerating (with stop button on dashboard)
   if (isSkipping) {
-    return (
-      <div className={styles.card}>
-        <Stack direction="vertical" gap="normal">
-          <Stack direction="horizontal" align="center" justify="space-between">
-            <Stack direction="horizontal" align="center" gap="condensed">
-              <Spinner size="small" />
-              <span className={styles.loadingText}>Generating new topic...</span>
-            </Stack>
-            {onStopSkip && (
-              <Button
-                variant="danger"
-                size="small"
-                onClick={() => onStopSkip(topic.id)}
-                leadingVisual={StopIcon}
-                aria-label="Stop generating topic"
-              >
-                Stop
-              </Button>
-            )}
-          </Stack>
-          <SkeletonBox height="24px" width="70%" />
-          <SkeletonBox height="16px" width="100%" />
-          <SkeletonBox height="16px" width="90%" />
-        </Stack>
-      </div>
-    );
+    return <SkippingCard id={topic.id} itemType="topic" skeletonLines={3} onStop={onStopSkip} />;
   }
 
   // Don't render skipped topics on dashboard (they've been replaced)

@@ -19,7 +19,8 @@ export type {
     Message,
     RepoReference,
     Thread,
-    ThreadContext
+    ThreadContext,
+    ToolCallEvent
 } from './types';
 
 // Storage

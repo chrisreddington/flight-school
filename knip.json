@@ -8,5 +8,12 @@
   ],
   "ignore": [
     "src/test/**"
+  ],
+  "ignoreBinaries": [
+    "aspire",
+    "wait-on"
+  ],
+  "ignoreDependencies": [
+    "tsx"
   ]
 }

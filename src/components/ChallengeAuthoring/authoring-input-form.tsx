@@ -8,6 +8,7 @@
  */
 
 import { Button, Spinner, Stack, Textarea } from '@primer/react';
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
 import styles from './ChallengeAuthoring.module.css';
 
 interface AuthoringInputFormProps {
@@ -33,6 +34,8 @@ export function AuthoringInputForm({
   onKeyDown,
   onStop,
 }: AuthoringInputFormProps) {
+  const { disabled: rateLimited, retryInSeconds } = useRateLimitCountdown();
+  const isDisabled = isStreaming || rateLimited;
   return (
     <form onSubmit={onSubmit} className={styles.inputArea}>
       <div className={styles.inputWrapper}>
@@ -42,7 +45,7 @@ export function AuthoringInputForm({
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Describe your challenge idea..."
-          disabled={isStreaming}
+          disabled={isDisabled}
           rows={2}
           resize="vertical"
           block
@@ -56,8 +59,15 @@ export function AuthoringInputForm({
             Stop
           </Button>
         ) : (
-          <Button type="submit" variant="primary" disabled={!inputValue.trim()}>
-            Send
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!inputValue.trim() || rateLimited}
+            aria-label={
+              rateLimited ? `Sending paused. Retry in ${retryInSeconds}s` : 'Send'
+            }
+          >
+            {rateLimited ? `Retry in ${retryInSeconds}s` : 'Send'}
           </Button>
         )}
       </Stack>

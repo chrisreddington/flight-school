@@ -6,20 +6,55 @@
  */
 
 import { logger } from '@/lib/logger';
+import type { TracePropagationHeaders } from '@/lib/observability/context-propagation';
+import type { ClientTriggerMetadata } from '@/lib/observability/trigger-metadata';
 import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
 
 const log = logger.withTag('JobStorage');
 
 type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-interface BackgroundJob<T = unknown> {
+/**
+ * Structured error codes for failed jobs.
+ *
+ * Surfaced to the polling client so the UI can route credentials-related
+ * failures to a re-auth CTA instead of rendering a generic error string.
+ */
+export type JobErrorCode =
+  | 'credentials_missing'
+  | 'credentials_refresh_failed'
+  | 'unknown';
+
+interface JobCausalityContext extends TracePropagationHeaders {
+  capturedAt: string;
+  trigger?: ClientTriggerMetadata;
+}
+
+export interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
+  /**
+   * Owner of this job. **REQUIRED** on every job since the multi-tenant
+   * hardening — read/list/cancel endpoints filter by this. Populated at
+   * `/api/jobs` POST from {@link requireUserContext}. Older job records
+   * persisted before this field existed are treated as orphaned and are
+   * never returned to any user.
+   */
+  userId: string;
   targetId?: string;
   status: JobStatus;
+  causality?: JobCausalityContext;
   input: Record<string, unknown>;
   result?: T;
   error?: string;
+  /** Machine-readable failure classification; set alongside `error`. */
+  errorCode?: JobErrorCode;
+  /**
+   * Short, user-facing label describing what the executor is doing
+   * right now (e.g. "Running tests…"). Updated incrementally during
+   * long-running jobs so the client can narrate progress.
+   */
+  currentStep?: string;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -127,6 +162,9 @@ export const jobStorage = {
    * Create a new job.
    */
   async create<T>(job: Omit<BackgroundJob<T>, 'status' | 'createdAt'>): Promise<BackgroundJob<T>> {
+    if (!job.userId) {
+      throw new Error('jobStorage.create: userId is required (multi-tenant invariant)');
+    }
     const schema = await loadJobs();
     const cleaned = cleanup(schema);
     
@@ -190,13 +228,35 @@ export const jobStorage = {
   
   /**
    * Mark a job as failed with error.
+   *
+   * Optionally accepts a structured `errorCode` so polling clients can
+   * distinguish credentials-expired failures from generic errors.
    */
-  async markFailed(id: string, error: string): Promise<BackgroundJob | undefined> {
+  async markFailed(
+    id: string,
+    error: string,
+    errorCode?: JobErrorCode,
+  ): Promise<BackgroundJob | undefined> {
     return this.update(id, {
       status: 'failed',
       error,
+      errorCode,
       completedAt: new Date().toISOString(),
     });
+  },
+
+  /**
+   * Update the human-readable `currentStep` label for an in-flight job.
+   *
+   * Safe to call repeatedly; only persists when the value actually
+   * changes to avoid disk churn during high-frequency narration.
+   */
+  async setCurrentStep(id: string, step: string): Promise<BackgroundJob | undefined> {
+    const schema = await loadJobs();
+    const job = schema.jobs[id];
+    if (!job) return undefined;
+    if (job.currentStep === step) return job;
+    return this.update(id, { currentStep: step });
   },
   
   /**
@@ -262,6 +322,32 @@ export const jobStorage = {
     return true;
   },
   
+  /**
+   * Delete every job owned by the given user. Returns the number of
+   * jobs removed. Used by the per-user "delete all my data" endpoint.
+   * Does NOT cancel running jobs — callers should call `cancelRunningJob`
+   * for any jobs that may still be executing in-process.
+   */
+  async deleteForUser(userId: string): Promise<{ deleted: number; ids: string[] }> {
+    if (!userId) {
+      throw new Error('jobStorage.deleteForUser: userId is required');
+    }
+    const schema = await loadJobs();
+    const ids: string[] = [];
+    const remaining: Record<string, BackgroundJob> = {};
+    for (const [id, job] of Object.entries(schema.jobs)) {
+      if (job.userId === userId) {
+        ids.push(id);
+      } else {
+        remaining[id] = job;
+      }
+    }
+    if (ids.length === 0) return { deleted: 0, ids: [] };
+    await saveJobs({ ...schema, jobs: remaining });
+    log.info(`Deleted ${ids.length} jobs for user ${userId}`);
+    return { deleted: ids.length, ids };
+  },
+
   /**
    * Clear all jobs (for testing).
    */

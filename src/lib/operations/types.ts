@@ -17,7 +17,7 @@ export type OperationType =
 export type OperationStatus = 'pending' | 'in-progress' | 'complete' | 'failed' | 'aborted';
 
 /** Metadata for an operation */
-export interface OperationMeta {
+interface OperationMeta {
   /** The type of operation */
   type: OperationType;
   /** When the operation started */

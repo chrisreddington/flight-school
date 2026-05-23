@@ -6,8 +6,7 @@
 
 'use client';
 
-import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
-import { HabitHistoryCard } from '@/components/FocusItem/HabitHistoryCard';
+import { ChallengeCard, GoalCard, HabitHistoryCard, TopicCard } from '@/components/FocusItem';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { LearningTopic } from '@/lib/focus/types';
 import {

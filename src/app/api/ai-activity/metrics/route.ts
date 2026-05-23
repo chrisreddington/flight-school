@@ -1,11 +1,14 @@
 /**
  * PATCH /api/ai-activity/metrics
- * 
+ *
  * Updates an existing activity event with client-side metrics.
- * This allows the activity panel to show the same metrics as chat message badges.
+ * **Per-user**: a user can only update metrics on their own events.
  */
 
+import { authErrorResponse } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
+import { updateShadowActivityMetrics } from '@/lib/copilot/activity/shadow-store';
 import { NextRequest, NextResponse } from 'next/server';
 
 export interface UpdateActivityMetricsRequest {
@@ -20,12 +23,9 @@ export interface UpdateActivityMetricsRequest {
   };
 }
 
-/**
- * PATCH /api/ai-activity/metrics
- * Updates an activity event with client-side performance metrics.
- */
 export async function PATCH(request: NextRequest) {
   try {
+    const { userId } = await requireUserContext();
     const body: UpdateActivityMetricsRequest = await request.json();
     const { eventId, clientMetrics } = body;
 
@@ -36,25 +36,20 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Update the event with client metrics
-    const updated = activityLogger.updateWithClientMetrics(eventId, clientMetrics);
-    
+    const updated = activityLogger.updateWithClientMetrics(userId, eventId, clientMetrics);
+
     if (!updated) {
-      return NextResponse.json(
-        { error: 'Event not found' },
-        { status: 404 }
-      );
+      // 404 for both "not found" and "not yours" — don't leak existence.
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      success: true,
-      eventId,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update activity metrics';
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    await updateShadowActivityMetrics(userId, eventId, clientMetrics);
+
+    return NextResponse.json({ success: true, eventId });
+  } catch (err) {
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return authResponse;
+    const errorMessage = err instanceof Error ? err.message : 'Failed to update activity metrics';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

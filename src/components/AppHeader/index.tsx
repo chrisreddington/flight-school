@@ -196,13 +196,10 @@ export function AppHeader() {
                 )}
                 <ActionList.Divider />
                 <ActionList.Item disabled>
-                  {profile?.meta?.authMethod === 'github-token' && 'Logged in via GITHUB_TOKEN'}
-                  {profile?.meta?.authMethod === 'github-cli' && 'Logged in via GitHub CLI'}
-                  {profile?.meta?.authMethod === 'copilot-mcp' && 'Logged in via Copilot SDK'}
-                  {/* If we have a real profile but no authMethod (old cache), show generic message */}
-                  {(!profile?.meta?.authMethod || profile?.meta?.authMethod === 'none') && 
-                    (profile?.user?.login && profile.user.login !== 'demo-user' 
-                      ? 'Logged in via GitHub CLI' 
+                  {profile?.meta?.authMethod === 'github-oauth' && 'Signed in with GitHub'}
+                  {(!profile?.meta?.authMethod || profile?.meta?.authMethod === 'none') &&
+                    (profile?.user?.login && profile.user.login !== 'demo-user'
+                      ? 'Signed in with GitHub'
                       : 'Not authenticated')}
                 </ActionList.Item>
               </ActionList>

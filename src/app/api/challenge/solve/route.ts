@@ -21,15 +21,16 @@
  * Supports multi-file workspaces (e.g., solution.ts + solution.test.ts).
  */
 
-import { parseJsonBody } from '@/lib/api';
+import { knownApiErrorResponse, parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
 import { validateSolveRequest } from '@/lib/challenge/request-validators';
 import {
     buildSolutionPrompt,
     SOLUTION_GENERATION_PROMPT,
 } from '@/lib/challenge/solution-generation';
-import { createLoggedCoachSession } from '@/lib/copilot/server';
+import { createLoggedCoachSession, createSessionIdentity } from '@/lib/copilot/server';
 import type { ChallengeDef } from '@/lib/copilot/types';
+import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 import { extractJSON } from '@/lib/utils/json-utils';
 import { NextRequest } from 'next/server';
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
 
     const { challenge, files } = parseResult.data;
 
+    const ctx = await requireUserContext();
+    const identity = createSessionIdentity(ctx);
+
     log.info(`Generating solution for: ${challenge.title} (${files.length} files)`);
 
     // Build the solution prompt with system prompt injected
@@ -76,6 +80,7 @@ export async function POST(request: NextRequest) {
 
     // Create a logged session and send the prompt
     const session = await createLoggedCoachSession(
+      identity,
       'Challenge Solution Generation',
       systemPromptedPrompt.slice(0, 100)
     );
@@ -141,9 +146,12 @@ export async function POST(request: NextRequest) {
       );
     } finally {
       // Clean up the session
-      await session.destroy();
+      session.destroy();
     }
   } catch (error) {
+    const knownResponse = knownApiErrorResponse(error);
+    if (knownResponse) return knownResponse;
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to generate solution';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

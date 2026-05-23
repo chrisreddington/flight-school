@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPost } from '@/lib/api-client';
 import type { RelatedSuggestion, WhatsNextResult } from '@/lib/copilot/suggestions';
 import { Button, Label, Spinner, Stack, Text } from '@primer/react';
 import { useEffect, useState } from 'react';
@@ -55,26 +56,19 @@ export function RelatedSuggestions({
     const loadSuggestions = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/suggestions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
+        const data = await apiPost<WhatsNextResult>(
+          '/api/suggestions',
+          {
             challengeTitle: completedChallenge.title,
             challengeLanguage: completedChallenge.language,
             challengeDifficulty: completedChallenge.difficulty,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to load suggestions');
-        }
-
-        const data = (await response.json()) as WhatsNextResult;
+          },
+          { signal: controller.signal },
+        );
         setSuggestions(data.suggestions.slice(0, 2));
       } catch {
+        // 402 already broadcast to the banner via apiPost; fall back to
+        // static suggestions for this view.
         if (!controller.signal.aborted) {
           setSuggestions(getFallbackSuggestions(completedChallenge));
         }

@@ -39,12 +39,18 @@ interface UseAIActivityReturn {
   pendingCount: number;
 }
 
+export function buildActivityStreamUrl(cursor: string | null): string {
+  if (!cursor) return '/api/ai-activity/stream';
+  return `/api/ai-activity/stream?cursor=${encodeURIComponent(cursor)}`;
+}
+
 export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivityReturn {
   const { enabled = true } = options;
   const [events, setEvents] = useState<AIActivityEvent[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const fallbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
 
   // Use SSE for real-time updates, with polling fallback
   useEffect(() => {
@@ -57,7 +63,7 @@ export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivit
 
     // Try SSE first
     const connectSSE = () => {
-      const eventSource = new EventSource('/api/ai-activity/stream');
+      const eventSource = new EventSource(buildActivityStreamUrl(lastEventIdRef.current));
       eventSourceRef.current = eventSource;
 
       eventSource.onmessage = (e) => {
@@ -71,6 +77,7 @@ export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivit
               timestamp: new Date(event.timestamp),
             }));
             setEvents(eventsWithDates);
+            lastEventIdRef.current = eventsWithDates.at(-1)?.id ?? lastEventIdRef.current;
           } else if (data.type === 'event') {
             // Single event update
             const event = {
@@ -88,8 +95,10 @@ export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivit
               }
               // Handle clear event
               if (event.id === 'clear') {
+                lastEventIdRef.current = null;
                 return [];
               }
+              lastEventIdRef.current = event.id;
               return [...prev, event];
             });
           }
@@ -124,6 +133,7 @@ export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivit
             })
           );
           setEvents(eventsWithDates);
+          lastEventIdRef.current = eventsWithDates.at(-1)?.id ?? lastEventIdRef.current;
         } catch (error) {
           logger.error('Fallback poll failed', { error }, 'useAIActivity');
         }
@@ -149,6 +159,7 @@ export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivit
     try {
       await apiDelete('/api/ai-activity', { throwOnError: false });
       setEvents([]);
+      lastEventIdRef.current = null;
     } catch (error) {
       logger.error('Failed to clear events', { error }, 'useAIActivity');
     }

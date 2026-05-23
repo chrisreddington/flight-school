@@ -8,21 +8,24 @@
  */
 
 import { parseJsonBody } from '@/lib/api';
-import { now, nowMs } from '@/lib/utils/date-utils';
+import { nowMs } from '@/lib/utils/date-utils';
 import {
     type CopilotChatRequest,
     validateCopilotChatRequest,
 } from '@/lib/copilot/api-requests';
-import { createLoggedChatSession, createLoggedGitHubChatSession } from '@/lib/copilot/server';
+import { executeCopilotChat } from '@/lib/copilot/execution';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { logger } from '@/lib/logger';
-import { needsGitHubTools } from '@/lib/utils/content-detection';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { CHAT_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Copilot API');
 
 export async function POST(request: NextRequest) {
   const startTime = nowMs();
-  
+
   try {
     const parseResult = await parseJsonBody<CopilotChatRequest>(request);
     if (!parseResult.success) {
@@ -36,50 +39,31 @@ export async function POST(request: NextRequest) {
 
     const { prompt, useGitHubTools, conversationId } = parseResult.data;
 
-    // Auto-detect or explicit GitHub tools request
-    const enableGitHub = useGitHubTools === true || needsGitHubTools(prompt);
-    const sessionType = enableGitHub ? 'GitHub Chat' : 'Chat (fast)';
-    
-    log.info(`${sessionType} - ${enableGitHub ? 'with MCP' : 'lightweight'}`);
+    return await withUserGuards(
+      { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
+      async (ctx) => {
+        const identity = createSessionIdentity(ctx);
+        const result = await executeCopilotChat({
+          identity,
+          prompt,
+          useGitHubTools,
+          conversationId,
+        });
 
-    // Create appropriate session type
-    const loggedSession = enableGitHub
-      ? await createLoggedGitHubChatSession(sessionType, prompt, conversationId)
-      : await createLoggedChatSession(sessionType, prompt, conversationId);
+        const totalTime = nowMs() - startTime;
+        log.info(`Total: ${totalTime}ms`);
 
-    const result = await loggedSession.sendAndWait(prompt);
-    
-    // Fire-and-forget cleanup (don't block response)
-    loggedSession.destroy();
-
-    const totalTime = nowMs() - startTime;
-    log.info(`Total: ${totalTime}ms`);
-
-    return NextResponse.json({
-      response: result.responseText,
-      toolCalls: result.toolCalls.map(t => ({
-        name: t.name,
-        args: t.args,
-        result: t.result,
-        duration: t.endTime ? t.endTime - t.startTime : undefined,
-      })),
-      meta: {
-        generatedAt: now(),
-        model: loggedSession.model,
-        toolsUsed: result.toolCalls.map(t => t.name),
-        totalTimeMs: result.totalTimeMs,
-        usedGitHubTools: enableGitHub,
-        sessionCreateMs: loggedSession.sessionMetrics?.sessionCreateMs ?? null,
-        sessionPoolHit: loggedSession.sessionMetrics ? !loggedSession.sessionMetrics.createdNew : null,
-        mcpEnabled: loggedSession.sessionMetrics?.mcpEnabled ?? null,
-        sessionReused: loggedSession.sessionMetrics?.reusedConversation ?? null,
+        return NextResponse.json(result);
       },
-    });
+    );
   } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
+
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
     log.error(`Error after ${totalTime}ms:`, errorMessage);
-    
+
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }

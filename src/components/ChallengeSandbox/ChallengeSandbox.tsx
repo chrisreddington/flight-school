@@ -27,13 +27,13 @@
 
 import { useChallengeSandbox } from '@/hooks/use-challenge-sandbox';
 import { useGuidedPlan } from '@/hooks/use-guided-plan';
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
 import { focusStore } from '@/lib/focus';
 import type { RunResult } from '@/lib/editor/code-runner';
 import { runCode } from '@/lib/editor/code-runner';
 import { getLanguageDisplayName, getMonacoLanguageFromExtension } from '@/lib/editor/monaco-language-map';
 import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
-import { loader } from '@monaco-editor/react';
 import type { BeforeMount, OnMount } from '@monaco-editor/react';
 import {
     BeakerIcon,
@@ -77,55 +77,15 @@ import { CodeOutputPanel } from './CodeOutputPanel';
 import { GuidedModePanel } from './GuidedModePanel';
 import type { ChallengeSandboxProps } from './types';
 import { SelfExplanationCard } from './self-explanation-card';
+import {
+  MONACO_KEYBINDING_RUN,
+  configureMonacoLanguageDefaults,
+  getMonacoEditorOptions,
+  getMonacoTheme,
+  initializeMonacoLanguageDefaults,
+} from './monaco-config';
 
-/** Applies Monaco compiler defaults so top-level exports are valid in sandbox files. */
-function configureMonacoLanguageDefaults(monaco: Parameters<BeforeMount>[0]): void {
-  const compilerOptions = {
-    module: monaco.languages.typescript.ModuleKind.ESNext,
-    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-    target: monaco.languages.typescript.ScriptTarget.ESNext,
-    esModuleInterop: true,
-    strict: false,
-  };
-
-  monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-    ...monaco.languages.typescript.typescriptDefaults.getCompilerOptions(),
-    ...compilerOptions,
-  });
-  monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-    ...monaco.languages.typescript.javascriptDefaults.getCompilerOptions(),
-    ...compilerOptions,
-  });
-  monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
-  monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
-}
-
-// Configure Monaco TypeScript for ES module mode as early as possible.
-// Without this, `export` is a syntax error because Monaco defaults to module: None (script mode).
-// loader.init() resolves to the same monaco instance used by all Editor components.
-// NOTE: Guard with typeof window to avoid SSR crash — Monaco requires browser APIs.
-if (typeof window !== 'undefined') {
-  loader.init().then((monaco) => {
-    configureMonacoLanguageDefaults(monaco);
-  }).catch(() => {/* ignore — beforeMount and onMount will apply the same config */});
-}
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Monaco editor key modifier for Ctrl (Windows/Linux) or Cmd (macOS).
- * Used for cross-platform keyboard shortcuts.
- * @see https://microsoft.github.io/monaco-editor/api/enums/monaco.KeyMod.html
- */
-const MONACO_KEYMOD_CTRL_CMD = 2048;
-
-/**
- * Monaco editor key code for Enter key.
- * @see https://microsoft.github.io/monaco-editor/api/enums/monaco.KeyCode.html
- */
-const MONACO_KEYCODE_ENTER = 3;
+initializeMonacoLanguageDefaults();
 
 // ============================================================================
 // Main Component
@@ -198,6 +158,8 @@ export function ChallengeSandbox({
 
   // Pre-fetch guided plan in background so it's ready when user opens Guided Mode
   const { plan: guidedPlan, loading: isGuidedPlanLoading } = useGuidedPlan(challengeId, challenge);
+  const { disabled: isRateLimited, retryInSeconds: rateLimitRetryInSeconds } =
+    useRateLimitCountdown();
 
   // Get active file for language detection
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
@@ -234,7 +196,7 @@ export function ChallengeSandbox({
       configureMonacoLanguageDefaults(monaco);
       // Add Cmd/Ctrl+Enter keybinding to run evaluation
       editor.addCommand(
-        MONACO_KEYMOD_CTRL_CMD | MONACO_KEYCODE_ENTER,
+        MONACO_KEYBINDING_RUN,
         () => {
           if (!isEvaluating) {
             void evaluate();
@@ -287,8 +249,7 @@ export function ChallengeSandbox({
     setHasPromptedSelfExplanation(true);
   }, []);
   
-  // Determine Monaco theme based on color mode
-  const monacoTheme = colorMode === 'night' || colorMode === 'dark' ? 'vs-dark' : 'vs';
+  const monacoTheme = getMonacoTheme(colorMode);
 
   return (
     <div
@@ -429,21 +390,7 @@ export function ChallengeSandbox({
                 onMount={handleEditorMount}
                 beforeMount={handleBeforeMount}
                 theme={monacoTheme}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  lineNumbers: 'on',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 2,
-                  wordWrap: 'on',
-                  padding: { top: 12, bottom: 12 },
-                  renderLineHighlight: 'line',
-                  scrollbar: {
-                    verticalScrollbarSize: 8,
-                    horizontalScrollbarSize: 8,
-                  },
-                }}
+                options={getMonacoEditorOptions()}
                 aria-label={`Code editor for ${activeFileName}`}
               />
             ) : (
@@ -484,8 +431,14 @@ export function ChallengeSandbox({
                   Reset
                 </Button>
                 {isEvaluating ? (
-                  <Button variant="danger" size="small" onClick={stopEvaluation} aria-label="Stop evaluation">
-                    Stop
+                  <Button
+                    variant="danger"
+                    size="small"
+                    onClick={stopEvaluation}
+                    disabled={evaluation.isCancelling}
+                    aria-label={evaluation.isCancelling ? 'Cancelling evaluation' : 'Stop evaluation'}
+                  >
+                    {evaluation.isCancelling ? 'Cancelling…' : 'Stop'}
                   </Button>
                 ) : (
                   <>
@@ -503,10 +456,14 @@ export function ChallengeSandbox({
                       size="small"
                       onClick={handleEvaluate}
                       leadingVisual={PlayIcon}
-                      disabled={!workspace.files.some(f => f.content.trim())}
-                      aria-label="Evaluate code solution"
+                      disabled={!workspace.files.some(f => f.content.trim()) || isRateLimited}
+                      aria-label={
+                        isRateLimited
+                          ? `Evaluation paused. Retry in ${rateLimitRetryInSeconds}s`
+                          : 'Evaluate code solution'
+                      }
                     >
-                      Evaluate
+                      {isRateLimited ? `Retry in ${rateLimitRetryInSeconds}s` : 'Evaluate'}
                     </Button>
                   </>
                 )}

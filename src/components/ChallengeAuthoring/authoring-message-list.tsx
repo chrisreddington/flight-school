@@ -12,7 +12,8 @@ import { CheckIcon, CopilotIcon, PersonIcon } from '@primer/octicons-react';
 import { Avatar, Button, Stack } from '@primer/react';
 import type { DailyChallenge } from '@/lib/focus/types';
 import styles from './ChallengeAuthoring.module.css';
-import type { AuthoringMessage } from './authoring-chat';
+import typingStyles from '@/styles/typing-indicator.module.css';
+import type { AuthoringMessage } from './types';
 
 interface AuthoringMessageListProps {
   messages: AuthoringMessage[];
@@ -94,10 +95,10 @@ export function AuthoringMessageList({
               </div>
             </div>
             <div className={styles.messageContent}>
-              <div className={styles.typingIndicator} aria-label="Copilot is thinking" role="status">
-                <span className={styles.typingDot} />
-                <span className={styles.typingDot} />
-                <span className={styles.typingDot} />
+              <div className={typingStyles.typingIndicator} aria-label="Copilot is thinking" role="status">
+                <span className={typingStyles.typingDot} />
+                <span className={typingStyles.typingDot} />
+                <span className={typingStyles.typingDot} />
               </div>
             </div>
           </li>

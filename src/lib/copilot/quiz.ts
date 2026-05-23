@@ -1,4 +1,4 @@
-import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
+import { createLoggedLightweightCoachSession, type SessionIdentity } from '@/lib/copilot/server';
 import { extractJSON } from '@/lib/utils/json-utils';
 
 export interface QuizQuestion {
@@ -119,6 +119,7 @@ function normalizeQuestions(
 }
 
 export async function generateTopicQuiz(
+  identity: SessionIdentity,
   topicTitle: string,
   topicDescription: string,
   profileContext: string
@@ -147,7 +148,7 @@ Return JSON only:
   ]
 }`;
 
-  const loggedSession = await createLoggedLightweightCoachSession('Topic Practice Quiz', topicTitle);
+  const loggedSession = await createLoggedLightweightCoachSession(identity, 'Topic Practice Quiz', topicTitle);
 
   try {
     const result = await loggedSession.sendAndWait(prompt);

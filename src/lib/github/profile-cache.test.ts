@@ -65,10 +65,10 @@ describe('Profile Cache', () => {
   describe('setCachedProfile', () => {
     it('should store profile data', () => {
       mockNowMs.mockReturnValue(1000);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       mockNowMs.mockReturnValue(1001); // Just 1ms later
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached).not.toBeNull();
       expect(cached?.user).toEqual(mockUser);
@@ -80,22 +80,22 @@ describe('Profile Cache', () => {
     it('should return null when cache is expired', () => {
       // Set cache at time 0
       mockNowMs.mockReturnValue(0);
-      setCachedProfile(mockUser, []);
+      setCachedProfile('testuser', mockUser, []);
       
       // Expire the cache (6 minutes later)
       mockNowMs.mockReturnValue(6 * 60 * 1000);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
       expect(cached).toBeNull();
     });
 
     it('should return cached data within TTL (5 minutes)', () => {
       const startTime = 1000;
       mockNowMs.mockReturnValue(startTime);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       // 4 minutes later (within TTL)
       mockNowMs.mockReturnValue(startTime + 4 * 60 * 1000);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached).not.toBeNull();
       expect(cached?.user.login).toBe('testuser');
@@ -104,11 +104,11 @@ describe('Profile Cache', () => {
     it('should return null when cache is expired (after 5 minutes)', () => {
       const startTime = 1000;
       mockNowMs.mockReturnValue(startTime);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       // 6 minutes later (beyond TTL)
       mockNowMs.mockReturnValue(startTime + 6 * 60 * 1000);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached).toBeNull();
     });
@@ -116,11 +116,11 @@ describe('Profile Cache', () => {
     it('should return cached data at exactly TTL boundary', () => {
       const startTime = 1000;
       mockNowMs.mockReturnValue(startTime);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       // Exactly 5 minutes minus 1ms (still valid)
       mockNowMs.mockReturnValue(startTime + 5 * 60 * 1000 - 1);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached).not.toBeNull();
     });
@@ -128,11 +128,11 @@ describe('Profile Cache', () => {
     it('should return null at TTL + 1ms', () => {
       const startTime = 1000;
       mockNowMs.mockReturnValue(startTime);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       // Exactly 5 minutes (expired)
       mockNowMs.mockReturnValue(startTime + 5 * 60 * 1000);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached).toBeNull();
     });
@@ -141,14 +141,14 @@ describe('Profile Cache', () => {
   describe('cache replacement', () => {
     it('should replace existing cache on new set', () => {
       mockNowMs.mockReturnValue(1000);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       const newUser = { ...mockUser, login: 'newuser' };
       mockNowMs.mockReturnValue(2000);
-      setCachedProfile(newUser, []);
+      setCachedProfile('testuser', newUser, []);
 
       mockNowMs.mockReturnValue(2001);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached?.user.login).toBe('newuser');
       expect(cached?.repos).toEqual([]);
@@ -157,16 +157,16 @@ describe('Profile Cache', () => {
     it('should reset TTL on cache update', () => {
       const startTime = 1000;
       mockNowMs.mockReturnValue(startTime);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       // 4 minutes later, update cache
       const updateTime = startTime + 4 * 60 * 1000;
       mockNowMs.mockReturnValue(updateTime);
-      setCachedProfile(mockUser, mockRepos);
+      setCachedProfile('testuser', mockUser, mockRepos);
 
       // 4 more minutes later (8 total from start, but only 4 from update)
       mockNowMs.mockReturnValue(updateTime + 4 * 60 * 1000);
-      const cached = getCachedProfile();
+      const cached = getCachedProfile('testuser');
 
       expect(cached).not.toBeNull();
     });

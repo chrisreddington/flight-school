@@ -18,7 +18,7 @@ import { logger } from '@/lib/logger';
 const log = logger.withTag('Storage Utils');
 
 /** Determines the appropriate storage directory based on platform. */
-function getDefaultStorageDir(): string {
+export function getStorageRoot(): string {
   // Allow override via environment variable
   if (process.env.FLIGHT_SCHOOL_DATA_DIR) {
     return process.env.FLIGHT_SCHOOL_DATA_DIR;
@@ -37,7 +37,7 @@ function getDefaultStorageDir(): string {
   return path.join(home, '.local', 'share', 'flight-school');
 }
 
-const STORAGE_DIR = getDefaultStorageDir();
+const STORAGE_DIR = getStorageRoot();
 
 /**
  * Safely joins path segments and ensures the result is within STORAGE_DIR.
@@ -49,10 +49,10 @@ const STORAGE_DIR = getDefaultStorageDir();
  */
 function safePath(...segments: string[]): string {
   // Resolve the base storage directory to an absolute path
-  const baseDir = path.resolve(STORAGE_DIR);
+  const baseDir = path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
   
   // Join all segments and resolve to absolute path
-  const targetPath = path.resolve(baseDir, ...segments);
+  const targetPath = path.resolve(/* turbopackIgnore: true */ baseDir, ...segments);
   
   // Ensure the resolved path starts with baseDir
   // This check MUST happen after path.resolve() to catch traversal attacks
@@ -61,6 +61,78 @@ function safePath(...segments: string[]): string {
   }
   
   return targetPath;
+}
+
+/**
+ * Resolve a path that MUST stay under `baseDir`. Throws if any segment (or the
+ * resolved path) escapes that subtree via `..`, absolute paths, embedded
+ * separators, NUL bytes, or other tricks.
+ *
+ * Unlike {@link safePath} (which only verifies containment within the global
+ * storage root), this validates containment within a caller-specified subtree.
+ * Use it when constructing a filesystem path from caller-supplied components
+ * (e.g. workspace filenames) where the caller must not be able to escape into
+ * a sibling subtree such as another user's data directory.
+ *
+ * Each segment is rejected if it:
+ * - is empty,
+ * - equals `.` or `..`,
+ * - contains a `/` or `\` separator,
+ * - contains a NUL byte (`\0`),
+ * - is absolute on its own.
+ *
+ * The resolved path is then asserted to start with `path.resolve(baseDir) +
+ * path.sep`; the baseDir-equals case is rejected because callers always need
+ * at least one child segment for file operations.
+ *
+ * @param baseDir - The directory the resolved path must stay under. May be
+ *   relative or absolute; both sides of the comparison use the same anchor.
+ * @param segments - One or more path components to append below `baseDir`.
+ * @returns The absolute resolved path, guaranteed to be a descendant of
+ *   `path.resolve(baseDir)`.
+ * @throws {Error} when the resolved path is outside `baseDir` or any segment
+ *   is structurally invalid (empty string, `.`, `..`, contains a separator
+ *   `/` or `\`, contains NUL, or is an absolute path).
+ */
+export function safeChildPath(baseDir: string, ...segments: string[]): string {
+  if (typeof baseDir !== 'string' || baseDir.length === 0) {
+    throw new Error('safeChildPath: baseDir must be a non-empty string');
+  }
+  if (segments.length === 0) {
+    throw new Error('safeChildPath: at least one child segment is required');
+  }
+
+  for (const segment of segments) {
+    if (typeof segment !== 'string') {
+      throw new Error('safeChildPath: segments must be strings');
+    }
+    if (segment.length === 0) {
+      throw new Error('safeChildPath: empty segment');
+    }
+    if (segment === '.' || segment === '..') {
+      throw new Error(`safeChildPath: forbidden segment "${segment}"`);
+    }
+    if (segment.includes('\0')) {
+      throw new Error('safeChildPath: NUL byte in segment');
+    }
+    if (segment.includes('/') || segment.includes('\\')) {
+      throw new Error(`safeChildPath: separator in segment "${segment}"`);
+    }
+    if (path.isAbsolute(segment)) {
+      throw new Error(`safeChildPath: absolute segment "${segment}"`);
+    }
+  }
+
+  const resolvedBase = path.resolve(/* turbopackIgnore: true */ baseDir);
+  const resolvedTarget = path.resolve(/* turbopackIgnore: true */ resolvedBase, ...segments);
+
+  if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
+    throw new Error(
+      `safeChildPath: path "${segments.join('/')}" escapes baseDir`
+    );
+  }
+
+  return resolvedTarget;
 }
 
 /** Ensures the .data storage directory exists (internal). */
@@ -215,13 +287,26 @@ export async function deleteStorage(filename: string): Promise<void> {
 
 /**
  * Ensures a subdirectory exists in .data directory.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
+ * @param options - Optional mkdir options. Pass `mode` (e.g. `0o700`) to
+ *   restrict the directory permissions on platforms that honour POSIX modes.
+ *   On Windows the mode is ignored by the OS.
  */
-export async function ensureDir(subdir: string): Promise<void> {
+export async function ensureDir(
+  subdir: string,
+  options: { mode?: number } = {}
+): Promise<void> {
   const dirPath = safePath(subdir);
   try {
-    await fs.mkdir(dirPath, { recursive: true });
+    await fs.mkdir(dirPath, { recursive: true, mode: options.mode });
+    if (options.mode !== undefined && os.platform() !== 'win32') {
+      try {
+        await fs.chmod(dirPath, options.mode);
+      } catch (chmodError) {
+        log.debug(`chmod ignored on directory: ${subdir}`, { chmodError });
+      }
+    }
   } catch (error) {
     log.error(`Failed to create directory: ${subdir}`, { error });
     throw error;
@@ -315,7 +400,7 @@ export async function deleteDir(subdir: string): Promise<void> {
  * @returns Array of subdirectory names
  */
 export async function listDirs(subdir: string): Promise<string[]> {
-  const dirPath = subdir ? safePath(subdir) : path.resolve(STORAGE_DIR);
+  const dirPath = subdir ? safePath(subdir) : path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
   try {
     await ensureStorageDir();
     if (subdir) await ensureDir(subdir);

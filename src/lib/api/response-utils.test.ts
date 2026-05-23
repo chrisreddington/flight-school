@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { apiSuccess, validationErrorResponse, serviceUnavailableResponse } from './response-utils';
+import { apiSuccess, validationErrorResponse } from './response-utils';
 
 describe('apiSuccess', () => {
   it('returns a 200 response by default', () => {
@@ -65,25 +65,5 @@ describe('validationErrorResponse', () => {
     const response = validationErrorResponse('error');
     const body = await response.json();
     expect(body).not.toHaveProperty('meta');
-  });
-});
-
-describe('serviceUnavailableResponse', () => {
-  it('returns a 503 status', () => {
-    const response = serviceUnavailableResponse('GitHub API not configured');
-    expect(response.status).toBe(503);
-  });
-
-  it('returns success: false with the error message', async () => {
-    const response = serviceUnavailableResponse('Service unavailable');
-    const body = await response.json();
-    expect(body).toEqual({ success: false, error: 'Service unavailable' });
-  });
-
-  it('includes meta when provided', async () => {
-    const meta = { aiEnabled: false, fallbackReason: 'no token' };
-    const response = serviceUnavailableResponse('AI not configured', meta);
-    const body = await response.json();
-    expect(body).toEqual({ success: false, error: 'AI not configured', meta });
   });
 });

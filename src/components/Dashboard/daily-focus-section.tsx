@@ -31,6 +31,7 @@ import {
 import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useState } from 'react';
+import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
 import {
     getDynamicChallenge,
     getDynamicGoal,
@@ -177,6 +178,9 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   // Per-component loading states for progressive rendering
   const isChallengeLoading = isProfileLoading || loadingComponents.includes('challenge');
   const isGoalLoading = isProfileLoading || loadingComponents.includes('goal');
+  const { disabled: isRateLimited } = useRateLimitCountdown();
+  const isChallengeRefreshDisabled = isChallengeLoading || isRateLimited;
+  const isGoalRefreshDisabled = isGoalLoading || isRateLimited;
   const isTopicsLoading = isProfileLoading || loadingComponents.includes('learningTopics');
 
   return (
@@ -257,7 +261,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onRequestDebugChallenge={!isCustomChallenge ? onRequestDebugChallenge : undefined}
                   onStopSkip={onStopSkipChallenge}
                   isSkipping={skippingChallengeIds.has(challenge.id)}
-                  refreshDisabled={isChallengeLoading}
+                  refreshDisabled={isChallengeRefreshDisabled}
                   timestamp={componentTimestamps.challenge}
                   queueCount={queueRemaining}
                   showIssueContextBadge={challenge.contextSource === 'issue'}
@@ -303,7 +307,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                 onSkipAndReplace={onSkipGoal}
                 onStopSkip={onStopSkipGoal}
                 isSkipping={skippingGoalIds.has(goal.id)}
-                refreshDisabled={isGoalLoading}
+                refreshDisabled={isGoalRefreshDisabled}
               />
             )}
           </div>

@@ -787,3 +787,36 @@
     max-height: 300px;
   }
 }
+
+/* Step narration shown above the evaluation skeleton + during streaming. */
+.stepNarration {
+  display: flex;
+  align-items: center;
+  gap: var(--stack-gap-condensed, 8px);
+  margin-bottom: var(--stack-gap-condensed, 8px);
+  color: var(--fgColor-muted);
+  font-size: var(--text-body-size-small, 12px);
+  font-weight: var(--text-body-weight-medium, 500);
+}
+
+.stepNarrationIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+/* Re-auth CTA shown when a job fails with credentials_missing/_refresh_failed. */
+.reAuthPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--stack-gap-normal, 16px);
+  padding: var(--stack-padding-spacious, 24px);
+  text-align: center;
+  background-color: var(--bgColor-attention-muted, #fff8c5);
+  border: 1px solid var(--borderColor-attention-emphasis, #d4a72c);
+  border-radius: var(--borderRadius-medium, 6px);
+}

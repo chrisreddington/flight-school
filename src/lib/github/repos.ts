@@ -3,10 +3,9 @@
  *
  * Functions for fetching repository data and aggregating language statistics.
  * All calculations are performed locally — no LLM overhead.
- * Includes caching for performance optimization.
  */
 
-import { getOctokit } from './client';
+import type { Octokit } from 'octokit';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { getLanguageColor } from './language-colors';
 import type {
@@ -26,58 +25,36 @@ interface RepoState {
 }
 
 // =============================================================================
-// Repository Caching
+// Caching (repo-keyed, safe across users)
 // =============================================================================
-
-/** Cache TTL: 5 minutes */
-const REPOS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Cache TTL: 24 hours for language bytes (rarely changes) */
 const LANGUAGE_BYTES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-interface CachedRepos {
-  repos: GitHubRepo[];
-  timestamp: number;
-}
 
 interface CachedLanguageBytes {
   languages: Record<string, number>;
   timestamp: number;
 }
 
-let reposCache: CachedRepos | null = null;
 const languageBytesCache = new Map<string, CachedLanguageBytes>();
 
 /**
- * Fetch repositories for the authenticated user with caching.
+ * Fetch repositories for the authenticated user.
  * Only fetches repos OWNED by the user (not org repos they have access to).
  * Paginates automatically to fetch ALL owned repositories.
- * 
- * Caches results for 5 minutes.
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param options - Fetch options
  * @returns Array of repository data
  */
-export async function getUserRepositories(options?: {
-  sort?: 'created' | 'updated' | 'pushed' | 'full_name';
-  perPage?: number;
-  maxPages?: number;
-}): Promise<GitHubRepo[]> {
-  const nowTimestamp = nowMs();
-  
-  // Only use cache for default options (most common case)
-  const isDefaultOptions = !options || (
-    (!options.sort || options.sort === 'pushed') &&
-    (!options.perPage || options.perPage === 100) &&
-    (!options.maxPages || options.maxPages === 10)
-  );
-  
-  if (isDefaultOptions && reposCache && (nowTimestamp - reposCache.timestamp) < REPOS_CACHE_TTL_MS) {
-    return reposCache.repos;
+export async function getUserRepositories(
+  octokit: Octokit,
+  options?: {
+    sort?: 'created' | 'updated' | 'pushed' | 'full_name';
+    perPage?: number;
+    maxPages?: number;
   }
-  
-  // Fetch from API
-  const octokit = await getOctokit();
+): Promise<GitHubRepo[]> {
   const perPage = options?.perPage || 100;
   const maxPages = options?.maxPages || 10; // Safety limit: 1000 repos max
 
@@ -117,11 +94,7 @@ export async function getUserRepositories(options?: {
 
     page++;
   }
-  
-  if (isDefaultOptions) {
-    reposCache = { repos: allRepos, timestamp: nowTimestamp };
-  }
-  
+
   return allRepos;
 }
 
@@ -142,6 +115,7 @@ export async function getUserRepositories(options?: {
  * ```
  */
 export async function getRepoLanguageBytes(
+  octokit: Octokit,
   owner: string,
   repo: string
 ): Promise<Record<string, number>> {
@@ -155,7 +129,6 @@ export async function getRepoLanguageBytes(
   }
 
   try {
-    const octokit = await getOctokit();
     const { data } = await octokit.rest.repos.listLanguages({ owner, repo });
 
     // Cache the result
@@ -170,16 +143,16 @@ export async function getRepoLanguageBytes(
 /**
  * Checks if a repository exists and whether it has commits.
  *
+ * @param octokit - Per-request Octokit bound to the caller's session token
  * @param owner - Repository owner
  * @param repo - Repository name
  * @returns Repository state (exists, hasCommits)
  */
 export async function getRepositoryState(
+  octokit: Octokit,
   owner: string,
   repo: string
 ): Promise<RepoState> {
-  const octokit = await getOctokit();
-
   try {
     const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
 
@@ -249,9 +222,10 @@ export function getLanguageStats(repos: GitHubRepo[], limit = 5): LanguageStat[]
  * console.log(`Created: ${repo.htmlUrl}`);
  * ```
  */
-export async function createRepository(input: CreateRepoInput): Promise<CreatedRepo> {
-  const octokit = await getOctokit();
-
+export async function createRepository(
+  octokit: Octokit,
+  input: CreateRepoInput
+): Promise<CreatedRepo> {
   try {
     const { data } = await octokit.rest.repos.createForAuthenticatedUser({
       name: input.name,
@@ -314,6 +288,7 @@ export async function createRepository(input: CreateRepoInput): Promise<CreatedR
  * ```
  */
 export async function updateRepoFile(
+  octokit: Octokit,
   owner: string,
   repo: string,
   path: string,
@@ -321,8 +296,6 @@ export async function updateRepoFile(
   message: string,
   sha?: string
 ): Promise<{ commitSha: string }> {
-  const octokit = await getOctokit();
-
   // Content must be base64 encoded
   const encodedContent = Buffer.from(content).toString('base64');
 
@@ -350,6 +323,7 @@ export async function updateRepoFile(
  * @returns File SHA if it exists, null otherwise
  */
 export async function getFileShaWithRetry(
+  octokit: Octokit,
   owner: string,
   repo: string,
   path: string,
@@ -357,7 +331,6 @@ export async function getFileShaWithRetry(
 ): Promise<string | null> {
   const maxRetries = options.maxRetries ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 200;
-  const octokit = await getOctokit();
 
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     try {

@@ -25,13 +25,9 @@
  * ```
  */
 
-import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey, now } from '@/lib/utils/date-utils';
 import {
-  createStatefulChallenge,
-  createStatefulGoal,
-  createStatefulTopic,
   transitionChallengeState,
   transitionGoalState,
   transitionTopicState,
@@ -54,21 +50,21 @@ import type {
     FocusStorageSchema,
     LearningTopic,
 } from './types';
-import { MAX_HISTORY_ENTRIES } from './types';
+import { getTodaysFocusFromHistory, saveFocusToHistory } from './history';
+import { clearFocusStorage, readFocusStorage, writeFocusStorage } from './persistence';
+import {
+  addChallengeToHistory,
+  addGoalToHistory,
+  addTopicToHistory,
+  getCalibrationNeededFromHistory,
+  getTopicPositionFromHistory,
+  markTopicReplacedInHistory,
+  removeCalibrationItemFromHistory,
+  saveSelfExplanationInHistory,
+} from './record-operations';
+import { markTopicReviewedInHistory } from './review-schedule';
 
 const log = logger.withTag('FocusStore');
-
-/**
- * Deep equality check for generic objects.
- * Used to deduplicate focus components.
- */
-function isEqual<T>(a: T, b: T): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-// =============================================================================
-// FocusStore Class
-// =============================================================================
 
 interface FocusStoreInterface {
   /** Get today's cached focus view (reconstructed from components) */
@@ -117,52 +113,11 @@ class LocalStorageFocusStore implements FocusStoreInterface {
    * Reads and parses storage data from API.
    */
   private async getStorage(): Promise<FocusStorageSchema> {
-    if (typeof window === 'undefined') {
-      return { history: {} };
-    }
-
-    try {
-      const schema = await apiGet<FocusStorageSchema>('/api/focus/storage');
-      return schema;
-    } catch (error) {
-      log.error('Failed to load focus storage, using empty schema', error);
-      return { history: {} };
-    }
+    return readFocusStorage();
   }
 
   private async setStorage(schema: FocusStorageSchema): Promise<void> {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    try {
-      await apiPost<void>('/api/focus/storage', schema);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // Network-level failures (page navigation, body too large for keepalive, AbortError)
-      // are non-fatal — the save will succeed on the next interaction.
-      const isNetworkError =
-        error instanceof Error &&
-        (error.name === 'AbortError' ||
-          message === 'Load failed' ||
-          message === 'Failed to fetch' ||
-          message.startsWith('NetworkError'));
-      if (isNetworkError) {
-        log.warn('Storage save skipped (network unavailable)', message);
-        return;
-      }
-      log.error('Failed to save to storage', message);
-      throw error;
-    }
-  }
-
-  private pruneHistory(history: FocusHistory): FocusHistory {
-    const entries = Object.entries(history);
-    if (entries.length <= MAX_HISTORY_ENTRIES) {
-      return history;
-    }
-    const sorted = entries.sort(([a], [b]) => b.localeCompare(a));
-    const pruned = sorted.slice(0, MAX_HISTORY_ENTRIES);
-    return Object.fromEntries(pruned);
+    await writeFocusStorage(schema);
   }
 
   /**
@@ -171,72 +126,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   async getTodaysFocus(): Promise<FocusResponse | null> {
     const schema = await this.getStorage();
     const todayKey = getDateKey();
-    const record = schema.history[todayKey];
-    
-    if (!record || 
-        record.challenges.length === 0 || 
-        record.goals.length === 0 || 
-        record.learningTopics.length === 0) {
-      return null;
-    }
-    
-    // Get latest version of each component
-    const latestChallenge = record.challenges[record.challenges.length - 1];
-    const latestGoal = record.goals[record.goals.length - 1];
-    const latestTopics = record.learningTopics[record.learningTopics.length - 1];
-
-    // Safety check: ensure items have stateHistory (handle old data format)
-    if (!latestChallenge.stateHistory || !latestGoal.stateHistory || !latestTopics[0]?.stateHistory) {
-      return null; // Old format - will be reset on schema mismatch
-    }
-
-    // Get generated timestamp from first state transition
-    const challengeGenerated = latestChallenge.stateHistory[0].timestamp;
-    const goalGenerated = latestGoal.stateHistory[0].timestamp;
-    const topicsGenerated = latestTopics[0].stateHistory[0].timestamp;
-    
-    const timestamps = [challengeGenerated, goalGenerated, topicsGenerated].sort();
-    const latestGeneratedAt = timestamps[timestamps.length - 1];
-
-    // Filter topics for dashboard display:
-    // 1. Exclude skipped topics
-    // 2. Exclude explored topics that have been replaced
-    // 3. Limit to 3 topics (prioritize non-explored over explored)
-    const displayableTopics = latestTopics.filter(t => {
-      const state = getCurrentTopicState(t);
-      // Hide skipped topics
-      if (state === 'skipped') return false;
-      // Hide explored topics that have been replaced
-      if (state === 'explored' && t.data.replacedByTopicId) return false;
-      return true;
-    });
-    
-    // Sort: non-explored first, then explored (to prioritize active topics)
-    const sortedTopics = displayableTopics.sort((a, b) => {
-      const stateA = getCurrentTopicState(a);
-      const stateB = getCurrentTopicState(b);
-      if (stateA === 'not-explored' && stateB === 'explored') return -1;
-      if (stateA === 'explored' && stateB === 'not-explored') return 1;
-      return 0; // maintain order within same state
-    });
-    
-    // Limit to 3 topics for dashboard display
-    const dashboardTopics = sortedTopics.slice(0, 3);
-
-    return {
-        challenge: latestChallenge.data,
-        goal: latestGoal.data,
-        learningTopics: dashboardTopics.map(t => t.data),
-        calibrationNeeded: record.calibrationNeeded,
-        meta: {
-            generatedAt: latestGeneratedAt,
-            aiEnabled: true, 
-            model: 'stored',
-            toolsUsed: [],
-            totalTimeMs: 0,
-            usedCachedProfile: true
-        }
-    };
+    return getTodaysFocusFromHistory(schema.history, todayKey);
   }
 
   /**
@@ -246,66 +136,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   async saveTodaysFocus(focus: FocusResponse): Promise<void> {
     const schema = await this.getStorage();
     const todayKey = getDateKey();
-
-    // Initialize daily record if needed
-    if (!schema.history[todayKey]) {
-      schema.history[todayKey] = {
-        challenges: [],
-        goals: [],
-        learningTopics: []
-      };
-    }
-    const record = schema.history[todayKey];
-
-    // Helper to check if an item has valid content (not empty placeholders)
-    const isValidChallenge = focus.challenge?.id && focus.challenge?.title;
-    const isValidGoal = focus.goal?.id && focus.goal?.title;
-    const hasValidTopics = focus.learningTopics?.length > 0 && 
-      focus.learningTopics.every(t => t.id && t.title);
-
-    // 1. Append Challenge if different AND valid
-    if (isValidChallenge) {
-      const lastChallenge = record.challenges[record.challenges.length - 1];
-      if (!lastChallenge || !isEqual(lastChallenge.data, focus.challenge)) {
-          const statefulChallenge = createStatefulChallenge(focus.challenge);
-          record.challenges.push(statefulChallenge);
-      }
-    }
-
-    // 2. Append Goal if different AND valid
-    if (isValidGoal) {
-      const lastGoal = record.goals[record.goals.length - 1];
-      if (!lastGoal || !isEqual(lastGoal.data, focus.goal)) {
-          const statefulGoal = createStatefulGoal(focus.goal);
-          record.goals.push(statefulGoal);
-      }
-    }
-
-    // 3. Append Topics if different AND valid
-    if (hasValidTopics) {
-      const lastTopics = record.learningTopics[record.learningTopics.length - 1];
-      const topicsChanged = !lastTopics || !isEqual(
-        lastTopics.map(t => t.data),
-        focus.learningTopics
-      );
-      
-      if (topicsChanged) {
-          const statefulTopics = focus.learningTopics.map(topic => 
-            createStatefulTopic(topic)
-          );
-          record.learningTopics.push(statefulTopics);
-      }
-    }
-
-    // 4. Save calibration items (merge with existing, avoiding duplicates)
-    if (focus.calibrationNeeded && focus.calibrationNeeded.length > 0) {
-      const existingIds = new Set(record.calibrationNeeded?.map(c => c.skillId) || []);
-      const newItems = focus.calibrationNeeded.filter(c => !existingIds.has(c.skillId));
-      record.calibrationNeeded = [...(record.calibrationNeeded || []), ...newItems];
-    }
-
-    // Prune old days
-    schema.history = this.pruneHistory(schema.history);
+    schema.history = saveFocusToHistory(schema.history, todayKey, focus);
     await this.setStorage(schema);
   }
 
@@ -319,11 +150,8 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   }
 
   async clear(): Promise<void> {
-    if (typeof window === 'undefined') {
-      return;
-    }
     try {
-      await apiDelete<void>('/api/focus/storage');
+      await clearFocusStorage();
       log.debug('Focus storage cleared successfully');
     } catch (error) {
       log.error('Failed to clear focus storage', { error });
@@ -529,23 +357,18 @@ class LocalStorageFocusStore implements FocusStoreInterface {
    */
   async markTopicReviewed(dateKey: string, topicId: string): Promise<void> {
     const schema = await this.getStorage();
-    const record = schema.history[dateKey];
+    const recordExists = Boolean(schema.history[dateKey]);
+    const updated = markTopicReviewedInHistory(schema.history, dateKey, topicId, now());
 
-    if (!record) {
+    if (!recordExists) {
       log.warn('Attempted to mark topic reviewed for non-existent date', { dateKey, topicId });
       return;
     }
 
-    for (let i = 0; i < record.learningTopics.length; i++) {
-      const topicArray = record.learningTopics[i];
-      const topicIndex = topicArray.findIndex((topic) => topic.data.id === topicId);
-
-      if (topicIndex !== -1) {
-        topicArray[topicIndex].data.lastReviewedAt = now();
-        await this.setStorage(schema);
-        log.debug('Topic marked as reviewed', { dateKey, topicId });
-        return;
-      }
+    if (updated) {
+      await this.setStorage(schema);
+      log.debug('Topic marked as reviewed', { dateKey, topicId });
+      return;
     }
 
     log.warn('Topic not found for review tracking', { dateKey, topicId });
@@ -624,42 +447,25 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     itemId: string,
     text: string
   ): Promise<void> {
-    const trimmedText = text.trim();
-    if (!trimmedText) {
-      return;
-    }
-
     const schema = await this.getStorage();
-    const record = schema.history[dateKey];
+    const result = saveSelfExplanationInHistory(schema.history, dateKey, itemType, itemId, text);
 
-    if (!record) {
+    if (result === 'empty') return;
+    if (result === 'missing-record') {
       log.warn('Attempted to save self-explanation for non-existent date', { dateKey, itemType, itemId });
       return;
     }
-
-    if (itemType === 'challenge') {
-      const challenge = record.challenges.find(c => c.data.id === itemId);
-      if (!challenge) {
-        log.warn('Challenge not found for self-explanation', { dateKey, itemId });
-        return;
-      }
-      challenge.data.selfExplanation = trimmedText;
-      await this.setStorage(schema);
-      log.debug('Saved challenge self-explanation', { dateKey, itemId });
+    if (result === 'missing-challenge') {
+      log.warn('Challenge not found for self-explanation', { dateKey, itemId });
+      return;
+    }
+    if (result === 'missing-topic') {
+      log.warn('Topic not found for self-explanation', { dateKey, itemId });
       return;
     }
 
-    for (const topicArray of record.learningTopics) {
-      const topic = topicArray.find(t => t.data.id === itemId);
-      if (topic) {
-        topic.data.selfExplanation = trimmedText;
-        await this.setStorage(schema);
-        log.debug('Saved topic self-explanation', { dateKey, itemId });
-        return;
-      }
-    }
-
-    log.warn('Topic not found for self-explanation', { dateKey, itemId });
+    await this.setStorage(schema);
+    log.debug(`Saved ${itemType} self-explanation`, { dateKey, itemId });
   }
 
   /**
@@ -672,32 +478,19 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   ): Promise<number | null> {
     const schema = await this.getStorage();
     const record = schema.history[dateKey];
-    
+
     if (!record || record.learningTopics.length === 0) {
       return null;
     }
 
-    // Work with the MOST RECENT topics array (last one)
-    const lastTopicsIndex = record.learningTopics.length - 1;
-    const topicArray = record.learningTopics[lastTopicsIndex];
-    
-    // Count active topics (not skipped) before this topic
-    let activePosition = 0;
-    for (const statefulTopic of topicArray) {
-      if (statefulTopic.data.id === topicId) {
-        log.debug('Found topic position', { dateKey, topicId, activePosition });
-        return activePosition;
-      }
-      
-      // Only count non-skipped topics towards position
-      const lastState = statefulTopic.stateHistory[statefulTopic.stateHistory.length - 1]?.state;
-      if (lastState !== 'skipped') {
-        activePosition++;
-      }
+    const activePosition = getTopicPositionFromHistory(schema.history, dateKey, topicId);
+    if (activePosition === null) {
+      log.warn('Topic not found for position lookup', { dateKey, topicId });
+      return null;
     }
-    
-    log.warn('Topic not found for position lookup', { dateKey, topicId });
-    return null;
+
+    log.debug('Found topic position', { dateKey, topicId, activePosition });
+    return activePosition;
   }
 
   /**
@@ -720,26 +513,19 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     }
     const schema = await this.getStorage();
     const record = schema.history[dateKey];
-    
+
     if (!record || record.learningTopics.length === 0) {
       log.warn('Attempted to add topic for non-existent date or empty topics', { dateKey });
       return;
     }
 
-    // Work with the MOST RECENT topics array (last one)
-    const lastTopicsIndex = record.learningTopics.length - 1;
-    
-    // Create new stateful topic
-    const statefulNewTopic = createStatefulTopic(newTopic);
-    
-    // Insert at position or append
-    if (position !== undefined && position >= 0 && position <= record.learningTopics[lastTopicsIndex].length) {
-      // Insert at specific position for in-place replacement
-      record.learningTopics[lastTopicsIndex].splice(position, 0, statefulNewTopic);
+    const latestTopicCount = record.learningTopics[record.learningTopics.length - 1].length;
+    const insertedAtPosition = position !== undefined && position >= 0 && position <= latestTopicCount;
+    addTopicToHistory(schema.history, dateKey, newTopic, position);
+
+    if (insertedAtPosition) {
       log.debug('Topic inserted at position', { dateKey, newTopicId: newTopic.id, position });
     } else {
-      // Append to end (default behavior)
-      record.learningTopics[lastTopicsIndex].push(statefulNewTopic);
       log.debug('Topic added', { dateKey, newTopicId: newTopic.id });
     }
 
@@ -756,26 +542,13 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     newTopicId: string
   ): Promise<void> {
     const schema = await this.getStorage();
-    const record = schema.history[dateKey];
-    
-    if (!record || record.learningTopics.length === 0) {
+    const updated = markTopicReplacedInHistory(schema.history, dateKey, oldTopicId, newTopicId);
+
+    if (!updated) {
       log.warn('Attempted to mark topic replaced for non-existent date', { dateKey, oldTopicId });
       return;
     }
 
-    // Find and update the old topic
-    const lastTopicsIndex = record.learningTopics.length - 1;
-    const topicArray = record.learningTopics[lastTopicsIndex];
-    const topicIndex = topicArray.findIndex(t => t.data.id === oldTopicId);
-    
-    if (topicIndex === -1) {
-      log.warn('Topic not found for replacement marking', { dateKey, oldTopicId });
-      return;
-    }
-
-    // Update the data with replacement reference
-    topicArray[topicIndex].data.replacedByTopicId = newTopicId;
-    
     await this.setStorage(schema);
     log.debug('Topic marked as replaced', { dateKey, oldTopicId, newTopicId });
   }
@@ -786,15 +559,11 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   async removeCalibrationItem(skillId: string): Promise<void> {
     const schema = await this.getStorage();
     const todayKey = getDateKey();
-    const record = schema.history[todayKey];
+    const updated = removeCalibrationItemFromHistory(schema.history, todayKey, skillId);
 
-    if (!record || !record.calibrationNeeded) {
+    if (!updated) {
       return;
     }
-
-    record.calibrationNeeded = record.calibrationNeeded.filter(
-      item => item.skillId !== skillId
-    );
 
     await this.setStorage(schema);
     log.debug('Calibration item removed', { skillId });
@@ -806,9 +575,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   async getCalibrationNeeded(): Promise<CalibrationNeededItem[]> {
     const schema = await this.getStorage();
     const todayKey = getDateKey();
-    const record = schema.history[todayKey];
-
-    return record?.calibrationNeeded || [];
+    return getCalibrationNeededFromHistory(schema.history, todayKey);
   }
 
   /**
@@ -827,23 +594,12 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       return;
     }
     const schema = await this.getStorage();
+    const result = addChallengeToHistory(schema.history, dateKey, newChallenge);
 
-    // Create the daily record if it doesn't exist yet (e.g., user opened
-    // a challenge URL directly without visiting the dashboard first)
-    if (!schema.history[dateKey]) {
-      schema.history[dateKey] = { challenges: [], goals: [], learningTopics: [] };
-    }
-    const record = schema.history[dateKey];
-
-    // Idempotent: skip if challenge is already registered
-    if (record.challenges.some(c => c.data.id === newChallenge.id)) {
+    if (result === 'duplicate') {
       log.debug('Challenge already registered (idempotent)', { dateKey, challengeId: newChallenge.id });
       return;
     }
-
-    // Create new stateful challenge and append
-    const statefulChallenge = createStatefulChallenge(newChallenge);
-    record.challenges.push(statefulChallenge);
 
     await this.setStorage(schema);
     log.debug('Challenge added', { dateKey, newChallengeId: newChallenge.id });
@@ -862,16 +618,12 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       return;
     }
     const schema = await this.getStorage();
-    const record = schema.history[dateKey];
-    
-    if (!record) {
+    const added = addGoalToHistory(schema.history, dateKey, newGoal);
+
+    if (!added) {
       log.warn('Attempted to add goal for non-existent date', { dateKey });
       return;
     }
-
-    // Create new stateful goal and append
-    const statefulGoal = createStatefulGoal(newGoal);
-    record.goals.push(statefulGoal);
 
     await this.setStorage(schema);
     log.debug('Goal added', { dateKey, newGoalId: newGoal.id });

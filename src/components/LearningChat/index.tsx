@@ -10,6 +10,7 @@ import { RepoSelector } from '../RepoSelector';
 import type { RepoOption } from '../RepoSelector/types';
 import { ThreadSidebar } from '../ThreadSidebar';
 import styles from './LearningChat.module.css';
+import typingStyles from '@/styles/typing-indicator.module.css';
 
 /**
  * Consolidated handlers for chat operations (reduces prop drilling)
@@ -316,10 +317,10 @@ export const LearningChat = memo(function LearningChat({
           )}
 
           {showTypingIndicator && (
-            <div className={styles.typingIndicator} aria-label="Copilot is thinking" role="status">
-              <span className={styles.typingDot} />
-              <span className={styles.typingDot} />
-              <span className={styles.typingDot} />
+            <div className={`${typingStyles.typingIndicator} ${styles.typingIndicatorOffset}`} aria-label="Copilot is thinking" role="status">
+              <span className={typingStyles.typingDot} />
+              <span className={typingStyles.typingDot} />
+              <span className={typingStyles.typingDot} />
             </div>
           )}
 

@@ -24,9 +24,13 @@ import { parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import { validateHintRequest } from '@/lib/challenge/request-validators';
+import { createSessionIdentity } from '@/lib/copilot/server';
 import { getHint } from '@/lib/copilot/hints';
 import type { ChallengeDef, HintResult } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { EVAL_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Hint API');
@@ -122,23 +126,35 @@ export async function POST(
   try {
     log.info(`Getting hint for: ${challenge.title}`);
 
-    const hintResult: HintResult = await getHint(challenge, question, currentCode);
+    return await withUserGuards(
+      { ...EVAL_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/challenge/hint', challengeTitle: challenge.title } },
+      async (ctx) => {
+        const hintResult: HintResult = await getHint(
+          createSessionIdentity(ctx),
+          challenge,
+          question,
+          currentCode
+        );
 
-    const totalTime = nowMs() - startTime;
-    log.info(`Hint generated in ${totalTime}ms`);
+        const totalTime = nowMs() - startTime;
+        log.info(`Hint generated in ${totalTime}ms`);
 
-    return NextResponse.json({
-      success: true,
-      hint: hintResult.hint,
-      isFinalHint: hintResult.isFinalHint,
-      concepts: hintResult.concepts,
-      suggestedFollowUp: hintResult.suggestedFollowUp,
-      meta: {
-        totalTimeMs: totalTime,
-        challengeTitle: challenge.title,
+        return NextResponse.json({
+          success: true,
+          hint: hintResult.hint,
+          isFinalHint: hintResult.isFinalHint,
+          concepts: hintResult.concepts,
+          suggestedFollowUp: hintResult.suggestedFollowUp,
+          meta: {
+            totalTimeMs: totalTime,
+            challengeTitle: challenge.title,
+          },
+        } satisfies HintResponse);
       },
-    } satisfies HintResponse);
+    );
   } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse as NextResponse<HintResponse | ErrorResponse>;
     return handleApiError(error, 'Hint API', startTime);
   }
 }

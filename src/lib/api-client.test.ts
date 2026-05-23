@@ -3,7 +3,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiGet, apiPost, apiPatch, apiDelete } from './api-client';
+
+const authMocks = vi.hoisted(() => ({
+  signOut: vi.fn(),
+}));
+
+vi.mock('next-auth/react', () => ({
+  signOut: authMocks.signOut,
+}));
+
+import { apiGet, apiPost, apiDelete } from './api-client';
 
 // =============================================================================
 // Setup
@@ -16,6 +25,7 @@ describe('API Client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    authMocks.signOut.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -101,30 +111,6 @@ describe('API Client', () => {
   });
 
   // ===========================================================================
-  // apiPatch Tests
-  // ===========================================================================
-
-  describe('apiPatch', () => {
-    it('should make PATCH request with body', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ updated: true }),
-      });
-
-      const result = await apiPatch('/api/update/1', { name: 'updated' });
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/update/1',
-        expect.objectContaining({
-          method: 'PATCH',
-          body: JSON.stringify({ name: 'updated' }),
-        })
-      );
-      expect(result).toEqual({ updated: true });
-    });
-  });
-
-  // ===========================================================================
   // apiDelete Tests
   // ===========================================================================
 
@@ -182,6 +168,120 @@ describe('API Client', () => {
       });
 
       await expect(apiGet('/api/error')).rejects.toThrow('HTTP 500');
+    });
+
+    it('signs out and redirects to sign-in on 401 in the browser', async () => {
+      const originalLocation = window.location;
+      const assign = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          pathname: '/dashboard',
+          search: '?tab=focus',
+          assign,
+        },
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'Authentication required' }),
+      });
+
+      await expect(apiGet('/api/profile')).rejects.toThrow('Authentication required');
+
+      expect(authMocks.signOut).toHaveBeenCalledWith({ redirect: false });
+      expect(assign).toHaveBeenCalledWith('/sign-in?callbackUrl=%2Fdashboard%3Ftab%3Dfocus');
+
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    });
+
+    it('does not redirect to sign-in for 403 responses', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error: 'Forbidden' }),
+      });
+
+      await expect(apiGet('/api/forbidden')).rejects.toThrow('Forbidden');
+
+      expect(authMocks.signOut).not.toHaveBeenCalled();
+    });
+  });
+
+  // ===========================================================================
+  // F5: 429 Rate-limit Detection
+  // ===========================================================================
+
+  describe('429 rate-limit detection', () => {
+    function make429Response(opts: {
+      headers?: Record<string, string>;
+      body?: unknown;
+    }) {
+      const headers = new Headers(opts.headers ?? {});
+      return {
+        ok: false,
+        status: 429,
+        headers,
+        json: () => Promise.resolve(opts.body ?? {}),
+      };
+    }
+
+    it('dispatches a rate-limited event with parsed Retry-After', async () => {
+      mockFetch.mockResolvedValueOnce(
+        make429Response({
+          headers: {
+            'Retry-After': '30',
+            'X-RateLimit-Reason': 'rate_limit',
+          },
+          body: { error: 'Rate limit exceeded', reason: 'rate_limit' },
+        }),
+      );
+
+      const listener = vi.fn();
+      window.addEventListener('rate-limited', listener);
+
+      await expect(apiGet('/api/profile')).rejects.toMatchObject({
+        status: 429,
+        reason: 'rate_limit',
+        retryAfterSeconds: 30,
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const detail = (listener.mock.calls[0][0] as CustomEvent).detail;
+      expect(detail.retryAfterSeconds).toBe(30);
+      expect(detail.reason).toBe('rate_limit');
+      expect(detail.route).toBe('/api/profile');
+
+      window.removeEventListener('rate-limited', listener);
+    });
+
+    it('defaults to 30s when Retry-After is missing', async () => {
+      mockFetch.mockResolvedValueOnce(
+        make429Response({
+          headers: { 'X-RateLimit-Reason': 'session_cap' },
+          body: { error: 'Too many sessions', reason: 'session_cap', max: 3 },
+        }),
+      );
+
+      const listener = vi.fn();
+      window.addEventListener('rate-limited', listener);
+
+      await expect(apiPost('/api/jobs', { type: 'chat' })).rejects.toMatchObject({
+        status: 429,
+        reason: 'session_cap',
+        retryAfterSeconds: 30,
+        max: 3,
+      });
+
+      const detail = (listener.mock.calls[0][0] as CustomEvent).detail;
+      expect(detail.retryAfterSeconds).toBe(30);
+      expect(detail.reason).toBe('session_cap');
+      expect(detail.max).toBe(3);
+
+      window.removeEventListener('rate-limited', listener);
     });
   });
 
@@ -365,6 +465,44 @@ describe('API Client', () => {
             Authorization: 'Bearer token',
           }),
         })
+      );
+    });
+
+    it('attaches client trigger headers when metadata is provided', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'job-1' }),
+      });
+
+      await apiPost(
+        '/api/jobs',
+        { type: 'chat-response' },
+        {
+          clientTrigger: {
+            source: 'learning-chat',
+            action: 'send-message',
+            pagePath: '/history',
+            navigationElapsedMs: 1140,
+            targetType: 'thread',
+            targetId: 'thread-123',
+            correlationId: 'b9e8ad89-c6c4-42ef-ad52-f74f0bec71a6',
+          },
+        },
+      );
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/jobs',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-flight-school-trigger-source': 'learning-chat',
+            'x-flight-school-trigger-action': 'send-message',
+            'x-flight-school-trigger-page-path': '/history',
+            'x-flight-school-trigger-navigation-elapsed-ms': '1140',
+            'x-flight-school-trigger-target-type': 'thread',
+            'x-flight-school-trigger-target-id': 'thread-123',
+            'x-flight-school-trigger-correlation-id': 'b9e8ad89-c6c4-42ef-ad52-f74f0bec71a6',
+          }),
+        }),
       );
     });
   });

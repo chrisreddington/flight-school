@@ -14,6 +14,20 @@
  * ```
  */
 
+import {
+  COPILOT_REQUIRED_EVENT,
+  type CopilotRequiredEventDetail,
+} from '@/lib/copilot/required-event';
+import {
+  encodeClientTriggerHeaders,
+  type ClientTriggerMetadata,
+} from '@/lib/observability/trigger-metadata';
+import {
+  dispatchRateLimited,
+  RateLimitedClientError,
+} from '@/lib/api/rate-limit-event';
+import { signOut } from 'next-auth/react';
+
 interface ApiRequestOptions extends RequestInit {
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
@@ -21,12 +35,14 @@ interface ApiRequestOptions extends RequestInit {
   retries?: number;
   /** Whether to throw on HTTP errors (default: true) */
   throwOnError?: boolean;
+  /** Optional client trigger metadata for observability correlation. */
+  clientTrigger?: ClientTriggerMetadata;
 }
 
 /**
  * Custom error class for API failures with status code and context.
  */
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
@@ -37,6 +53,52 @@ class ApiError extends Error {
   }
 }
 
+/**
+ * Dispatch the `copilot-required` window event so the global banner can
+ * surface a 402 from any fetch site.
+ */
+function dispatchCopilotRequired(
+  body: unknown,
+  endpoint: string,
+): CopilotRequiredEventDetail {
+  const detail: CopilotRequiredEventDetail = {
+    message:
+      body && typeof body === 'object' && typeof (body as { message?: unknown }).message === 'string'
+        ? (body as { message: string }).message
+        : undefined,
+    signUpUrl:
+      body && typeof body === 'object' && typeof (body as { signUpUrl?: unknown }).signUpUrl === 'string'
+        ? (body as { signUpUrl: string }).signUpUrl
+        : undefined,
+    endpoint,
+  };
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(COPILOT_REQUIRED_EVENT, { detail }));
+  }
+  return detail;
+}
+
+/**
+ * True when a 402 body has the `copilot_required` shape AI routes return.
+ */
+function isCopilotRequiredBody(body: unknown): boolean {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    (body as { error?: unknown }).error === 'copilot_required'
+  );
+}
+
+async function redirectToSignInAfterAuthFailure(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === '/sign-in') return;
+
+  await signOut({ redirect: false });
+  const callbackPath = `${window.location.pathname}${window.location.search}`;
+  const signInUrl = `/sign-in?callbackUrl=${encodeURIComponent(callbackPath || '/')}`;
+  window.location.assign(signInUrl);
+}
+
 // Request deduplication cache for GET requests
 const pendingRequests = new Map<string, Promise<unknown>>();
 
@@ -45,6 +107,54 @@ function getCacheKey(url: string, options?: ApiRequestOptions): string {
   const method = options?.method ?? 'GET';
   const body = options?.body ? String(options.body) : '';
   return `${method}:${url}:${body}`;
+}
+
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    const normalized: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      normalized[key] = value;
+    });
+    return normalized;
+  }
+  if (Array.isArray(headers)) {
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of headers) {
+      normalized[key] = value;
+    }
+    return normalized;
+  }
+
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== 'string') continue;
+    normalized[key] = value;
+  }
+  return normalized;
+}
+
+function hasHeader(headers: Record<string, string>, name: string): boolean {
+  const wanted = name.toLowerCase();
+  return Object.keys(headers).some((header) => header.toLowerCase() === wanted);
+}
+
+function buildRequestHeaders(
+  headers: HeadersInit | undefined,
+  clientTrigger: ClientTriggerMetadata | undefined,
+): Record<string, string> {
+  const merged = normalizeHeaders(headers);
+  if (!hasHeader(merged, 'content-type')) {
+    merged['Content-Type'] = 'application/json';
+  }
+  if (!clientTrigger) {
+    return merged;
+  }
+
+  return {
+    ...merged,
+    ...encodeClientTriggerHeaders(clientTrigger),
+  };
 }
 
 /**
@@ -59,6 +169,7 @@ async function apiRequest<T>(
     retries = 0,
     throwOnError = true,
     signal: externalSignal,
+    clientTrigger,
     ...fetchOptions
   } = options;
 
@@ -103,20 +214,50 @@ async function apiRequest<T>(
             signal: combinedSignal,
             // Keep the request alive even during navigation - critical for background operations
             keepalive: true,
-            headers: {
-              'Content-Type': 'application/json',
-              ...fetchOptions.headers,
-            },
+            headers: buildRequestHeaders(fetchOptions.headers, clientTrigger),
           });
 
           clearTimeout(timeoutId);
 
           const data = await response.json().catch(() => ({}));
 
+          // F4: 402 + `copilot_required` → broadcast so the global banner
+          // can react without each call site having to handle it.
+          if (response.status === 402 && isCopilotRequiredBody(data)) {
+            dispatchCopilotRequired(data, url);
+          }
+
+          if (response.status === 401) {
+            await redirectToSignInAfterAuthFailure();
+          }
+
+          // F5: 429 → broadcast so the global rate-limit toast/hook can
+          // react without each call site having to handle it.
+          if (response.status === 429) {
+            const detail = dispatchRateLimited(response, data, url);
+            if (throwOnError) {
+              throw new RateLimitedClientError(detail);
+            }
+            return data as T;
+          }
+
           if (!response.ok) {
             const errorMessage = data.error || `HTTP ${response.status}`;
             if (throwOnError) {
-              throw new ApiError(errorMessage, response.status, data.meta);
+              // Surface body-level fields (e.g. `code`, `windowSeconds`) on
+              // the error context so call sites can branch on them without
+              // having to re-parse the response.
+              const context = {
+                ...(data.meta && typeof data.meta === 'object' ? data.meta : {}),
+                ...(typeof data === 'object' && data !== null
+                  ? Object.fromEntries(
+                      Object.entries(data).filter(
+                        ([k]) => k !== 'error' && k !== 'meta',
+                      ),
+                    )
+                  : {}),
+              };
+              throw new ApiError(errorMessage, response.status, context);
             }
             return data as T;
           }
@@ -189,26 +330,6 @@ export function apiPost<T>(
   return apiRequest<T>(url, {
     ...options,
     method: 'POST',
-    body: data ? JSON.stringify(data) : undefined,
-  });
-}
-
-/**
- * Perform a PATCH request.
- * 
- * @param url - API endpoint URL
- * @param data - Request body data
- * @param options - Request options
- * @returns Promise resolving to the API response
- */
-export function apiPatch<T>(
-  url: string,
-  data?: unknown,
-  options?: Omit<ApiRequestOptions, 'method' | 'body'>
-): Promise<T> {
-  return apiRequest<T>(url, {
-    ...options,
-    method: 'PATCH',
     body: data ? JSON.stringify(data) : undefined,
   });
 }

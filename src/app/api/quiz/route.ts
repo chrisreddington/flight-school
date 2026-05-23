@@ -1,5 +1,8 @@
-import { parseJsonBodyWithFallback } from '@/lib/api';
+import { knownApiErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateTopicQuiz, type QuizResult } from '@/lib/copilot/quiz';
+import { createSessionIdentity } from '@/lib/copilot/server';
+import { requireUserContext } from '@/lib/auth/context';
+import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -56,16 +59,25 @@ export async function POST(request: NextRequest) {
 
   let profileContext = '';
   try {
-    const compactProfile = await buildCompactContext(500);
+    const octokit = await getOctokitForRequest();
+    const compactProfile = await buildCompactContext(octokit, 500);
     profileContext = serializeContext(compactProfile);
   } catch (error) {
     log.warn('Failed to build profile context for quiz generation', error);
   }
 
   try {
-    const quiz = await generateTopicQuiz(topicTitle, topicDescription, profileContext);
+    const ctx = await requireUserContext();
+    const quiz = await generateTopicQuiz(
+      createSessionIdentity(ctx),
+      topicTitle,
+      topicDescription,
+      profileContext
+    );
     return NextResponse.json(quiz);
   } catch (error) {
+    const knownResponse = knownApiErrorResponse(error);
+    if (knownResponse) return knownResponse;
     if (isAIUnavailableError(error)) {
       return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
     }
@@ -73,4 +85,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
   }
 }
-

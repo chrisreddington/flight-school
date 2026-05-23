@@ -14,7 +14,37 @@
 // =============================================================================
 
 /** Role of the message author */
-export type MessageRole = 'user' | 'assistant' | 'system';
+type MessageRole = 'user' | 'assistant' | 'system';
+
+/**
+ * Status of a single tool call in an assistant message.
+ *
+ * `running` is the in-flight state surfaced live to the user; `complete` is
+ * the settled state once the SDK emits `tool.execution_complete`.
+ */
+type ToolCallStatus = 'running' | 'complete';
+
+/**
+ * Rich record of a single MCP/Copilot tool call.
+ *
+ * Stored on assistant messages so the UI can surface progress without relying
+ * on debug mode. The shape is intentionally serialisable so it round-trips
+ * through `threadStore` JSON persistence.
+ */
+export interface ToolCallEvent {
+  /** Stable identifier so the UI can reconcile running → complete updates. */
+  id: string;
+  /** Tool name as emitted by the SDK (e.g. `search_code`). */
+  name: string;
+  /** Current execution status. */
+  status: ToolCallStatus;
+  /** Arguments passed to the tool, preserved for the "Show details" disclosure. */
+  args?: unknown;
+  /** Truncated stringified result (only present once `status === 'complete'`). */
+  result?: string;
+  /** Wall-clock duration in ms (only present once `status === 'complete'`). */
+  durationMs?: number;
+}
 
 /**
  * A single message in a chat thread.
@@ -30,8 +60,13 @@ export interface Message {
   content: string;
   /** ISO timestamp of when the message was created */
   timestamp: string;
-  /** Tools called during message generation (MCP tool names) */
+  /** Tools called during message generation (MCP tool names) — legacy summary form. */
   toolCalls?: string[];
+  /**
+   * Rich tool-call timeline. Populated by the job executor while the assistant
+   * is responding so the chat UI can render running/complete states inline.
+   */
+  toolEvents?: ToolCallEvent[];
   /** Whether the message contains an actionable item (for smart actions) */
   hasActionableItem?: boolean;
   /** Performance metrics for this message */

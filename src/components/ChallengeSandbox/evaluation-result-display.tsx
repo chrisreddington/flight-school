@@ -10,8 +10,8 @@
 
 'use client';
 
-import { BeakerIcon, CheckCircleIcon, XCircleIcon } from '@primer/octicons-react';
-import { SkeletonBox } from '@primer/react';
+import { AlertIcon, BeakerIcon, CheckCircleIcon, SignInIcon, XCircleIcon } from '@primer/octicons-react';
+import { Button, SkeletonBox } from '@primer/react';
 import dynamic from 'next/dynamic';
 import remarkGfm from 'remark-gfm';
 
@@ -20,14 +20,41 @@ const ReactMarkdown = dynamic(() => import('react-markdown'), {
   loading: () => <SkeletonBox height="3em" />,
 });
 
-import type { EvaluationState } from '@/hooks/use-challenge-sandbox';
+import type { EvaluationErrorCode, EvaluationState } from '@/hooks/use-challenge-sandbox';
 
 import styles from './ChallengeSandbox.module.css';
+
+/**
+ * Error codes that should surface the re-auth call-to-action instead of
+ * a generic error message.
+ */
+const CREDENTIALS_EXPIRED_CODES: readonly EvaluationErrorCode[] = [
+  'credentials_missing',
+  'credentials_refresh_failed',
+];
 
 /** Props for EvaluationResultDisplay */
 interface EvaluationResultDisplayProps {
   /** Current evaluation state with streaming data */
   evaluation: EvaluationState;
+}
+
+/**
+ * Step narration shown above the skeleton while we wait for the first
+ * partial result. Wrapping the label in an `aria-live="polite"` region
+ * lets screen readers announce transitions naturally; React's keyed
+ * reconciliation already prevents redundant DOM updates when the value
+ * is unchanged across polls.
+ */
+function StepNarration({ step }: { step: string }) {
+  return (
+    <div className={styles.stepNarration} role="status" aria-live="polite">
+      <span className={styles.stepNarrationIcon} aria-hidden="true">
+        ⏳
+      </span>
+      <span>{step}</span>
+    </div>
+  );
 }
 
 /**
@@ -39,7 +66,52 @@ interface EvaluationResultDisplayProps {
 export function EvaluationResultDisplay({
   evaluation,
 }: EvaluationResultDisplayProps) {
-  const { isLoading, partialResult, streamingFeedback, result } = evaluation;
+  const {
+    isLoading,
+    partialResult,
+    streamingFeedback,
+    result,
+    error,
+    errorCode,
+    currentStep,
+  } = evaluation;
+
+  // Credentials-expired UX takes precedence: route the user to re-auth
+  // instead of showing a generic error.
+  if (errorCode && CREDENTIALS_EXPIRED_CODES.includes(errorCode)) {
+    const callbackUrl = typeof window !== 'undefined' ? window.location.pathname : '/';
+    return (
+      <div className={styles.reAuthPrompt} role="alert">
+        <div className={styles.emptyIcon}>
+          <AlertIcon size={24} />
+        </div>
+        <p className={styles.emptyText}>
+          <strong>Your GitHub session expired.</strong> Sign in again to keep your evaluation running.
+        </p>
+        <Button
+          as="a"
+          href={`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+          variant="primary"
+          leadingVisual={SignInIcon}
+        >
+          Sign in with GitHub
+        </Button>
+      </div>
+    );
+  }
+
+  // Generic failure (e.g. provider error, parsing failure) without a
+  // structured errorCode falls through to a plain error banner.
+  if (error && !isLoading && !result) {
+    return (
+      <div className={styles.emptyState} role="alert">
+        <div className={styles.emptyIcon}>
+          <XCircleIcon size={24} />
+        </div>
+        <p className={styles.emptyText}>{error}</p>
+      </div>
+    );
+  }
 
   // Show empty state when not loading and no result
   if (!isLoading && !result && !partialResult) {
@@ -55,10 +127,11 @@ export function EvaluationResultDisplay({
     );
   }
 
-  // While loading but no partial result yet, show spinner
+  // While loading but no partial result yet, show step narration + skeleton
   if (isLoading && !partialResult) {
     return (
       <div className={styles.emptyState}>
+        {currentStep && <StepNarration step={currentStep} />}
         <SkeletonBox height="8em" />
       </div>
     );
@@ -79,6 +152,9 @@ export function EvaluationResultDisplay({
 
   return (
     <div className={styles.sectionBody}>
+      {/* Step narration while streaming continues after the partial arrives */}
+      {isLoading && currentStep && <StepNarration step={currentStep} />}
+
       {/* Perfect score completion message */}
       {isPerfectScore && (
         <div 

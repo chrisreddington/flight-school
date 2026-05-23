@@ -8,6 +8,7 @@ import {
 } from '@opentelemetry/api';
 
 type OperationStatus = 'ok' | 'error';
+type StreamTerminalState = 'completed' | 'error' | 'cancelled';
 
 interface TraceContext {
   traceId: string;
@@ -35,7 +36,35 @@ const githubRequestCounter = meter.createCounter('flight_school.github.requests'
   description: 'Count of GitHub API requests by outcome',
 });
 
-export function startSpan(name: string, attributes?: Attributes): Span {
+const aiStreamFirstTokenHistogram = meter.createHistogram('flight_school.ai.stream.first_token_ms', {
+  description: 'Latency from stream start to first token',
+  unit: 'ms',
+});
+
+const aiStreamDurationHistogram = meter.createHistogram('flight_school.ai.stream.duration_ms', {
+  description: 'Total streaming duration',
+  unit: 'ms',
+});
+
+const aiStreamDeltaCountHistogram = meter.createHistogram('flight_school.ai.stream.delta_count', {
+  description: 'Number of delta chunks emitted per stream',
+});
+
+const aiStreamDeltaBytesHistogram = meter.createHistogram('flight_school.ai.stream.delta_bytes', {
+  description: 'Total streamed bytes per stream',
+  unit: 'By',
+});
+
+const aiStreamToolCallsCounter = meter.createCounter('flight_school.ai.stream.tool_calls', {
+  description: 'Number of tool calls observed during streaming',
+});
+
+const jobQueueWaitHistogram = meter.createHistogram('flight_school.jobs.queue_wait_ms', {
+  description: 'Time between job capture and worker execution start',
+  unit: 'ms',
+});
+
+function startSpan(name: string, attributes?: Attributes): Span {
   return tracer.startSpan(name, {
     attributes,
   });
@@ -101,6 +130,45 @@ export function recordGitHubOperation(
 
   githubDurationHistogram.record(durationMs, attributes);
   githubRequestCounter.add(1, attributes);
+}
+
+interface AiStreamMetricsInput {
+  model: string;
+  mcpEnabled: boolean;
+  poolHit?: boolean | null;
+  firstTokenMs: number | null;
+  durationMs: number;
+  deltaCount: number;
+  deltaBytes: number;
+  toolCalls: number;
+  terminalState: StreamTerminalState;
+}
+
+export function recordAiStreamMetrics(input: AiStreamMetricsInput): void {
+  const attributes: Attributes = {
+    'ai.model': input.model,
+    'ai.mcp_enabled': input.mcpEnabled,
+    'ai.pool_hit': input.poolHit ?? 'unknown',
+    'ai.stream.terminal_state': input.terminalState,
+  };
+
+  if (typeof input.firstTokenMs === 'number' && Number.isFinite(input.firstTokenMs)) {
+    aiStreamFirstTokenHistogram.record(input.firstTokenMs, attributes);
+  }
+  aiStreamDurationHistogram.record(input.durationMs, attributes);
+  aiStreamDeltaCountHistogram.record(input.deltaCount, attributes);
+  aiStreamDeltaBytesHistogram.record(input.deltaBytes, attributes);
+  aiStreamToolCallsCounter.add(input.toolCalls, attributes);
+}
+
+export function recordJobQueueWait(durationMs: number, jobType: string): void {
+  if (!Number.isFinite(durationMs) || durationMs < 0) {
+    return;
+  }
+
+  jobQueueWaitHistogram.record(durationMs, {
+    'job.type': jobType,
+  });
 }
 
 export function getActiveTraceContext(): TraceContext | null {

@@ -9,15 +9,11 @@
  * more targeted skill development.
  */
 
-import { getOctokit } from './client';
-import { nowMs } from '@/lib/utils/date-utils';
+import type { Octokit } from 'octokit';
 
 // =============================================================================
 // Constants
 // =============================================================================
-
-/** Cache TTL: 1 hour */
-const PATTERNS_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /** Maximum items to analyze */
 const MAX_ITEMS = 30;
@@ -41,17 +37,6 @@ export interface WorkPatternSummary {
 }
 
 // =============================================================================
-// Cache
-// =============================================================================
-
-interface CachedPatterns {
-  summary: WorkPatternSummary;
-  timestamp: number;
-}
-
-let patternsCache: CachedPatterns | null = null;
-
-// =============================================================================
 // Public API
 // =============================================================================
 
@@ -60,21 +45,17 @@ let patternsCache: CachedPatterns | null = null;
  *
  * @remarks
  * Uses GitHub search API to find the user's recent activity. Classifies each
- * item using label matching and title keyword analysis. Cached for 1 hour.
+ * item using label matching and title keyword analysis.
  *
+ * @param octokit - Per-request Octokit instance bound to the caller's token
  * @param username - GitHub username
  * @returns Work pattern summary
  */
 export async function analyzeWorkPatterns(
+  octokit: Octokit,
   username: string
 ): Promise<WorkPatternSummary> {
-  if (patternsCache && nowMs() - patternsCache.timestamp < PATTERNS_CACHE_TTL_MS) {
-    return patternsCache.summary;
-  }
-
-  const summary = await fetchAndAnalyze(username);
-  patternsCache = { summary, timestamp: nowMs() };
-  return summary;
+  return fetchAndAnalyze(octokit, username);
 }
 
 // =============================================================================
@@ -90,10 +71,8 @@ const PATTERN_KEYWORDS: Record<string, string[]> = {
   ci: ['ci', 'cd', 'pipeline', 'workflow', 'action', 'deploy', 'release'],
 };
 
-async function fetchAndAnalyze(username: string): Promise<WorkPatternSummary> {
+async function fetchAndAnalyze(octokit: Octokit, username: string): Promise<WorkPatternSummary> {
   try {
-    const octokit = await getOctokit();
-
     const response = await octokit.rest.search.issuesAndPullRequests({
       q: `author:${username} is:merged user:${username} sort:updated`,
       per_page: MAX_ITEMS,
