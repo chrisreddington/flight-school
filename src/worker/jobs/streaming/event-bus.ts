@@ -347,6 +347,30 @@ export class JobEventBus {
   }
 
   /**
+   * Append a terminal event only if the buffer has not already been
+   * terminated. Idempotent: if a terminal frame has already been
+   * recorded for this job (by the worker's happy path, by a concurrent
+   * DELETE, or by `sweep()`), the call is a no-op and returns `null`.
+   *
+   * This is the single primitive both the worker executor's terminal
+   * sequence AND the DELETE handler use to emit `done`/`cancelled`/
+   * `failed` frames without racing.
+   */
+  appendTerminalIfNotTerminated(
+    jobId: string,
+    event: JobStreamEvent,
+  ): SequencedJobStreamEvent | null {
+    if (!isTerminalEvent(event)) {
+      throw new Error(
+        `appendTerminalIfNotTerminated requires a terminal event; got ${event.type}`,
+      );
+    }
+    const existing = this.buffers.get(jobId);
+    if (existing?.terminated) return null;
+    return this.append(jobId, event);
+  }
+
+  /**
    * Whether the bus currently retains any state for the given job. Used by
    * the worker stream route to detect "terminal job, buffer already swept"
    * and synthesize a deterministic terminal SSE frame for late reconnects.

@@ -15,6 +15,7 @@ import { redactJobForDetail } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { withExtractedTraceContext } from '@/lib/observability/context-propagation';
 import { requestCancellation } from '@/worker/jobs/executors/session-registry';
+import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('InternalJobById');
@@ -69,17 +70,44 @@ async function handleDelete(request: NextRequest, id: string) {
     return NextResponse.json({ alreadyTerminal: true, status: job.status });
   }
 
-  // Mark cancelled FIRST so the executor sees terminal intent before
-  // we disrupt its session. Otherwise destroy() can race the executor
-  // into completed/failed before the cancel status lands.
-  await jobStorage.markCancelled(id);
+  // Phase 5: CAS the job state first so the executor's next
+  // `isJobStillValid()` check sees `cancelled`. Then request
+  // session cancellation. The boolean tells us whether an active
+  // session was found:
+  //
+  // - `hadActiveSession === true`: the executor is alive and will
+  //   reach its terminal sequence shortly, where it calls
+  //   `appendTerminalIfNotTerminated(cancelled)` itself. We MUST NOT
+  //   emit a competing terminal frame here or the executor's
+  //   in-flight annotation work could race the SSE consumer's evict.
+  // - `hadActiveSession === false`: the session is gone (worker
+  //   crashed, restart, or never registered). The executor will
+  //   never emit a terminal frame, so we emit `cancelled` ourselves
+  //   to unstick any live SSE consumer. `appendTerminalIfNotTerminated`
+  //   is a no-op if a terminal was somehow already written.
+  const cas = await jobStorage.markCancelledIfNonTerminal(id);
+  if (!cas.transitioned) {
+    return NextResponse.json({ alreadyTerminal: true, status: cas.status });
+  }
+  let hadActiveSession = false;
   try {
-    await requestCancellation(id);
+    hadActiveSession = await requestCancellation(id);
   } catch (err) {
     log.warn(`[Job ${id}] requestCancellation threw after markCancelled`, err);
   }
+  if (!hadActiveSession) {
+    try {
+      jobEventBus.appendTerminalIfNotTerminated(id, {
+        type: 'cancelled',
+        content: '',
+        toolEvents: [],
+      });
+    } catch (err) {
+      log.warn(`[Job ${id}] Failed to emit orphan cancelled to bus`, err);
+    }
+  }
 
-  return NextResponse.json({ cancelled: true });
+  return NextResponse.json({ cancelled: true, orphan: !hadActiveSession });
 }
 
 export async function GET(

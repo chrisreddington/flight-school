@@ -237,7 +237,7 @@ export const MessageBubble = memo(function MessageBubble({
               aria-live={isStreaming ? 'polite' : undefined}
               aria-label={isStreaming ? 'Streaming response' : undefined}
             >
-              <MarkdownContent content={displayContent} isStreaming={isStreaming} />
+              <MarkdownContent content={displayContent} />
             </div>
           ) : null}
 

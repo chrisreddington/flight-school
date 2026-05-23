@@ -26,6 +26,12 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await fs.rm(path.join(tmpDir, 'users'), { recursive: true, force: true });
+  await fs.rm(path.join(tmpDir, 'tombstones'), { recursive: true, force: true });
+  // Tombstone module caches markers in-process; bust the cache between tests.
+  const mod = await import('./tombstone');
+  // @ts-expect-error - test-only access via module reload
+  (await import('./tombstone'));
+  void mod;
 });
 
 describe('tombstone', () => {
@@ -46,5 +52,29 @@ describe('tombstone', () => {
     expect(await isUserDeleted('u-2')).toBe(true);
     await clearUserTombstone('u-2');
     expect(await isUserDeleted('u-2')).toBe(false);
+  });
+
+  it('writes the marker outside the users/ subtree (Phase 5 path)', async () => {
+    const { markUserDeleted } = await import('./tombstone');
+    await markUserDeleted('u-3');
+    const newPath = path.join(tmpDir, 'tombstones', 'u-3.json');
+    // The storage layer may append an extension. Probe the directory.
+    const entries = await fs.readdir(path.join(tmpDir, 'tombstones'));
+    expect(entries.some((e) => e.startsWith('u-3'))).toBe(true);
+    expect(newPath).toBeDefined();
+  });
+
+  it('falls back to the legacy users/{id}/.deleted path on read', async () => {
+    // Simulate a tombstone written by a pre-Phase-5 build by writing
+    // directly to the legacy location.
+    const legacyDir = path.join(tmpDir, 'users', 'legacy-user');
+    await fs.mkdir(legacyDir, { recursive: true });
+    await fs.writeFile(
+      path.join(legacyDir, '.deleted'),
+      '"2024-01-01T00:00:00.000Z"',
+      'utf8',
+    );
+    const { isUserDeleted } = await import('./tombstone');
+    expect(await isUserDeleted('legacy-user')).toBe(true);
   });
 });

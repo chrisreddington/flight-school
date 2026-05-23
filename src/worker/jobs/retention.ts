@@ -26,6 +26,13 @@ const staleRunningMs = 6 * 60 * 60 * 1000;
 export interface SweepResult {
   deleted: number;
   inspected: number;
+  /**
+   * IDs of jobs that transitioned to `failed` (Phase 5 added so the
+   * sweep route can annotate the durable chat thread with a
+   * `*(Response interrupted)*` marker for any chat-response job that
+   * was streaming when the worker stalled).
+   */
+  sweptIds?: string[];
 }
 
 function parseTimestamp(input: unknown): number | null {
@@ -49,6 +56,7 @@ export async function sweepStaleRunningJobs(
   const all = await jobStorage.getAll();
   let deleted = 0;
   let inspected = 0;
+  const sweptIds: string[] = [];
   for (const job of all) {
     if (job.status !== 'pending' && job.status !== 'running') continue;
     inspected += 1;
@@ -62,12 +70,13 @@ export async function sweepStaleRunningJobs(
       `Job exceeded stale-running TTL (${Math.round(ttlMs / 60000)} min) — assumed dead.`,
       'unknown',
     );
+    sweptIds.push(job.id);
     deleted += 1;
   }
   if (deleted > 0) {
     log.info(`[retention] marked ${deleted} stale running jobs as failed`);
   }
-  return { deleted, inspected };
+  return { deleted, inspected, sweptIds };
 }
 
 /**

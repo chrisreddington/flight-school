@@ -390,6 +390,98 @@ export const jobStorage = {
   },
 
   /**
+   * Idempotent completion mark.
+   *
+   * Phase 5 introduced compare-and-swap helpers so the worker's terminal
+   * sequence can race safely with DELETE-initiated cancellations. If the
+   * job is already in a terminal state, this is a no-op and returns that
+   * status. Transient I/O failures are retried up to 3× with exponential
+   * backoff (100/200/400 ms) so a flaky disk doesn't corrupt the
+   * happy-path commit.
+   */
+  async markCompletedIdempotent<T>(id: string, result: T): Promise<JobStatus> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await withJobsMutation<JobStatus>((schema) => {
+          const job = schema.jobs[id];
+          if (!job) return { schema, result: 'completed' as JobStatus };
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+            return { schema, result: job.status };
+          }
+          const next: BackgroundJob = {
+            ...job,
+            status: 'completed',
+            result: result as unknown,
+            completedAt: new Date().toISOString(),
+          };
+          schema.jobs[id] = next;
+          return { schema, result: 'completed' as JobStatus };
+        });
+      } catch (err) {
+        lastErr = err;
+        const delayMs = 100 * 2 ** attempt;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    log.error(`markCompletedIdempotent failed for ${id} after 3 retries`, lastErr);
+    throw lastErr instanceof Error ? lastErr : new Error('markCompletedIdempotent failed');
+  },
+
+  /**
+   * Atomic CAS: transition to `failed` only if the job is currently
+   * pending or running. Returns `{ status, transitioned }` so the
+   * worker can detect a concurrent DELETE-initiated cancellation and
+   * preserve the user-intent annotation instead of overwriting it.
+   */
+  async markFailedIfNonTerminal(
+    id: string,
+    message: string,
+    errorCode?: JobErrorCode,
+  ): Promise<{ status: JobStatus; transitioned: boolean }> {
+    return withJobsMutation<{ status: JobStatus; transitioned: boolean }>((schema) => {
+      const job = schema.jobs[id];
+      if (!job) return { schema, result: { status: 'failed', transitioned: false } };
+      if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+        return { schema, result: { status: job.status, transitioned: false } };
+      }
+      schema.jobs[id] = {
+        ...job,
+        status: 'failed',
+        error: message,
+        errorCode,
+        completedAt: new Date().toISOString(),
+      };
+      return { schema, result: { status: 'failed', transitioned: true } };
+    });
+  },
+
+  /**
+   * Atomic CAS: transition to `cancelled` only if the job is currently
+   * pending or running. Returns `{ status, transitioned }` so the
+   * DELETE handler (and any other caller) can tell whether the
+   * cancellation actually moved state forward.
+   */
+  async markCancelledIfNonTerminal(
+    id: string,
+  ): Promise<{ status: JobStatus; transitioned: boolean }> {
+    return withJobsMutation<{ status: JobStatus; transitioned: boolean }>((schema) => {
+      const job = schema.jobs[id];
+      if (!job) return { schema, result: { status: 'cancelled', transitioned: false } };
+      if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+        return { schema, result: { status: job.status, transitioned: false } };
+      }
+      schema.jobs[id] = {
+        ...job,
+        status: 'cancelled',
+        error: 'Cancelled by user',
+        completedAt: new Date().toISOString(),
+      };
+      return { schema, result: { status: 'cancelled', transitioned: true } };
+    });
+  },
+
+  /**
    * Get all jobs of a specific type.
    */
   async getByType(type: string): Promise<BackgroundJob[]> {

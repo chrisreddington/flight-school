@@ -290,4 +290,66 @@ describe('jobStorage', () => {
       expect(observed?.status).toBe('running');
     });
   });
+
+  describe('terminal CAS helpers (Phase 5)', () => {
+    it('markCompletedIdempotent transitions a running job and persists the result', async () => {
+      await jobStorage.create({ id: 'cas-c1', type: 'chat-response', userId: 'u1', input: {} });
+      await jobStorage.markRunning('cas-c1');
+      const status = await jobStorage.markCompletedIdempotent('cas-c1', { ok: true });
+      expect(status).toBe('completed');
+      const job = await jobStorage.get<{ ok: boolean }>('cas-c1');
+      expect(job?.status).toBe('completed');
+      expect(job?.result).toEqual({ ok: true });
+    });
+
+    it('markCompletedIdempotent is a no-op when the job is already terminal', async () => {
+      await jobStorage.create({ id: 'cas-c2', type: 'chat-response', userId: 'u1', input: {} });
+      await jobStorage.markCancelled('cas-c2');
+      const status = await jobStorage.markCompletedIdempotent('cas-c2', { ok: true });
+      expect(status).toBe('cancelled');
+      const job = await jobStorage.get('cas-c2');
+      expect(job?.status).toBe('cancelled');
+      expect(job?.result).toBeUndefined();
+    });
+
+    it('markFailedIfNonTerminal transitions when running and reports transitioned=true', async () => {
+      await jobStorage.create({ id: 'cas-f1', type: 'chat-response', userId: 'u1', input: {} });
+      await jobStorage.markRunning('cas-f1');
+      const res = await jobStorage.markFailedIfNonTerminal('cas-f1', 'boom');
+      expect(res).toEqual({ status: 'failed', transitioned: true });
+      const job = await jobStorage.get('cas-f1');
+      expect(job?.status).toBe('failed');
+      expect(job?.error).toBe('boom');
+    });
+
+    it('markFailedIfNonTerminal is a no-op when already cancelled and reports transitioned=false', async () => {
+      await jobStorage.create({ id: 'cas-f2', type: 'chat-response', userId: 'u1', input: {} });
+      await jobStorage.markCancelled('cas-f2');
+      const res = await jobStorage.markFailedIfNonTerminal('cas-f2', 'boom');
+      expect(res).toEqual({ status: 'cancelled', transitioned: false });
+      const job = await jobStorage.get('cas-f2');
+      expect(job?.status).toBe('cancelled');
+    });
+
+    it('markCancelledIfNonTerminal transitions when running and reports transitioned=true', async () => {
+      await jobStorage.create({ id: 'cas-x1', type: 'chat-response', userId: 'u1', input: {} });
+      await jobStorage.markRunning('cas-x1');
+      const res = await jobStorage.markCancelledIfNonTerminal('cas-x1');
+      expect(res).toEqual({ status: 'cancelled', transitioned: true });
+    });
+
+    it('markCancelledIfNonTerminal is a no-op when already completed', async () => {
+      await jobStorage.create({ id: 'cas-x2', type: 'chat-response', userId: 'u1', input: {} });
+      await jobStorage.markCompleted('cas-x2', { ok: true });
+      const res = await jobStorage.markCancelledIfNonTerminal('cas-x2');
+      expect(res).toEqual({ status: 'completed', transitioned: false });
+    });
+
+    it('CAS helpers report transitioned=false when the job does not exist', async () => {
+      const fail = await jobStorage.markFailedIfNonTerminal('missing', 'boom');
+      const cancel = await jobStorage.markCancelledIfNonTerminal('missing');
+      expect(fail.transitioned).toBe(false);
+      expect(cancel.transitioned).toBe(false);
+    });
+  });
 });

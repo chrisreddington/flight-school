@@ -102,7 +102,10 @@ export function Dashboard() {
     activeThreadId,
     isThreadsLoading,
     isStreaming,
+    streamingAssistantMessageId,
+    streamingContent,
     streamingThreadIds,
+    streamingToolEvents,
     sendMessage,
     stopStreaming,
     createThread,
@@ -202,6 +205,9 @@ export function Dashboard() {
               isThreadsLoading={isThreadsLoading}
               isStreaming={isStreaming}
               streamingThreadIds={streamingThreadIds}
+              streamingAssistantMessageId={streamingAssistantMessageId}
+              streamingContent={streamingContent}
+              streamingToolEvents={streamingToolEvents}
                 userAvatarUrl={profile?.user?.avatarUrl}
             />
           </Stack>

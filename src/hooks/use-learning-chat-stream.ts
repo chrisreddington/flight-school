@@ -1,15 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
+import { chatStreamStore, TERMINAL_SEQ, type ChatStreamState } from '@/lib/chat/chat-stream-store';
 import { logger } from '@/lib/logger';
 import { operationsManager } from '@/lib/operations';
-import type { Message, Thread } from '@/lib/threads';
-import { THREAD_DATA_CHANGED_EVENT, threadStore } from '@/lib/threads';
+import type { ToolCallEvent } from '@/lib/threads';
+import { THREAD_DATA_CHANGED_EVENT, threadStore, type Thread } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
+
+/**
+ * Wire-format mirror of the worker-side `JobStreamEvent` discriminated
+ * union. Kept inline here so the client hook does not have to import
+ * across the `@/worker/jobs/streaming/*` architecture boundary
+ * (enforced by `worker-job-boundaries.test.ts`). Shape must stay in
+ * sync with `src/worker/jobs/streaming/types.ts`.
+ */
+type SSEStreamEvent =
+  | { type: 'delta'; content: string }
+  | { type: 'tool_start'; toolCallId: string; name: string; args: unknown }
+  | { type: 'tool_complete'; toolCallId: string; name: string; result: unknown; durationMs: number }
+  | { type: 'state_snapshot'; content: string; toolEvents: ToolCallEvent[]; hasActionableItem: boolean }
+  | { type: 'done'; content: string; toolEvents: ToolCallEvent[]; hasActionableItem: boolean }
+  | { type: 'cancelled'; content: string; toolEvents: ToolCallEvent[] }
+  | { type: 'failed'; message: string };
 
 const log = logger.withTag('useLearningChat');
 
+/**
+ * Wall-clock budget after which a thread still marked
+ * `isStreaming: true` in storage, but with NO matching live chat
+ * operation in `operationsManager`, is considered abandoned. The
+ * stale-stream effect rewrites it to `isStreaming: false` so the UI
+ * stops perpetually showing a typing indicator after a worker crash
+ * (the worker would have annotated the thread itself if it had a
+ * chance — sweep handles the durable annotation).
+ */
 const STALE_STREAM_THRESHOLD_MS = 5_000;
 
 type PendingStreamMessages = Map<string, string>;
@@ -39,61 +65,29 @@ export function isThreadStreaming(
     (activeThreadId ? pendingStreamMessages.has(activeThreadId) : false);
 }
 
-const STREAM_CURSOR_GLYPH = '▊';
-
-function hasStreamCursor(content: string): boolean {
-  return content.includes(STREAM_CURSOR_GLYPH);
-}
-
-export function getStreamingContent(activeThread: Thread | null): string {
-  if (!activeThread?.isStreaming) return '';
-  // Worker writes the in-flight assistant message under its stable
-  // assistantMessageId UUID with a trailing STREAM_CURSOR glyph during
-  // periodic durable consolidation. The legacy `streaming-*` placeholder
-  // ID prefix is no longer produced by any code path.
-  const streamingMessage = activeThread.messages.find(
-    (message) => message.role === 'assistant' && hasStreamCursor(message.content),
-  );
-  return streamingMessage?.content ?? '';
-}
-
-export function finalizeInterruptedMessage(thread: Thread): Thread | null {
-  const streamingIdx = thread.messages.findIndex(
-    (message) => message.role === 'assistant' && hasStreamCursor(message.content),
-  );
-  if (streamingIdx === -1) return null;
-  const streamingMessage = thread.messages[streamingIdx];
-
-  const trimmedContent = streamingMessage.content.replace(' ▊', '').replace('▊', '').trim();
-  const withoutStreaming = thread.messages.filter((_, i) => i !== streamingIdx);
-  if (!trimmedContent) {
+/**
+ * Read the in-flight assistant content for the given thread from the
+ * client-side chat-stream store. After Phase 5 the worker no longer
+ * writes mid-stream content into the durable thread, so this store —
+ * not `Thread.messages` — is the canonical source for any partial
+ * assistant message that is still streaming.
+ *
+ * Returns the empty string when no live record exists.
+ */
+export function getStreamingContentForThread(
+  streamRecords: ReadonlyMap<string, ChatStreamState>,
+  threadId: string | null,
+): { content: string; assistantMessageId: string | null; toolEvents: ToolCallEvent[] } {
+  if (!threadId) return { content: '', assistantMessageId: null, toolEvents: [] };
+  for (const rec of streamRecords.values()) {
+    if (rec.threadId !== threadId) continue;
     return {
-      ...thread,
-      messages: withoutStreaming,
-      updatedAt: now(),
-      isStreaming: false,
+      content: rec.content,
+      assistantMessageId: rec.assistantMessageId,
+      toolEvents: rec.toolEvents,
     };
   }
-
-  const interruptionNote = '*(Response interrupted)*';
-  const content = streamingMessage.content.includes(interruptionNote)
-    ? streamingMessage.content.replace(' ▊', '').replace('▊', '')
-    : `${trimmedContent}\n\n${interruptionNote}`;
-  const finalizedMessage: Message = {
-    ...streamingMessage,
-    content,
-    timestamp: now(),
-  };
-
-  const finalizedMessages = [...thread.messages];
-  finalizedMessages[streamingIdx] = finalizedMessage;
-
-  return {
-    ...thread,
-    messages: finalizedMessages,
-    updatedAt: now(),
-    isStreaming: false,
-  };
+  return { content: '', assistantMessageId: null, toolEvents: [] };
 }
 
 export function useLearningChatStream({
@@ -110,19 +104,20 @@ export function useLearningChatStream({
   );
   const streamingThreadId = storageStreamingThreadIds[storageStreamingThreadIds.length - 1] ?? null;
   const [pendingStreamMessages, setPendingStreamMessages] = useState<PendingStreamMessages>(new Map());
-  const allStreamingThreadIds = useMemo(
-    () => combineStreamingThreadIds(storageStreamingThreadIds, pendingStreamMessages),
-    [storageStreamingThreadIds, pendingStreamMessages],
+
+  // Subscribe to the chat-stream store so any delta/snapshot from the
+  // SSE handler below triggers a re-render with the latest live
+  // content for the active thread.
+  const streamRecords = useSyncExternalStore(
+    chatStreamStore.subscribe.bind(chatStreamStore),
+    () => chatStreamStore.getSnapshot(),
+    () => chatStreamStore.getSnapshot(),
   );
-  // Stable string key derived from sorted ids so the SSE effect below only
-  // re-runs when the set of streaming threads actually changes (array
-  // identity is unstable across renders even when contents match).
-  const streamingThreadIdsKey = useMemo(
-    () => [...allStreamingThreadIds].sort().join(','),
-    [allStreamingThreadIds],
-  );
-  const isStreaming = isThreadStreaming(activeThread, activeThreadId, pendingStreamMessages);
-  const streamingContent = useMemo(() => getStreamingContent(activeThread), [activeThread]);
+  const { content: streamingContent, assistantMessageId: streamingAssistantMessageId, toolEvents: streamingToolEvents } =
+    useMemo(
+      () => getStreamingContentForThread(streamRecords, activeThreadId),
+      [streamRecords, activeThreadId],
+    );
 
   // Ensure operationsManager has had a chance to hydrate from the
   // server-side job list on page load. This is also called from
@@ -144,6 +139,41 @@ export function useLearningChatStream({
     () => operationsManager.getSnapshot(),
     () => operationsManager.getSnapshot(),
   );
+
+  // Discovery: active chat operations are now the PRIMARY signal that a
+  // thread is streaming (Phase 5). `thread.isStreaming` is a fallback
+  // for the brief window between user-send and op registration, and
+  // `pendingStreamMessages` covers the period before storage has caught
+  // up. Cold-tab reloads land here with chat ops hydrated from the job
+  // list — without them in this set the SSE effect would never attach.
+  const opStreamingThreadIds = useMemo(() => {
+    const out: string[] = [];
+    for (const op of opsSnapshot.chatMessages.values()) {
+      const threadId = op.meta.targetId;
+      if (threadId) out.push(threadId);
+    }
+    return out;
+  }, [opsSnapshot]);
+
+  const allStreamingThreadIds = useMemo(
+    () => Array.from(new Set([
+      ...opStreamingThreadIds,
+      ...storageStreamingThreadIds,
+      ...pendingStreamMessages.keys(),
+    ])),
+    [opStreamingThreadIds, storageStreamingThreadIds, pendingStreamMessages],
+  );
+  // Stable string key derived from sorted ids so the SSE effect below only
+  // re-runs when the set of streaming threads actually changes (array
+  // identity is unstable across renders even when contents match).
+  const streamingThreadIdsKey = useMemo(
+    () => [...allStreamingThreadIds].sort().join(','),
+    [allStreamingThreadIds],
+  );
+  const isStreaming =
+    isThreadStreaming(activeThread, activeThreadId, pendingStreamMessages) ||
+    (activeThreadId !== null && opStreamingThreadIds.includes(activeThreadId));
+
   const chatSubscriptionKey = useMemo(() => {
     const idSet = new Set(allStreamingThreadIds);
     const pairs: string[] = [];
@@ -157,6 +187,11 @@ export function useLearningChatStream({
     return pairs.sort().join(',');
   }, [opsSnapshot, allStreamingThreadIds]);
 
+  // Per-job dedupe: terminal frame handlers may fire multiple times
+  // (transport reconnect re-replays the buffer up to the terminal). We
+  // only want to refresh + evict once per job lifetime.
+  const terminalCleanupsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const ids = streamingThreadIdsKey ? streamingThreadIdsKey.split(',') : [];
     if (ids.length === 0) return;
@@ -165,19 +200,6 @@ export function useLearningChatStream({
     log.debug('Subscribing to SSE streams', { count: ids.length });
     const sources: EventSource[] = [];
     let disposed = false;
-
-    // Coalesce refreshThreads calls — the SSE handler fires on every
-    // frame (including deltas) and we don't need a full thread refetch
-    // that often. ~400ms keeps the UI responsive without hammering
-    // /api/learning/threads on a token stream.
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleRefresh = (): void => {
-      if (refreshTimer !== null) return;
-      refreshTimer = setTimeout(() => {
-        refreshTimer = null;
-        void refreshThreads();
-      }, 400);
-    };
 
     void (async () => {
       const cursorMod = await import('@/lib/streaming/cursor-store');
@@ -191,42 +213,134 @@ export function useLearningChatStream({
       for (const op of snapshot.chatMessages.values()) {
         const jobId = op.meta.jobId;
         const threadId = op.meta.targetId;
+        const assistantMessageId = op.meta.assistantMessageId;
         if (!jobId || !threadId) continue;
         if (!idSet.has(threadId)) continue;
         if (subscribedJobIds.has(jobId)) continue;
         subscribedJobIds.add(jobId);
+
+        // Defensive register so apply* calls always have a record. The
+        // sender (`useLearningChat.sendMessage`) registers
+        // synchronously after `apiPost` returns, but for a hydrated
+        // job (page reload while a stream is in flight) this is the
+        // first opportunity to seed the store with a stable identity.
+        chatStreamStore.register(jobId, threadId, assistantMessageId ?? '');
+
+        const handleTerminal = (terminalPayload?: SSEStreamEvent): void => {
+          if (terminalCleanupsRef.current.has(jobId)) return;
+          terminalCleanupsRef.current.add(jobId);
+          // STEP 1: Apply any terminal payload to the live chat-stream
+          // store FIRST, at the terminal sentinel seq. This ensures the
+          // store still holds the final/partial content if the refresh
+          // below fails for any reason (network blip, server error) —
+          // the UI keeps showing the assistant's last visible state
+          // instead of snapping back to an empty bubble.
+          if (terminalPayload?.type === 'done') {
+            chatStreamStore.applySnapshot(jobId, {
+              content: terminalPayload.content,
+              toolEvents: terminalPayload.toolEvents,
+              hasActionableItem: terminalPayload.hasActionableItem,
+              seq: TERMINAL_SEQ,
+            });
+          } else if (terminalPayload?.type === 'cancelled') {
+            chatStreamStore.applySnapshot(jobId, {
+              content: terminalPayload.content,
+              toolEvents: terminalPayload.toolEvents,
+              hasActionableItem: false,
+              seq: TERMINAL_SEQ,
+            });
+          }
+
+          // STEP 2: Refresh durable threads. Only evict the live record
+          // and complete the operation once refresh succeeds — if it
+          // fails, leave the in-memory record so a subsequent refresh
+          // can still recover. Removing the dedupe entry on failure
+          // lets the next terminal frame (e.g., reconnect replay) retry.
+          refreshThreads()
+            .then(() => {
+              chatStreamStore.evict(jobId);
+              operationsManager.completeExistingJob(jobId);
+            })
+            .catch((err: unknown) => {
+              log.warn('refreshThreads failed during terminal cleanup; leaving live record in place for retry', { jobId, err });
+              terminalCleanupsRef.current.delete(jobId);
+            });
+        };
 
         const cursor = getCursor(jobId);
         const url = `/api/jobs/${encodeURIComponent(jobId)}/stream${cursor > 0 ? `?cursor=${cursor}` : ''}`;
         const es = new EventSource(url, { withCredentials: true });
         es.onmessage = (msg) => {
           const me = msg as MessageEvent;
+          let seq = 0;
           if (me.lastEventId) {
             const parsed = Number.parseInt(me.lastEventId, 10);
-            if (Number.isFinite(parsed)) setCursor(jobId, parsed);
+            if (Number.isFinite(parsed)) {
+              seq = parsed;
+              setCursor(jobId, parsed);
+            }
           }
           if (me.data === '[DONE]') {
             evictCursor(jobId);
             es.close();
-            // Terminal cleanup: remove the chat operation from
-            // operationsManager so a subsequent message in the same
-            // thread can register a fresh op without the old one's
-            // stale jobId leaking into the SSE subscription.
-            operationsManager.completeExistingJob(jobId);
-            // Refresh immediately (no throttle) so the UI settles
-            // fast on the final assistant message.
-            if (refreshTimer !== null) {
-              clearTimeout(refreshTimer);
-              refreshTimer = null;
-            }
-            void refreshThreads();
+            // [DONE] arrives without a payload — any preceding terminal
+            // SSE frame already handled the snapshot apply, so this is
+            // a no-op pass-through that triggers refresh+evict.
+            handleTerminal();
             return;
           }
-          scheduleRefresh();
+          let parsed: SSEStreamEvent | null = null;
+          try {
+            parsed = JSON.parse(me.data) as SSEStreamEvent;
+          } catch (err) {
+            log.warn('Failed to parse SSE frame', { jobId, err });
+            return;
+          }
+          if (!parsed) return;
+          switch (parsed.type) {
+            case 'delta':
+              chatStreamStore.applyDelta(jobId, parsed.content, seq);
+              break;
+            case 'tool_start':
+              chatStreamStore.applyToolStart(
+                jobId,
+                { toolCallId: parsed.toolCallId, name: parsed.name, args: parsed.args },
+                seq,
+              );
+              break;
+            case 'tool_complete':
+              chatStreamStore.applyToolComplete(
+                jobId,
+                {
+                  toolCallId: parsed.toolCallId,
+                  name: parsed.name,
+                  result: parsed.result,
+                  durationMs: parsed.durationMs,
+                },
+                seq,
+              );
+              break;
+            case 'state_snapshot':
+              chatStreamStore.applySnapshot(jobId, {
+                content: parsed.content,
+                toolEvents: parsed.toolEvents,
+                hasActionableItem: parsed.hasActionableItem,
+                seq,
+              });
+              break;
+            case 'done':
+            case 'cancelled':
+            case 'failed':
+              handleTerminal(parsed);
+              break;
+          }
         };
         es.onerror = () => {
-          // EventSource auto-reconnects; refresh so any thread updates are visible.
-          scheduleRefresh();
+          // EventSource auto-reconnects; the cursor is already
+          // persisted so resumed frames are deduped by the store's
+          // sequence guard. We deliberately do NOT refresh here — the
+          // store still has the buffered partial content and the UI
+          // remains responsive across the brief reconnect window.
         };
         sources.push(es);
       }
@@ -234,7 +348,6 @@ export function useLearningChatStream({
 
     return () => {
       disposed = true;
-      if (refreshTimer !== null) clearTimeout(refreshTimer);
       log.debug('Closing SSE subscriptions', { count: sources.length });
       for (const es of sources) es.close();
     };
@@ -252,29 +365,20 @@ export function useLearningChatStream({
       }
       if (thread.isStreaming) continue;
 
-      // After the SSE [DONE] handler and worker's terminal consolidate,
-      // the assistant message lives under its assistantMessageId (a
-      // UUID) with no STREAM_CURSOR. A stream is considered settled
-      // when isStreaming is false AND there is no cursor-suffixed
-      // partial message remaining. A second condition — an assistant
-      // message after the user's message — handles the happy path
-      // where the worker finalised cleanly.
-      const hasStreamingMessage = thread.messages.some(
-        (message) => message.role === 'assistant' && hasStreamCursor(message.content),
-      );
+      // Once the worker's terminal consolidate lands, the durable
+      // thread carries the final assistant message after the user
+      // message that started this pending stream. Treat that as
+      // settled and drop from the pending set.
       const userMessageIndex = thread.messages.findIndex(message => message.id === userMessageId);
       const hasNewResponse =
         userMessageIndex !== -1 &&
-        thread.messages
-          .slice(userMessageIndex + 1)
-          .some((message) => message.role === 'assistant' && !hasStreamCursor(message.content));
-      if (!hasStreamingMessage && !hasNewResponse) {
+        thread.messages.slice(userMessageIndex + 1).some((message) => message.role === 'assistant');
+      if (!hasNewResponse) {
         stillPending.set(threadId, userMessageId);
       }
     }
 
     if (stillPending.size !== pendingStreamMessages.size) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile pending stream tracking against storage updates
       setPendingStreamMessages(stillPending);
     }
   }, [threads, pendingStreamMessages]);
@@ -290,18 +394,36 @@ export function useLearningChatStream({
     }
   }, [isThreadsLoading, storageStreamingThreadIds, activeThreadId, selectThread]);
 
+  // Stale-stream finalizer: any thread with `isStreaming: true` that
+  // has NO live chat op (operationsManager has hydrated AND no
+  // matching jobId for the thread) is considered orphaned. We rewrite
+  // it to `isStreaming: false` so the UI stops perpetually showing
+  // the typing indicator. Worker/sweep are responsible for the
+  // durable annotation; this is the client-side safety net.
   useEffect(() => {
     if (isThreadsLoading || threads.length === 0) return;
+    if (!opsSnapshot.hydrated) return;
+
+    const liveThreadIds = new Set<string>();
+    for (const op of opsSnapshot.chatMessages.values()) {
+      const threadId = op.meta.targetId;
+      if (threadId) liveThreadIds.add(threadId);
+    }
 
     const nowMs = Date.now();
-    const updates = threads
-      .map((thread) => finalizeStaleStream(thread, pendingStreamMessages, nowMs))
-      .filter((thread): thread is Thread => Boolean(thread));
+    const updates: Thread[] = [];
+    for (const thread of threads) {
+      if (!thread.isStreaming) continue;
+      if (liveThreadIds.has(thread.id)) continue;
+      if (pendingStreamMessages.has(thread.id)) continue;
+      const ageMs = nowMs - new Date(thread.updatedAt).getTime();
+      if (ageMs <= STALE_STREAM_THRESHOLD_MS) continue;
+      updates.push({ ...thread, isStreaming: false, updatedAt: now() });
+    }
 
     if (updates.length === 0) return;
-
     void Promise.all(updates.map((thread) => threadStore.update(thread)));
-  }, [isThreadsLoading, threads, pendingStreamMessages]);
+  }, [isThreadsLoading, threads, pendingStreamMessages, opsSnapshot]);
 
   useEffect(() => {
     const handleThreadDataChanged = async (event: Event) => {
@@ -336,6 +458,13 @@ export function useLearningChatStream({
     });
   }, []);
 
+  const registerStream = useCallback(
+    (jobId: string, threadId: string, assistantMessageId: string) => {
+      chatStreamStore.register(jobId, threadId, assistantMessageId);
+    },
+    [],
+  );
+
   const stopStreaming = useCallback(async () => {
     const threadId = activeThreadId;
     if (!threadId) {
@@ -346,13 +475,13 @@ export function useLearningChatStream({
     log.debug('Stopping stream for thread:', threadId);
     clearPendingStream(threadId);
 
+    // Phase 5: client only fires the DELETE; the worker writes the
+    // `*(Response stopped)*` annotation into the durable thread as
+    // part of its terminal sequence. Writing here would double-tag.
     try {
       const jobsRes = await fetch('/api/jobs');
       if (jobsRes.ok) {
         const { jobs } = await jobsRes.json();
-        // After Phase 2B the list DTO redacts `input` entirely, so use
-        // the top-level `targetId` field — chat-response jobs set
-        // `targetId` to the thread id at creation.
         const runningJobs = jobs.filter((job: { status: string; type?: string; targetId?: string }) =>
           job.status === 'running' &&
           job.type === 'chat-response' &&
@@ -364,65 +493,21 @@ export function useLearningChatStream({
           await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
         }
       }
-
-      const thread = await threadStore.getById(threadId);
-      if (thread) {
-        const updatedMessages = thread.messages.map(message => {
-          if (message.role === 'assistant' && hasStreamCursor(message.content)) {
-            const content = message.content.replace(' ▊', '').replace('▊', '').trim();
-            return {
-              ...message,
-              content: content ? `${content}\n\n*(Response stopped)*` : '',
-            };
-          }
-          return message;
-        }).filter(message => message.content);
-
-        await threadStore.update({
-          ...thread,
-          messages: updatedMessages,
-          isStreaming: false,
-          updatedAt: now(),
-        });
-
-        log.debug('Thread updated after stop');
-      }
-
-      await refreshThreads();
     } catch (err) {
       log.error('Failed to stop streaming:', err);
     }
-  }, [activeThreadId, clearPendingStream, refreshThreads]);
+  }, [activeThreadId, clearPendingStream]);
 
   return {
     allStreamingThreadIds,
     clearPendingStream,
     isStreaming,
     markStreamPending,
+    registerStream,
     stopStreaming,
+    streamingAssistantMessageId,
     streamingContent,
     streamingThreadId,
+    streamingToolEvents,
   };
-}
-
-function finalizeStaleStream(
-  thread: Thread,
-  pendingStreamMessages: PendingStreamMessages,
-  nowMs: number,
-): Thread | null {
-  if (!thread.isStreaming) return null;
-  if (pendingStreamMessages.has(thread.id)) return null;
-
-  const hasStreamingMessage = thread.messages.some(
-    (message) => message.role === 'assistant' && hasStreamCursor(message.content),
-  );
-  const isStale =
-    nowMs - new Date(thread.updatedAt).getTime() > STALE_STREAM_THRESHOLD_MS;
-
-  if (hasStreamingMessage) {
-    if (!isStale) return null;
-    return finalizeInterruptedMessage(thread);
-  }
-
-  return { ...thread, isStreaming: false, updatedAt: now() };
 }

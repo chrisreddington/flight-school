@@ -19,6 +19,7 @@ import { readStorage, writeStorage, ensureDir } from '@/lib/storage/utils';
 import { isUserDeleted } from '@/lib/storage/tombstone';
 import { userScopedFilename } from '@/lib/storage/user-scope';
 import type { Thread } from '@/lib/threads';
+import { stripLegacyCursorFromThread } from '@/lib/threads/legacy-cursor';
 import { now } from '@/lib/utils/date-utils';
 
 interface ThreadsStorageSchema {
@@ -60,7 +61,11 @@ async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<v
 /** Get a thread by ID directly from storage for a specific user. */
 export async function getThreadById(userId: string, threadId: string): Promise<Thread | null> {
   const threads = await readThreadsStorage(userId);
-  return threads.find(t => t.id === threadId) ?? null;
+  const thread = threads.find(t => t.id === threadId);
+  if (!thread) return null;
+  // Phase 5: scrub the legacy `▊` cursor glyph from any thread that
+  // was last persisted by a pre-Phase-5 worker.
+  return stripLegacyCursorFromThread(thread);
 }
 
 /** Update a thread directly in storage for a specific user. */

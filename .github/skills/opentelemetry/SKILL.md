@@ -322,6 +322,41 @@ If you need a new browser metric, prefer adding a span event or
 attribute to an existing browser span. Do not wire `sdk-metrics` or
 `sdk-logs` on the browser without a written design.
 
+### 16. Suppress the OTel-proxy self-tracing feedback loop
+
+The browser BSP flushes pending spans on `document.visibilitychange`, so
+every tab switch POSTs to `/api/otel/v1/traces`. Without intervention,
+`@vercel/otel`'s server-side auto-instrumentation traces *that* POST,
+producing four spans per export (`POST`, `POST /api/otel/v1/traces`,
+`resolve page components`, `executing api route (app) /api/otel/v1/traces`).
+On a quiet app these self-spans drown out real telemetry on the dashboard.
+
+The fix is a `traceSampler` that drops spans whose name or attributes
+identify the proxy route. The unsampled root propagates `NOT_RECORD` to
+its children via the standard parent-based chain, so all four spans
+disappear together:
+
+```ts
+// src/instrumentation.ts
+import { createProxySampler } from '@/lib/observability/proxy-sampler';
+
+registerOTel({
+  // ...
+  traceSampler: createProxySampler(),
+});
+```
+
+The sampler matches on `spanName.endsWith('/api/otel/v1/traces')`,
+`http.target`, `url.path`, **and** `http.route` because those attributes
+are populated at different stages of the request lifecycle (HTTP
+instrumentation sets `http.target` / `url.path` at span creation; Next.js
+sets `http.route` later, once the route has matched).
+
+Do **not** "fix" this by disabling the browser BSP's visibilitychange
+flush — losing spans when a tab is backgrounded is worse than a few
+self-spans, and the sampler closes the loop completely without that
+trade-off.
+
 ## Red flags to call out in review
 
 - A new `tracer.startSpan` without `try/finally`/`span.end()`.

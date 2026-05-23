@@ -52,6 +52,20 @@ interface LearningChatProps {
   isStreaming?: boolean;
   /** IDs of ALL threads that are currently streaming */
   streamingThreadIds?: string[];
+  /**
+   * Phase 5: live partial assistant content for the active thread,
+   * served from the client `chatStreamStore` (never the durable
+   * thread). Empty when nothing is in flight.
+   */
+  streamingContent?: string;
+  /**
+   * Phase 5: stable id of the in-flight assistant message in the
+   * active thread, used to identify the streaming `MessageBubble`
+   * (replaces the pre-Phase-5 `▊` glyph check).
+   */
+  streamingAssistantMessageId?: string | null;
+  /** Phase 5: tool events emitted by the in-flight chat job. */
+  streamingToolEvents?: import('@/lib/threads/types').ToolCallEvent[];
   /** User's avatar URL */
   userAvatarUrl?: string;
 }
@@ -87,6 +101,9 @@ export const LearningChat = memo(function LearningChat({
   isThreadsLoading = false,
   isStreaming = false,
   streamingThreadIds = [],
+  streamingContent = '',
+  streamingAssistantMessageId = null,
+  streamingToolEvents = [],
   userAvatarUrl,
 }: LearningChatProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -107,7 +124,7 @@ export const LearningChat = memo(function LearningChat({
     [threads, activeThreadId]
   );
 
-  const messages = activeThread?.messages ?? [];
+  const messages = useMemo(() => activeThread?.messages ?? [], [activeThread]);
   // Use pending repos when no thread exists, otherwise use thread repos
   const selectedRepos = activeThread?.context?.repos ?? pendingRepos;
 
@@ -175,13 +192,35 @@ export const LearningChat = memo(function LearningChat({
   // Detect if active thread is streaming based on thread.isStreaming flag
   // This is set by the background job in storage
   const isStreamingInActiveThread = (isStreaming === true) || (activeThread?.isStreaming === true);
-  
-  // All messages come directly from storage - no synthetic messages needed
-  // The streaming assistant message is identified by the STREAM_CURSOR
-  // glyph (▊) in its content, written by the worker during deltas.
-  const displayMessages = messages;
-  // Show typing indicator when streaming starts but no streaming message has arrived yet
-  const hasStreamingMessage = displayMessages.some(m => m.role === 'assistant' && m.content.includes('▊'));
+
+  // Phase 5: synthesize the in-flight assistant message at the tail
+  // of `displayMessages` whenever the chat-stream store has live
+  // content for this thread. The durable thread no longer contains a
+  // partial message during streaming, so the UI is wholly responsible
+  // for blending the live buffer into the visible message list.
+  const displayMessages = useMemo(() => {
+    if (!isStreamingInActiveThread) return messages;
+    if (!streamingAssistantMessageId) return messages;
+    const alreadyPresent = messages.some((m) => m.id === streamingAssistantMessageId);
+    if (alreadyPresent) return messages;
+    if (!streamingContent && streamingToolEvents.length === 0) return messages;
+    const synthesized = {
+      id: streamingAssistantMessageId,
+      role: 'assistant' as const,
+      content: streamingContent,
+      timestamp: new Date().toISOString(),
+      toolEvents: streamingToolEvents.length > 0 ? streamingToolEvents : undefined,
+    };
+    return [...messages, synthesized];
+  }, [
+    messages,
+    isStreamingInActiveThread,
+    streamingAssistantMessageId,
+    streamingContent,
+    streamingToolEvents,
+  ]);
+  // Show typing indicator when streaming starts but no streaming content has arrived yet.
+  const hasStreamingMessage = Boolean(streamingAssistantMessageId) && Boolean(streamingContent);
   const showTypingIndicator = isStreamingInActiveThread && !hasStreamingMessage;
 
   // Auto-scroll to bottom when messages change or typing indicator appears
@@ -302,9 +341,13 @@ export const LearningChat = memo(function LearningChat({
           ) : (
             <div className={styles.messagesList}>
               {displayMessages.map((message) => {
-                // A message is rendered as streaming when it contains the
-                // STREAM_CURSOR glyph the worker writes during deltas.
-                const isMessageStreaming = message.role === 'assistant' && message.content.includes('▊');
+                // Phase 5: a message is rendered as streaming when
+                // its id matches the live `streamingAssistantMessageId`
+                // surfaced by the chat-stream store.
+                const isMessageStreaming =
+                  message.role === 'assistant' &&
+                  streamingAssistantMessageId !== null &&
+                  message.id === streamingAssistantMessageId;
                 return (
                   <MessageBubble
                     key={message.id}

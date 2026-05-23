@@ -289,3 +289,61 @@ describe('JobEventBus cap enforcement', () => {
     expect(replay.length).toBeLessThanOrEqual(MAX_EVENTS_PER_JOB);
   });
 });
+
+describe('JobEventBus.appendTerminalIfNotTerminated', () => {
+  it('writes the terminal frame on a fresh buffer', () => {
+    const bus = new JobEventBus();
+    const result = bus.appendTerminalIfNotTerminated('j1', {
+      type: 'done',
+      content: 'final',
+      toolEvents: [],
+      hasActionableItem: false,
+    });
+    expect(result).not.toBeNull();
+    expect(bus.isTerminated('j1')).toBe(true);
+  });
+
+  it('is a no-op on a buffer that already terminated', () => {
+    const bus = new JobEventBus();
+    bus.append('j1', { type: 'cancelled', content: '', toolEvents: [] });
+    expect(bus.isTerminated('j1')).toBe(true);
+    const result = bus.appendTerminalIfNotTerminated('j1', {
+      type: 'done',
+      content: 'should-be-dropped',
+      toolEvents: [],
+      hasActionableItem: false,
+    });
+    expect(result).toBeNull();
+    const replay = bus.replay('j1');
+    expect(replay.some((e) => e.event.type === 'done')).toBe(false);
+  });
+
+  it('throws when called with a non-terminal event', () => {
+    const bus = new JobEventBus();
+    expect(() =>
+      bus.appendTerminalIfNotTerminated('j1', { type: 'delta', content: 'x' }),
+    ).toThrow();
+  });
+
+  it('emits a single terminal frame under concurrent calls', () => {
+    const bus = new JobEventBus();
+    const a = bus.appendTerminalIfNotTerminated('j1', {
+      type: 'done',
+      content: 'a',
+      toolEvents: [],
+      hasActionableItem: false,
+    });
+    const b = bus.appendTerminalIfNotTerminated('j1', {
+      type: 'cancelled',
+      content: 'b',
+      toolEvents: [],
+    });
+    expect(a).not.toBeNull();
+    expect(b).toBeNull();
+    const replay = bus.replay('j1');
+    const terminals = replay.filter((e) =>
+      ['done', 'cancelled', 'failed'].includes(e.event.type),
+    );
+    expect(terminals).toHaveLength(1);
+  });
+});

@@ -34,6 +34,13 @@ export interface JobListDTO {
   completedAt?: string;
   error?: string;
   errorCode?: BackgroundJob['errorCode'];
+  /**
+   * For `chat-response` jobs only: the stable assistant-message id the
+   * worker is filling in. Surfaced so the client can hydrate
+   * `chatStreamStore` on a cold reload (Phase 5). Never populated for
+   * other job types to avoid leaking unrelated input shapes.
+   */
+  assistantMessageId?: string;
 }
 
 /**
@@ -41,7 +48,7 @@ export interface JobListDTO {
  * content-bearing field; surfaces only lifecycle metadata.
  */
 export function redactJobForList(job: BackgroundJob): JobListDTO {
-  return {
+  const dto: JobListDTO = {
     id: job.id,
     type: job.type,
     status: job.status,
@@ -52,6 +59,13 @@ export function redactJobForList(job: BackgroundJob): JobListDTO {
     error: typeof job.error === 'string' ? clamp(job.error, 500) : undefined,
     errorCode: job.errorCode,
   };
+  if (job.type === 'chat-response') {
+    const raw = (job.input as Record<string, unknown> | undefined)?.assistantMessageId;
+    if (typeof raw === 'string' && raw.length > 0) {
+      dto.assistantMessageId = raw;
+    }
+  }
+  return dto;
 }
 
 /**

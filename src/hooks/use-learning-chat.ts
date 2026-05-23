@@ -74,8 +74,12 @@ interface UseLearningChatState {
   isThreadsLoading: UseThreadsReturn['isLoading'];
   /** Whether a message is being processed (in the active thread) */
   isStreaming: boolean;
-  /** Current streaming content (partial response) for active thread */
+  /** Live streaming assistant content for the active thread (post-Phase-5: served from chatStreamStore, not the durable thread). */
   streamingContent: string;
+  /** Stable id of the in-flight assistant message in the active thread, or null when nothing is streaming. */
+  streamingAssistantMessageId: string | null;
+  /** Tool events emitted by the in-flight chat job for the active thread. */
+  streamingToolEvents: import('@/lib/threads').ToolCallEvent[];
   /** ID of the thread that is currently streaming (last one started, for backward compatibility) */
   streamingThreadId: string | null;
   /** IDs of ALL threads that are currently streaming */
@@ -136,9 +140,12 @@ export function useLearningChat(): UseLearningChatReturn {
     clearPendingStream,
     isStreaming,
     markStreamPending,
+    registerStream,
     stopStreaming,
+    streamingAssistantMessageId,
     streamingContent,
     streamingThreadId,
+    streamingToolEvents,
   } = useLearningChatStream({
     threads,
     activeThread,
@@ -269,6 +276,12 @@ export function useLearningChat(): UseLearningChatReturn {
         });
         log.debug(`Started job ${jobId} for thread ${targetThreadId}`);
 
+        // Phase 5: seed the client-side chat-stream store BEFORE
+        // operationsManager so the SSE-attach effect can find a
+        // pre-existing record and never has to fall back to the
+        // defensive synthetic-record path.
+        registerStream(jobId, targetThreadId, assistantMessageId);
+
         // Register the externally-created job into the operations
         // snapshot so the SSE subscription hook can find this jobId
         // for this thread and open the EventSource. Chat creation goes
@@ -290,6 +303,7 @@ export function useLearningChat(): UseLearningChatReturn {
       clearPendingStream,
       createThread,
       markStreamPending,
+      registerStream,
       updateActiveThread,
       refreshThreads,
     ]
@@ -302,9 +316,11 @@ export function useLearningChat(): UseLearningChatReturn {
     activeThreadId,
     isThreadsLoading,
     isStreaming,
+    streamingAssistantMessageId,
     streamingContent,
     streamingThreadId,
     streamingThreadIds: allStreamingThreadIds, // Use combined list including pending
+    streamingToolEvents,
     // Actions
     sendMessage,
     stopStreaming,

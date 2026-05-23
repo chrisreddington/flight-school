@@ -1,7 +1,5 @@
 import type { Message } from '@/lib/threads';
 
-export const STREAM_CURSOR = ' ▊';
-
 /**
  * Upsert `nextMessage` into `messages` by id. When `mergeExisting` is
  * true the existing entry is spread-merged with `nextMessage`; when

@@ -15,6 +15,7 @@ import {
 import { registerOTel } from '@vercel/otel';
 
 import { logger } from '@/lib/logger';
+import { createProxySampler } from '@/lib/observability/proxy-sampler';
 import {
   GEN_AI_DURATION_BUCKETS,
   GEN_AI_TOKEN_USAGE_BUCKETS,
@@ -46,6 +47,12 @@ export async function register(): Promise<void> {
         'deployment.environment.name':
           process.env.NODE_ENV === 'production' ? 'production' : 'development',
       },
+      // Drop server-side spans for the browser→server OTel proxy route to
+      // prevent a self-tracing feedback loop: every BSP flush (including
+      // those triggered by `document.visibilitychange`) would otherwise
+      // produce a fresh server trace, drowning out real app telemetry.
+      // See `src/lib/observability/proxy-sampler.ts` for the rationale.
+      traceSampler: createProxySampler(),
       metricReaders: [
         new PeriodicExportingMetricReader({
           exporter: new OTLPMetricExporter(),
@@ -125,9 +132,9 @@ export async function register(): Promise<void> {
         // user manually navigates away.
         const staleChatJobs = staleJobs.filter((job) => job.type === 'chat-response');
         if (staleChatJobs.length > 0) {
-          const [{ getThreadById, updateThread }, { STREAM_CURSOR }] = await Promise.all([
+          const [{ getThreadById, updateThread }, { stripLegacyCursorFromThread }] = await Promise.all([
             import('@/lib/jobs/storage/threads-storage'),
-            import('@/worker/jobs/executors/thread-consolidation'),
+            import('@/lib/threads/legacy-cursor'),
           ]);
           await Promise.all(
             staleChatJobs.map(async (job) => {
@@ -136,24 +143,15 @@ export async function register(): Promise<void> {
               try {
                 const thread = await getThreadById(job.userId, input.threadId);
                 if (!thread) return;
-                // Strip the streaming cursor from the partial assistant
-                // message left by the last periodic durable write.
-                // Without this `LearningChat` keeps showing the ▊ cursor
-                // because it inspects the message content independent of
-                // `thread.isStreaming`.
-                const cleanedMessages = thread.messages.map((m) => {
-                  if (m.role !== 'assistant') return m;
-                  if (input.assistantMessageId && m.id !== input.assistantMessageId) return m;
-                  if (!m.content.includes(STREAM_CURSOR.trim())) return m;
-                  return { ...m, content: m.content.replace(STREAM_CURSOR, '').trimEnd() };
-                });
+                // Strip any residual `▊` left by pre-Phase-5 workers,
+                // and clear `isStreaming` so the UI does not render a
+                // stuck cursor on restart.
+                const stripped = stripLegacyCursorFromThread(thread);
                 const needsUpdate =
-                  thread.isStreaming === true ||
-                  cleanedMessages.some((m, i) => m !== thread.messages[i]);
+                  stripped !== thread || thread.isStreaming === true;
                 if (needsUpdate) {
                   await updateThread(job.userId, {
-                    ...thread,
-                    messages: cleanedMessages,
+                    ...stripped,
                     isStreaming: false,
                     updatedAt: new Date().toISOString(),
                   });

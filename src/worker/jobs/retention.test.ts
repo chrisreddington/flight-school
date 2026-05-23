@@ -54,7 +54,7 @@ describe('sweepStaleRunningJobs', () => {
 
     const result = await sweepStaleRunningJobs(now, 1000);
 
-    expect(result).toEqual({ deleted: 1, inspected: 2 });
+    expect(result).toEqual({ deleted: 1, inspected: 2, sweptIds: ['stale'] });
     expect(mocks.markFailed).toHaveBeenCalledTimes(1);
     expect(mocks.markFailed).toHaveBeenCalledWith(
       'stale',

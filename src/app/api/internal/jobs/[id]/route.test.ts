@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   jobStorageGet: vi.fn(),
   jobStorageMarkCancelled: vi.fn(),
+  jobStorageMarkCancelledIfNonTerminal: vi.fn(),
   jobStorageInvalidateCache: vi.fn(),
   requestCancellation: vi.fn(),
+  appendTerminalIfNotTerminated: vi.fn(),
   withExtractedTraceContext: vi.fn(),
 }));
 
@@ -12,12 +14,19 @@ vi.mock('@/lib/jobs', () => ({
   jobStorage: {
     get: mocks.jobStorageGet,
     markCancelled: mocks.jobStorageMarkCancelled,
+    markCancelledIfNonTerminal: mocks.jobStorageMarkCancelledIfNonTerminal,
     invalidateCache: mocks.jobStorageInvalidateCache,
   },
 }));
 
 vi.mock('@/worker/jobs/executors/session-registry', () => ({
   requestCancellation: mocks.requestCancellation,
+}));
+
+vi.mock('@/worker/jobs/streaming/event-bus', () => ({
+  jobEventBus: {
+    appendTerminalIfNotTerminated: mocks.appendTerminalIfNotTerminated,
+  },
 }));
 
 vi.mock('@/lib/observability/context-propagation', () => ({
@@ -46,6 +55,8 @@ beforeEach(() => {
   );
   mocks.requestCancellation.mockResolvedValue(true);
   mocks.jobStorageMarkCancelled.mockResolvedValue({});
+  mocks.jobStorageMarkCancelledIfNonTerminal.mockResolvedValue({ status: 'cancelled', transitioned: true });
+  mocks.appendTerminalIfNotTerminated.mockReturnValue(undefined);
 });
 
 afterEach(() => {
@@ -94,7 +105,7 @@ describe('DELETE /api/internal/jobs/[id]', () => {
     const res = await DELETE(makeRequest('DELETE', 'userId=u-1'), params());
     expect(res.status).toBe(404);
     expect(mocks.requestCancellation).not.toHaveBeenCalled();
-    expect(mocks.jobStorageMarkCancelled).not.toHaveBeenCalled();
+    expect(mocks.jobStorageMarkCancelledIfNonTerminal).not.toHaveBeenCalled();
   });
 
   it('returns alreadyTerminal=true without cancelling when job is terminal', async () => {
@@ -104,25 +115,54 @@ describe('DELETE /api/internal/jobs/[id]', () => {
     const json = await res.json();
     expect(json).toEqual({ alreadyTerminal: true, status: 'completed' });
     expect(mocks.requestCancellation).not.toHaveBeenCalled();
-    expect(mocks.jobStorageMarkCancelled).not.toHaveBeenCalled();
+    expect(mocks.jobStorageMarkCancelledIfNonTerminal).not.toHaveBeenCalled();
   });
 
-  it('invokes abort helper and marks cancelled', async () => {
+  it('invokes abort helper and marks cancelled (active session — no orphan emit)', async () => {
     mocks.jobStorageGet.mockResolvedValue({ id: 'job-1', userId: 'u-1', status: 'running', input: {}, type: 'chat-response', createdAt: 'x' });
+    mocks.requestCancellation.mockResolvedValue(true);
     const res = await DELETE(makeRequest('DELETE', 'userId=u-1'), params());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ cancelled: true });
+    expect(await res.json()).toEqual({ cancelled: true, orphan: false });
     expect(mocks.requestCancellation).toHaveBeenCalledWith('job-1');
-    expect(mocks.jobStorageMarkCancelled).toHaveBeenCalledWith('job-1');
+    expect(mocks.jobStorageMarkCancelledIfNonTerminal).toHaveBeenCalledWith('job-1');
+    // Worker's terminal sequence owns the SSE emit when a session was live.
+    expect(mocks.appendTerminalIfNotTerminated).not.toHaveBeenCalled();
   });
 
-  it('marks cancelled BEFORE requesting cancellation so executor sees terminal intent first', async () => {
+  it('emits orphan cancelled SSE frame when no active session was registered', async () => {
+    mocks.jobStorageGet.mockResolvedValue({ id: 'job-1', userId: 'u-1', status: 'running', input: {}, type: 'chat-response', createdAt: 'x' });
+    mocks.requestCancellation.mockResolvedValue(false);
+    const res = await DELETE(makeRequest('DELETE', 'userId=u-1'), params());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ cancelled: true, orphan: true });
+    expect(mocks.appendTerminalIfNotTerminated).toHaveBeenCalledWith('job-1', {
+      type: 'cancelled',
+      content: '',
+      toolEvents: [],
+    });
+  });
+
+  it('returns alreadyTerminal when CAS detects the job has already settled (race with worker)', async () => {
+    mocks.jobStorageGet.mockResolvedValue({ id: 'job-1', userId: 'u-1', status: 'running', input: {}, type: 'chat-response', createdAt: 'x' });
+    mocks.jobStorageMarkCancelledIfNonTerminal.mockResolvedValue({ status: 'completed', transitioned: false });
+    const res = await DELETE(makeRequest('DELETE', 'userId=u-1'), params());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ alreadyTerminal: true, status: 'completed' });
+    expect(mocks.requestCancellation).not.toHaveBeenCalled();
+    expect(mocks.appendTerminalIfNotTerminated).not.toHaveBeenCalled();
+  });
+
+  it('CAS markCancelledIfNonTerminal runs BEFORE requestCancellation so executor sees terminal intent first', async () => {
     mocks.jobStorageGet.mockResolvedValue({ id: 'job-1', userId: 'u-1', status: 'running', input: {}, type: 'chat-response', createdAt: 'x' });
     const order: string[] = [];
-    mocks.jobStorageMarkCancelled.mockImplementation(async () => { order.push('markCancelled'); });
+    mocks.jobStorageMarkCancelledIfNonTerminal.mockImplementation(async () => {
+      order.push('markCancelledIfNonTerminal');
+      return { status: 'cancelled', transitioned: true };
+    });
     mocks.requestCancellation.mockImplementation(async () => { order.push('requestCancellation'); return true; });
     const res = await DELETE(makeRequest('DELETE', 'userId=u-1'), params());
     expect(res.status).toBe(200);
-    expect(order).toEqual(['markCancelled', 'requestCancellation']);
+    expect(order).toEqual(['markCancelledIfNonTerminal', 'requestCancellation']);
   });
 });

@@ -10,7 +10,10 @@ export interface OperationState {
   };
 }
 
-export function buildOperationState(operations: Iterable<[string, ActiveOperation]>): OperationState {
+export function buildOperationState(
+  operations: Iterable<[string, ActiveOperation]>,
+  hydrated = false,
+): OperationState {
   const topicRegenerations = new Map<string, ActiveOperation>();
   const challengeRegenerations = new Map<string, ActiveOperation>();
   const goalRegenerations = new Map<string, ActiveOperation>();
@@ -50,6 +53,7 @@ export function buildOperationState(operations: Iterable<[string, ActiveOperatio
       challengeRegenerations,
       goalRegenerations,
       chatMessages,
+      hydrated,
     },
     activeIds: {
       topics,

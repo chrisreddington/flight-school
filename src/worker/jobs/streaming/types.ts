@@ -77,6 +77,38 @@ export function isTerminalEvent(event: JobStreamEvent): boolean {
   return TERMINAL_EVENT_TYPES.has(event.type as TerminalEventType);
 }
 
+/**
+ * Map a terminal job status into the corresponding {@link JobStreamEvent}.
+ *
+ * Used by the Phase 5 worker terminal sequence so the same helper is
+ * used by `appendTerminalIfNotTerminated` from both the happy path and
+ * the catch/cancellation branches.
+ *
+ * `completed` → `done`, `cancelled` → `cancelled`, `failed` → `failed`.
+ */
+export function terminalEventFromStatus(
+  status: 'completed' | 'cancelled' | 'failed',
+  payload: { content?: string; toolEvents?: import('@/lib/threads').ToolCallEvent[]; hasActionableItem?: boolean; message?: string },
+): JobStreamEvent {
+  switch (status) {
+    case 'completed':
+      return {
+        type: 'done',
+        content: payload.content ?? '',
+        toolEvents: payload.toolEvents ?? [],
+        hasActionableItem: payload.hasActionableItem ?? false,
+      };
+    case 'cancelled':
+      return {
+        type: 'cancelled',
+        content: payload.content ?? '',
+        toolEvents: payload.toolEvents ?? [],
+      };
+    case 'failed':
+      return { type: 'failed', message: payload.message ?? 'unknown error' };
+  }
+}
+
 export interface SequencedJobStreamEvent {
   seq: number;
   event: JobStreamEvent;

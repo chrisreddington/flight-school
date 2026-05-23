@@ -2,10 +2,9 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveOperation } from '@/lib/operations/types';
 import type { Thread } from '@/lib/threads';
+import { chatStreamStore } from '@/lib/chat/chat-stream-store';
 import {
   combineStreamingThreadIds,
-  finalizeInterruptedMessage,
-  getStreamingContent,
   isThreadStreaming,
   useLearningChatStream,
 } from './use-learning-chat-stream';
@@ -26,6 +25,7 @@ const operationsState = vi.hoisted(() => {
     challengeRegenerations: Map<string, unknown>;
     goalRegenerations: Map<string, unknown>;
     chatMessages: Map<string, unknown>;
+    hydrated: boolean;
   };
   const holder: { snapshot: Snap } = {
     snapshot: {
@@ -33,6 +33,7 @@ const operationsState = vi.hoisted(() => {
       challengeRegenerations: new Map(),
       goalRegenerations: new Map(),
       chatMessages: new Map(),
+      hydrated: true,
     },
   };
   const listeners: Set<Listener> = new Set();
@@ -45,12 +46,16 @@ const operationsState = vi.hoisted(() => {
       // useSyncExternalStore compares snapshots by reference — always swap.
       holder.snapshot = { ...holder.snapshot, chatMessages: map };
     },
+    setHydrated(value: boolean) {
+      holder.snapshot = { ...holder.snapshot, hydrated: value };
+    },
     reset() {
       holder.snapshot = {
         topicRegenerations: new Map(),
         challengeRegenerations: new Map(),
         goalRegenerations: new Map(),
         chatMessages: new Map(),
+        hydrated: true,
       };
       listeners.clear();
       this.initializeMock.calls = 0;
@@ -168,56 +173,6 @@ describe('learning chat stream helpers', () => {
     expect(isThreadStreaming(createThread(), 'thread-1', new Map([['thread-1', 'user-message-1']]))).toBe(true);
     expect(isThreadStreaming(createThread(), 'thread-1', new Map())).toBe(false);
   });
-
-  it('should return active streaming content only from streaming messages', () => {
-    const thread = createThread({
-      isStreaming: true,
-      messages: [
-        { id: 'msg-1', role: 'user', content: 'Hello', timestamp: '2026-01-01T00:00:00.000Z' },
-        { id: 'streaming-job-1', role: 'assistant', content: 'Partial ▊', timestamp: '2026-01-01T00:00:01.000Z' },
-      ],
-    });
-
-    expect(getStreamingContent(thread)).toBe('Partial ▊');
-    expect(getStreamingContent(createThread({ ...thread, isStreaming: false }))).toBe('');
-  });
-
-  it('should finalize interrupted streaming messages with a permanent ID and note', () => {
-    const finalized = finalizeInterruptedMessage(createThread({
-      isStreaming: true,
-      messages: [
-        { id: 'msg-1', role: 'user', content: 'Hello', timestamp: '2026-01-01T00:00:00.000Z' },
-        { id: 'streaming-job-1', role: 'assistant', content: 'Partial ▊', timestamp: '2026-01-01T00:00:01.000Z' },
-      ],
-    }));
-
-    expect(finalized).toMatchObject({
-      isStreaming: false,
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      messages: [
-        { id: 'msg-1' },
-        {
-          id: 'streaming-job-1',
-          role: 'assistant',
-          content: 'Partial\n\n*(Response interrupted)*',
-          timestamp: '2026-01-01T00:00:00.000Z',
-        },
-      ],
-    });
-  });
-
-  it('should remove empty interrupted streaming messages', () => {
-    const finalized = finalizeInterruptedMessage(createThread({
-      isStreaming: true,
-      messages: [
-        { id: 'msg-1', role: 'user', content: 'Hello', timestamp: '2026-01-01T00:00:00.000Z' },
-        { id: 'streaming-job-1', role: 'assistant', content: ' ▊', timestamp: '2026-01-01T00:00:01.000Z' },
-      ],
-    }));
-
-    expect(finalized?.messages).toEqual([{ id: 'msg-1', role: 'user', content: 'Hello', timestamp: '2026-01-01T00:00:00.000Z' }]);
-    expect(finalized?.isStreaming).toBe(false);
-  });
 });
 
 // =============================================================================
@@ -275,6 +230,7 @@ describe('useLearningChatStream (renderHook)', () => {
     cursorState.evictCalls = [];
     threadStoreState.updateCalls = [];
     eventSources.length = 0;
+    chatStreamStore.__resetForTests();
     globalThis.EventSource = FakeES as unknown as typeof EventSource;
   });
 
@@ -386,7 +342,7 @@ describe('useLearningChatStream (renderHook)', () => {
     ]);
   });
 
-  it('on [DONE] evicts cursor, closes the EventSource, completes the job, and refreshes threads immediately', async () => {
+  it('on [DONE] evicts cursor, closes the EventSource, refreshes threads, and then completes the job + evicts the stream record (terminal order)', async () => {
     const thread = streamingThread('t1');
     setChatOps([mkChatOp('j1', 't1')]);
     const { refreshThreads } = renderChatStream({
@@ -402,12 +358,13 @@ describe('useLearningChatStream (renderHook)', () => {
 
     expect(cursorState.evictCalls).toEqual(['j1']);
     expect(es.closed).toBe(true);
-    expect(operationsState.completeMock.calls).toEqual(['j1']);
+    // refreshThreads is invoked synchronously, completeExistingJob runs
+    // in the .finally(); both must land within a microtask flush.
     await waitFor(() => expect(refreshThreads).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(operationsState.completeMock.calls).toEqual(['j1']));
   });
 
-  it('coalesces refreshThreads calls on rapid delta frames (~400ms debounce)', async () => {
-    vi.useFakeTimers();
+  it('does NOT refresh threads on every delta — only on terminal frames (Phase 5: store carries deltas)', async () => {
     const thread = streamingThread('t1');
     setChatOps([mkChatOp('j1', 't1')]);
     const { refreshThreads } = renderChatStream({
@@ -416,19 +373,19 @@ describe('useLearningChatStream (renderHook)', () => {
       activeThreadId: 't1',
     });
 
-    // Flush the dynamic import + effect using a real-timer microtask wait.
-    await vi.waitFor(() => expect(eventSources).toHaveLength(1));
+    await waitFor(() => expect(eventSources).toHaveLength(1));
     const es = eventSources[0];
 
-    es.onmessage?.({ lastEventId: '1', data: '{"delta":"a"}' } as unknown as MessageEvent);
-    es.onmessage?.({ lastEventId: '2', data: '{"delta":"b"}' } as unknown as MessageEvent);
-    es.onmessage?.({ lastEventId: '3', data: '{"delta":"c"}' } as unknown as MessageEvent);
+    es.onmessage?.({ lastEventId: '1', data: '{"type":"delta","content":"a"}' } as unknown as MessageEvent);
+    es.onmessage?.({ lastEventId: '2', data: '{"type":"delta","content":"b"}' } as unknown as MessageEvent);
+    es.onmessage?.({ lastEventId: '3', data: '{"type":"delta","content":"c"}' } as unknown as MessageEvent);
 
+    await Promise.resolve();
     expect(refreshThreads).toHaveBeenCalledTimes(0);
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
-    expect(refreshThreads).toHaveBeenCalledTimes(1);
+
+    // Terminal still triggers exactly one refresh.
+    es.onmessage?.({ lastEventId: '4', data: '[DONE]' } as unknown as MessageEvent);
+    await waitFor(() => expect(refreshThreads).toHaveBeenCalledTimes(1));
   });
 
   it('closes all open EventSources and unsubscribes from operationsManager on unmount', async () => {
@@ -499,7 +456,27 @@ describe('useLearningChatStream (renderHook)', () => {
     expect(result.current.isStreaming).toBe(true);
   });
 
-  it('finalizes a storage thread when it has been streaming with no cursor message for > 5s', async () => {
+  it('finalizes a storage thread (isStreaming=false) when it has been streaming with no live chat op for > 5s (post-hydration only)', async () => {
+    const stale: Thread = createThread({
+      id: 't1',
+      isStreaming: true,
+      updatedAt: new Date(Date.now() - 10_000).toISOString(),
+      messages: [
+        { id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' },
+      ],
+    });
+    // operationsState.hydrated defaults to true; no chat op present so
+    // the thread is considered orphaned by the safety net.
+    renderChatStream({ threads: [stale], activeThread: stale, activeThreadId: 't1' });
+
+    await waitFor(() => expect(threadStoreState.updateCalls.length).toBeGreaterThan(0));
+    const updated = threadStoreState.updateCalls[0];
+    expect(updated.isStreaming).toBe(false);
+    expect(updated.id).toBe('t1');
+  });
+
+  it('skips stale-stream finalization while operationsManager is still hydrating', async () => {
+    operationsState.setHydrated(false);
     const stale: Thread = createThread({
       id: 't1',
       isStreaming: true,
@@ -509,11 +486,9 @@ describe('useLearningChatStream (renderHook)', () => {
       ],
     });
     renderChatStream({ threads: [stale], activeThread: stale, activeThreadId: 't1' });
-
-    await waitFor(() => expect(threadStoreState.updateCalls.length).toBeGreaterThan(0));
-    const updated = threadStoreState.updateCalls[0];
-    expect(updated.isStreaming).toBe(false);
-    expect(updated.id).toBe('t1');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(threadStoreState.updateCalls.length).toBe(0);
   });
 
   it('treats the active thread as streaming when only a pendingStreamMessages entry exists', async () => {
@@ -529,25 +504,23 @@ describe('useLearningChatStream (renderHook)', () => {
     expect(result.current.isStreaming).toBe(true);
   });
 
-  it('extracts streamingContent from a cursor-glyph assistant message regardless of id format', () => {
-    const thread = createThread({
-      id: 't1',
-      isStreaming: true,
-      messages: [
-        { id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' },
-        {
-          id: 'd3b0a4e8-uuid-style-id',
-          role: 'assistant',
-          content: 'Partial ▊',
-          timestamp: '2026-01-01T00:00:01.000Z',
-        },
-      ],
-    });
+  it('exposes streamingContent and streamingAssistantMessageId from the chatStreamStore for the active thread', async () => {
+    chatStreamStore.__resetForTests();
+    chatStreamStore.register('j1', 't1', 'asst-1');
+    chatStreamStore.applyDelta('j1', 'Partial', 1);
+
+    const thread = createThread({ id: 't1', isStreaming: true });
     const { result } = renderChatStream({
       threads: [thread],
       activeThread: thread,
       activeThreadId: 't1',
     });
-    expect(result.current.streamingContent).toBe('Partial ▊');
+    await waitFor(() => expect(result.current.streamingContent).toBe('Partial'));
+    expect(result.current.streamingAssistantMessageId).toBe('asst-1');
+
+    // Eviction (terminal cleanup) clears the live content.
+    act(() => chatStreamStore.evict('j1'));
+    await waitFor(() => expect(result.current.streamingContent).toBe(''));
+    expect(result.current.streamingAssistantMessageId).toBeNull();
   });
 });

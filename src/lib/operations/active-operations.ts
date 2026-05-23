@@ -81,6 +81,7 @@ class ActiveOperationsManager {
     challengeRegenerations: new Map(),
     goalRegenerations: new Map(),
     chatMessages: new Map(),
+    hydrated: false,
   };
 
   /** Cached active IDs sets for useSyncExternalStore stability */
@@ -97,6 +98,12 @@ class ActiveOperationsManager {
   private jobToOperation = new Map<string, string>();
   /** Whether we've initialized from backend */
   private initialized = false;
+  /**
+   * Whether {@link initialize} has finished one pass — flipped to true
+   * after the API list call returns (or fails) so the snapshot's
+   * `hydrated` flag can flip to true on the very next `updateSnapshot()`.
+   */
+  private isHydrated = false;
 
   /** Registered completion handlers by job type (survive React lifecycle) */
   private completionHandlers = new Map<string, (result: unknown, targetId: string) => Promise<void>>();
@@ -122,7 +129,7 @@ class ActiveOperationsManager {
     this.initialized = true;
 
     try {
-      let entries: { jobId: string; itemId: string; itemType: ActiveOperationItemType; startedAt: string }[] = [];
+      let entries: { jobId: string; itemId: string; itemType: ActiveOperationItemType; startedAt: string; assistantMessageId?: string }[] = [];
       
       if (typeof window !== 'undefined') {
         try {
@@ -131,11 +138,12 @@ class ActiveOperationsManager {
             const data = await response.json();
             entries = (data.jobs || [])
               .filter((job: { status: string }) => job.status === 'pending' || job.status === 'running')
-              .map((job: { id: string; targetId?: string; type: string; createdAt: string }) => ({
+              .map((job: { id: string; targetId?: string; type: string; createdAt: string; assistantMessageId?: string }) => ({
                 jobId: job.id,
                 itemId: job.targetId || job.id,
                 itemType: JOB_ITEM_TYPE_BY_TYPE[job.type as OperationType] || 'topic',
                 startedAt: job.createdAt,
+                assistantMessageId: job.assistantMessageId,
               }));
           }
         } catch (err) {
@@ -164,6 +172,7 @@ class ActiveOperationsManager {
             startedAt: entry.startedAt,
             targetId: entry.itemId,
             jobId: entry.jobId,
+            assistantMessageId: entry.assistantMessageId,
           },
         };
 
@@ -178,12 +187,21 @@ class ActiveOperationsManager {
         }
       }
 
-      if (entries.length > 0) {
-        this.updateSnapshot();
-        this.notifyListeners();
-      }
+      // Flip the hydration flag regardless of whether we found any
+      // entries — the snapshot now authoritatively reflects backend
+      // state and downstream consumers (the chat hook) can safely
+      // treat empty `chatMessages` as "no in-flight stream".
+      this.isHydrated = true;
+      this.updateSnapshot();
+      this.notifyListeners();
     } catch (error) {
       log.warn('Failed to check for active jobs:', error);
+      // Even on failure, flip hydrated so stale-stream cleanup is not
+      // blocked indefinitely — the snapshot is no less accurate than
+      // before initialize() ran.
+      this.isHydrated = true;
+      this.updateSnapshot();
+      this.notifyListeners();
     }
   }
 
@@ -475,7 +493,7 @@ class ActiveOperationsManager {
    * Update the cached snapshot when operations change.
    */
   private updateSnapshot(): void {
-    const state = buildOperationState(this.operations);
+    const state = buildOperationState(this.operations, this.isHydrated);
     this.cachedSnapshot = state.snapshot;
     this.cachedActiveIds = state.activeIds;
   }

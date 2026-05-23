@@ -29,6 +29,14 @@ interface OperationMeta {
   context?: Record<string, unknown>;
   /** Backend job ID (for background jobs) */
   jobId?: string;
+  /**
+   * For `chat-response` operations: the stable assistant-message id the
+   * worker is filling in. Set during {@link operationsManager.initialize}
+   * from the {@link JobListDTO} so the chat hook can register the
+   * `chatStreamStore` record on a cold reload without waiting for a
+   * delta to arrive (Phase 5).
+   */
+  assistantMessageId?: string;
 }
 
 /** A tracked operation */
@@ -60,4 +68,11 @@ export interface OperationsSnapshot {
   goalRegenerations: Map<string, ActiveOperation>;
   /** All operations of type 'chat-response' */
   chatMessages: Map<string, ActiveOperation>;
+  /**
+   * Whether {@link operationsManager.initialize} has completed at
+   * least once for this session. Hooks gate stale-stream cleanup on
+   * this so we never treat the empty pre-hydration snapshot as
+   * evidence that an in-flight stream has ended (Phase 5).
+   */
+  hydrated: boolean;
 }

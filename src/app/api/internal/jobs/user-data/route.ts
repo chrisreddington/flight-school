@@ -15,6 +15,7 @@ import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
 import { withExtractedTraceContext } from '@/lib/observability/context-propagation';
 import { requestCancellation } from '@/worker/jobs/executors/session-registry';
+import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('InternalJobsUserData');
@@ -59,6 +60,15 @@ async function handleDelete(request: NextRequest) {
   // Cancel any in-flight worker sessions for this user BEFORE deleting
   // job records. Otherwise executors keep streaming after their records
   // are gone, wasting compute and possibly hitting undefined state.
+  //
+  // We mirror the single-job DELETE route's semantics so SSE consumers
+  // observing these jobs receive a terminal frame:
+  //   - CAS to `cancelled` first so a live executor sees terminal intent.
+  //   - Request session cancellation; the return tells us whether an
+  //     active session was present.
+  //   - For orphan jobs (no active session), emit a synthesized
+  //     `cancelled` terminal to the event bus so any SSE client still
+  //     attached unsticks instead of waiting indefinitely.
   const allJobs = await jobStorage.getAll();
   const ownedRunning = allJobs.filter(
     (j) => j.userId === userId && (j.status === 'running' || j.status === 'pending'),
@@ -66,9 +76,25 @@ async function handleDelete(request: NextRequest) {
   let cancelled = 0;
   for (const job of ownedRunning) {
     try {
-      // markCancelled first so executor sees terminal intent before destroy().
-      await jobStorage.markCancelled(job.id);
-      await requestCancellation(job.id);
+      const cas = await jobStorage.markCancelledIfNonTerminal(job.id);
+      if (!cas.transitioned) continue;
+      let hadActiveSession = false;
+      try {
+        hadActiveSession = await requestCancellation(job.id);
+      } catch (err) {
+        log.warn(`[user ${userId}] requestCancellation threw for job ${job.id}`, err);
+      }
+      if (!hadActiveSession) {
+        try {
+          jobEventBus.appendTerminalIfNotTerminated(job.id, {
+            type: 'cancelled',
+            content: '',
+            toolEvents: [],
+          });
+        } catch (err) {
+          log.warn(`[user ${userId}] Failed to emit orphan cancelled for job ${job.id}`, err);
+        }
+      }
       cancelled += 1;
     } catch (err) {
       log.warn(`[user ${userId}] cancel failed for job ${job.id}`, err);

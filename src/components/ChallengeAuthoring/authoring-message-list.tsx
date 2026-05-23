@@ -111,7 +111,7 @@ export function AuthoringMessageList({
               </div>
             </div>
             <div className={styles.messageContent}>
-              <MarkdownContent content={streamingContent} isStreaming />
+              <MarkdownContent content={streamingContent} />
             </div>
           </li>
         )}
