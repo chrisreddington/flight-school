@@ -13,6 +13,8 @@ const log = logger.withTag('useLearningChat');
 const STALE_STREAM_THRESHOLD_MS = 5_000;
 const POLL_INTERVAL_MS = 400;
 
+const STREAMING_TRANSPORT = process.env.NEXT_PUBLIC_STREAMING_TRANSPORT === 'sse' ? 'sse' : 'poll';
+
 type PendingStreamMessages = Map<string, string>;
 
 interface UseLearningChatStreamInput {
@@ -100,13 +102,98 @@ export function useLearningChatStream({
     () => combineStreamingThreadIds(storageStreamingThreadIds, pendingStreamMessages),
     [storageStreamingThreadIds, pendingStreamMessages],
   );
+  // Stable string key derived from sorted ids so the SSE effect below only
+  // re-runs when the set of streaming threads actually changes (array
+  // identity is unstable across renders even when contents match).
+  const streamingThreadIdsKey = useMemo(
+    () => [...allStreamingThreadIds].sort().join(','),
+    [allStreamingThreadIds],
+  );
   const isStreaming = isThreadStreaming(activeThread, activeThreadId, pendingStreamMessages);
   const streamingContent = useMemo(() => getStreamingContent(activeThread), [activeThread]);
 
   useEffect(() => {
-    if (allStreamingThreadIds.length === 0) return;
+    const ids = streamingThreadIdsKey ? streamingThreadIdsKey.split(',') : [];
+    if (ids.length === 0) return;
 
-    log.debug('Starting polling for streaming threads', { count: allStreamingThreadIds.length });
+    if (STREAMING_TRANSPORT === 'sse') {
+      log.debug('Subscribing to SSE streams', { count: ids.length });
+      const sources: EventSource[] = [];
+      let disposed = false;
+
+      // Coalesce refreshThreads calls — the SSE handler fires on every
+      // frame (including deltas) and we don't need a full thread refetch
+      // that often. ~400ms keeps the UI responsive without hammering
+      // /api/learning/threads on a token stream.
+      let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleRefresh = (): void => {
+        if (refreshTimer !== null) return;
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null;
+          void refreshThreads();
+        }, 400);
+      };
+
+      void (async () => {
+        const [{ operationsManager }, cursorMod] = await Promise.all([
+          import('@/lib/operations'),
+          import('@/lib/streaming/cursor-store'),
+        ]);
+        if (disposed) return;
+        const { getCursor, setCursor, evictCursor } = cursorMod;
+
+        const snapshot = operationsManager.getSnapshot();
+        const subscribedJobIds = new Set<string>();
+        const idSet = new Set(ids);
+
+        for (const op of snapshot.chatMessages.values()) {
+          const jobId = op.meta.jobId;
+          const threadId = op.meta.targetId;
+          if (!jobId || !threadId) continue;
+          if (!idSet.has(threadId)) continue;
+          if (subscribedJobIds.has(jobId)) continue;
+          subscribedJobIds.add(jobId);
+
+          const cursor = getCursor(jobId);
+          const url = `/api/jobs/${encodeURIComponent(jobId)}/stream${cursor > 0 ? `?cursor=${cursor}` : ''}`;
+          const es = new EventSource(url, { withCredentials: true });
+          es.onmessage = (msg) => {
+            const me = msg as MessageEvent;
+            if (me.lastEventId) {
+              const parsed = Number.parseInt(me.lastEventId, 10);
+              if (Number.isFinite(parsed)) setCursor(jobId, parsed);
+            }
+            if (me.data === '[DONE]') {
+              evictCursor(jobId);
+              es.close();
+              // Terminal: refresh immediately (no throttle) so the UI
+              // settles fast on the final assistant message.
+              if (refreshTimer !== null) {
+                clearTimeout(refreshTimer);
+                refreshTimer = null;
+              }
+              void refreshThreads();
+              return;
+            }
+            scheduleRefresh();
+          };
+          es.onerror = () => {
+            // EventSource auto-reconnects; refresh so any thread updates are visible.
+            scheduleRefresh();
+          };
+          sources.push(es);
+        }
+      })();
+
+      return () => {
+        disposed = true;
+        if (refreshTimer !== null) clearTimeout(refreshTimer);
+        log.debug('Closing SSE subscriptions', { count: sources.length });
+        for (const es of sources) es.close();
+      };
+    }
+
+    log.debug('Starting polling for streaming threads', { count: ids.length });
     const pollInterval = setInterval(() => {
       refreshThreads();
     }, POLL_INTERVAL_MS);
@@ -115,7 +202,7 @@ export function useLearningChatStream({
       log.debug('Stopping polling for streaming threads');
       clearInterval(pollInterval);
     };
-  }, [allStreamingThreadIds.length, refreshThreads]);
+  }, [streamingThreadIdsKey, refreshThreads]);
 
   useEffect(() => {
     if (pendingStreamMessages.size === 0) return;

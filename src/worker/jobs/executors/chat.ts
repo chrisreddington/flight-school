@@ -9,6 +9,7 @@ import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
+import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
 import { registerSession, unregisterSession } from './session-registry';
 import {
@@ -81,6 +82,20 @@ export async function executeChatResponse(
       } catch (err) {
         log.warn(`[Job ${jobId}] Failed to flush scratchpad:`, err);
       }
+
+      // Dual-write: also emit a rolling state snapshot to the in-process
+      // event bus. SSE subscribers use this for gap recovery — new readers
+      // (or reconnects past the buffer cap) get the latest state in one
+      // event without replaying every delta.
+      try {
+        jobEventBus.snapshot(jobId, {
+          content: fullContent,
+          toolEvents: toolEvents.map((e) => ({ ...e })),
+          hasActionableItem,
+        });
+      } catch (err) {
+        log.warn(`[Job ${jobId}] Failed to emit state snapshot to bus:`, err);
+      }
     };
 
     const consolidateToThread = async (isFinal: boolean) => {
@@ -130,6 +145,11 @@ export async function executeChatResponse(
 
       if (event.type === 'delta') {
         fullContent += event.content;
+        try {
+          jobEventBus.append(jobId, { type: 'delta', content: event.content });
+        } catch (err) {
+          log.warn(`[Job ${jobId}] Failed to emit delta to bus:`, err);
+        }
 
         const nowMs = Date.now();
         if (nowMs - lastSaveTime >= SAVE_INTERVAL_MS) {
@@ -138,17 +158,30 @@ export async function executeChatResponse(
         }
       } else if (event.type === 'tool_start') {
         toolCalls.push(event.name);
+        const toolCallId = `tool-${jobId}-${toolCounter++}`;
         toolEvents.push({
-          id: `tool-${jobId}-${toolCounter++}`,
+          id: toolCallId,
           name: event.name,
           status: 'running',
           args: event.args,
         });
+        try {
+          jobEventBus.append(jobId, {
+            type: 'tool_start',
+            toolCallId,
+            name: event.name,
+            args: event.args,
+          });
+        } catch (err) {
+          log.warn(`[Job ${jobId}] Failed to emit tool_start to bus:`, err);
+        }
         await flushScratchpad('streaming');
         lastSaveTime = Date.now();
       } else if (event.type === 'tool_complete') {
+        let completedToolCallId: string | null = null;
         for (let i = toolEvents.length - 1; i >= 0; i--) {
           if (toolEvents[i].status === 'running' && toolEvents[i].name === event.name) {
+            completedToolCallId = toolEvents[i].id;
             toolEvents[i] = {
               ...toolEvents[i],
               status: 'complete',
@@ -156,6 +189,19 @@ export async function executeChatResponse(
               durationMs: event.duration,
             };
             break;
+          }
+        }
+        if (completedToolCallId !== null) {
+          try {
+            jobEventBus.append(jobId, {
+              type: 'tool_complete',
+              toolCallId: completedToolCallId,
+              name: event.name,
+              result: event.result,
+              durationMs: event.duration,
+            });
+          } catch (err) {
+            log.warn(`[Job ${jobId}] Failed to emit tool_complete to bus:`, err);
           }
         }
         await flushScratchpad('streaming');
@@ -173,6 +219,15 @@ export async function executeChatResponse(
     if (wasCancelled) {
       log.info(`[Job ${jobId}] Chat response cancelled after ${fullContent.length} chars`);
       await consolidateToThread(true);
+      try {
+        jobEventBus.append(jobId, {
+          type: 'cancelled',
+          content: fullContent,
+          toolEvents: toolEvents.map((e) => ({ ...e })),
+        });
+      } catch (err) {
+        log.warn(`[Job ${jobId}] Failed to emit cancelled to bus:`, err);
+      }
       return;
     }
 
@@ -185,6 +240,17 @@ export async function executeChatResponse(
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     });
 
+    try {
+      jobEventBus.append(jobId, {
+        type: 'done',
+        content: fullContent,
+        toolEvents: toolEvents.map((e) => ({ ...e })),
+        hasActionableItem,
+      });
+    } catch (err) {
+      log.warn(`[Job ${jobId}] Failed to emit done to bus:`, err);
+    }
+
     log.info(`[Job ${jobId}] Chat response completed: ${fullContent.length} chars`);
   } catch (error) {
     unregisterSession(jobId);
@@ -194,6 +260,11 @@ export async function executeChatResponse(
       await consolidateScratchpadToThread(userId, jobId, true);
     } catch (consolidationErr) {
       log.warn(`[Job ${jobId}] Failed to consolidate after error:`, consolidationErr);
+    }
+    try {
+      jobEventBus.append(jobId, { type: 'failed', message: errorMessage });
+    } catch (err) {
+      log.warn(`[Job ${jobId}] Failed to emit failed to bus:`, err);
     }
     await jobStorage.markFailed(jobId, errorMessage);
   }

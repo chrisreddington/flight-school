@@ -33,6 +33,23 @@ describe('worker job architecture boundaries', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps streaming bus imports inside the worker process boundary', () => {
+    const SRC_ROOT = path.join(process.cwd(), 'src');
+    const WORKER_ROOT = path.join(SRC_ROOT, 'worker');
+    const INTERNAL_ROOT = path.join(SRC_ROOT, 'app/api/internal');
+    const offenders = sourceFiles(SRC_ROOT).flatMap((filePath) => {
+      // Allowed: anywhere inside src/worker/ or src/app/api/internal/.
+      if (filePath.startsWith(WORKER_ROOT)) return [];
+      if (filePath.startsWith(INTERNAL_ROOT)) return [];
+      const rel = path.relative(process.cwd(), filePath).replaceAll(path.sep, '/');
+      const source = readFileSync(filePath, 'utf8');
+      return importSpecifiers(source)
+        .filter((specifier) => specifier.startsWith('@/worker/jobs/streaming'))
+        .map((specifier) => `${rel} imports ${specifier}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps web job routes free of in-process executor imports', () => {
     const jobsRoot = path.join(APP_ROOT, 'api/jobs');
     const offenders = sourceFiles(jobsRoot).flatMap((filePath) => {
