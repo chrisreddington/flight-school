@@ -111,6 +111,80 @@ describe('jobStorage', () => {
     expect(result).toBeUndefined();
   });
 
+  describe('createIfAbsent (atomic check-then-create)', () => {
+    it('returns {created:true} when no record exists', async () => {
+      const outcome = await jobStorage.createIfAbsent({
+        id: 'absent-1',
+        type: 'chat-response',
+        userId: 'user-1',
+        input: {},
+      });
+      expect(outcome.created).toBe(true);
+      if (outcome.created) {
+        expect(outcome.job.id).toBe('absent-1');
+        expect(outcome.job.status).toBe('pending');
+      }
+    });
+
+    it('returns {created:false, existing} when same id already exists', async () => {
+      await jobStorage.create({ id: 'dup', type: 'chat-response', userId: 'user-1', input: {} });
+      const outcome = await jobStorage.createIfAbsent({
+        id: 'dup',
+        type: 'chat-response',
+        userId: 'user-1',
+        input: { v: 'newer' },
+      });
+      expect(outcome.created).toBe(false);
+      if (!outcome.created) {
+        expect(outcome.existing.id).toBe('dup');
+        expect(outcome.existing.input).toEqual({});
+      }
+    });
+
+    it('invokes the findCollision predicate inside the mutation and returns the match', async () => {
+      await jobStorage.create({
+        id: 'first',
+        type: 'chat-response',
+        userId: 'user-1',
+        input: { threadId: 't', assistantMessageId: 'a' },
+      });
+      const outcome = await jobStorage.createIfAbsent(
+        { id: 'second', type: 'chat-response', userId: 'user-1', input: { threadId: 't', assistantMessageId: 'a' } },
+        (jobs) => Object.values(jobs).find((j) => {
+          const input = j.input as { threadId?: string; assistantMessageId?: string };
+          return input?.threadId === 't' && input?.assistantMessageId === 'a';
+        }),
+      );
+      expect(outcome.created).toBe(false);
+      if (!outcome.created) {
+        expect(outcome.existing.id).toBe('first');
+      }
+    });
+
+    it('serialises parallel createIfAbsent calls with the same id so only one wins', async () => {
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () => jobStorage.createIfAbsent({
+          id: 'race',
+          type: 'chat-response',
+          userId: 'user-1',
+          input: {},
+        })),
+      );
+      const created = results.filter((r) => r.created);
+      expect(created).toHaveLength(1);
+      expect(results.filter((r) => !r.created)).toHaveLength(9);
+    });
+
+    it('rejects when userId is missing (multi-tenant invariant)', async () => {
+      await expect(jobStorage.createIfAbsent({
+        id: 'no-user',
+        type: 'chat-response',
+        userId: '',
+        input: {},
+      })).rejects.toThrow('userId is required');
+    });
+  });
+
   describe('concurrency (Phase 1 mutex)', () => {
     it('serialises parallel create calls so all jobs survive', async () => {
       // Without the withJobsMutation mutex, concurrent create() calls race on

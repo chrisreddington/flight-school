@@ -256,6 +256,54 @@ export const jobStorage = {
   },
 
   /**
+   * Atomic check-then-create.
+   *
+   * Closes the read-then-write race that existed when callers used
+   * `get(id)` + `create(...)` separately: two concurrent requests
+   * with the same `id` could both observe "no existing record" before
+   * either insert, and the second `create` would silently clobber
+   * the first.
+   *
+   * `findCollision` runs INSIDE the mutation, with the freshly-loaded
+   * schema, so callers can also enforce tuple uniqueness (e.g. the
+   * chat-response `(userId, threadId, assistantMessageId)` dedupe)
+   * under the same lock that the insert holds.
+   *
+   * - If `findCollision` returns a job → `{ created: false, existing }`.
+   * - If `schema.jobs[id]` already exists → `{ created: false, existing }`.
+   * - Otherwise → `{ created: true, job }` with the freshly-inserted record.
+   */
+  async createIfAbsent<T>(
+    job: Omit<BackgroundJob<T>, 'status' | 'createdAt'>,
+    findCollision?: (schema: Readonly<Record<string, BackgroundJob>>) => BackgroundJob | undefined,
+  ): Promise<{ created: true; job: BackgroundJob<T> } | { created: false; existing: BackgroundJob<T> }> {
+    if (!job.userId) {
+      throw new Error('jobStorage.createIfAbsent: userId is required (multi-tenant invariant)');
+    }
+    return withJobsMutation<{ created: true; job: BackgroundJob<T> } | { created: false; existing: BackgroundJob<T> }>(
+      (schema) => {
+        const cleaned = cleanup(schema);
+        const byId = cleaned.jobs[job.id];
+        if (byId) {
+          return { schema: cleaned, result: { created: false, existing: byId as BackgroundJob<T> } };
+        }
+        const collision = findCollision ? findCollision(cleaned.jobs) : undefined;
+        if (collision) {
+          return { schema: cleaned, result: { created: false, existing: collision as BackgroundJob<T> } };
+        }
+        const newJob: BackgroundJob<T> = {
+          ...job,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
+        cleaned.jobs[job.id] = newJob as BackgroundJob;
+        log.info(`Created job (if-absent): ${job.id} (${job.type})`);
+        return { schema: cleaned, result: { created: true, job: newJob } };
+      },
+    );
+  },
+
+  /**
    * Get a job by ID.
    */
   async get<T>(id: string): Promise<BackgroundJob<T> | undefined> {
