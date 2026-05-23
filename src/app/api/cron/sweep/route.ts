@@ -1,10 +1,10 @@
 /**
  * `POST /api/cron/sweep` — global retention sweeper.
  *
- * Runs every per-user sweep (threads / evaluations / job scratchpads)
- * plus the global stale-running and orphan-job sweeps. Intended to be
- * invoked on a fixed cadence (e.g. hourly) by an Azure Container Apps
- * Job authenticated via Entra ID. Returns aggregate counts only — no
+ * Runs every per-user sweep (threads / evaluations) plus the global
+ * stale-running and orphan-job sweeps. Intended to be invoked on a
+ * fixed cadence (e.g. hourly) by an Azure Container Apps Job
+ * authenticated via Entra ID. Returns aggregate counts only — no
  * user content ever leaves the server through this route.
  *
  * Auth: {@link verifyCronRequest} enforces a real Entra-issued bearer
@@ -55,7 +55,6 @@ export async function POST(request: Request) {
     const summary = {
       threads: userSweeps?.threads ?? null,
       evaluations: userSweeps?.evaluations ?? null,
-      scratchpads: userSweeps?.scratchpads ?? null,
       staleRunningJobs: jobSweeps?.staleRunningJobs ?? null,
       orphanJobs: jobSweeps?.orphanJobs ?? null,
       redactedTerminalJobs: jobSweeps?.redactedTerminalJobs ?? null,

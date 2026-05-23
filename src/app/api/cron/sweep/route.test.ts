@@ -54,7 +54,7 @@ function makeRequest(headers: Record<string, string> = {}): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   verifyCronRequestMock.mockResolvedValue({ appid: 'cron-app' });
-  sweepAllUsersMock.mockResolvedValue({ threads: 2, evaluations: 3, scratchpads: 1 });
+  sweepAllUsersMock.mockResolvedValue({ threads: 2, evaluations: 3 });
   sweepWorkerJobsMock.mockResolvedValue({
     staleRunningJobs: 4,
     orphanJobs: 5,
@@ -92,11 +92,11 @@ describe('POST /api/cron/sweep', () => {
     expect(body.summary).toMatchObject({
       threads: 2,
       evaluations: 3,
-      scratchpads: 1,
       staleRunningJobs: 4,
       orphanJobs: 5,
       redactedTerminalJobs: 6,
     });
+    expect(body.summary).not.toHaveProperty('scratchpads');
     expect(typeof body.sweptAt).toBe('string');
   });
 

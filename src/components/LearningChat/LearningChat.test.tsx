@@ -71,9 +71,9 @@ describe('LearningChat typing indicator', () => {
         createThread({
           messages: [
             {
-              id: 'streaming-abc',
+              id: 'msg-abc',
               role: 'assistant',
-              content: 'Thinking...',
+              content: 'Thinking ▊',
               timestamp: '2025-01-01T00:00:00.000Z',
             },
           ],

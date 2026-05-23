@@ -125,9 +125,9 @@ async function handleCreateJob(request: NextRequest, userId: string) {
   const causality = toJobCausalityContext(traceContext, triggerMetadata);
 
   // Phase D — server-validated assistantMessageId for chat jobs. The id
-  // is the stable handle the executor's streaming scratchpad uses to
-  // reconcile deltas to a single assistant message. The worker enforces
-  // the `(threadId, assistantMessageId)` uniqueness inside its atomic
+  // is the stable handle the worker uses to upsert deltas into a single
+  // assistant message on `threads.json`. The worker enforces the
+  // `(threadId, assistantMessageId)` uniqueness inside its atomic
   // create primitive; we just normalise the shape here.
   if (body.type === 'chat-response') {
     const chatInput = body.input as ChatResponseInput | undefined;

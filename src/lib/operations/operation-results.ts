@@ -37,7 +37,7 @@ export function buildOperationState(operations: Iterable<[string, ActiveOperatio
         goalRegenerations.set(id, operation);
         if (isActive) goals.add(targetId);
         break;
-      case 'chat-message':
+      case 'chat-response':
         chatMessages.set(id, operation);
         if (isActive) chat.add(id);
         break;

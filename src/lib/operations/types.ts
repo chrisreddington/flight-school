@@ -10,7 +10,6 @@ export type OperationType =
   | 'topic-regeneration'
   | 'challenge-regeneration'
   | 'goal-regeneration'
-  | 'chat-message'
   | 'chat-response';
 
 /** Status of an operation */
@@ -59,6 +58,6 @@ export interface OperationsSnapshot {
   challengeRegenerations: Map<string, ActiveOperation>;
   /** All operations of type 'goal-regeneration' */
   goalRegenerations: Map<string, ActiveOperation>;
-  /** All operations of type 'chat-message' */
+  /** All operations of type 'chat-response' */
   chatMessages: Map<string, ActiveOperation>;
 }

@@ -4,7 +4,6 @@ import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
 import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage';
 import { logger } from '@/lib/logger';
-import { deleteScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
 import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
@@ -13,7 +12,6 @@ import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
 import { registerSession, unregisterSession } from './session-registry';
 import {
-  consolidateScratchpadToThread,
   STREAM_CURSOR,
   upsertMessageById,
 } from './thread-consolidation';
@@ -33,6 +31,49 @@ export async function executeChatResponse(
 
   const { threadId, prompt, assistantMessageId: providedAssistantId, learningMode = false, useGitHubTools = false, repos } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
+
+  // Stream-state is hoisted to the outer scope so the catch block can
+  // consolidate whatever partial assistant content was assembled before
+  // the error and finalise the thread (clears `isStreaming`).
+  let fullContent = '';
+  const toolCalls: string[] = [];
+  const toolEvents: ToolCallEvent[] = [];
+  let hasActionableItem = false;
+
+  const consolidateToThread = async (isFinal: boolean) => {
+    try {
+      const currentThread = await getThreadById(userId, threadId);
+      if (!currentThread) return;
+
+      const consolidatedMessage: Message = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: fullContent + (isFinal ? '' : STREAM_CURSOR),
+        timestamp: now(),
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
+        hasActionableItem,
+      };
+
+      const updatedMessages = upsertMessageById(
+        currentThread.messages,
+        assistantMessageId,
+        consolidatedMessage,
+        false,
+      );
+
+      await updateThread(userId, {
+        ...currentThread,
+        messages: updatedMessages,
+        updatedAt: now(),
+        isStreaming: !isFinal,
+      });
+
+      log.debug(`[Job ${jobId}] Consolidated to thread: ${fullContent.length} chars, final=${isFinal}`);
+    } catch (err) {
+      log.warn(`[Job ${jobId}] Failed to consolidate to thread:`, err);
+    }
+  };
 
   try {
     log.info(`[Job ${jobId}] Starting chat response for thread ${threadId}`);
@@ -61,32 +102,17 @@ export async function executeChatResponse(
       },
     });
 
-    let fullContent = '';
-    const toolCalls: string[] = [];
-    const toolEvents: ToolCallEvent[] = [];
     let toolCounter = 0;
-    let hasActionableItem = false;
-    let lastSaveTime = Date.now();
-    const SAVE_INTERVAL_MS = 400;
+    let lastSnapshotMs = 0;
+    let lastDurableWriteMs = 0;
+    const SNAPSHOT_INTERVAL_MS = 400;
+    const DURABLE_WRITE_INTERVAL_MS = 500;
 
-    const flushScratchpad = async (status: 'streaming' | 'completed' | 'failed') => {
-      try {
-        await writeScratchpad(userId, jobId, {
-          threadId,
-          assistantMessageId,
-          content: fullContent,
-          toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
-          hasActionableItem,
-          status,
-        });
-      } catch (err) {
-        log.warn(`[Job ${jobId}] Failed to flush scratchpad:`, err);
-      }
-
-      // Dual-write: also emit a rolling state snapshot to the in-process
-      // event bus. SSE subscribers use this for gap recovery — new readers
-      // (or reconnects past the buffer cap) get the latest state in one
-      // event without replaying every delta.
+    // Emit a rolling state snapshot to the in-process event bus so SSE
+    // subscribers (and reconnects past the buffer cap) can recover the
+    // latest assembled state in one event without replaying every delta.
+    const emitSnapshot = (): void => {
+      lastSnapshotMs = Date.now();
       try {
         jobEventBus.snapshot(jobId, {
           content: fullContent,
@@ -95,43 +121,6 @@ export async function executeChatResponse(
         });
       } catch (err) {
         log.warn(`[Job ${jobId}] Failed to emit state snapshot to bus:`, err);
-      }
-    };
-
-    const consolidateToThread = async (isFinal: boolean) => {
-      try {
-        const currentThread = await getThreadById(userId, threadId);
-        if (!currentThread) return;
-
-        const consolidatedMessage: Message = {
-          id: assistantMessageId,
-          role: 'assistant',
-          content: fullContent + (isFinal ? '' : STREAM_CURSOR),
-          timestamp: now(),
-          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-          toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
-          hasActionableItem,
-        };
-
-        const updatedMessages = upsertMessageById(
-          currentThread.messages,
-          assistantMessageId,
-          consolidatedMessage,
-          false,
-        );
-
-        await updateThread(userId, {
-          ...currentThread,
-          messages: updatedMessages,
-          updatedAt: now(),
-          isStreaming: !isFinal,
-        });
-
-        await deleteScratchpad(userId, jobId);
-
-        log.debug(`[Job ${jobId}] Consolidated to thread: ${fullContent.length} chars, final=${isFinal}`);
-      } catch (err) {
-        log.warn(`[Job ${jobId}] Failed to consolidate to thread:`, err);
       }
     };
 
@@ -150,11 +139,24 @@ export async function executeChatResponse(
         } catch (err) {
           log.warn(`[Job ${jobId}] Failed to emit delta to bus:`, err);
         }
-
-        const nowMs = Date.now();
-        if (nowMs - lastSaveTime >= SAVE_INTERVAL_MS) {
-          await flushScratchpad('streaming');
-          lastSaveTime = nowMs;
+        // Emit a state_snapshot periodically during delta-only streams so
+        // (a) late subscribers past the ring-buffer cap can recover full
+        // assembled content via the replayed snapshot, and (b) any reader
+        // dropping into the SSE stream sees a coherent rolling view.
+        if (Date.now() - lastSnapshotMs >= SNAPSHOT_INTERVAL_MS) {
+          emitSnapshot();
+        }
+        // Periodically write partial assistant content to the durable
+        // thread store. With the scratchpad gone, this is what makes
+        // live content visible to clients that refresh threads.json
+        // (e.g. when navigating back to a streaming thread).
+        if (Date.now() - lastDurableWriteMs >= DURABLE_WRITE_INTERVAL_MS) {
+          lastDurableWriteMs = Date.now();
+          try {
+            await consolidateToThread(false);
+          } catch (err) {
+            log.warn(`[Job ${jobId}] Periodic durable write failed:`, err);
+          }
         }
       } else if (event.type === 'tool_start') {
         toolCalls.push(event.name);
@@ -175,8 +177,13 @@ export async function executeChatResponse(
         } catch (err) {
           log.warn(`[Job ${jobId}] Failed to emit tool_start to bus:`, err);
         }
-        await flushScratchpad('streaming');
-        lastSaveTime = Date.now();
+        emitSnapshot();
+        try {
+          await consolidateToThread(false);
+          lastDurableWriteMs = Date.now();
+        } catch (err) {
+          log.warn(`[Job ${jobId}] tool_start durable write failed:`, err);
+        }
       } else if (event.type === 'tool_complete') {
         let completedToolCallId: string | null = null;
         for (let i = toolEvents.length - 1; i >= 0; i--) {
@@ -204,8 +211,13 @@ export async function executeChatResponse(
             log.warn(`[Job ${jobId}] Failed to emit tool_complete to bus:`, err);
           }
         }
-        await flushScratchpad('streaming');
-        lastSaveTime = Date.now();
+        emitSnapshot();
+        try {
+          await consolidateToThread(false);
+          lastDurableWriteMs = Date.now();
+        } catch (err) {
+          log.warn(`[Job ${jobId}] tool_complete durable write failed:`, err);
+        }
       } else if (event.type === 'done') {
         hasActionableItem = detectActionableContent(fullContent);
       } else if (event.type === 'error') {
@@ -256,8 +268,11 @@ export async function executeChatResponse(
     unregisterSession(jobId);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     log.error(`[Job ${jobId}] Chat response failed:`, errorMessage);
+    // Finalise whatever partial assistant content was assembled before
+    // the error. `consolidateToThread(true)` clears `isStreaming` and
+    // upserts the partial message so the UI doesn't show a stuck cursor.
     try {
-      await consolidateScratchpadToThread(userId, jobId, true);
+      await consolidateToThread(true);
     } catch (consolidationErr) {
       log.warn(`[Job ${jobId}] Failed to consolidate after error:`, consolidationErr);
     }

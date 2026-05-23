@@ -12,8 +12,7 @@
  * |--------------------------------------------------|---------------------------|
  * | `users/{userId}/threads.json` (per-thread)       | 7d since `updatedAt`      |
  * | `users/{userId}/evaluations.json` (per entry)    | 24h since terminal state  |
- * | `users/{userId}/jobs/{jobId}.json` (scratchpad)  | 1h since `lastUpdated`    |
- * | `BackgroundJob` records (terminal, no scratchpad)| existing 1h delete window |
+ * | `BackgroundJob` records (terminal)               | existing 1h delete window |
  * | `BackgroundJob` records (running) considered stale | 6h with no progress     |
  * | Orphan `BackgroundJob` records (no `userId`)     | deleted on next sweep     |
  *
@@ -21,7 +20,7 @@
  */
 
 import 'server-only';
-import { deleteFile, listDirs, listFiles, readFile, writeFile } from './utils';
+import { deleteFile, listDirs, readFile, writeFile } from './utils';
 import { SAFE_USER_ID } from './user-scope';
 import { logger } from '@/lib/logger';
 
@@ -33,8 +32,6 @@ export const RETENTION_TTL = {
   threadMs: 7 * 24 * 60 * 60 * 1000,
   /** 24 hours after terminal state before an evaluation entry is swept. */
   evaluationMs: 24 * 60 * 60 * 1000,
-  /** 1 hour after `lastUpdated` before a scratchpad is swept. */
-  scratchpadMs: 60 * 60 * 1000,
   /** 6 hours of no progress before a `running`/`pending` job is failed. */
   staleRunningMs: 6 * 60 * 60 * 1000,
 } as const;
@@ -60,12 +57,7 @@ interface EvaluationShape {
   updatedAt?: string;
 }
 
-interface ScratchpadShape {
-  status?: 'pending' | 'streaming' | 'completed' | 'failed' | string;
-  lastUpdated?: string;
-}
-
-export type UserSweepKey = 'threads' | 'evaluations' | 'scratchpads';
+export type UserSweepKey = 'threads' | 'evaluations';
 
 export function parseTimestamp(input: unknown): number | null {
   if (typeof input !== 'string' || input.length === 0) return null;
@@ -197,45 +189,6 @@ export async function sweepEvaluationsForUser(
 }
 
 /**
- * Sweep streaming-scratchpad files (Phase D) at
- * `users/{userId}/jobs/{jobId}.json` whose `lastUpdated` is older than
- * the scratchpad TTL.
- */
-export async function sweepJobScratchpadsForUser(
-  userId: string,
-  nowMs: number,
-  ttlMs: number = RETENTION_TTL.scratchpadMs,
-): Promise<SweepResult> {
-  if (!SAFE_USER_ID.test(userId)) {
-    return { deleted: 0, inspected: 0 };
-  }
-  const subdir = `users/${userId}/jobs`;
-  const files = await listFiles(subdir);
-  const inspected = files.length;
-  if (inspected === 0) return { deleted: 0, inspected: 0 };
-
-  let deleted = 0;
-  for (const filename of files) {
-    if (!filename.endsWith('.json')) continue;
-    const raw = await readFile(subdir, filename);
-    if (raw === null) continue;
-    let parsed: ScratchpadShape;
-    try {
-      parsed = JSON.parse(raw) as ScratchpadShape;
-    } catch {
-      continue;
-    }
-    if (!isOlderThanTtl(parsed.lastUpdated, nowMs, ttlMs)) continue;
-    await deleteFile(subdir, filename);
-    deleted += 1;
-  }
-  if (deleted > 0) {
-    log.info(`[retention] swept ${deleted}/${inspected} scratchpads for user ${userId}`);
-  }
-  return { deleted, inspected };
-}
-
-/**
  * Run every per-user sweeper for every user directory on disk.
  * Filters dirnames through {@link SAFE_USER_ID} as defense in depth
  * against unexpected names appearing under the storage root.
@@ -247,7 +200,6 @@ export async function sweepAllUsers(
   const aggregate: Record<UserSweepKey, SweepResult> = {
     threads: { deleted: 0, inspected: 0 },
     evaluations: { deleted: 0, inspected: 0 },
-    scratchpads: { deleted: 0, inspected: 0 },
   };
   for (const userId of userDirs) {
     if (!SAFE_USER_ID.test(userId)) {
@@ -258,8 +210,6 @@ export async function sweepAllUsers(
     addSweepResult(aggregate.threads, t);
     const e = await sweepEvaluationsForUser(userId, nowMs);
     addSweepResult(aggregate.evaluations, e);
-    const s = await sweepJobScratchpadsForUser(userId, nowMs);
-    addSweepResult(aggregate.scratchpads, s);
   }
   return aggregate;
 }

@@ -119,8 +119,58 @@ export async function register(): Promise<void> {
           staleJobs.map((job) => jobStorage.markFailed(job.id, 'Server process restarted'))
         );
 
+        // Clean up any chat threads that were mid-stream when the worker
+        // restarted. Without this, threads.json still has `isStreaming: true`
+        // and the UI would display a stuck cursor indefinitely until the
+        // user manually navigates away.
+        const staleChatJobs = staleJobs.filter((job) => job.type === 'chat-response');
+        if (staleChatJobs.length > 0) {
+          const [{ getThreadById, updateThread }, { STREAM_CURSOR }] = await Promise.all([
+            import('@/lib/jobs/storage/threads-storage'),
+            import('@/worker/jobs/executors/thread-consolidation'),
+          ]);
+          await Promise.all(
+            staleChatJobs.map(async (job) => {
+              const input = (job.input ?? {}) as { threadId?: string; assistantMessageId?: string };
+              if (!input.threadId || !job.userId) return;
+              try {
+                const thread = await getThreadById(job.userId, input.threadId);
+                if (!thread) return;
+                // Strip the streaming cursor from the partial assistant
+                // message left by the last periodic durable write.
+                // Without this `LearningChat` keeps showing the ▊ cursor
+                // because it inspects the message content independent of
+                // `thread.isStreaming`.
+                const cleanedMessages = thread.messages.map((m) => {
+                  if (m.role !== 'assistant') return m;
+                  if (input.assistantMessageId && m.id !== input.assistantMessageId) return m;
+                  if (!m.content.includes(STREAM_CURSOR.trim())) return m;
+                  return { ...m, content: m.content.replace(STREAM_CURSOR, '').trimEnd() };
+                });
+                const needsUpdate =
+                  thread.isStreaming === true ||
+                  cleanedMessages.some((m, i) => m !== thread.messages[i]);
+                if (needsUpdate) {
+                  await updateThread(job.userId, {
+                    ...thread,
+                    messages: cleanedMessages,
+                    isStreaming: false,
+                    updatedAt: new Date().toISOString(),
+                  });
+                }
+              } catch (err) {
+                log.warn('Failed to clear stale chat thread state', {
+                  err,
+                  jobId: job.id,
+                  threadId: input.threadId,
+                });
+              }
+            })
+          );
+        }
+
         if (staleJobs.length > 0) {
-          log.info(`Marked ${staleJobs.length} stale jobs as failed on startup`);
+          log.info(`Marked ${staleJobs.length} stale jobs as failed on startup (${staleChatJobs.length} chat threads cleared)`);
         }
       } catch (err) {
         log.warn('Failed to mark stale jobs on startup', { err });

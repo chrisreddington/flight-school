@@ -117,7 +117,7 @@ describe('useActiveOperations core logic', () => {
 
 describe('useActiveOperations interface contract', () => {
   it('should define expected result shape', () => {
-    type OperationType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-message';
+    type OperationType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response';
 
     interface UseActiveOperationsResult {
       activeTopicIds: Set<string>;

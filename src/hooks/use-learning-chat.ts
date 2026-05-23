@@ -38,6 +38,7 @@ import { useCallback } from 'react';
 import { apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { createLearningChatSendTrigger } from '@/lib/observability/job-trigger-builders';
+import { operationsManager } from '@/lib/operations';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
@@ -254,6 +255,7 @@ export function useLearningChat(): UseLearningChatReturn {
         // apiPost handles 402 (banner) and 429 (rate-limit toast) globally.
         const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
           type: 'chat-response',
+          targetId: targetThreadId,
           input: {
             threadId: targetThreadId,
             prompt: message,
@@ -266,7 +268,15 @@ export function useLearningChat(): UseLearningChatReturn {
           clientTrigger: createLearningChatSendTrigger(targetThreadId, assistantMessageId),
         });
         log.debug(`Started job ${jobId} for thread ${targetThreadId}`);
-        
+
+        // Register the externally-created job into the operations
+        // snapshot so the SSE subscription hook can find this jobId
+        // for this thread and open the EventSource. Chat creation goes
+        // through raw `apiPost` (not `startBackgroundJob`) because chat
+        // streams over SSE and does not want the per-job status poll
+        // that `startBackgroundJob` attaches.
+        operationsManager.registerExistingJob(jobId, 'chat-response', targetThreadId);
+
         // Trigger immediate refresh to pick up the isStreaming flag
         await refreshThreads();
       } catch (err) {

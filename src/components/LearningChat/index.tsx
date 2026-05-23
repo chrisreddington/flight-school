@@ -177,10 +177,11 @@ export const LearningChat = memo(function LearningChat({
   const isStreamingInActiveThread = (isStreaming === true) || (activeThread?.isStreaming === true);
   
   // All messages come directly from storage - no synthetic messages needed
-  // The streaming message has id starting with 'streaming-' and contains cursor ` ▊`
+  // The streaming assistant message is identified by the STREAM_CURSOR
+  // glyph (▊) in its content, written by the worker during deltas.
   const displayMessages = messages;
   // Show typing indicator when streaming starts but no streaming message has arrived yet
-  const hasStreamingMessage = displayMessages.some(m => m.id.startsWith('streaming-'));
+  const hasStreamingMessage = displayMessages.some(m => m.role === 'assistant' && m.content.includes('▊'));
   const showTypingIndicator = isStreamingInActiveThread && !hasStreamingMessage;
 
   // Auto-scroll to bottom when messages change or typing indicator appears
@@ -301,9 +302,9 @@ export const LearningChat = memo(function LearningChat({
           ) : (
             <div className={styles.messagesList}>
               {displayMessages.map((message) => {
-                // Message is streaming if it has streaming- prefix or contains cursor
-                const isMessageStreaming = message.id.startsWith('streaming-') || 
-                  (message.role === 'assistant' && message.content.includes(' ▊'));
+                // A message is rendered as streaming when it contains the
+                // STREAM_CURSOR glyph the worker writes during deltas.
+                const isMessageStreaming = message.role === 'assistant' && message.content.includes('▊');
                 return (
                   <MessageBubble
                     key={message.id}

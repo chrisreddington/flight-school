@@ -169,7 +169,13 @@ class ActiveOperationsManager {
 
         this.operations.set(operationId, operation);
         this.jobToOperation.set(entry.jobId, operationId);
-        this.startPolling(entry.jobId, operationId);
+        // Chat operations stream exclusively via SSE; per-job status polling
+        // is intentionally skipped to avoid duplicating transport. The SSE
+        // subscription hook discovers the jobId via `snapshot.chatMessages`
+        // and clears the op on `[DONE]` via `completeExistingJob`.
+        if (jobType !== 'chat-response') {
+          this.startPolling(entry.jobId, operationId);
+        }
       }
 
       if (entries.length > 0) {
@@ -433,7 +439,7 @@ class ActiveOperationsManager {
         return this.cachedActiveIds.challenges;
       case 'goal-regeneration':
         return this.cachedActiveIds.goals;
-      case 'chat-message':
+      case 'chat-response':
         return this.cachedActiveIds.chat;
       default:
         return new Set();
@@ -597,6 +603,91 @@ class ActiveOperationsManager {
     
     const operationId = `chat-response:${threadId}`;
     return this.cancelBackgroundJob(operationId);
+  }
+
+  /**
+   * Register an externally-created background job so consumers using
+   * the operations snapshot (e.g. the chat SSE subscription hook) can
+   * see it. Used by code paths that create jobs via raw `apiPost`
+   * rather than `startBackgroundJob`, where polling is undesirable
+   * (chat streams over SSE rather than poll-on-completion).
+   *
+   * Idempotent: re-registering the same operationId is a no-op aside
+   * from updating the jobId mapping.
+   */
+  registerExistingJob(
+    jobId: string,
+    type: OperationType,
+    targetId: string,
+  ): void {
+    const operationId = `${type}:${targetId}`;
+    const existing = this.operations.get(operationId);
+    if (existing) {
+      // Refresh jobId metadata when a new job replaces an older one for
+      // the same target (e.g. user sends a second message in the same
+      // thread before the prior op was cleaned up). Without this the
+      // SSE subscription hook would keep targeting the old job.
+      if (existing.meta.jobId && existing.meta.jobId !== jobId) {
+        this.jobToOperation.delete(existing.meta.jobId);
+      }
+      existing.meta = { ...existing.meta, jobId, startedAt: now() };
+      existing.status = 'in-progress';
+    } else {
+      const operation: ActiveOperation = {
+        id: operationId,
+        status: 'in-progress',
+        meta: {
+          type,
+          startedAt: now(),
+          targetId,
+          jobId,
+        },
+      };
+      this.operations.set(operationId, operation);
+    }
+    this.jobToOperation.set(jobId, operationId);
+
+    const itemType = JOB_ITEM_TYPE_BY_TYPE[type];
+    if (itemType) {
+      activeOperationsStore.addEntry({
+        itemId: targetId,
+        itemType,
+        jobId,
+        startedAt: this.operations.get(operationId)?.meta.startedAt ?? now(),
+      }).catch((err) => {
+        log.warn('Failed to persist active operation entry', { err, jobId, operationId });
+      });
+    }
+
+    this.updateSnapshot();
+    this.notifyListeners();
+  }
+
+  /**
+   * Tear down a registered chat operation when its SSE stream terminates
+   * (done / failed / cancelled). Mirrors the polling-based completion
+   * path's cleanup but for the no-polling SSE-only path:
+   *  - removes the in-memory operation,
+   *  - clears the jobId mapping,
+   *  - evicts the persisted active-operations-store entry,
+   *  - refreshes the snapshot.
+   *
+   * Safe to call with an unknown jobId (no-op).
+   */
+  completeExistingJob(jobId: string): void {
+    const operationId = this.jobToOperation.get(jobId);
+    if (operationId) {
+      this.operations.delete(operationId);
+      this.jobToOperation.delete(jobId);
+      void this.removeActiveEntry(jobId);
+      this.updateSnapshot();
+      this.notifyListeners();
+    } else {
+      // Even if the in-memory op was never registered (e.g. job created
+      // before page load and only discovered via initialize), drop the
+      // persisted entry so the next initialize doesn't resurrect it.
+      void this.removeActiveEntry(jobId);
+    }
   }
 }
 
