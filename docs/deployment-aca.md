@@ -1,9 +1,12 @@
 # Deploying Flight School to Azure Container Apps
 
 > [!WARNING]
-> **Exploratory only — not for production use.**
-> This document exists to support experimentation with GitHub, Copilot SDK, Aspire, and ACA workflows.
-> Do **not** treat this project or these deployment steps as production guidance.
+> **Exploratory only — not for production use.** Flight School is a
+> single-developer side project mid-iteration. This document describes how
+> *the experiment* is deployed; it is **not** a reference architecture and
+> almost certainly contains shortcuts you should not copy into a production
+> system. Treat everything here as "how I'm currently kicking the tires" and
+> review independently before reusing.
 
 This doc covers the **container image** half of deploying Flight School. The
 full Azure Container Apps deployment (infra, identity, secrets wiring) is
@@ -20,12 +23,11 @@ That is acceptable for this exploratory ACA lab, but it is not the target shape
 for a public multi-user platform. The target architecture is an internal worker
 service with a per-user Copilot runtime pool, described in
 [`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md).
-The current code has the first seams for that migration:
-`src/lib/copilot/execution/` isolates chat execution,
-`src/app/api/jobs/dispatcher.ts` isolates async job dispatch, and
-`src/lib/copilot/runtime/` defines the prototype per-user runtime-pool contract.
-The next scaffold adds a private `copilot-worker` Container App and configures
-the public web app to call it through `COPILOT_WORKER_URL`.
+The current code has this split in place:
+`src/lib/copilot/execution/` handles chat worker transport,
+`src/app/api/jobs/dispatcher.ts` dispatches async jobs to the worker, and
+`/api/internal/jobs/{execute,cancel}` is the worker-owned background job boundary.
+Service Bus/KEDA durable workers remain future work.
 
 ## Building the image
 
@@ -129,6 +131,7 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | Signal | Where |
 |---|---|
 | HTTP request traces, GitHub API spans, Copilot session spans | Application Insights (OpenTelemetry export via `@vercel/otel`). |
+| Web→worker job correlation | Application Insights distributed traces. A single chat/job flow should contain web `POST /api/jobs`, web→worker `/api/internal/jobs/execute`, worker execution spans, and Copilot spans under one trace lineage (with replay/retry linked via span links). |
 | Audit events (`copilot.session.create`, rate-limit denials, cap hits) | Application Insights traces, filterable on `eventType`. User IDs are hashed with `AUDIT_SALT`. |
 | Revision health | `az containerapp revision list` — startup/readiness probes hit `/api/health` (owned by another phase). |
 | Worker health | `az containerapp show -n <appName>-worker` — internal ingress only; probes also hit `/api/health`. |

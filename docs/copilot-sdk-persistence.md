@@ -1,5 +1,11 @@
 # Copilot SDK persistence: keep `infiniteSessions` enabled
 
+> [!WARNING]
+> **Exploratory project — not a reference.** This is a design note from a
+> single-developer side project. The reasoning below reflects the current
+> tradeoffs in this experiment; it is **not** general guidance for using the
+> Copilot SDK in production.
+
 > **Status:** Decision (Phase C of the multi-tenant data-minimization plan).
 > **Date:** 2024-11.
 

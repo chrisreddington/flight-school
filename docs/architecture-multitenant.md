@@ -1,5 +1,11 @@
 # Multi-tenant Architecture
 
+> [!WARNING]
+> **Exploratory project — not a reference architecture.** Flight School is a
+> single-developer experiment; this document captures the current state, not
+> a recommended design. Expect rough edges and pending refactors. Don't copy
+> these patterns into production without independent review.
+
 Flight School is multi-tenant: every incoming HTTP request is authenticated as
 a specific GitHub user, and that user's GitHub App user-to-server (`ghu_`)
 token flows all the way down to GitHub API calls **and** to the Copilot SDK
@@ -135,7 +141,7 @@ SDK rejects `cliUrl` combined with `gitHubToken` / `useLoggedInUser`.
 | Copilot session factory | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
 | Logged session helpers | `src/lib/copilot/server.ts` | `createLoggedChatSession`, `createLoggedCoachSession`, `SessionIdentity` |
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
-| Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution`, `executeDispatchedJob` |
+| Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution` (web -> worker HTTP dispatch) |
 | Prototype runtime-pool contracts | `src/lib/copilot/runtime/` | `createPerUserRuntimePool`, `CopilotRuntimePool` |
 | Route guard composition | `src/lib/security/guard.ts` | `withUserGuards` |
 | Audit + abuse controls | `src/lib/security/` | `auditLog`, `checkRateLimit`, `acquireSlot` |
@@ -258,8 +264,23 @@ plus the job-specific input. They MUST NOT contain `accessToken`,
 `gitHubToken`, or any other GitHub credential. This invariant is enforced
 by `src/app/api/jobs/route.ts` (and asserted by `route.test.ts`).
 
+**Cross-service trace contract.** Web and worker traces are stitched with
+W3C trace context (`traceparent` / `tracestate`) as transport metadata:
+
+- `POST /api/jobs` captures request trace context and forwards it on worker
+  dispatch calls (`/api/internal/jobs/execute` and `/api/internal/jobs/cancel`)
+  using HTTP headers.
+- Worker internal routes extract inbound trace context before validation and
+  execution so downstream spans (`copilot.session.create`, `invoke_agent`,
+  executor spans) stay in the same distributed trace.
+- Jobs persist a minimal causality envelope (`traceparent`, `tracestate`,
+  `capturedAt`) for replay/retry scenarios.
+- Worker execution creates a `worker.job.execute` span and attaches a span-link
+  from persisted causality context when available, so replayed work keeps
+  causal trace lineage without requiring long-lived parent spans.
+
 **Token-refresh-at-execution.** Each executor in
-`src/app/api/jobs/job-executors.ts` calls
+`src/worker/jobs/executors/*` calls
 `resolveFreshGitHubToken(userId)` (`src/lib/auth/token-resolver.ts`) as its
 first step after `markRunning`. The resolver:
 
@@ -398,11 +419,13 @@ Concretely:
 
 ## Future work: durable async execution
 
-The current background-job executor still runs in-process via a `setImmediate`
-dispatcher boundary, which limits horizontal scaling and means a pod-recycle
-mid-job loses the work. The dispatcher boundary keeps job routes from owning
-executor wiring, but it is not durable execution yet. The recommended end-state
-is a Service Bus queue with a KEDA-scaled Azure Container Apps Job worker:
+Background jobs are now executed in the private worker service via
+`/api/internal/jobs/execute` and cancelled via `/api/internal/jobs/cancel`.
+This keeps Copilot runtime/session ownership in the worker process and moves
+execution telemetry off the public web process. It is still not durable queue
+execution yet: scheduling is in-memory in the worker process. A worker restart
+mid-job can still lose in-flight work. The recommended end-state remains a
+Service Bus queue with a KEDA-scaled Azure Container Apps Job worker:
 
 - `POST /api/jobs` enqueues the job descriptor (still userId-only) to
   Service Bus after `seedTokenStoreFromJwt`.
@@ -413,7 +436,6 @@ is a Service Bus queue with a KEDA-scaled Azure Container Apps Job worker:
 - The web replicas can then be stateless and freely roll without
   abandoning in-flight work.
 
-The current `setImmediate`-based path is intentionally a transitional
-shape: the CAS-safe `TokenStore`, the no-token-on-payload contract, and
-the seed-at-boundary precondition all transfer to the durable design
-unchanged.
+The current worker-route-based path is intentionally transitional: the
+CAS-safe `TokenStore`, the no-token-on-payload contract, and the seed-at-boundary
+precondition all transfer to the durable design unchanged.

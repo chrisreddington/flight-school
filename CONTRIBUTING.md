@@ -2,6 +2,16 @@
 
 Thank you for your interest in contributing to Flight School! This guide will help you get started with local development or using GitHub Codespaces.
 
+> [!WARNING]
+> **Exploratory project — not a reference.** Flight School is a
+> single-developer side project for trying out GitHub, the Copilot SDK,
+> Aspire, and adjacent tooling. The codebase is **mid-flight** and
+> intentionally noisy — expect half-finished refactors, antipatterns, and
+> decisions that will likely change. Do not treat anything here as a
+> recommended pattern, and do not copy it into production systems without
+> independent review. Issues and PRs are welcome, but there is no SLA,
+> roadmap, or stability guarantee.
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior through the channels described in the Code of Conduct.

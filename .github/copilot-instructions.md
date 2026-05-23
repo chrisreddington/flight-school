@@ -1,5 +1,14 @@
 # Flight School - Copilot Instructions
 
+> [!WARNING]
+> **Exploratory project — not a reference.** Flight School is a
+> single-developer side project, mid-iteration. The patterns below describe
+> the current state of the codebase, not recommended best practices. Expect
+> antipatterns, half-finished refactors, and inconsistencies. When working in
+> this repo, follow the conventions documented here for *consistency with
+> existing code*, but do not assume any pattern here is a reference for use
+> elsewhere.
+
 ## Architecture Overview
 
 Next.js 14 App Router application with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes to protect credentials.

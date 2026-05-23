@@ -5,9 +5,20 @@
 Flight School is a sample implementation showing how to build AI-powered developer tools using the [GitHub Copilot SDK](https://github.com/github/copilot-sdk). It's a learning platform where developers practice coding challenges, receive real-time AI evaluation, and get personalized guidance all powered by GitHub Copilot.
 
 > [!WARNING]
-> **Exploratory project — not production ready.**
-> Flight School is an experiment for trying the latest capabilities across **GitHub**, the **Copilot SDK**, **Aspire**, and related tooling.
-> It is **not recommended for production use**.
+> **Exploratory project — not a reference, not production-ready.**
+>
+> Flight School is a single-developer side project used to explore the latest
+> capabilities across **GitHub**, the **Copilot SDK**, **Aspire**, and related
+> tooling. It is **mid-flight**: actively iterated on, intentionally noisy in
+> places, and almost certainly contains antipatterns, half-finished
+> refactors, and decisions I'd make differently next time.
+>
+> - **Do not** treat this codebase as a reference example or a recommended
+>   architecture.
+> - **Do not** copy patterns from here into production systems without
+>   independent review.
+> - Issues, PRs, and observations are welcome, but there is no SLA, roadmap
+>   commitment, or stability guarantee on anything in this repo.
 >
 > The current Copilot SDK integration provides **per-user identity isolation**
 > by passing each authenticated user's GitHub token into every SDK session.
