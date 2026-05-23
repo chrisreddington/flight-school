@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createTelemetryHygieneSampler,
-  isNextjsBubbleSpan,
   isProxyRouteSpan,
 } from './proxy-sampler';
 
@@ -80,50 +79,56 @@ describe('createTelemetryHygieneSampler', () => {
     expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
   });
 
-  it('drops the Next.js bubble wrapper span via next.bubble attribute', () => {
+  it('does NOT drop bare-method SERVER spans at sample time (bubble + keeper both pass through)', () => {
+    // CRITICAL ARCHITECTURAL INVARIANT. At shouldSample()/startSpan() time,
+    // the Next.js bubble and the route keeper are STRUCTURALLY IDENTICAL:
+    // both have a bare-method name ("GET", "POST"), both have
+    // next.span_type="BaseServer.handleRequest", neither has next.bubble,
+    // http.route, next.route, or operation.name (all set later).
+    //
+    // Therefore the sampler MUST pass both through. Bubble filtering is
+    // done at export time by BubbleFilteringSpanExporter, where every
+    // discriminating attribute is fully materialised. Filtering here would
+    // either:
+    //   - silently no-op (using attributes that aren't yet set), or
+    //   - drop the keeper too, killing the entire downstream tree via
+    //     ParentBasedSampler propagation (PR1 regression).
+    //
+    // Even when next.bubble is somehow present at sample time (e.g. set
+    // by a future Next.js version on the initial startSpan attributes),
+    // the sampler still passes — bubble filtering is the exporter's job.
     const sampler = createTelemetryHygieneSampler();
-    const result = sampler.shouldSample(
-      ROOT_CONTEXT,
-      traceId,
-      'GET',
-      SpanKind.SERVER,
+    const startTimeShapes: Array<{ label: string; attrs: Record<string, unknown> }> = [
       {
-        'next.span_type': 'BaseServer.handleRequest',
-        'next.bubble': 'true',
-        'next.rsc': 'false',
-        'http.target': '/api/profile',
-      },
-      [],
-    );
-    expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
-  });
-
-  it('keeps a bare-method SERVER span without next.bubble (the keeper at startSpan time)', () => {
-    // CRITICAL REGRESSION TEST. At shouldSample()/startSpan() time, Next.js
-    // has not yet renamed the keeper SERVER span from "POST" to
-    // "POST /api/route" and has not yet populated `http.route`. The keeper
-    // and the bubble are indistinguishable by name — only `next.bubble`
-    // discriminates. A previous defensive-backup branch caught the keeper
-    // here and dropped the entire downstream trace tree via ParentBased
-    // propagation.
-    const sampler = createTelemetryHygieneSampler();
-    for (const name of ['GET', 'POST', 'HTTP GET', 'PUT', 'DELETE']) {
-      const result = sampler.shouldSample(
-        ROOT_CONTEXT,
-        traceId,
-        name,
-        SpanKind.SERVER,
-        {
+        label: 'keeper-at-start (no discriminating attrs)',
+        attrs: {
           'next.span_type': 'BaseServer.handleRequest',
           'http.target': '/api/profile',
-          // next.bubble: absent (this is the keeper)
-          // http.route: absent (not yet populated at sampler time)
         },
-        [],
-      );
-      expect(result.decision, `name=${name}`).toBe(
-        SamplingDecision.RECORD_AND_SAMPLED,
-      );
+      },
+      {
+        label: 'bubble-at-start (Next.js sets next.bubble later, but defend anyway)',
+        attrs: {
+          'next.span_type': 'BaseServer.handleRequest',
+          'next.bubble': 'true',
+          'http.target': '/api/profile',
+        },
+      },
+    ];
+    for (const name of ['GET', 'POST', 'HTTP GET', 'PUT', 'DELETE']) {
+      for (const shape of startTimeShapes) {
+        const result = sampler.shouldSample(
+          ROOT_CONTEXT,
+          traceId,
+          name,
+          SpanKind.SERVER,
+          shape.attrs,
+          [],
+        );
+        expect(result.decision, `name=${name} ${shape.label}`).toBe(
+          SamplingDecision.RECORD_AND_SAMPLED,
+        );
+      }
     }
   });
 
@@ -233,42 +238,4 @@ describe('createTelemetryHygieneSampler', () => {
   });
 });
 
-describe('isNextjsBubbleSpan', () => {
-  it('matches a bare GET SERVER span with next.bubble', () => {
-    expect(
-      isNextjsBubbleSpan(SpanKind.SERVER, { 'next.bubble': 'true' }),
-    ).toBe(true);
-  });
 
-  it('matches even when next.bubble is the literal boolean true', () => {
-    expect(
-      isNextjsBubbleSpan(SpanKind.SERVER, { 'next.bubble': true }),
-    ).toBe(true);
-  });
-
-  it('does NOT match a bare-method SERVER span without next.bubble', () => {
-    // REGRESSION GUARD: the keeper looks like this at startSpan() time.
-    expect(isNextjsBubbleSpan(SpanKind.SERVER, {})).toBe(false);
-    expect(isNextjsBubbleSpan(SpanKind.SERVER, { 'http.target': '/api/x' })).toBe(
-      false,
-    );
-  });
-
-  it('does not match templated SERVER spans (those carry http.route)', () => {
-    expect(
-      isNextjsBubbleSpan(SpanKind.SERVER, {
-        'http.route': '/api/profile',
-      }),
-    ).toBe(false);
-  });
-
-  it('does not match CLIENT spans (outbound fetches named GET)', () => {
-    expect(isNextjsBubbleSpan(SpanKind.CLIENT, { 'next.bubble': 'true' })).toBe(
-      false,
-    );
-  });
-
-  it('does not match arbitrary span kinds', () => {
-    expect(isNextjsBubbleSpan(SpanKind.INTERNAL, {})).toBe(false);
-  });
-});

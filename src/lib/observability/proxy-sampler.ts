@@ -1,24 +1,59 @@
 /**
- * Telemetry-hygiene sampler. Drops three classes of noisy spans before they
- * reach the exporter:
+ * Telemetry-hygiene sampler. Drops two classes of noisy spans at
+ * `shouldSample()` (head-sampling) time:
  *
  * 1. **OTel-proxy self-trace** — server-side spans for the browser→server
- *    OTel proxy route (`/api/otel/v1/traces`).
- * 2. **Next.js "bubble" wrapper SERVER span** — the bare-method `"GET"` /
- *    `"POST"` etc. SERVER span emitted by `BaseServer.handleRequest` with
- *    `next.bubble: "true"` and no `http.route`. Next.js emits two SERVER
- *    spans per request: this wrapper (which loses the route template) plus
- *    the templated `"GET /api/route"` span. We keep the templated one
- *    because it owns `http.route`, App Router lifecycle attributes, and
- *    matches what dashboards aggregate on.
- * 3. **Next.js framework stub INTERNAL spans** — sub-millisecond spans
+ *    OTel proxy route (`/api/otel/v1/traces`). Discriminated by span name
+ *    and/or `http.target` / `url.path` — all available at `startSpan()` time.
+ * 2. **Next.js framework stub INTERNAL spans** — sub-millisecond spans
  *    Next.js emits for internal hooks (`resolve page components`,
  *    `start response`, …). They add visual noise to the trace tree and
- *    carry no actionable signal. Drop based on an allowlist of
- *    `next.span_type` values.
+ *    carry no actionable signal. Discriminated by an allowlist of
+ *    `next.span_type` values — set by Next.js's `NextTracerImpl.trace()`
+ *    on the initial `startSpan()` attributes, so visible to the sampler.
  *
  * Dropping at the sampler stage propagates `NOT_RECORD` to every child
- * span via the standard OTel parent-based sampling chain.
+ * span via the standard OTel parent-based sampling chain — which means
+ * **only attributes that exist at `startSpan()` time are safe
+ * discriminators here.** Any attribute set later via `span.setAttribute()`
+ * or by a downstream `SpanProcessor.onEnd` hook is invisible to this
+ * sampler.
+ *
+ * ## What is NOT dropped here: Next.js "bubble" wrapper SERVER spans
+ *
+ * For every API request Next.js emits **two SERVER spans as siblings**
+ * under the browser fetch: a "bubble" wrapper (bare-method name, no route,
+ * tagged with `next.bubble = true` and `operation.name =
+ * "next_js.BaseServer.handleRequest"`) and the real route keeper
+ * (`"METHOD /api/route"`, has `http.route`, has `operation.name =
+ * "web.request"`). The bubble is duplicate noise on dashboards.
+ *
+ * **The bubble cannot be dropped at this sampler.** Both spans are
+ * structurally identical at `startSpan()` time — they share the same
+ * bare-method name (`"GET"`, `"POST"`, …), the same `next.span_type =
+ * "BaseServer.handleRequest"`, and the same start attributes
+ * (`http.method`, `http.target`). The discriminating attributes are all
+ * set later: `next.bubble` via `span.setAttribute()` in Next.js's
+ * `closeSpanWithError`; `http.route`, `next.route`, and the renamed span
+ * name via `span.updateName()` in the route-match hook; `operation.name`
+ * by `@vercel/otel`'s `CompositeSpanProcessor.onEnd`.
+ *
+ * A previous attempt to filter the bubble here using `next.bubble === true`
+ * was a silent no-op (attribute not yet set). An earlier attempt using a
+ * `bareMethodName && !http.route` heuristic catastrophically dropped the
+ * keeper too — because at `startSpan()` time the keeper also has a bare
+ * method name and no `http.route`. The dropped keeper became the parent
+ * of every route-handler, GitHub-request, and worker-side span, and the
+ * entire downstream tree vanished via `ParentBasedSampler` propagation.
+ *
+ * **Bubble filtering now lives at the export boundary.** See
+ * `src/lib/observability/bubble-filter-exporter.ts` (`BubbleFilteringSpanExporter`),
+ * which discriminates on the fully-materialised attributes
+ * (`next.bubble === true`, `operation.name === "next_js.BaseServer.handleRequest"`)
+ * and is wired via `registerOTel({ traceExporter: ... })` in
+ * `src/instrumentation.ts`. A mistake there would drop only the
+ * misidentified span — never its children — so the tree-kill failure
+ * mode is structurally impossible.
  *
  * ## Why the OTel-proxy self-trace exists
  *
@@ -32,34 +67,6 @@
  * `FetchInstrumentation.ignoreUrls`, but the server side has no equivalent —
  * so every tab-switch would produce a fresh proxy-trace that drowns out
  * real app telemetry on the dashboard.
- *
- * ## Why the Next.js bubble span is dropped
- *
- * Diagnosis (PR1 of the telemetry-hygiene cleanup): for every API request
- * Next.js emits **two SERVER spans as siblings** under the browser fetch:
- *
- * ```
- * [Client]  HTTP GET                          src=flight-school-browser
- * ├─ [Server] GET                             src=flight-school   5ms
- * │  attrs: next.span_type=BaseServer.handleRequest, next.bubble="true",
- * │         next.rsc="false", http.target=/api/route   (no http.route)
- * └─ [Server] GET /api/route                  src=flight-school   20ms
- *    attrs: next.span_type=BaseServer.handleRequest, http.route=/api/route,
- *           next.route=/api/route, operation.name=web.request
- *    └─ executing api route (app) /api/route
- *    └─ resolve page components / start response   (stubs — see PR2)
- * ```
- *
- * Both are emitted by Next.js's own internal tracer (not
- * `@opentelemetry/instrumentation-http`; `@vercel/otel` v2 default is
- * `["fetch"]` only). The bubble span lacks the route template, so anything
- * aggregating by `http.route` mis-bins it as a bare `"GET"`. Dropping it
- * leaves the templated sibling intact, which is what we actually want.
- *
- * The unique discriminator is `next.bubble === "true"` (a Next.js-internal
- * flag set at span creation, present on the bubble and absent on the
- * keeper). See {@link isNextjsBubbleSpan} for why a name-based backup
- * was previously tried and removed.
  */
 
 import {
@@ -149,42 +156,6 @@ export function isProxyRouteSpan(
 }
 
 /**
- * Returns `true` if the given SERVER span is the Next.js "bubble" wrapper
- * span — the bare-method sibling that loses the route template. Exposed
- * for unit testing.
- *
- * Discriminator: `next.bubble === "true"` (a Next.js-internal flag set at
- * span creation, only on the bubble span — never on the keeper).
- *
- * **Why no name-based backup.** A previous version of this function
- * included a defensive backup that dropped any bare-method SERVER span
- * (`"GET"`, `"POST"`, …) without `http.route`. That backup was buggy:
- * `shouldSample()` runs at `startSpan()` time, before Next.js renames the
- * keeper span from `"POST"` → `"POST /api/route"` and before
- * `http.route` is populated. At that moment the keeper sibling looked
- * identical to the bubble (bare method, no `http.route`) and the backup
- * dropped it too. Because the dropped keeper became the parent of every
- * route-handler, GitHub-request, and worker-side span, the entire
- * downstream trace tree vanished via `ParentBasedSampler` propagation.
- *
- * The primary `next.bubble` flag is unambiguous and is set at span
- * creation, so it is reliable on its own. If a future Next.js version
- * stops emitting `next.bubble`, the bubble span will resurface in
- * dashboards — accept that trade-off rather than risk silent data loss.
- */
-export function isNextjsBubbleSpan(
-  spanKind: SpanKind | undefined,
-  attrs: Attributes | undefined,
-): boolean {
-  if (spanKind !== undefined && spanKind !== SpanKind.SERVER) {
-    return false;
-  }
-
-  const bubble = attrs?.['next.bubble'];
-  return bubble === 'true' || bubble === true;
-}
-
-/**
  * Returns `true` if the given span is a Next.js framework stub INTERNAL
  * span on the allowlist. Exposed for unit testing.
  */
@@ -202,10 +173,14 @@ export function isNextjsFrameworkStubSpan(
 }
 
 /**
- * Builds a {@link Sampler} that drops three classes of noisy spans (OTel
- * proxy self-trace, Next.js bubble wrapper SERVER span, Next.js framework
- * stub INTERNAL spans) and delegates all other decisions to a parent-based
+ * Builds a {@link Sampler} that drops two classes of noisy spans at
+ * head-sampling time (OTel proxy self-trace, Next.js framework stub
+ * INTERNAL spans) and delegates all other decisions to a parent-based
  * always-on sampler.
+ *
+ * Bubble-span filtering is intentionally NOT done here — see the file
+ * header for the rationale and `bubble-filter-exporter.ts` for the
+ * export-time implementation.
  *
  * Exposed as a factory (rather than a singleton) so unit tests can construct
  * fresh instances without shared state.
@@ -223,9 +198,6 @@ export function createTelemetryHygieneSampler(): Sampler {
       links: Link[],
     ): SamplingResult {
       if (isProxyRouteSpan(spanName, attributes)) {
-        return NOT_RECORD;
-      }
-      if (isNextjsBubbleSpan(spanKind, attributes)) {
         return NOT_RECORD;
       }
       if (isNextjsFrameworkStubSpan(spanKind, attributes)) {

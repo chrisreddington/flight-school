@@ -7,14 +7,17 @@
 
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import {
   AggregationType,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { registerOTel } from '@vercel/otel';
 
 import { logger } from '@/lib/logger';
+import { BubbleFilteringSpanExporter } from '@/lib/observability/bubble-filter-exporter';
 import { createTelemetryHygieneSampler } from '@/lib/observability/proxy-sampler';
 import {
   GEN_AI_DURATION_BUCKETS,
@@ -48,13 +51,39 @@ export async function register(): Promise<void> {
           process.env.NODE_ENV === 'production' ? 'production' : 'development',
       },
       // Drop high-noise spans before they reach the exporter:
-      //   - server-side spans for the browser→server OTel proxy route
-      //     (self-tracing feedback loop on every BSP flush);
-      //   - the Next.js "bubble" wrapper SERVER span (bare-method sibling
-      //     of every templated API span — drops the route template and
-      //     mis-bins as a flat "GET" / "POST" in dashboards).
-      // See `src/lib/observability/proxy-sampler.ts` for the full rationale.
+      //   - **Sampler (head-time):** server-side spans for the
+      //     browser→server OTel proxy route (self-tracing feedback loop
+      //     on every BSP flush) and Next.js framework stub INTERNAL
+      //     spans. See `src/lib/observability/proxy-sampler.ts`.
+      //   - **Filtering exporter (export-time):** Next.js "bubble"
+      //     wrapper SERVER spans — these cannot be safely dropped at
+      //     the sampler because the discriminating attribute
+      //     (`next.bubble`) is set after `startSpan()` (in
+      //     `closeSpanWithError`). See
+      //     `src/lib/observability/bubble-filter-exporter.ts`.
+      //
+      // ## Why `spanProcessors` rather than `traceExporter`
+      //
+      // `@vercel/otel`'s `traceExporter` option is **additive** when
+      // `spanProcessors` is unset or `'auto'`: an auto-configured OTLP
+      // `BatchSpanProcessor` runs in parallel whenever
+      // `OTEL_EXPORTER_OTLP_ENDPOINT` is present (Aspire injects this).
+      // Passing our wrapper via `traceExporter` would therefore leave a
+      // second, unfiltered exporter alive — bubbles would still leak and
+      // keepers would be double-exported.
+      //
+      // Setting `spanProcessors` to a non-`'auto'` array makes
+      // `@vercel/otel` skip its auto branch entirely (see
+      // `@vercel/otel/dist/node/index.js` `r2()`), so our wrapped
+      // exporter is the **only** trace export path. The composite
+      // processor that injects `operation.name` still wraps every
+      // user-supplied processor, so `onEnd` ordering is preserved.
       traceSampler: createTelemetryHygieneSampler(),
+      spanProcessors: [
+        new BatchSpanProcessor(
+          new BubbleFilteringSpanExporter(new OTLPTraceExporter()),
+        ),
+      ],
       metricReaders: [
         new PeriodicExportingMetricReader({
           exporter: new OTLPMetricExporter(),
