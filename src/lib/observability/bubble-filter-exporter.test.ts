@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   BubbleFilteringSpanExporter,
+  isFrameworkUpdateCheckSpan,
   isNextjsBubbleReadableSpan,
 } from './bubble-filter-exporter';
 
@@ -124,6 +125,56 @@ describe('isNextjsBubbleReadableSpan', () => {
   });
 });
 
+describe('isFrameworkUpdateCheckSpan', () => {
+  it('matches the Next.js dev-only npm registry dist-tags fetch', () => {
+    expect(
+      isFrameworkUpdateCheckSpan(
+        makeSpan({
+          kind: SpanKind.CLIENT,
+          attributes: {
+            'http.method': 'GET',
+            'http.url': 'https://registry.npmjs.org/-/package/next/dist-tags',
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('does NOT match SERVER spans', () => {
+    expect(
+      isFrameworkUpdateCheckSpan(
+        makeSpan({
+          kind: SpanKind.SERVER,
+          attributes: {
+            'http.url': 'https://registry.npmjs.org/-/package/next/dist-tags',
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('does NOT match unrelated registry.npmjs.org URLs', () => {
+    expect(
+      isFrameworkUpdateCheckSpan(
+        makeSpan({
+          kind: SpanKind.CLIENT,
+          attributes: {
+            'http.url': 'https://registry.npmjs.org/-/package/react/dist-tags',
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('does NOT match CLIENT spans with no http.url', () => {
+    expect(
+      isFrameworkUpdateCheckSpan(
+        makeSpan({ kind: SpanKind.CLIENT, attributes: {} }),
+      ),
+    ).toBe(false);
+  });
+});
+
 describe('BubbleFilteringSpanExporter', () => {
   it('forwards only non-bubble spans to the delegate', () => {
     const delegate = new StubExporter();
@@ -191,6 +242,29 @@ describe('BubbleFilteringSpanExporter', () => {
 
     expect(delegate.exported).toHaveLength(1);
     expect(delegate.exported[0]).toEqual([keeper, fetch]);
+  });
+
+  it('drops Next.js dev-only npm registry update-check spans', () => {
+    const delegate = new StubExporter();
+    const exporter = new BubbleFilteringSpanExporter(delegate);
+
+    const updateCheck = makeSpan({
+      kind: SpanKind.CLIENT,
+      attributes: {
+        'http.method': 'GET',
+        'http.url': 'https://registry.npmjs.org/-/package/next/dist-tags',
+      },
+    });
+    const keeper = makeSpan({
+      kind: SpanKind.SERVER,
+      attributes: { 'http.route': '/api/profile' },
+    });
+
+    const cb = vi.fn();
+    exporter.export([updateCheck, keeper], cb);
+
+    expect(delegate.exported).toHaveLength(1);
+    expect(delegate.exported[0]).toEqual([keeper]);
   });
 
   it('delegates shutdown and forceFlush', async () => {

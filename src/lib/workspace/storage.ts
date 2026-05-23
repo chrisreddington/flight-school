@@ -99,6 +99,30 @@ function toWorkspaceFile(meta: WorkspaceFileMetadata, content: string): Workspac
  */
 class ServerWorkspaceStore implements WorkspaceStoreInterface {
   /**
+   * In-flight request dedup. React strict-mode (and any other rapid
+   * remount) can fire the same workspace load/save/delete twice within a
+   * single frame. Without this guard the server sees the same DELETE or
+   * POST twice in a row (visible in OTel traces as two sibling client
+   * spans 1ms apart). Keyed by `${method}:${challengeId}` so unrelated
+   * operations don't collide.
+   */
+  private readonly inflight = new Map<string, Promise<unknown>>();
+
+  private dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const existing = this.inflight.get(key) as Promise<T> | undefined;
+    if (existing) return existing;
+    const promise = fn().finally(() => {
+      // Only clear if still ours — guards against a later identical key
+      // having already replaced the entry.
+      if (this.inflight.get(key) === promise) {
+        this.inflight.delete(key);
+      }
+    });
+    this.inflight.set(key, promise);
+    return promise;
+  }
+
+  /**
    * Gets the workspace directory path for a challenge.
    */
   private getWorkspaceDir(challengeId: string): string {
@@ -136,34 +160,36 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
       return null;
     }
 
-    try {
-      const workspace = await apiGet<ChallengeWorkspace>(
-        `/api/workspace/storage?challengeId=${encodeURIComponent(challengeId)}`,
-        { throwOnError: false }
-      );
+    return this.dedupe(`get:${challengeId}`, async () => {
+      try {
+        const workspace = await apiGet<ChallengeWorkspace>(
+          `/api/workspace/storage?challengeId=${encodeURIComponent(challengeId)}`,
+          { throwOnError: false }
+        );
 
-      if (!workspace) {
+        if (!workspace) {
+          return null;
+        }
+
+        // Validate workspace belongs to correct challenge
+        if (workspace.challengeId !== challengeId) {
+          log.warn('Challenge ID mismatch, clearing', { challengeId });
+          await this.deleteWorkspace(challengeId);
+          return null;
+        }
+
+        // Check size warning
+        const serialized = JSON.stringify(workspace);
+        if (getByteSize(serialized) > MAX_WORKSPACE_SIZE_BYTES) {
+          log.warn('Workspace exceeds size limit', { challengeId });
+        }
+
+        return workspace;
+      } catch (error) {
+        log.error('Failed to parse workspace', { challengeId, error });
         return null;
       }
-
-      // Validate workspace belongs to correct challenge
-      if (workspace.challengeId !== challengeId) {
-        log.warn('Challenge ID mismatch, clearing', { challengeId });
-        await this.deleteWorkspace(challengeId);
-        return null;
-      }
-
-      // Check size warning
-      const serialized = JSON.stringify(workspace);
-      if (getByteSize(serialized) > MAX_WORKSPACE_SIZE_BYTES) {
-        log.warn('Workspace exceeds size limit', { challengeId });
-      }
-
-      return workspace;
-    } catch (error) {
-      log.error('Failed to parse workspace', { challengeId, error });
-      return null;
-    }
+    });
   }
 
   /**
@@ -212,11 +238,13 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
       return;
     }
 
-    try {
-      await apiDelete<void>(`/api/workspace/storage?challengeId=${encodeURIComponent(challengeId)}`);
-    } catch (error) {
-      log.error('Failed to delete workspace', { challengeId, error });
-    }
+    await this.dedupe(`del:${challengeId}`, async () => {
+      try {
+        await apiDelete<void>(`/api/workspace/storage?challengeId=${encodeURIComponent(challengeId)}`);
+      } catch (error) {
+        log.error('Failed to delete workspace', { challengeId, error });
+      }
+    });
   }
 
   /**

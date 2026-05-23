@@ -1,6 +1,11 @@
 /**
- * Filtering SpanExporter that drops Next.js "bubble" wrapper SERVER spans
+ * Filtering SpanExporter that drops known framework-emitted noise spans
  * before they reach the OTLP exporter.
+ *
+ * Currently drops:
+ *   1. Next.js "bubble" wrapper SERVER spans (`isNextjsBubbleReadableSpan`).
+ *   2. Next.js dev-only npm registry update-check fetches
+ *      (`isFrameworkUpdateCheckSpan`).
  *
  * ## Why an exporter wrapper rather than a sampler
  *
@@ -69,6 +74,30 @@ export function isNextjsBubbleReadableSpan(span: ReadableSpan): boolean {
 }
 
 /**
+ * Returns `true` if the span is a Next.js dev-only outbound fetch that
+ * is pure noise in traces. Today this matches Next.js's update-notifier
+ * fetch to `https://registry.npmjs.org/-/package/next/dist-tags`, which
+ * fires once per dev boot and is not configurable via env. Production
+ * builds do not emit it, so this check is safe to run unconditionally.
+ *
+ * Exposed for unit testing.
+ */
+export function isFrameworkUpdateCheckSpan(span: ReadableSpan): boolean {
+  if (span.kind !== SpanKind.CLIENT) {
+    return false;
+  }
+  const url = span.attributes['http.url'];
+  if (typeof url !== 'string') {
+    return false;
+  }
+  return url.startsWith('https://registry.npmjs.org/-/package/next/dist-tags');
+}
+
+function isNoiseSpan(span: ReadableSpan): boolean {
+  return isNextjsBubbleReadableSpan(span) || isFrameworkUpdateCheckSpan(span);
+}
+
+/**
  * Wraps an underlying `SpanExporter`, filtering out Next.js bubble
  * wrapper SERVER spans before delegating to the underlying exporter.
  *
@@ -97,7 +126,7 @@ export class BubbleFilteringSpanExporter implements SpanExporter {
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    const keep = spans.filter((span) => !isNextjsBubbleReadableSpan(span));
+    const keep = spans.filter((span) => !isNoiseSpan(span));
     if (keep.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS });
       return;

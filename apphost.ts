@@ -21,6 +21,13 @@ async function main(): Promise<void> {
     .withEnvironment('COPILOT_WORKER_ENABLED', '1')
     .withEnvironment('COPILOT_WORKER_MODE', '1')
     .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    // Distinct OTEL service name per Aspire resource so dashboards/logs/
+    // traces can tell the web tier from the worker tier. Without this both
+    // processes emit `service.name=flight-school` and every startup-side
+    // log line ("Server starting", "Copilot client warmed", token-store
+    // warnings) appears as a duplicate because the dashboard groups by
+    // service.
+    .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-worker')
     // Suppress Next.js's built-in `AppRender.fetch` span so we don't
     // double-count every server fetch alongside @vercel/otel's
     // FetchInstrumentation. See .github/skills/opentelemetry/SKILL.md.
@@ -35,6 +42,7 @@ async function main(): Promise<void> {
     .withEnvironment('CRON_SKIP_AUTH', '1')
     .withEnvironment('COPILOT_WORKER_URL', workerUrl)
     .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-web')
     .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
 
   await flightSchool.withCommand(
