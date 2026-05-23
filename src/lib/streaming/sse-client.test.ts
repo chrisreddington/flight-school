@@ -102,6 +102,7 @@ describe('consumeSSE', () => {
       fetchImpl: fake.fetchImpl,
       onMessage: (evt) => {
         events.push({ id: evt.id, data: evt.data });
+        return { terminal: true };
       },
     });
 
@@ -119,6 +120,7 @@ describe('consumeSSE', () => {
       fetchImpl: fake.fetchImpl,
       onMessage: (evt) => {
         seen.push({ id: evt.id });
+        return { terminal: true };
       },
     });
 
@@ -136,6 +138,7 @@ describe('consumeSSE', () => {
       fetchImpl: fake.fetchImpl,
       onMessage: (evt) => {
         events.push(evt.data);
+        return { terminal: true };
       },
     });
 
@@ -152,6 +155,7 @@ describe('consumeSSE', () => {
       fetchImpl: fake.fetchImpl,
       onMessage: (evt) => {
         events.push(evt.data);
+        return { terminal: true };
       },
     });
 
@@ -168,6 +172,7 @@ describe('consumeSSE', () => {
       fetchImpl: fake.fetchImpl,
       onMessage: (evt) => {
         events.push(evt.data);
+        return { terminal: true };
       },
     });
 
@@ -216,6 +221,7 @@ describe('consumeSSE', () => {
       fetchImpl: customFetch,
       onMessage: (evt) => {
         events.push(evt.data);
+        return { terminal: true };
       },
     });
 
@@ -283,6 +289,7 @@ describe('consumeSSE', () => {
       onMessage: (evt) => {
         firstEventSeen = true;
         events.push(evt.data);
+        return { terminal: true };
       },
       onReconnectRecovered: () => {
         // Recovery fires immediately before the first parsed frame is
@@ -304,6 +311,39 @@ describe('consumeSSE', () => {
     expect(events).toEqual(['recovered']);
     expect(fake.calls).toEqual(['/api/test?cursor=0', '/api/test?cursor=42']);
     expect(recoveredCalledBeforeFirstEvent).toBe(true);
+  });
+
+  it('reconnects after the upstream closes the body without a terminal frame', async () => {
+    // Stream emits a non-terminal event then EOFs cleanly (e.g. reverse-
+    // proxy idle timeout, load-balancer half-close). `EventSource` would
+    // auto-reconnect in this case; our client must do the same.
+    vi.useFakeTimers();
+    fake.enqueueOk('data: first\n\n');
+    fake.enqueueOk('data: second\n\n');
+
+    let cursor = 0;
+    const events: string[] = [];
+
+    const promise = consumeSSE({
+      buildUrl: () => `/api/test?cursor=${cursor}`,
+      signal: new AbortController().signal,
+      fetchImpl: fake.fetchImpl,
+      onMessage: (evt) => {
+        events.push(evt.data);
+        if (evt.data === 'second') return { terminal: true };
+      },
+      setTimeoutImpl: (cb) => globalThis.setTimeout(cb, 0),
+      clearTimeoutImpl: (h) => globalThis.clearTimeout(h as ReturnType<typeof setTimeout>),
+      nowMs: () => 0,
+      random: () => 0,
+    });
+
+    cursor = 7;
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(events).toEqual(['first', 'second']);
+    expect(fake.calls).toEqual(['/api/test?cursor=0', '/api/test?cursor=7']);
   });
 
   it('does not reconnect after onMessage signals terminal', async () => {

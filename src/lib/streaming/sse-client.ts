@@ -133,6 +133,20 @@ class TerminalSignal {
 }
 
 /**
+ * Sentinel thrown internally when the upstream closed the body cleanly
+ * without ever emitting a terminal frame. Triggers a reconnect via the
+ * normal backoff path so the client matches `EventSource` semantics
+ * (which auto-reconnects on any close that isn't an explicit protocol
+ * completion). Never escapes to user code.
+ */
+class ConnectionClosedWithoutTerminalError extends Error {
+  constructor() {
+    super('SSE connection closed without terminal frame');
+    this.name = 'ConnectionClosedWithoutTerminalError';
+  }
+}
+
+/**
  * Error rejected from {@link consumeSSE} when reconnects exceed
  * {@link ConsumeSSEOptions.maxReconnectDurationMs}.
  */
@@ -205,11 +219,15 @@ export async function consumeSSE(options: ConsumeSSEOptions): Promise<void> {
         },
         onWarn,
       });
-      // Stream closed cleanly without a terminal signal — exit without
-      // reconnect. This matches `EventSource` behaviour: the server
-      // intentionally closed the connection (e.g., legitimate `[DONE]`
-      // already flushed by the caller's `onMessage`).
-      return;
+      // Stream closed cleanly **without** a terminal signal. This is not a
+      // legitimate completion — a terminal frame would have thrown
+      // `TerminalSignal` above. Treat clean EOF the same as a network
+      // error and reconnect with backoff, matching `EventSource` semantics
+      // (which auto-reconnects on any disconnect that did not exit via a
+      // protocol-level "done" message). This covers reverse-proxy idle
+      // timeouts, load-balancer half-closes, and Cloudflare-style HTTP/2
+      // hop terminations that don't surface as fetch errors.
+      throw new ConnectionClosedWithoutTerminalError();
     } catch (err) {
       if (signal.aborted) return;
       if (err instanceof TerminalSignal || signalledTerminal) return;
