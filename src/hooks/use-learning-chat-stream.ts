@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { chatStreamStore, TERMINAL_SEQ, type ChatStreamState } from '@/lib/chat/chat-stream-store';
 import { logger } from '@/lib/logger';
 import { operationsManager } from '@/lib/operations';
+import { consumeSSE, SSEReconnectExhaustedError } from '@/lib/streaming/sse-client';
 import type { ToolCallEvent } from '@/lib/threads';
 import { THREAD_DATA_CHANGED_EVENT, threadStore, type Thread } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
@@ -192,13 +193,20 @@ export function useLearningChatStream({
   // only want to refresh + evict once per job lifetime.
   const terminalCleanupsRef = useRef<Set<string>>(new Set());
 
+  // jobIds currently in a (visibly user-surfaced) reconnect state.
+  // Threshold mirrors `sse-client`'s recommendation: surface after the
+  // 3rd consecutive reconnect attempt so brief blips don't flicker.
+  const [reconnectingJobIds, setReconnectingJobIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+
   useEffect(() => {
     const ids = streamingThreadIdsKey ? streamingThreadIdsKey.split(',') : [];
     if (ids.length === 0) return;
     if (!chatSubscriptionKey) return;
 
     log.debug('Subscribing to SSE streams', { count: ids.length });
-    const sources: EventSource[] = [];
+    const controllers: AbortController[] = [];
     let disposed = false;
 
     void (async () => {
@@ -267,89 +275,132 @@ export function useLearningChatStream({
             });
         };
 
-        const cursor = getCursor(jobId);
-        const url = `/api/jobs/${encodeURIComponent(jobId)}/stream${cursor > 0 ? `?cursor=${cursor}` : ''}`;
-        const es = new EventSource(url, { withCredentials: true });
-        es.onmessage = (msg) => {
-          const me = msg as MessageEvent;
-          let seq = 0;
-          if (me.lastEventId) {
-            const parsed = Number.parseInt(me.lastEventId, 10);
-            if (Number.isFinite(parsed)) {
-              seq = parsed;
-              setCursor(jobId, parsed);
+        const controller = new AbortController();
+        controllers.push(controller);
+
+        // Show "Reconnecting..." after the 3rd consecutive attempt, and
+        // clear on the first successfully-parsed frame post-reconnect.
+        const RECONNECT_VISIBLE_AFTER = 3;
+        const markReconnecting = (visible: boolean): void => {
+          if (disposed) return;
+          setReconnectingJobIds((prev) => {
+            const has = prev.has(jobId);
+            if (visible === has) return prev;
+            const next = new Set(prev);
+            if (visible) next.add(jobId);
+            else next.delete(jobId);
+            return next;
+          });
+        };
+
+        void consumeSSE({
+          // Recompute on every (re)connect so the latest cursor is
+          // always used — never a stale closure-captured value.
+          buildUrl: () => {
+            const cursor = getCursor(jobId);
+            return `/api/jobs/${encodeURIComponent(jobId)}/stream${cursor > 0 ? `?cursor=${cursor}` : ''}`;
+          },
+          signal: controller.signal,
+          onMessage: (frame) => {
+            if (disposed) return { terminal: true };
+
+            // Cursor advance — mirror the previous EventSource semantics:
+            // setCursor BEFORE JSON parse so a mid-parse crash still
+            // bumps the durable last-seen seq.
+            let seq = 0;
+            if (frame.id) {
+              const parsed = Number.parseInt(frame.id, 10);
+              if (Number.isFinite(parsed)) {
+                seq = parsed;
+                setCursor(jobId, parsed);
+              }
             }
-          }
-          if (me.data === '[DONE]') {
+
+            if (frame.data === '[DONE]') {
+              evictCursor(jobId);
+              handleTerminal();
+              return { terminal: true };
+            }
+
+            let parsed: SSEStreamEvent | null = null;
+            try {
+              parsed = JSON.parse(frame.data) as SSEStreamEvent;
+            } catch (err) {
+              log.warn('Failed to parse SSE frame', { jobId, err });
+              return;
+            }
+            if (!parsed) return;
+
+            switch (parsed.type) {
+              case 'delta':
+                chatStreamStore.applyDelta(jobId, parsed.content, seq);
+                break;
+              case 'tool_start':
+                chatStreamStore.applyToolStart(
+                  jobId,
+                  { toolCallId: parsed.toolCallId, name: parsed.name, args: parsed.args },
+                  seq,
+                );
+                break;
+              case 'tool_complete':
+                chatStreamStore.applyToolComplete(
+                  jobId,
+                  {
+                    toolCallId: parsed.toolCallId,
+                    name: parsed.name,
+                    result: parsed.result,
+                    durationMs: parsed.durationMs,
+                  },
+                  seq,
+                );
+                break;
+              case 'state_snapshot':
+                chatStreamStore.applySnapshot(jobId, {
+                  content: parsed.content,
+                  toolEvents: parsed.toolEvents,
+                  hasActionableItem: parsed.hasActionableItem,
+                  seq,
+                });
+                break;
+              case 'done':
+              case 'cancelled':
+              case 'failed':
+                handleTerminal(parsed);
+                return { terminal: true };
+            }
+            return;
+          },
+          onReconnectScheduled: (attempt) => {
+            if (attempt >= RECONNECT_VISIBLE_AFTER) {
+              markReconnecting(true);
+            }
+          },
+          onReconnectRecovered: () => {
+            markReconnecting(false);
+          },
+        }).catch((err: unknown) => {
+          if (err instanceof SSEReconnectExhaustedError) {
+            // 10-minute reconnect budget exhausted — evict the cursor
+            // and surface a terminal "failed" frame to the store so
+            // the UI stops showing a typing indicator.
+            log.warn('SSE reconnect budget exhausted', { jobId, err: err.message });
             evictCursor(jobId);
-            es.close();
-            // [DONE] arrives without a payload — any preceding terminal
-            // SSE frame already handled the snapshot apply, so this is
-            // a no-op pass-through that triggers refresh+evict.
-            handleTerminal();
+            handleTerminal({ type: 'failed', message: err.message });
+            markReconnecting(false);
             return;
           }
-          let parsed: SSEStreamEvent | null = null;
-          try {
-            parsed = JSON.parse(me.data) as SSEStreamEvent;
-          } catch (err) {
-            log.warn('Failed to parse SSE frame', { jobId, err });
-            return;
-          }
-          if (!parsed) return;
-          switch (parsed.type) {
-            case 'delta':
-              chatStreamStore.applyDelta(jobId, parsed.content, seq);
-              break;
-            case 'tool_start':
-              chatStreamStore.applyToolStart(
-                jobId,
-                { toolCallId: parsed.toolCallId, name: parsed.name, args: parsed.args },
-                seq,
-              );
-              break;
-            case 'tool_complete':
-              chatStreamStore.applyToolComplete(
-                jobId,
-                {
-                  toolCallId: parsed.toolCallId,
-                  name: parsed.name,
-                  result: parsed.result,
-                  durationMs: parsed.durationMs,
-                },
-                seq,
-              );
-              break;
-            case 'state_snapshot':
-              chatStreamStore.applySnapshot(jobId, {
-                content: parsed.content,
-                toolEvents: parsed.toolEvents,
-                hasActionableItem: parsed.hasActionableItem,
-                seq,
-              });
-              break;
-            case 'done':
-            case 'cancelled':
-            case 'failed':
-              handleTerminal(parsed);
-              break;
-          }
-        };
-        es.onerror = () => {
-          // EventSource auto-reconnects; the cursor is already
-          // persisted so resumed frames are deduped by the store's
-          // sequence guard. We deliberately do NOT refresh here — the
-          // store still has the buffered partial content and the UI
-          // remains responsive across the brief reconnect window.
-        };
-        sources.push(es);
+          // Aborts return silently from consumeSSE; anything else
+          // reaching here is unexpected.
+          log.warn('Chat SSE consumer terminated unexpectedly', { jobId, err });
+          markReconnecting(false);
+        });
       }
     })();
 
     return () => {
       disposed = true;
-      log.debug('Closing SSE subscriptions', { count: sources.length });
-      for (const es of sources) es.close();
+      log.debug('Closing SSE subscriptions', { count: controllers.length });
+      for (const controller of controllers) controller.abort();
     };
   }, [streamingThreadIdsKey, chatSubscriptionKey, refreshThreads]);
 
@@ -503,6 +554,7 @@ export function useLearningChatStream({
     clearPendingStream,
     isStreaming,
     markStreamPending,
+    reconnectingJobIds,
     registerStream,
     stopStreaming,
     streamingAssistantMessageId,

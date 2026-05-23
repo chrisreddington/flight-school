@@ -122,29 +122,65 @@ vi.mock('@/lib/threads', async (importOriginal) => {
   };
 });
 
-// --- Test-controlled EventSource registry ---
-interface FakeEventSource {
+// --- Test-controlled consumeSSE registry ---
+//
+// Mocks `@/lib/streaming/sse-client` so renderHook tests drive the chat
+// stream by:
+//   1. Capturing each consumeSSE call (its `buildUrl`, `signal`,
+//      `onMessage`, reconnect callbacks).
+//   2. Allowing tests to push synthetic SSE events through `onMessage` —
+//      exactly like the older FakeES tests pushed via `es.onmessage(...)`.
+//   3. Tracking abort state per call so unmount/teardown assertions work.
+interface FakeSSESubscription {
+  /** Initial URL captured at subscription time. */
   url: string;
+  /** Closed = signal aborted OR onMessage returned terminal. */
   closed: boolean;
-  onmessage: ((event: MessageEvent) => void) | null;
-  onerror: (() => void) | null;
-  close: () => void;
+  /** Push an SSE-shaped frame into the subscription. */
+  push: (frame: { id?: string; data: string }) => void;
 }
 
-const eventSources: FakeEventSource[] = [];
-class FakeES implements FakeEventSource {
-  url: string;
-  closed = false;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onerror: (() => void) | null = null;
-  constructor(url: string) {
-    this.url = url;
-    eventSources.push(this);
-  }
-  close() {
-    this.closed = true;
-  }
-}
+const sseSubscriptions: FakeSSESubscription[] = [];
+
+vi.mock('@/lib/streaming/sse-client', () => {
+  return {
+    consumeSSE: vi.fn(async (opts: {
+      buildUrl: () => string;
+      signal: AbortSignal;
+      onMessage: (frame: { id?: string; data: string }) =>
+        | void
+        | { terminal?: boolean };
+    }) => {
+      const url = opts.buildUrl();
+      const sub: FakeSSESubscription = {
+        url,
+        closed: false,
+        push: (frame) => {
+          if (sub.closed) return;
+          const result = opts.onMessage(frame);
+          if (result?.terminal) {
+            sub.closed = true;
+          }
+        },
+      };
+      const onAbort = (): void => {
+        sub.closed = true;
+      };
+      if (opts.signal.aborted) {
+        sub.closed = true;
+      } else {
+        opts.signal.addEventListener('abort', onAbort, { once: true });
+      }
+      sseSubscriptions.push(sub);
+    }),
+    SSEReconnectExhaustedError: class extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'SSEReconnectExhaustedError';
+      }
+    },
+  };
+});
 
 function createThread(overrides: Partial<Thread> = {}): Thread {
   return {
@@ -202,7 +238,7 @@ function setChatOps(ops: ActiveOperation[]) {
   );
 }
 
-const origEventSource = globalThis.EventSource;
+// (origEventSource removed; tests no longer need to mutate globalThis.EventSource.)
 
 function renderChatStream(initial: { threads: Thread[]; activeThread: Thread | null; activeThreadId: string | null }) {
   const refreshThreads = vi.fn(async () => undefined);
@@ -229,13 +265,11 @@ describe('useLearningChatStream (renderHook)', () => {
     cursorState.setCalls = [];
     cursorState.evictCalls = [];
     threadStoreState.updateCalls = [];
-    eventSources.length = 0;
+    sseSubscriptions.length = 0;
     chatStreamStore.__resetForTests();
-    globalThis.EventSource = FakeES as unknown as typeof EventSource;
   });
 
   afterEach(() => {
-    globalThis.EventSource = origEventSource;
     vi.useRealTimers();
   });
 
@@ -253,7 +287,7 @@ describe('useLearningChatStream (renderHook)', () => {
 
     // Streaming thread is present but no chat op yet — must NOT open ES.
     await Promise.resolve();
-    expect(eventSources).toHaveLength(0);
+    expect(sseSubscriptions).toHaveLength(0);
 
     // Register the chat op AFTER the effect has already run; this is the
     // exact race the useSyncExternalStore wiring protects against.
@@ -262,8 +296,8 @@ describe('useLearningChatStream (renderHook)', () => {
       operationsState.notify();
     });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
-    expect(eventSources[0].url).toBe('/api/jobs/j1/stream');
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
+    expect(sseSubscriptions[0].url).toBe('/api/jobs/j1/stream');
   });
 
   it('includes ?cursor=N in the SSE URL when getCursor returns a positive value (reload-resume)', async () => {
@@ -272,8 +306,8 @@ describe('useLearningChatStream (renderHook)', () => {
     setChatOps([mkChatOp('j1', 't1')]);
     renderChatStream({ threads: [thread], activeThread: thread, activeThreadId: 't1' });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
-    expect(eventSources[0].url).toBe('/api/jobs/j1/stream?cursor=42');
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
+    expect(sseSubscriptions[0].url).toBe('/api/jobs/j1/stream?cursor=42');
   });
 
   it('does not reopen the EventSource when operationsManager notifies with a new snapshot ref but unchanged chatSubscriptionKey', async () => {
@@ -281,7 +315,7 @@ describe('useLearningChatStream (renderHook)', () => {
     setChatOps([mkChatOp('j1', 't1')]);
     renderChatStream({ threads: [thread], activeThread: thread, activeThreadId: 't1' });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
 
     // Swap the snapshot reference so useSyncExternalStore actually forwards
     // the change, then notify. The chat subscription key (threadId:jobId)
@@ -293,16 +327,16 @@ describe('useLearningChatStream (renderHook)', () => {
       operationsState.notify();
     });
     await Promise.resolve();
-    expect(eventSources).toHaveLength(1);
-    expect(eventSources[0].closed).toBe(false);
+    expect(sseSubscriptions).toHaveLength(1);
+    expect(sseSubscriptions[0].closed).toBe(false);
 
     act(() => {
       setChatOps([mkChatOp('j1', 't1')]);
       operationsState.notify();
     });
     await Promise.resolve();
-    expect(eventSources).toHaveLength(1);
-    expect(eventSources[0].closed).toBe(false);
+    expect(sseSubscriptions).toHaveLength(1);
+    expect(sseSubscriptions[0].closed).toBe(false);
   });
 
   it('replaces the EventSource when the jobId for a streaming thread changes', async () => {
@@ -310,8 +344,8 @@ describe('useLearningChatStream (renderHook)', () => {
     setChatOps([mkChatOp('j-old', 't1')]);
     renderChatStream({ threads: [thread], activeThread: thread, activeThreadId: 't1' });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
-    const first = eventSources[0];
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
+    const first = sseSubscriptions[0];
     expect(first.url).toBe('/api/jobs/j-old/stream');
 
     act(() => {
@@ -319,9 +353,9 @@ describe('useLearningChatStream (renderHook)', () => {
       operationsState.notify();
     });
 
-    await waitFor(() => expect(eventSources).toHaveLength(2));
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(2));
     expect(first.closed).toBe(true);
-    expect(eventSources[1].url).toBe('/api/jobs/j-new/stream');
+    expect(sseSubscriptions[1].url).toBe('/api/jobs/j-new/stream');
   });
 
   it('updates the cursor on each message with a numeric lastEventId', async () => {
@@ -329,12 +363,12 @@ describe('useLearningChatStream (renderHook)', () => {
     setChatOps([mkChatOp('j1', 't1')]);
     renderChatStream({ threads: [thread], activeThread: thread, activeThreadId: 't1' });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
-    const es = eventSources[0];
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
+    const es = sseSubscriptions[0];
 
-    es.onmessage?.({ lastEventId: '7', data: '{"delta":"x"}' } as unknown as MessageEvent);
-    es.onmessage?.({ lastEventId: 'not-a-number', data: '{"delta":"y"}' } as unknown as MessageEvent);
-    es.onmessage?.({ lastEventId: '9', data: '{"delta":"z"}' } as unknown as MessageEvent);
+    es.push({ id: '7', data: '{"delta":"x"}' });
+    es.push({ id: 'not-a-number', data: '{"delta":"y"}' });
+    es.push({ id: '9', data: '{"delta":"z"}' });
 
     expect(cursorState.setCalls).toEqual([
       { jobId: 'j1', cursor: 7 },
@@ -351,10 +385,10 @@ describe('useLearningChatStream (renderHook)', () => {
       activeThreadId: 't1',
     });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
-    const es = eventSources[0];
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
+    const es = sseSubscriptions[0];
 
-    es.onmessage?.({ lastEventId: '10', data: '[DONE]' } as unknown as MessageEvent);
+    es.push({ id: '10', data: '[DONE]' });
 
     expect(cursorState.evictCalls).toEqual(['j1']);
     expect(es.closed).toBe(true);
@@ -373,18 +407,18 @@ describe('useLearningChatStream (renderHook)', () => {
       activeThreadId: 't1',
     });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
-    const es = eventSources[0];
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
+    const es = sseSubscriptions[0];
 
-    es.onmessage?.({ lastEventId: '1', data: '{"type":"delta","content":"a"}' } as unknown as MessageEvent);
-    es.onmessage?.({ lastEventId: '2', data: '{"type":"delta","content":"b"}' } as unknown as MessageEvent);
-    es.onmessage?.({ lastEventId: '3', data: '{"type":"delta","content":"c"}' } as unknown as MessageEvent);
+    es.push({ id: '1', data: '{"type":"delta","content":"a"}' });
+    es.push({ id: '2', data: '{"type":"delta","content":"b"}' });
+    es.push({ id: '3', data: '{"type":"delta","content":"c"}' });
 
     await Promise.resolve();
     expect(refreshThreads).toHaveBeenCalledTimes(0);
 
     // Terminal still triggers exactly one refresh.
-    es.onmessage?.({ lastEventId: '4', data: '[DONE]' } as unknown as MessageEvent);
+    es.push({ id: '4', data: '[DONE]' });
     await waitFor(() => expect(refreshThreads).toHaveBeenCalledTimes(1));
   });
 
@@ -393,12 +427,12 @@ describe('useLearningChatStream (renderHook)', () => {
     setChatOps([mkChatOp('j1', 't1')]);
     const view = renderChatStream({ threads: [thread], activeThread: thread, activeThreadId: 't1' });
 
-    await waitFor(() => expect(eventSources).toHaveLength(1));
+    await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
     expect(operationsState.listeners.size).toBeGreaterThan(0);
 
     view.unmount();
 
-    expect(eventSources[0].closed).toBe(true);
+    expect(sseSubscriptions[0].closed).toBe(true);
     expect(operationsState.listeners.size).toBe(0);
   });
 

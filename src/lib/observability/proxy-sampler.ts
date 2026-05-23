@@ -251,10 +251,3 @@ export function createTelemetryHygieneSampler(): Sampler {
   };
 }
 
-/**
- * @deprecated Use {@link createTelemetryHygieneSampler}. Retained as an
- *   alias because callers across the app + tests imported the old name.
- *   The returned sampler now also drops the Next.js bubble wrapper SERVER
- *   span — see module docs.
- */
-export const createProxySampler = createTelemetryHygieneSampler;

@@ -338,11 +338,11 @@ disappear together:
 
 ```ts
 // src/instrumentation.ts
-import { createProxySampler } from '@/lib/observability/proxy-sampler';
+import { createTelemetryHygieneSampler } from '@/lib/observability/proxy-sampler';
 
 registerOTel({
   // ...
-  traceSampler: createProxySampler(),
+  traceSampler: createTelemetryHygieneSampler(),
 });
 ```
 
