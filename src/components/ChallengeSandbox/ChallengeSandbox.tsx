@@ -488,7 +488,11 @@ export function ChallengeSandbox({
                       difficulty: challenge.difficulty,
                     }}
                     onSelectSuggestion={(suggestion) => {
-                      console.log('Selected related suggestion:', suggestion);
+                      logger.info(
+                        'Related suggestion selected',
+                        { suggestionTitle: suggestion.title },
+                        'ChallengeSandbox',
+                      );
                     }}
                   />
                 )}

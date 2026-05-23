@@ -8,10 +8,21 @@
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  AggregationType,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import { registerOTel } from '@vercel/otel';
 
 import { logger } from '@/lib/logger';
+import {
+  GEN_AI_DURATION_BUCKETS,
+  GEN_AI_TOKEN_USAGE_BUCKETS,
+  INSTRUMENTATION_SCOPE_VERSION,
+  METRIC_GEN_AI_CLIENT_OPERATION_DURATION,
+  METRIC_GEN_AI_CLIENT_TIME_TO_FIRST_CHUNK,
+  METRIC_GEN_AI_CLIENT_TOKEN_USAGE,
+} from '@/lib/observability/semconv';
 
 const log = logger.withTag('Instrumentation');
 
@@ -29,10 +40,43 @@ export async function register(): Promise<void> {
     // explicit endpoint config is needed here.
     registerOTel({
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'flight-school',
+      attributes: {
+        'service.version': INSTRUMENTATION_SCOPE_VERSION,
+        // Note: the spec renamed `deployment.environment` to `deployment.environment.name`.
+        'deployment.environment.name':
+          process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      },
       metricReaders: [
         new PeriodicExportingMetricReader({
           exporter: new OTLPMetricExporter(),
         }),
+      ],
+      // GenAI semconv recommends explicit bucket boundaries for the
+      // duration and token-usage histograms; the SDK default
+      // (millisecond-scale buckets) is unsuitable for our second-scale
+      // values and would crush most data into a single bucket.
+      views: [
+        {
+          instrumentName: METRIC_GEN_AI_CLIENT_OPERATION_DURATION,
+          aggregation: {
+            type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM,
+            options: { boundaries: GEN_AI_DURATION_BUCKETS, recordMinMax: true },
+          },
+        },
+        {
+          instrumentName: METRIC_GEN_AI_CLIENT_TIME_TO_FIRST_CHUNK,
+          aggregation: {
+            type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM,
+            options: { boundaries: GEN_AI_DURATION_BUCKETS, recordMinMax: true },
+          },
+        },
+        {
+          instrumentName: METRIC_GEN_AI_CLIENT_TOKEN_USAGE,
+          aggregation: {
+            type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM,
+            options: { boundaries: GEN_AI_TOKEN_USAGE_BUCKETS, recordMinMax: true },
+          },
+        },
       ],
       logRecordProcessors: [
         new BatchLogRecordProcessor(new OTLPLogExporter()),

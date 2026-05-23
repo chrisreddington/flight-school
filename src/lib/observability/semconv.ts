@@ -89,3 +89,30 @@ export const METRIC_FLIGHT_SCHOOL_GITHUB_DURATION = 'flight_school.github.durati
 
 /** Counter, unit `{request}`. GitHub API requests by outcome. */
 export const METRIC_FLIGHT_SCHOOL_GITHUB_REQUESTS = 'flight_school.github.requests';
+
+// ---------- Histogram bucket boundaries (from GenAI spec) ----------
+
+/**
+ * Recommended explicit-bucket boundaries for GenAI duration histograms
+ * (`gen_ai.client.operation.duration`,
+ * `gen_ai.client.operation.time_to_first_chunk`,
+ * `gen_ai.client.operation.time_per_output_chunk`).
+ *
+ * Doubling progression from 10 ms to ~82 s — matches the boundaries the
+ * GenAI semconv spec calls out as the recommended advisory parameter.
+ *
+ * @see {@link https://github.com/open-telemetry/semantic-conventions-genai/blob/main/model/gen-ai/metrics.yaml}
+ */
+export const GEN_AI_DURATION_BUCKETS = [
+  0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28,
+  2.56, 5.12, 10.24, 20.48, 40.96, 81.92,
+];
+
+/**
+ * Recommended explicit-bucket boundaries for `gen_ai.client.token.usage`.
+ * Geometric progression (power-of-4) spanning 1 to ~67M tokens.
+ */
+export const GEN_AI_TOKEN_USAGE_BUCKETS = [
+  1, 4, 16, 64, 256, 1024, 4096, 16384, 65536,
+  262144, 1048576, 4194304, 16777216, 67108864,
+];

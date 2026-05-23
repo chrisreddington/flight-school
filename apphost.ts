@@ -20,7 +20,11 @@ async function main(): Promise<void> {
     .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
     .withEnvironment('COPILOT_WORKER_ENABLED', '1')
     .withEnvironment('COPILOT_WORKER_MODE', '1')
-    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
+    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    // Suppress Next.js's built-in `AppRender.fetch` span so we don't
+    // double-count every server fetch alongside @vercel/otel's
+    // FetchInstrumentation. See .github/skills/opentelemetry/SKILL.md.
+    .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
   const workerEndpoint = await copilotWorker.getEndpoint('http');
   const workerUrl = await workerEndpoint.property(EndpointProperty.Url);
 
@@ -30,7 +34,8 @@ async function main(): Promise<void> {
     .withExternalHttpEndpoints()
     .withEnvironment('CRON_SKIP_AUTH', '1')
     .withEnvironment('COPILOT_WORKER_URL', workerUrl)
-    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
+    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
 
   await flightSchool.withCommand(
     'sweep-retention',
