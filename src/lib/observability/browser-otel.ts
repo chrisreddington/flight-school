@@ -19,6 +19,7 @@ import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor, WebTracerProvider } from '@opentelemetry/sdk-trace-web';
 
+import { INSTRUMENTATION_SCOPE_VERSION } from '@/lib/observability/semconv';
 import { stripQueryString } from '@/lib/observability/url-sanitize';
 
 const PROXY_URL = '/api/otel/v1/traces';
@@ -34,7 +35,10 @@ export function initBrowserOtel(): void {
 
   const provider = new WebTracerProvider({
     resource: defaultResource().merge(
-      resourceFromAttributes({ 'service.name': SERVICE_NAME }),
+      resourceFromAttributes({
+        'service.name': SERVICE_NAME,
+        'service.version': INSTRUMENTATION_SCOPE_VERSION,
+      }),
     ),
     spanProcessors: [new BatchSpanProcessor(exporter)],
   } as ConstructorParameters<typeof WebTracerProvider>[0]);

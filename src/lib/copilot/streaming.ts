@@ -13,7 +13,17 @@ import { logger } from '@/lib/logger';
 import {
   recordAiOperation,
   recordAiStreamMetrics,
+  recordAiTokenUsage,
 } from '@/lib/observability/telemetry';
+import {
+  GEN_AI_OPERATION,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_PROVIDER_GITHUB_COPILOT,
+  GEN_AI_PROVIDER_NAME,
+  GEN_AI_REQUEST_MODEL,
+  INSTRUMENTATION_SCOPE_SERVER,
+  INSTRUMENTATION_SCOPE_VERSION,
+} from '@/lib/observability/semconv';
 import { context, SpanStatusCode, trace } from '@opentelemetry/api';
 import { activityLogger } from './activity/logger';
 import {
@@ -149,13 +159,15 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
     firstDeltaMs: null as number | null,
     activityEventId, // Pass this to the client
   };
-  const tracer = trace.getTracer('flight-school');
+  const tracer = trace.getTracer(INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION);
 
   async function* generateStream(): AsyncGenerator<StreamEvent, void, unknown> {
-    const streamSpan = tracer.startSpan('ai.stream', {
+    const streamSpan = tracer.startSpan(`${GEN_AI_OPERATION.CHAT} ${model}`, {
       attributes: {
-        'ai.model': model,
-        'ai.operation': operationName,
+        [GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION.CHAT,
+        [GEN_AI_REQUEST_MODEL]: model,
+        [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
+        'app.operation': operationName,
         'ai.mcp_enabled': useGitHubTools,
       },
     });
@@ -173,6 +185,12 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
     let queueResolver: (() => void) | null = null;
     let deltaCount = 0;
     let deltaBytes = 0;
+    const usageTotals = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
 
     // Set up event listener
     const unsubscribe = session.on((event) => {
@@ -193,6 +211,19 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
           eventQueue.push({ type: 'delta', content: data.deltaContent });
           queueResolver?.();
         }
+      } else if (eventType === 'assistant.usage') {
+        // Accumulate token counts; recorded once on stream completion so the
+        // histogram sample reflects the whole turn rather than per-chunk noise.
+        const data = event.data as {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        };
+        usageTotals.inputTokens += data.inputTokens ?? 0;
+        usageTotals.outputTokens += data.outputTokens ?? 0;
+        usageTotals.cacheReadTokens += data.cacheReadTokens ?? 0;
+        usageTotals.cacheWriteTokens += data.cacheWriteTokens ?? 0;
       } else if (eventType === 'tool.execution_start') {
         const data = event.data as { toolName: string; arguments: unknown };
         log.debug(`Tool start: ${data.toolName}`);
@@ -311,6 +342,14 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         terminalState: 'completed',
       });
       recordAiOperation('streamSession', durationMs, model, 'ok');
+      recordAiTokenUsage({
+        operation: GEN_AI_OPERATION.CHAT,
+        model,
+        inputTokens: usageTotals.inputTokens,
+        outputTokens: usageTotals.outputTokens,
+        cacheReadTokens: usageTotals.cacheReadTokens,
+        cacheWriteTokens: usageTotals.cacheWriteTokens,
+      });
       streamSpan.addEvent('stream.completed', {
         'ai.stream.delta_count': deltaCount,
         'ai.stream.delta_bytes': deltaBytes,

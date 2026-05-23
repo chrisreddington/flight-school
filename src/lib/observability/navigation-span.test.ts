@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@opentelemetry/api', () => ({
   trace: {
-    getTracer: (name: string) => {
-      mocks.getTracer(name);
+    getTracer: (name: string, version?: string) => {
+      mocks.getTracer(name, version);
       return {
         startSpan: (n: string, opts: unknown) => {
           mocks.startSpan(n, opts);
@@ -39,7 +39,7 @@ describe('recordNavigation', () => {
 
     recordNavigation('/dashboard', '/');
 
-    expect(mocks.getTracer).toHaveBeenCalledWith('flight-school-browser-navigation');
+    expect(mocks.getTracer).toHaveBeenCalledWith('flight-school.browser', expect.any(String));
     expect(mocks.startSpan).toHaveBeenCalledWith('page.navigation', expect.any(Object));
     expect(mocks.setAttribute).toHaveBeenCalledWith('page.path', '/dashboard');
     expect(mocks.setAttribute).toHaveBeenCalledWith('page.previous_path', '/');

@@ -5,16 +5,38 @@
  * @see https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
  */
 
-import { logger } from '@/lib/logger';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { registerOTel } from '@vercel/otel';
+
+import { logger } from '@/lib/logger';
 
 const log = logger.withTag('Instrumentation');
 
 export async function register(): Promise<void> {
   // Only run on server
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // `@vercel/otel` installs a tracer provider by default but only wires
+    // a meter provider / log record provider when explicitly given
+    // `metricReaders` / `logRecordProcessors`. Without these, every
+    // `metrics.getMeter(...).createHistogram(...)` and every OTel-bridged
+    // log call is silently dropped. See `.github/skills/opentelemetry/SKILL.md`.
+    //
+    // Both exporters pick up `OTEL_EXPORTER_OTLP_ENDPOINT` and
+    // `OTEL_EXPORTER_OTLP_HEADERS` from the env Aspire injects, so no
+    // explicit endpoint config is needed here.
     registerOTel({
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'flight-school',
+      metricReaders: [
+        new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter(),
+        }),
+      ],
+      logRecordProcessors: [
+        new BatchLogRecordProcessor(new OTLPLogExporter()),
+      ],
     });
 
     log.info('Server starting...');

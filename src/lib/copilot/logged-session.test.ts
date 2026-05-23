@@ -21,6 +21,7 @@ vi.mock('./activity/logger', () => ({
 
 vi.mock('@/lib/observability/telemetry', () => ({
   recordAiOperation: mocks.recordAiOperationMock,
+  recordAiTokenUsage: vi.fn(),
   setSpanError: vi.fn(),
   withSpan: vi.fn((_name, _attributes, callback) => callback({})),
 }));

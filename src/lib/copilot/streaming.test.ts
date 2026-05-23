@@ -97,6 +97,7 @@ vi.mock('./activity/logger', () => ({
 vi.mock('@/lib/observability/telemetry', () => ({
   recordAiOperation: mocks.recordAiOperation,
   recordAiStreamMetrics: mocks.recordAiStreamMetrics,
+  recordAiTokenUsage: vi.fn(),
 }));
 
 vi.mock('@opentelemetry/api', () => ({

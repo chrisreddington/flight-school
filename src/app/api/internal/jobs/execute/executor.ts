@@ -10,11 +10,15 @@ import {
   type ClientTriggerMetadata,
 } from '@/lib/observability/trigger-metadata';
 import { recordJobQueueWait } from '@/lib/observability/telemetry';
+import {
+  INSTRUMENTATION_SCOPE_SERVER,
+  INSTRUMENTATION_SCOPE_VERSION,
+} from '@/lib/observability/semconv';
 import { context, trace } from '@opentelemetry/api';
 import { executeWorkerJob } from '@/worker/jobs/executor-dispatcher';
 
 const log = logger.withTag('InternalJobExecute');
-const tracer = trace.getTracer('flight-school');
+const tracer = trace.getTracer(INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION);
 
 export function scheduleWorkerJobExecution(
   request: DispatchJobExecutionRequest,

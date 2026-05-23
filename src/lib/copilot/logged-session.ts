@@ -2,7 +2,14 @@ import type { CopilotSession } from '@github/copilot-sdk';
 import { nowMs } from '@/lib/utils/date-utils';
 
 import { logger } from '@/lib/logger';
-import { recordAiOperation, setSpanError, withSpan } from '@/lib/observability/telemetry';
+import { recordAiOperation, recordAiTokenUsage, setSpanError, withSpan } from '@/lib/observability/telemetry';
+import {
+  GEN_AI_OPERATION,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_PROVIDER_GITHUB_COPILOT,
+  GEN_AI_PROVIDER_NAME,
+  GEN_AI_REQUEST_MODEL,
+} from '@/lib/observability/semconv';
 import { activityLogger, type CompleteOperation } from './activity/logger';
 import type { AIActivityOutput } from './activity/types';
 import type {
@@ -37,6 +44,12 @@ export function wrapSessionWithLogging(
 ): LoggedCopilotSession {
   const toolCalls: ToolCallRecord[] = [];
   let complete: CompleteOperation | null = null;
+  const usageTotals = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
 
   session.on((event) => {
     const eventType = event.type;
@@ -67,6 +80,17 @@ export function wrapSessionWithLogging(
         );
       }
     }
+
+    if (eventType === 'assistant.usage') {
+      // The SDK emits one or more `assistant.usage` events per turn (e.g.
+      // multiple inferences across tool hops). Accumulate so the histogram
+      // is recorded once per `sendAndWait` rather than per delta event.
+      const data = event.data;
+      usageTotals.inputTokens += data.inputTokens ?? 0;
+      usageTotals.outputTokens += data.outputTokens ?? 0;
+      usageTotals.cacheReadTokens += data.cacheReadTokens ?? 0;
+      usageTotals.cacheWriteTokens += data.cacheWriteTokens ?? 0;
+    }
   });
 
   return {
@@ -91,10 +115,12 @@ export function wrapSessionWithLogging(
       try {
         log.info(`Sending prompt for: ${operationName}`);
         const response = await withSpan(
-          'copilot.session.send_and_wait',
+          `${GEN_AI_OPERATION.CHAT} ${model}`,
           {
-            'ai.operation': operationName,
-            'ai.model': model,
+            [GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION.CHAT,
+            [GEN_AI_REQUEST_MODEL]: model,
+            [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
+            'app.operation': operationName,
           },
           async (span) => {
             try {
@@ -120,6 +146,14 @@ export function wrapSessionWithLogging(
         };
         complete(output);
         recordAiOperation('sendAndWait', totalTimeMs, model, 'ok');
+        recordAiTokenUsage({
+          operation: GEN_AI_OPERATION.CHAT,
+          model,
+          inputTokens: usageTotals.inputTokens,
+          outputTokens: usageTotals.outputTokens,
+          cacheReadTokens: usageTotals.cacheReadTokens,
+          cacheWriteTokens: usageTotals.cacheWriteTokens,
+        });
 
         return {
           responseText,

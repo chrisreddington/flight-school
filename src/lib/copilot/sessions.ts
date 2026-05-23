@@ -28,6 +28,13 @@ import type {
 } from './types';
 import { logger } from '@/lib/logger';
 import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
+import {
+  GEN_AI_OPERATION,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_PROVIDER_GITHUB_COPILOT,
+  GEN_AI_PROVIDER_NAME,
+  GEN_AI_REQUEST_MODEL,
+} from '@/lib/observability/semconv';
 import { createNewSessionMetrics, createReusedSessionMetrics } from './session-metrics';
 
 const log = logger.withTag('Copilot SDK');
@@ -187,9 +194,11 @@ export async function createSessionWithMetrics(
   const startTime = Date.now();
 
   return withSpan(
-    'copilot.session.create',
+    `${GEN_AI_OPERATION.CREATE_AGENT} ${model}`,
     {
-      'ai.model': model,
+      [GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION.CREATE_AGENT,
+      [GEN_AI_REQUEST_MODEL]: model,
+      [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
       'copilot.pool_key': poolKey,
       'copilot.mcp_enabled': includeMcp,
     },
