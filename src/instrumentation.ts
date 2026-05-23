@@ -15,7 +15,7 @@ import {
 import { registerOTel } from '@vercel/otel';
 
 import { logger } from '@/lib/logger';
-import { createProxySampler } from '@/lib/observability/proxy-sampler';
+import { createTelemetryHygieneSampler } from '@/lib/observability/proxy-sampler';
 import {
   GEN_AI_DURATION_BUCKETS,
   GEN_AI_TOKEN_USAGE_BUCKETS,
@@ -47,12 +47,14 @@ export async function register(): Promise<void> {
         'deployment.environment.name':
           process.env.NODE_ENV === 'production' ? 'production' : 'development',
       },
-      // Drop server-side spans for the browser→server OTel proxy route to
-      // prevent a self-tracing feedback loop: every BSP flush (including
-      // those triggered by `document.visibilitychange`) would otherwise
-      // produce a fresh server trace, drowning out real app telemetry.
-      // See `src/lib/observability/proxy-sampler.ts` for the rationale.
-      traceSampler: createProxySampler(),
+      // Drop high-noise spans before they reach the exporter:
+      //   - server-side spans for the browser→server OTel proxy route
+      //     (self-tracing feedback loop on every BSP flush);
+      //   - the Next.js "bubble" wrapper SERVER span (bare-method sibling
+      //     of every templated API span — drops the route template and
+      //     mis-bins as a flat "GET" / "POST" in dashboards).
+      // See `src/lib/observability/proxy-sampler.ts` for the full rationale.
+      traceSampler: createTelemetryHygieneSampler(),
       metricReaders: [
         new PeriodicExportingMetricReader({
           exporter: new OTLPMetricExporter(),

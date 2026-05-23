@@ -1,22 +1,64 @@
 /**
- * Sampler that drops self-tracing spans for the browser→server OTel proxy
- * route (`/api/otel/v1/traces`).
+ * Telemetry-hygiene sampler. Drops three classes of noisy spans before they
+ * reach the exporter:
  *
- * ## Why this exists
+ * 1. **OTel-proxy self-trace** — server-side spans for the browser→server
+ *    OTel proxy route (`/api/otel/v1/traces`).
+ * 2. **Next.js "bubble" wrapper SERVER span** — the bare-method `"GET"` /
+ *    `"POST"` etc. SERVER span emitted by `BaseServer.handleRequest` with
+ *    `next.bubble: "true"` and no `http.route`. Next.js emits two SERVER
+ *    spans per request: this wrapper (which loses the route template) plus
+ *    the templated `"GET /api/route"` span. We keep the templated one
+ *    because it owns `http.route`, App Router lifecycle attributes, and
+ *    matches what dashboards aggregate on.
+ * 3. **Next.js framework stub INTERNAL spans** — sub-millisecond spans
+ *    Next.js emits for internal hooks (`resolve page components`,
+ *    `start response`, …). They add visual noise to the trace tree and
+ *    carry no actionable signal. Drop based on an allowlist of
+ *    `next.span_type` values.
+ *
+ * Dropping at the sampler stage propagates `NOT_RECORD` to every child
+ * span via the standard OTel parent-based sampling chain.
+ *
+ * ## Why the OTel-proxy self-trace exists
  *
  * The browser-side `BatchSpanProcessor` flushes pending spans on
  * `document.visibilitychange` — a legitimate behaviour that prevents data
  * loss when a tab is backgrounded. Each flush POSTs to the same-origin OTel
- * proxy at `/api/otel/v1/traces`. Next.js + `@vercel/otel` auto-instruments
- * incoming requests, so without intervention each export creates an HTTP
- * server span (plus framework children) which is itself exported on the next
- * BSP tick. The browser already excludes the proxy via
+ * proxy at `/api/otel/v1/traces`. Next.js auto-instruments incoming
+ * requests, so without intervention each export creates an HTTP server span
+ * (plus framework children) which is itself exported on the next BSP tick.
+ * The browser already excludes the proxy via
  * `FetchInstrumentation.ignoreUrls`, but the server side has no equivalent —
- * so every tab-switch produces a fresh proxy-trace that drowns out real app
- * telemetry on the dashboard.
+ * so every tab-switch would produce a fresh proxy-trace that drowns out
+ * real app telemetry on the dashboard.
  *
- * Dropping the root SERVER span here propagates `NOT_RECORD` to every child
- * span via the standard OTel parent-based sampling chain.
+ * ## Why the Next.js bubble span is dropped
+ *
+ * Diagnosis (PR1 of the telemetry-hygiene cleanup): for every API request
+ * Next.js emits **two SERVER spans as siblings** under the browser fetch:
+ *
+ * ```
+ * [Client]  HTTP GET                          src=flight-school-browser
+ * ├─ [Server] GET                             src=flight-school   5ms
+ * │  attrs: next.span_type=BaseServer.handleRequest, next.bubble="true",
+ * │         next.rsc="false", http.target=/api/route   (no http.route)
+ * └─ [Server] GET /api/route                  src=flight-school   20ms
+ *    attrs: next.span_type=BaseServer.handleRequest, http.route=/api/route,
+ *           next.route=/api/route, operation.name=web.request
+ *    └─ executing api route (app) /api/route
+ *    └─ resolve page components / start response   (stubs — see PR2)
+ * ```
+ *
+ * Both are emitted by Next.js's own internal tracer (not
+ * `@opentelemetry/instrumentation-http`; `@vercel/otel` v2 default is
+ * `["fetch"]` only). The bubble span lacks the route template, so anything
+ * aggregating by `http.route` mis-bins it as a bare `"GET"`. Dropping it
+ * leaves the templated sibling intact, which is what we actually want.
+ *
+ * The unique discriminator is `next.bubble === "true"` (a Next.js-internal
+ * flag set at span creation). Defensive backup: bare-method span name
+ * (`"GET"`, `"HTTP GET"`, etc.) on `SpanKind.SERVER` with no `http.route`.
  */
 
 import {
@@ -26,12 +68,44 @@ import {
   type Sampler,
   type SamplingResult,
 } from '@opentelemetry/sdk-trace-base';
-import type { Attributes, Context, Link, SpanKind } from '@opentelemetry/api';
+import type { Attributes, Context, Link } from '@opentelemetry/api';
+import { SpanKind } from '@opentelemetry/api';
 
 /** Route prefix for the same-origin OTel trace proxy. */
 const PROXY_PATH = '/api/otel/v1/traces';
 
 const NOT_RECORD: SamplingResult = { decision: SamplingDecision.NOT_RECORD };
+
+/**
+ * Matches the bare HTTP-method names that the Next.js bubble SERVER span
+ * uses (e.g. `"GET"`, `"HTTP POST"`). The templated sibling that we want
+ * to keep is named `"GET /api/route"`, which does not match this regex
+ * because of the trailing path segment.
+ */
+const BARE_METHOD_SPAN_NAME = /^(HTTP )?(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/;
+
+/**
+ * Allowlist of `next.span_type` values to drop. These correspond to
+ * sub-millisecond INTERNAL spans Next.js emits for its own framework hooks
+ * — useful when debugging Next.js itself, but pure noise in an application
+ * trace tree.
+ *
+ * Confirmed via diagnostic against the running Aspire dashboard:
+ *
+ * | `next.span_type`                         | Span name                  |
+ * | ---------------------------------------- | -------------------------- |
+ * | `NextNodeServer.findPageComponents`      | `resolve page components`  |
+ * | `NextNodeServer.startResponse`           | `start response`           |
+ *
+ * Spans we deliberately **keep** include
+ * `AppRouteRouteHandlers.runHandler` (the actual route handler body) and
+ * `BaseServer.handleRequest` (the templated SERVER span — see bubble-span
+ * docs above).
+ */
+const NEXTJS_FRAMEWORK_STUB_SPAN_TYPES = new Set<string>([
+  'NextNodeServer.findPageComponents',
+  'NextNodeServer.startResponse',
+]);
 
 /**
  * Returns `true` if the given span name + attributes describe a request to
@@ -82,13 +156,66 @@ export function isProxyRouteSpan(
 }
 
 /**
- * Builds a {@link Sampler} that drops spans for the OTel proxy route and
- * delegates all other decisions to a parent-based always-on sampler.
+ * Returns `true` if the given SERVER span is the Next.js "bubble" wrapper
+ * span — the bare-method sibling that loses the route template. Exposed
+ * for unit testing.
+ *
+ * Primary discriminator: `next.bubble === "true"` (Next.js-internal flag
+ * set at span creation). Defensive backup: bare-method span name on
+ * `SpanKind.SERVER` with no `http.route` (which is also not yet populated
+ * at sampler stage but, when present at this stage, would always be on the
+ * keeper sibling — never on the bubble).
+ */
+export function isNextjsBubbleSpan(
+  spanName: string,
+  spanKind: SpanKind | undefined,
+  attrs: Attributes | undefined,
+): boolean {
+  // SERVER-kind only; bubble is always a SERVER span.
+  if (spanKind !== undefined && spanKind !== SpanKind.SERVER) {
+    return false;
+  }
+
+  const bubble = attrs?.['next.bubble'];
+  if (bubble === 'true' || bubble === true) {
+    return true;
+  }
+
+  // Backup: bare-method name + no http.route.
+  if (BARE_METHOD_SPAN_NAME.test(spanName) && !attrs?.['http.route']) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Returns `true` if the given span is a Next.js framework stub INTERNAL
+ * span on the allowlist. Exposed for unit testing.
+ */
+export function isNextjsFrameworkStubSpan(
+  spanKind: SpanKind | undefined,
+  attrs: Attributes | undefined,
+): boolean {
+  if (spanKind !== undefined && spanKind !== SpanKind.INTERNAL) {
+    return false;
+  }
+  const spanType = attrs?.['next.span_type'];
+  return (
+    typeof spanType === 'string' && NEXTJS_FRAMEWORK_STUB_SPAN_TYPES.has(spanType)
+  );
+}
+
+/**
+ * Builds a {@link Sampler} that drops three classes of noisy spans (OTel
+ * proxy self-trace, Next.js bubble wrapper SERVER span, Next.js framework
+ * stub INTERNAL spans) and delegates all other decisions to a parent-based
+ * always-on sampler.
  *
  * Exposed as a factory (rather than a singleton) so unit tests can construct
  * fresh instances without shared state.
  */
-export function createProxySampler(): Sampler {
+export function createTelemetryHygieneSampler(): Sampler {
   const delegate = new ParentBasedSampler({ root: new AlwaysOnSampler() });
 
   return {
@@ -103,6 +230,12 @@ export function createProxySampler(): Sampler {
       if (isProxyRouteSpan(spanName, attributes)) {
         return NOT_RECORD;
       }
+      if (isNextjsBubbleSpan(spanName, spanKind, attributes)) {
+        return NOT_RECORD;
+      }
+      if (isNextjsFrameworkStubSpan(spanKind, attributes)) {
+        return NOT_RECORD;
+      }
       return delegate.shouldSample(
         context,
         traceId,
@@ -113,7 +246,15 @@ export function createProxySampler(): Sampler {
       );
     },
     toString(): string {
-      return 'OtelProxyExcludingSampler';
+      return 'TelemetryHygieneSampler';
     },
   };
 }
+
+/**
+ * @deprecated Use {@link createTelemetryHygieneSampler}. Retained as an
+ *   alias because callers across the app + tests imported the old name.
+ *   The returned sampler now also drops the Next.js bubble wrapper SERVER
+ *   span — see module docs.
+ */
+export const createProxySampler = createTelemetryHygieneSampler;

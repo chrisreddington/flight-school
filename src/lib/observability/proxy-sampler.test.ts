@@ -2,7 +2,11 @@ import { ROOT_CONTEXT, SpanKind, trace } from '@opentelemetry/api';
 import { SamplingDecision } from '@opentelemetry/sdk-trace-base';
 import { describe, expect, it } from 'vitest';
 
-import { createProxySampler, isProxyRouteSpan } from './proxy-sampler';
+import {
+  createTelemetryHygieneSampler,
+  isNextjsBubbleSpan,
+  isProxyRouteSpan,
+} from './proxy-sampler';
 
 describe('isProxyRouteSpan', () => {
   it('matches when spanName ends with the proxy path', () => {
@@ -47,11 +51,11 @@ describe('isProxyRouteSpan', () => {
   });
 });
 
-describe('createProxySampler', () => {
+describe('createTelemetryHygieneSampler', () => {
   const traceId = '00000000000000000000000000000001';
 
   it('drops the root SERVER span when http.target matches', () => {
-    const sampler = createProxySampler();
+    const sampler = createTelemetryHygieneSampler();
     const result = sampler.shouldSample(
       ROOT_CONTEXT,
       traceId,
@@ -64,7 +68,7 @@ describe('createProxySampler', () => {
   });
 
   it('drops the framework route span by name alone', () => {
-    const sampler = createProxySampler();
+    const sampler = createTelemetryHygieneSampler();
     const result = sampler.shouldSample(
       ROOT_CONTEXT,
       traceId,
@@ -76,14 +80,77 @@ describe('createProxySampler', () => {
     expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
   });
 
+  it('drops the Next.js bubble wrapper span via next.bubble attribute', () => {
+    const sampler = createTelemetryHygieneSampler();
+    const result = sampler.shouldSample(
+      ROOT_CONTEXT,
+      traceId,
+      'GET',
+      SpanKind.SERVER,
+      {
+        'next.span_type': 'BaseServer.handleRequest',
+        'next.bubble': 'true',
+        'next.rsc': 'false',
+        'http.target': '/api/profile',
+      },
+      [],
+    );
+    expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
+  });
+
+  it('drops bare-method SERVER spans without http.route as a defensive backup', () => {
+    const sampler = createTelemetryHygieneSampler();
+    for (const name of ['GET', 'POST', 'HTTP GET', 'PUT', 'DELETE']) {
+      const result = sampler.shouldSample(
+        ROOT_CONTEXT,
+        traceId,
+        name,
+        SpanKind.SERVER,
+        {},
+        [],
+      );
+      expect(result.decision, `name=${name}`).toBe(SamplingDecision.NOT_RECORD);
+    }
+  });
+
+  it('keeps the templated SERVER span (the keeper sibling)', () => {
+    const sampler = createTelemetryHygieneSampler();
+    const result = sampler.shouldSample(
+      ROOT_CONTEXT,
+      traceId,
+      'GET /api/profile',
+      SpanKind.SERVER,
+      {
+        'next.span_type': 'BaseServer.handleRequest',
+        'next.route': '/api/profile',
+        'http.route': '/api/profile',
+      },
+      [],
+    );
+    expect(result.decision).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+  });
+
+  it('does not drop CLIENT-kind spans named GET (outbound fetches)', () => {
+    const sampler = createTelemetryHygieneSampler();
+    const result = sampler.shouldSample(
+      ROOT_CONTEXT,
+      traceId,
+      'GET',
+      SpanKind.CLIENT,
+      {},
+      [],
+    );
+    expect(result.decision).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+  });
+
   it('delegates unrelated root spans to the parent-based always-on sampler', () => {
-    const sampler = createProxySampler();
+    const sampler = createTelemetryHygieneSampler();
     const result = sampler.shouldSample(
       ROOT_CONTEXT,
       traceId,
       'POST /api/profile',
       SpanKind.SERVER,
-      { 'http.target': '/api/profile' },
+      { 'http.target': '/api/profile', 'http.route': '/api/profile' },
       [],
     );
     // ParentBased + AlwaysOn root with no parent context yields
@@ -92,7 +159,7 @@ describe('createProxySampler', () => {
   });
 
   it('honours a non-recording parent for unrelated spans (parent-based delegate)', () => {
-    const sampler = createProxySampler();
+    const sampler = createTelemetryHygieneSampler();
     const parentSpanContext = {
       traceId,
       spanId: '0000000000000002',
@@ -105,14 +172,86 @@ describe('createProxySampler', () => {
       traceId,
       'POST /api/profile',
       SpanKind.SERVER,
-      { 'http.target': '/api/profile' },
+      { 'http.target': '/api/profile', 'http.route': '/api/profile' },
       [],
     );
     // Non-sampled parent → ParentBasedSampler drops the child.
     expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
   });
 
+  it('drops Next.js framework stub INTERNAL spans by next.span_type', () => {
+    const sampler = createTelemetryHygieneSampler();
+    for (const spanType of [
+      'NextNodeServer.findPageComponents',
+      'NextNodeServer.startResponse',
+    ]) {
+      const result = sampler.shouldSample(
+        ROOT_CONTEXT,
+        traceId,
+        'resolve page components',
+        SpanKind.INTERNAL,
+        { 'next.span_type': spanType },
+        [],
+      );
+      expect(result.decision, `span_type=${spanType}`).toBe(
+        SamplingDecision.NOT_RECORD,
+      );
+    }
+  });
+
+  it('keeps the route-handler INTERNAL span (AppRouteRouteHandlers.runHandler)', () => {
+    const sampler = createTelemetryHygieneSampler();
+    const result = sampler.shouldSample(
+      ROOT_CONTEXT,
+      traceId,
+      'executing api route (app) /api/profile',
+      SpanKind.INTERNAL,
+      { 'next.span_type': 'AppRouteRouteHandlers.runHandler' },
+      [],
+    );
+    expect(result.decision).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+  });
+
   it('reports a stable identifier via toString', () => {
-    expect(createProxySampler().toString()).toBe('OtelProxyExcludingSampler');
+    expect(createTelemetryHygieneSampler().toString()).toBe(
+      'TelemetryHygieneSampler',
+    );
+  });
+});
+
+describe('isNextjsBubbleSpan', () => {
+  it('matches a bare GET SERVER span with next.bubble', () => {
+    expect(
+      isNextjsBubbleSpan('GET', SpanKind.SERVER, { 'next.bubble': 'true' }),
+    ).toBe(true);
+  });
+
+  it('matches even when next.bubble is the literal boolean true', () => {
+    expect(
+      isNextjsBubbleSpan('GET', SpanKind.SERVER, { 'next.bubble': true }),
+    ).toBe(true);
+  });
+
+  it('matches bare HTTP-method names without next.bubble (defensive backup)', () => {
+    expect(isNextjsBubbleSpan('GET', SpanKind.SERVER, {})).toBe(true);
+    expect(isNextjsBubbleSpan('HTTP POST', SpanKind.SERVER, {})).toBe(true);
+  });
+
+  it('does not match templated SERVER spans (those carry http.route)', () => {
+    expect(
+      isNextjsBubbleSpan('GET /api/profile', SpanKind.SERVER, {
+        'http.route': '/api/profile',
+      }),
+    ).toBe(false);
+  });
+
+  it('does not match CLIENT spans (outbound fetches named GET)', () => {
+    expect(isNextjsBubbleSpan('GET', SpanKind.CLIENT, {})).toBe(false);
+  });
+
+  it('does not match arbitrary span names', () => {
+    expect(
+      isNextjsBubbleSpan('resolve page components', SpanKind.INTERNAL, {}),
+    ).toBe(false);
   });
 });
