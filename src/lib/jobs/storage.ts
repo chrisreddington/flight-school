@@ -6,6 +6,8 @@
  */
 
 import { logger } from '@/lib/logger';
+import type { TracePropagationHeaders } from '@/lib/observability/context-propagation';
+import type { ClientTriggerMetadata } from '@/lib/observability/trigger-metadata';
 import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
 
 const log = logger.withTag('JobStorage');
@@ -23,6 +25,11 @@ export type JobErrorCode =
   | 'credentials_refresh_failed'
   | 'unknown';
 
+interface JobCausalityContext extends TracePropagationHeaders {
+  capturedAt: string;
+  trigger?: ClientTriggerMetadata;
+}
+
 export interface BackgroundJob<T = unknown> {
   id: string;
   type: string;
@@ -36,6 +43,7 @@ export interface BackgroundJob<T = unknown> {
   userId: string;
   targetId?: string;
   status: JobStatus;
+  causality?: JobCausalityContext;
   input: Record<string, unknown>;
   result?: T;
   error?: string;

@@ -7,6 +7,7 @@
 
 import { logger } from '@/lib/logger';
 import { nowMs } from '@/lib/utils/date-utils';
+import { appendShadowActivityEvent } from './shadow-store';
 import type {
     ActivityListener,
     AIActivityEvent,
@@ -81,6 +82,9 @@ class AIActivityLogger {
       // Notify listeners with a NEW object reference to ensure React detects the change
       // This prevents flakiness where React doesn't see mutations to the same object
       this.notifyListeners({ ...event });
+      void appendShadowActivityEvent(event).catch((shadowError) => {
+        logger.warn('Failed to update activity shadow event', { error: shadowError }, 'AIActivityLogger');
+      });
     };
   }
 
@@ -124,6 +128,9 @@ class AIActivityLogger {
     }
     // Notify with a new object reference for React change detection
     this.notifyListeners({ ...event });
+    void appendShadowActivityEvent(event).catch((shadowError) => {
+      logger.warn('Failed to append activity shadow event', { error: shadowError }, 'AIActivityLogger');
+    });
   }
 
   private notifyListeners(event: AIActivityEvent): void {

@@ -6,6 +6,11 @@ import {
   writeFocusStorage,
 } from './persistence';
 
+const mocks = vi.hoisted(() => ({
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
+
 vi.mock('@/lib/api-client', () => ({
   apiDelete: vi.fn(),
   apiGet: vi.fn(),
@@ -16,8 +21,8 @@ vi.mock('@/lib/logger', () => ({
   logger: {
     withTag: () => ({
       debug: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn(),
+      error: mocks.logError,
+      warn: mocks.logWarn,
     }),
   },
 }));
@@ -44,6 +49,20 @@ describe('focus persistence adapter', () => {
     vi.mocked(apiGet).mockRejectedValue(new Error('Network error'));
 
     await expect(readFocusStorage()).resolves.toEqual({ history: {} });
+  });
+
+  it('should not log aborted reads as errors', async () => {
+    const abortError = new Error('Fetch is aborted');
+    abortError.name = 'AbortError';
+    vi.mocked(apiGet).mockRejectedValue(abortError);
+
+    await expect(readFocusStorage()).resolves.toEqual({ history: {} });
+
+    expect(mocks.logError).not.toHaveBeenCalled();
+    expect(mocks.logWarn).toHaveBeenCalledWith(
+      'Storage read skipped (network unavailable)',
+      'Fetch is aborted',
+    );
   });
 
   it('should skip transient network write failures and rethrow other write failures', async () => {

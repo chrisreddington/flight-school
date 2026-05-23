@@ -8,6 +8,7 @@
 import { authErrorResponse } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
+import { updateShadowActivityMetrics } from '@/lib/copilot/activity/shadow-store';
 import { NextRequest, NextResponse } from 'next/server';
 
 export interface UpdateActivityMetricsRequest {
@@ -41,6 +42,8 @@ export async function PATCH(request: NextRequest) {
       // 404 for both "not found" and "not yours" — don't leak existence.
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
+
+    await updateShadowActivityMetrics(userId, eventId, clientMetrics);
 
     return NextResponse.json({ success: true, eventId });
   } catch (err) {

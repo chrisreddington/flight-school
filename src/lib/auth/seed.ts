@@ -23,6 +23,7 @@
 import 'server-only';
 
 import { logger } from '@/lib/logger';
+import type { WorkerDispatchCredentials } from '@/lib/jobs/dispatch';
 
 import { readCredentialsFromJwt } from './context';
 import { getTokenStore } from './token-store';
@@ -93,4 +94,17 @@ export async function seedTokenStoreFromJwt(userId: string): Promise<SeedResult>
     log.error('Failed to seed token store from JWT', { userId, message: error.message });
     return { status: 'error', error };
   }
+}
+
+export async function buildWorkerDispatchCredentials(): Promise<WorkerDispatchCredentials | null> {
+  const creds = await readCredentialsFromJwt();
+  if (!creds?.accessToken || !creds.refreshToken || !creds.expiresAt || creds.expiresAt <= 0) {
+    return null;
+  }
+
+  return {
+    accessToken: creds.accessToken,
+    refreshToken: creds.refreshToken,
+    expiresAt: creds.expiresAt,
+  };
 }

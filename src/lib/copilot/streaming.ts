@@ -10,7 +10,11 @@
  */
 
 import { logger } from '@/lib/logger';
-import { recordAiOperation } from '@/lib/observability/telemetry';
+import {
+  recordAiOperation,
+  recordAiStreamMetrics,
+} from '@/lib/observability/telemetry';
+import { context, SpanStatusCode, trace } from '@opentelemetry/api';
 import { activityLogger } from './activity/logger';
 import {
   CHAT_MODEL,
@@ -145,8 +149,18 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
     firstDeltaMs: null as number | null,
     activityEventId, // Pass this to the client
   };
+  const tracer = trace.getTracer('flight-school');
 
   async function* generateStream(): AsyncGenerator<StreamEvent, void, unknown> {
+    const streamSpan = tracer.startSpan('ai.stream', {
+      attributes: {
+        'ai.model': model,
+        'ai.operation': operationName,
+        'ai.mcp_enabled': useGitHubTools,
+      },
+    });
+    streamSpan.addEvent('stream.started');
+
     let resolveIdle: (() => void) | null = null;
     let rejectWithError: ((err: Error) => void) | null = null;
     const idlePromise = new Promise<void>((resolve, reject) => {
@@ -157,6 +171,8 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
     // Queue for delta events
     const eventQueue: StreamEvent[] = [];
     let queueResolver: (() => void) | null = null;
+    let deltaCount = 0;
+    let deltaBytes = 0;
 
     // Set up event listener
     const unsubscribe = session.on((event) => {
@@ -167,7 +183,12 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         if (data.deltaContent) {
           if (streamingMetrics.firstDeltaMs === null) {
             streamingMetrics.firstDeltaMs = Date.now() - startTime;
+            streamSpan.addEvent('first_token', {
+              'ai.stream.first_delta_ms': streamingMetrics.firstDeltaMs,
+            });
           }
+          deltaCount += 1;
+          deltaBytes += Buffer.byteLength(data.deltaContent);
           totalContent += data.deltaContent;
           eventQueue.push({ type: 'delta', content: data.deltaContent });
           queueResolver?.();
@@ -175,6 +196,9 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       } else if (eventType === 'tool.execution_start') {
         const data = event.data as { toolName: string; arguments: unknown };
         log.debug(`Tool start: ${data.toolName}`);
+        streamSpan.addEvent('tool.start', {
+          'tool.name': data.toolName,
+        });
         toolCalls.push({
           name: data.toolName,
           args: data.arguments,
@@ -196,6 +220,10 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
           lastCall.endTime = Date.now();
           const duration = lastCall.endTime - lastCall.startTime;
           log.debug(`Tool complete: ${lastCall.name} (${duration}ms)`);
+          streamSpan.addEvent('tool.complete', {
+            'tool.name': lastCall.name,
+            'tool.duration_ms': duration,
+          });
           eventQueue.push({
             type: 'tool_complete',
             name: lastCall.name,
@@ -214,7 +242,10 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
 
     try {
       // Send the message (non-blocking)
-      await session.send({ prompt });
+      const activeContext = trace.setSpan(context.active(), streamSpan);
+      await context.with(activeContext, async () => {
+        await session.send({ prompt });
+      });
 
       // Yield events as they arrive
       while (true) {
@@ -268,7 +299,24 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         }
       }
 
+      recordAiStreamMetrics({
+        model,
+        mcpEnabled: useGitHubTools,
+        poolHit: metrics ? !metrics.createdNew : null,
+        firstTokenMs: streamingMetrics.firstDeltaMs,
+        durationMs,
+        deltaCount,
+        deltaBytes,
+        toolCalls: toolCalls.length,
+        terminalState: 'completed',
+      });
       recordAiOperation('streamSession', durationMs, model, 'ok');
+      streamSpan.addEvent('stream.completed', {
+        'ai.stream.delta_count': deltaCount,
+        'ai.stream.delta_bytes': deltaBytes,
+        'ai.stream.tool_calls': toolCalls.length,
+      });
+      streamSpan.setStatus({ code: SpanStatusCode.OK });
 
       // Yield final done event
       yield {
@@ -279,11 +327,31 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      recordAiOperation('streamSession', Date.now() - startTime, model, 'error');
+      const durationMs = Date.now() - startTime;
+      recordAiOperation('streamSession', durationMs, model, 'error');
+      recordAiStreamMetrics({
+        model,
+        mcpEnabled: useGitHubTools,
+        poolHit: metrics ? !metrics.createdNew : null,
+        firstTokenMs: streamingMetrics.firstDeltaMs,
+        durationMs,
+        deltaCount,
+        deltaBytes,
+        toolCalls: toolCalls.length,
+        terminalState: 'error',
+      });
+      streamSpan.addEvent('stream.failed', {
+        message: errorMessage,
+      });
+      if (error instanceof Error) {
+        streamSpan.recordException(error);
+      }
+      streamSpan.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
       complete(undefined, errorMessage);
       yield { type: 'error', message: errorMessage };
     } finally {
       unsubscribe();
+      streamSpan.end();
     }
   }
 

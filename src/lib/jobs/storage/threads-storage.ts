@@ -34,7 +34,7 @@ function validateThreadsSchema(data: unknown): data is ThreadsStorageSchema {
 }
 
 /** Read threads directly from storage for a specific user. */
-export async function readThreadsStorage(userId: string): Promise<Thread[]> {
+async function readThreadsStorage(userId: string): Promise<Thread[]> {
   const storage = await readStorage<ThreadsStorageSchema>(
     userScopedFilename(userId, 'threads.json'),
     DEFAULT_THREADS_SCHEMA,
@@ -51,7 +51,7 @@ export async function readThreadsStorage(userId: string): Promise<Thread[]> {
  * delta (rubber-duck #6). The tombstone is cleared on next successful
  * sign-in.
  */
-export async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<void> {
+async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<void> {
   if (await isUserDeleted(userId)) return;
   await ensureDir(`users/${userId}`, { mode: 0o700 });
   await writeStorage(userScopedFilename(userId, 'threads.json'), { threads });

@@ -6,7 +6,7 @@
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
-import { seedTokenStoreFromJwt } from '@/lib/auth/seed';
+import { buildWorkerDispatchCredentials, seedTokenStoreFromJwt } from '@/lib/auth/seed';
 import type {
   ChallengeEvaluationInput,
   ChallengeRegenerationInput,
@@ -17,12 +17,16 @@ import type {
 import { jobStorage } from '@/lib/jobs';
 import { redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
+import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
+import {
+  parseClientTriggerFromHeaders,
+  toClientTriggerSpanAttributes,
+  type ClientTriggerMetadata,
+} from '@/lib/observability/trigger-metadata';
+import { trace } from '@opentelemetry/api';
 import { NextRequest, NextResponse } from 'next/server';
 import { dispatchJobExecution, type DispatchableJobInput, type DispatchableJobType } from './dispatcher';
-import {
-  getRegisteredSession,
-  unregisterSession,
-} from './job-executors';
+import { cancelWorkerJob } from './worker-client';
 
 const log = logger.withTag('Jobs API');
 
@@ -30,11 +34,31 @@ const log = logger.withTag('Jobs API');
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type JobType = DispatchableJobType;
+type JobTraceContext = ReturnType<typeof captureTracePropagationHeaders>;
 
 interface CreateJobRequest {
   type: JobType;
   targetId?: string;
   input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput | ChallengeEvaluationInput;
+}
+
+function hasTraceContext(traceContext: JobTraceContext): boolean {
+  return Object.keys(traceContext).length > 0;
+}
+
+function toJobCausalityContext(
+  traceContext: JobTraceContext,
+  trigger?: ClientTriggerMetadata,
+) {
+  if (!hasTraceContext(traceContext) && !trigger) {
+    return undefined;
+  }
+
+  return {
+    ...traceContext,
+    capturedAt: new Date().toISOString(),
+    ...(trigger ? { trigger } : {}),
+  };
 }
 
 /** 
@@ -55,19 +79,11 @@ export async function cancelRunningJob(jobId: string): Promise<boolean> {
   
   log.info(`[Job ${jobId}] Marking job as cancelled in storage`);
   await jobStorage.markCancelled(jobId);
-  
-  const session = getRegisteredSession(jobId);
-  if (session) {
-    log.info(`[Job ${jobId}] Destroying Copilot SDK session...`);
-    try {
-      await session.destroy();
-      log.info(`[Job ${jobId}] Copilot SDK session destroyed successfully`);
-    } catch (err) {
-      log.warn(`[Job ${jobId}] Error destroying session:`, err);
-    }
-    unregisterSession(jobId);
-  } else {
-    log.debug(`[Job ${jobId}] No active session to destroy (may be between stages)`);
+
+  try {
+    await cancelWorkerJob(jobId);
+  } catch (err) {
+    log.warn(`[Job ${jobId}] Failed to forward cancellation to worker`, err);
   }
   
   return true;
@@ -104,6 +120,14 @@ export async function POST(request: NextRequest) {
   }
 
   const jobId = crypto.randomUUID();
+  const traceContext = captureTracePropagationHeaders();
+  const triggerMetadata = parseClientTriggerFromHeaders(request.headers);
+  if (triggerMetadata) {
+    trace.getActiveSpan()?.setAttributes(
+      toClientTriggerSpanAttributes(triggerMetadata),
+    );
+  }
+  const causality = toJobCausalityContext(traceContext, triggerMetadata);
 
   // Phase D / rubber-duck #9 — server-validated assistantMessageId for
   // chat jobs. The id is the stable handle the executor's streaming
@@ -161,6 +185,7 @@ export async function POST(request: NextRequest) {
     type: body.type,
     targetId: body.targetId,
     userId,
+    causality,
     input: body.input as unknown as Record<string, unknown>,
   });
   
@@ -173,6 +198,8 @@ export async function POST(request: NextRequest) {
     type: body.type,
     input: body.input as DispatchableJobInput,
     userId,
+    credentials: await getWorkerDispatchCredentials(),
+    traceContext: hasTraceContext(traceContext) ? traceContext : undefined,
   });
   
   return NextResponse.json({
@@ -181,6 +208,18 @@ export async function POST(request: NextRequest) {
     status: job.status,
     createdAt: job.createdAt,
   });
+}
+
+async function getWorkerDispatchCredentials() {
+  const dispatchCredentialsEnabled =
+    process.env.NODE_ENV !== 'production'
+    || process.env.COPILOT_WORKER_DISPATCH_CREDENTIALS === '1';
+
+  if (!dispatchCredentialsEnabled) {
+    return undefined;
+  }
+
+  return (await buildWorkerDispatchCredentials()) ?? undefined;
 }
 
 export async function GET(request: NextRequest) {

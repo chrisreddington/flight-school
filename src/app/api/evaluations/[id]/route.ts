@@ -13,7 +13,7 @@ import { requireUserContext } from '@/lib/auth/context';
 import {
   getEvaluationProgress,
   clearEvaluationProgress,
-} from '../../jobs/evaluation-storage';
+} from '@/lib/jobs/storage/evaluation-storage';
 
 interface RouteContext {
   params: Promise<{ id: string }>;

@@ -37,6 +37,7 @@ import { useCallback } from 'react';
 
 import { apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
+import { createLearningChatSendTrigger } from '@/lib/observability/job-trigger-builders';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
@@ -248,10 +249,7 @@ export function useLearningChat(): UseLearningChatReturn {
       markStreamPending(targetThreadId, userMessage.id);
       
       try {
-        // Generate a stable v4 uuid up-front so streaming deltas can
-        // reconcile by id (rubber-duck #9 / #18). Server validates the
-        // shape and uses (threadId, assistantMessageId) as an idempotency
-        // key.
+        // Stable id for streaming delta reconciliation and chat job idempotency.
         const assistantMessageId = crypto.randomUUID();
         // apiPost handles 402 (banner) and 429 (rate-limit toast) globally.
         const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
@@ -264,6 +262,8 @@ export function useLearningChat(): UseLearningChatReturn {
             useGitHubTools,
             repos: effectiveRepos?.map(r => r.fullName),
           },
+        }, {
+          clientTrigger: createLearningChatSendTrigger(targetThreadId, assistantMessageId),
         });
         log.debug(`Started job ${jobId} for thread ${targetThreadId}`);
         

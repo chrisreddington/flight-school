@@ -2,6 +2,7 @@
 
 import { AIActivityPanel } from '@/components/AIActivityPanel';
 import { CopilotRequiredBanner } from '@/components/CopilotRequiredBanner';
+import { BrowserOtelBootstrap } from '@/components/observability/BrowserOtelBootstrap';
 import { BreadcrumbProvider } from '@/contexts/breadcrumb-context';
 import { DebugProvider } from '@/contexts/debug-context';
 // Import only the Primer CSS that we need for faster load times
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <DebugProvider>
         <BreadcrumbProvider>
           <BaseStyles>
+            <BrowserOtelBootstrap />
             <div className={styles.appRoot}>
               <CopilotRequiredBanner />
               {children}

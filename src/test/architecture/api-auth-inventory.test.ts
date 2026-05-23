@@ -15,6 +15,8 @@ type Boundary =
 
 const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   'internal/copilot/execute/route.ts': 'internalWorkerSecret',
+  'internal/jobs/cancel/route.ts': 'internalWorkerSecret',
+  'internal/jobs/execute/route.ts': 'internalWorkerSecret',
   'ai-activity/metrics/route.ts': 'requireUserContext',
   'ai-activity/route.ts': 'requireUserContext',
   'ai-activity/stream/route.ts': 'requireUserContext',
@@ -35,6 +37,7 @@ const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   'issues/route.ts': 'getOctokitForRequest',
   'jobs/[id]/route.ts': 'requireUserContext',
   'jobs/route.ts': 'requireUserContext',
+  'otel/v1/traces/route.ts': 'requireUserContext',
   'profile/route.ts': 'getOctokitForRequest',
   'profile/storage/route.ts': 'createStorageRoute',
   'quiz/route.ts': 'requireUserContext',

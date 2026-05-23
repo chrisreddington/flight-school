@@ -14,6 +14,10 @@
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
+import {
+  completeClientTriggerMetadata,
+  type PartialClientTriggerMetadata,
+} from '@/lib/observability/job-trigger-builders';
 import { now } from '@/lib/utils/date-utils';
 import { activeOperationsStore, type ActiveOperationItemType } from './active-operations-store';
 import { getJobPollingDecision } from './job-polling';
@@ -38,6 +42,7 @@ interface BackgroundJobOptions<T> {
   type: 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response';
   targetId: string;
   input: Record<string, unknown>;
+  clientTrigger?: PartialClientTriggerMetadata;
   onComplete?: (result: T) => void | Promise<void>;
   onError?: (error: Error) => void;
 }
@@ -68,10 +73,8 @@ const ITEM_TYPE_TO_JOB_TYPE: Record<ActiveOperationItemType, OperationType> = {
 class ActiveOperationsManager {
   /** All tracked operations by ID */
   private operations = new Map<string, ActiveOperation>();
-
   /** Subscribers to be notified on changes */
   private listeners = new Set<OperationsListener>();
-
   /** Cached snapshots for useSyncExternalStore (must be stable references) */
   private cachedSnapshot: OperationsSnapshot = {
     topicRegenerations: new Map(),
@@ -90,10 +93,8 @@ class ActiveOperationsManager {
 
   /** Active polling intervals by job ID */
   private pollingIntervals = new Map<string, ReturnType<typeof setInterval>>();
-
   /** Job ID to operation ID mapping */
   private jobToOperation = new Map<string, string>();
-
   /** Whether we've initialized from backend */
   private initialized = false;
 
@@ -121,17 +122,13 @@ class ActiveOperationsManager {
     this.initialized = true;
 
     try {
-      // On client, fetch active jobs from server API
-      // On server, use local storage (though this rarely happens)
       let entries: { jobId: string; itemId: string; itemType: ActiveOperationItemType; startedAt: string }[] = [];
       
       if (typeof window !== 'undefined') {
-        // Client-side: fetch from API
         try {
           const response = await fetch('/api/jobs');
           if (response.ok) {
             const data = await response.json();
-            // Transform API response to our entry format - only pending/running jobs
             entries = (data.jobs || [])
               .filter((job: { status: string }) => job.status === 'pending' || job.status === 'running')
               .map((job: { id: string; targetId?: string; type: string; createdAt: string }) => ({
@@ -145,7 +142,6 @@ class ActiveOperationsManager {
           log.warn('Failed to fetch active jobs from API:', err);
         }
       } else {
-        // Server-side: use local store
         const storeEntries = await activeOperationsStore.getEntries();
         entries = storeEntries;
       }
@@ -190,14 +186,17 @@ class ActiveOperationsManager {
    * This is the preferred method for operations that must survive navigation.
    */
   async startBackgroundJob<T>(options: BackgroundJobOptions<T>): Promise<string | null> {
-    const { type, targetId, input, onComplete, onError } = options;
+    const { type, targetId, input, clientTrigger, onComplete, onError } = options;
 
     try {
+      const triggerMetadata = completeClientTriggerMetadata(clientTrigger, targetId);
       // Create job on the backend
       const response = await apiPost<JobResponse>('/api/jobs', {
         type,
         targetId,
         input,
+      }, {
+        clientTrigger: triggerMetadata,
       });
 
       if (!response?.id) {

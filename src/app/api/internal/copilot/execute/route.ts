@@ -4,7 +4,7 @@ import { executeCopilotChatInWorkerRuntime } from '@/lib/copilot/runtime/worker-
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
-  if (process.env.COPILOT_WORKER_ENABLED !== '1') {
+  if (process.env.COPILOT_WORKER_MODE !== '1') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 

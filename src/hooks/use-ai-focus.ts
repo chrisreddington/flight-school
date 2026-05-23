@@ -15,13 +15,13 @@ import { apiPost } from '@/lib/api-client';
 import { focusStore } from '@/lib/focus';
 import type { DailyChallenge, DailyGoal, FocusResponse, LearningTopic } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
+import { createAiFocusSkipTrigger } from '@/lib/observability/job-trigger-builders';
 import { operationsManager, FOCUS_DATA_CHANGED_EVENT } from '@/lib/operations';
 import { formatTimestamp, getDateKey, now } from '@/lib/utils/date-utils';
 import { skillsStore } from '@/lib/skills/storage';
 import type { SkillProfile } from '@/lib/skills/types';
 import { DEFAULT_SKILL_PROFILE } from '@/lib/skills/types';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-
 const log = logger.withTag('useAIFocus');
 
 type FocusComponent = 'challenge' | 'goal' | 'learningTopics';
@@ -335,7 +335,7 @@ export function useAIFocus(): UseAIFocusResult {
         skillProfile: skillProfile?.skills.length ? skillProfile : undefined,
         position, // Pass position for in-place replacement
       },
-
+      clientTrigger: createAiFocusSkipTrigger('topic', skippedTopicId),
       // onComplete handles UI refresh only; persistence is in global handler
       onComplete: async (result) => {
         if (!result?.learningTopic) {
@@ -374,7 +374,7 @@ export function useAIFocus(): UseAIFocusResult {
         existingChallengeTitles,
         skillProfile: skillProfile?.skills.length ? skillProfile : undefined,
       },
-
+      clientTrigger: createAiFocusSkipTrigger('challenge', skippedChallengeId),
       onComplete: async (result) => {
         if (!result?.challenge) {
           log.warn('Challenge regeneration completed but no challenge returned');
@@ -421,7 +421,7 @@ export function useAIFocus(): UseAIFocusResult {
         existingGoalTitles,
         skillProfile: skillProfile?.skills.length ? skillProfile : undefined,
       },
-
+      clientTrigger: createAiFocusSkipTrigger('goal', skippedGoalId),
       onComplete: async (result) => {
         if (!result?.goal) {
           log.warn('Goal regeneration completed but no goal returned');

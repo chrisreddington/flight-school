@@ -2,13 +2,13 @@ import { createLearningStreamingSession, createStreamingChatSession } from '@/li
 import { jobStorage } from '@/lib/jobs';
 import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
 import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
+import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage';
 import { logger } from '@/lib/logger';
 import { deleteScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
 import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
-import { getThreadById, updateThread } from '../threads-storage';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
 import { registerSession, unregisterSession } from './session-registry';
 import {

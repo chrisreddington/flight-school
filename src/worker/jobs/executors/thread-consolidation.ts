@@ -1,7 +1,7 @@
 import { deleteScratchpad, readScratchpad } from '@/lib/storage/scratchpad';
 import type { Message } from '@/lib/threads';
 import { now } from '@/lib/utils/date-utils';
-import { getThreadById, updateThread } from '../threads-storage';
+import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage';
 
 export const STREAM_CURSOR = ' ▊';
 

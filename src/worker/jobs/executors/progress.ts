@@ -1,7 +1,7 @@
 import { jobStorage } from '@/lib/jobs';
+import { readEvaluationStorage, writeEvaluationStorage } from '@/lib/jobs/storage/evaluation-storage';
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
-import { readEvaluationStorage, writeEvaluationStorage } from '../evaluation-storage';
 
 const log = logger.withTag('JobProgress');
 

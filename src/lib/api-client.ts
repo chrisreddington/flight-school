@@ -19,6 +19,10 @@ import {
   type CopilotRequiredEventDetail,
 } from '@/lib/copilot/required-event';
 import {
+  encodeClientTriggerHeaders,
+  type ClientTriggerMetadata,
+} from '@/lib/observability/trigger-metadata';
+import {
   dispatchRateLimited,
   RateLimitedClientError,
 } from '@/lib/api/rate-limit-event';
@@ -31,6 +35,8 @@ interface ApiRequestOptions extends RequestInit {
   retries?: number;
   /** Whether to throw on HTTP errors (default: true) */
   throwOnError?: boolean;
+  /** Optional client trigger metadata for observability correlation. */
+  clientTrigger?: ClientTriggerMetadata;
 }
 
 /**
@@ -103,6 +109,54 @@ function getCacheKey(url: string, options?: ApiRequestOptions): string {
   return `${method}:${url}:${body}`;
 }
 
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    const normalized: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      normalized[key] = value;
+    });
+    return normalized;
+  }
+  if (Array.isArray(headers)) {
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of headers) {
+      normalized[key] = value;
+    }
+    return normalized;
+  }
+
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== 'string') continue;
+    normalized[key] = value;
+  }
+  return normalized;
+}
+
+function hasHeader(headers: Record<string, string>, name: string): boolean {
+  const wanted = name.toLowerCase();
+  return Object.keys(headers).some((header) => header.toLowerCase() === wanted);
+}
+
+function buildRequestHeaders(
+  headers: HeadersInit | undefined,
+  clientTrigger: ClientTriggerMetadata | undefined,
+): Record<string, string> {
+  const merged = normalizeHeaders(headers);
+  if (!hasHeader(merged, 'content-type')) {
+    merged['Content-Type'] = 'application/json';
+  }
+  if (!clientTrigger) {
+    return merged;
+  }
+
+  return {
+    ...merged,
+    ...encodeClientTriggerHeaders(clientTrigger),
+  };
+}
+
 /**
  * Core API request function with retry, timeout, and deduplication.
  */
@@ -115,6 +169,7 @@ async function apiRequest<T>(
     retries = 0,
     throwOnError = true,
     signal: externalSignal,
+    clientTrigger,
     ...fetchOptions
   } = options;
 
@@ -159,10 +214,7 @@ async function apiRequest<T>(
             signal: combinedSignal,
             // Keep the request alive even during navigation - critical for background operations
             keepalive: true,
-            headers: {
-              'Content-Type': 'application/json',
-              ...fetchOptions.headers,
-            },
+            headers: buildRequestHeaders(fetchOptions.headers, clientTrigger),
           });
 
           clearTimeout(timeoutId);

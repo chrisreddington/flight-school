@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { seedTokenStoreFromJwt } from './seed';
+import { buildWorkerDispatchCredentials, seedTokenStoreFromJwt } from './seed';
 
 const { setTokenIfNewerMock, readCredentialsFromJwtMock } = vi.hoisted(() => ({
   setTokenIfNewerMock: vi.fn<(userId: string, token: unknown) => Promise<boolean>>(),
@@ -125,5 +125,34 @@ describe('seedTokenStoreFromJwt', () => {
       refreshToken: undefined,
       expiresAt: 1_700_000_000,
     });
+  });
+});
+
+describe('buildWorkerDispatchCredentials', () => {
+  beforeEach(() => {
+    readCredentialsFromJwtMock.mockReset();
+  });
+
+  it('returns full credentials when the JWT has refresh material', async () => {
+    readCredentialsFromJwtMock.mockResolvedValue({
+      accessToken: 'ghu_a',
+      refreshToken: 'ghr_a',
+      expiresAt: 1_700_000_000,
+    });
+
+    await expect(buildWorkerDispatchCredentials()).resolves.toEqual({
+      accessToken: 'ghu_a',
+      refreshToken: 'ghr_a',
+      expiresAt: 1_700_000_000,
+    });
+  });
+
+  it('returns null when refresh material is incomplete', async () => {
+    readCredentialsFromJwtMock.mockResolvedValue({
+      accessToken: 'ghu_a',
+      expiresAt: 1_700_000_000,
+    });
+
+    await expect(buildWorkerDispatchCredentials()).resolves.toBeNull();
   });
 });

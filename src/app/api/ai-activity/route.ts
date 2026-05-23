@@ -12,6 +12,11 @@
 import { apiSuccess, handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
+import {
+  clearShadowActivityEvents,
+  loadShadowActivityEvents,
+} from '@/lib/copilot/activity/shadow-store';
+import { mergeActivityEventStreams } from '@/lib/copilot/activity/stream-cursor';
 import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import { now } from '@/lib/utils/date-utils';
 import { NextRequest } from 'next/server';
@@ -35,7 +40,10 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireUserContext();
     const includeFull = request.nextUrl.searchParams.get('include') === 'full';
-    const events = activityLogger.getEvents(userId).map((event) =>
+    const shadowEvents = await loadShadowActivityEvents(userId);
+    const liveEvents = activityLogger.getEvents(userId);
+    const mergedEvents = mergeActivityEventStreams(shadowEvents, liveEvents);
+    const events = mergedEvents.map((event) =>
       toPublicActivityEvent(event, { includeFull }),
     );
     const stats = activityLogger.getStats(userId);
@@ -57,6 +65,7 @@ export async function DELETE() {
   try {
     const { userId } = await requireUserContext();
     activityLogger.clear(userId);
+    await clearShadowActivityEvents(userId);
     return apiSuccess({ cleared: true });
   } catch (err) {
     return handleUnauthorizedError(err);

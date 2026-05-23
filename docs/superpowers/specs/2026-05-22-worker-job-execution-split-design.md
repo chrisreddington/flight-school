@@ -1,12 +1,12 @@
 # Worker Job Execution Split Design
 
-**Status**: Approved for planning
+**Status**: Foundation implemented
 **Date**: 2026-05-22
 
 ## Resumption Section
 - **Scope**: Move background job execution from the web process to the Copilot worker process.
-- **Current Phase**: Design approved; ready for implementation planning.
-- **Next Action**: Write and rubber-duck the implementation plan.
+- **Current Phase**: Core implementation delivered; hardening and final smoke remain.
+- **Next Action**: Complete architecture guard/doc follow-ups and final Aspire smoke verification.
 - **Blockers**: None.
 
 ## Job Story

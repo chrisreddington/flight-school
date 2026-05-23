@@ -84,13 +84,6 @@ export async function getEvaluationProgress(userId: string, challengeId: string)
   return storage.evaluations[challengeId] ?? null;
 }
 
-/** Update evaluation progress for a specific user. */
-export async function updateEvaluationProgress(userId: string, progress: EvaluationProgress): Promise<void> {
-  const storage = await readEvaluationStorage(userId);
-  storage.evaluations[progress.challengeId] = progress;
-  await writeEvaluationStorage(userId, storage);
-}
-
 /** Clear evaluation progress for a challenge owned by a specific user. */
 export async function clearEvaluationProgress(userId: string, challengeId: string): Promise<void> {
   const storage = await readEvaluationStorage(userId);

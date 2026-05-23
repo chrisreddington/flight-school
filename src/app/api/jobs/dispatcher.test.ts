@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { dispatchJobExecution } from './dispatcher';
 
 const mocks = vi.hoisted(() => ({
-  executeTopicRegeneration: vi.fn(),
-  executeChallengeRegeneration: vi.fn(),
-  executeGoalRegeneration: vi.fn(),
-  executeChatResponse: vi.fn(),
-  executeChallengeEvaluation: vi.fn(),
+  dispatchJobExecutionToWorker: vi.fn(),
+  markFailed: vi.fn(),
   logError: vi.fn(),
+}));
+
+vi.mock('./worker-client', () => ({
+  dispatchJobExecutionToWorker: mocks.dispatchJobExecutionToWorker,
+}));
+
+vi.mock('@/lib/jobs', () => ({
+  jobStorage: {
+    markFailed: mocks.markFailed,
+  },
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -18,46 +26,44 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-vi.mock('./job-executors', () => ({
-  executeTopicRegeneration: mocks.executeTopicRegeneration,
-  executeChallengeRegeneration: mocks.executeChallengeRegeneration,
-  executeGoalRegeneration: mocks.executeGoalRegeneration,
-  executeChatResponse: mocks.executeChatResponse,
-  executeChallengeEvaluation: mocks.executeChallengeEvaluation,
-}));
-
 describe('dispatchJobExecution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.executeTopicRegeneration.mockResolvedValue(undefined);
   });
 
-  it('dispatches token-free job payloads by type', async () => {
+  it('dispatches jobs through the worker client', async () => {
+    mocks.dispatchJobExecutionToWorker.mockResolvedValue(undefined);
+
     await dispatchJobExecution({
       jobId: 'job-1',
       type: 'topic-regeneration',
       input: { existingTopicTitles: [], skillProfile: undefined },
-      userId: '123',
+      userId: 'user-1',
     });
 
-    expect(mocks.executeTopicRegeneration).toHaveBeenCalledWith(
-      'job-1',
-      { existingTopicTitles: [], skillProfile: undefined },
-      '123',
-    );
-  });
-
-  it('logs and resolves executor failures to preserve fire-and-forget behavior', async () => {
-    const error = new Error('executor failed');
-    mocks.executeTopicRegeneration.mockRejectedValue(error);
-
-    await expect(dispatchJobExecution({
+    expect(mocks.dispatchJobExecutionToWorker).toHaveBeenCalledWith({
       jobId: 'job-1',
       type: 'topic-regeneration',
-      input: { existingTopicTitles: [] },
-      userId: '123',
-    })).resolves.toBeUndefined();
+      input: { existingTopicTitles: [], skillProfile: undefined },
+      userId: 'user-1',
+    });
+    expect(mocks.markFailed).not.toHaveBeenCalled();
+  });
 
-    expect(mocks.logError).toHaveBeenCalledWith('Unhandled error in job job-1:', error);
+  it('marks the job failed when worker dispatch throws', async () => {
+    const error = new Error('worker unavailable');
+    mocks.dispatchJobExecutionToWorker.mockRejectedValue(error);
+
+    await expect(
+      dispatchJobExecution({
+        jobId: 'job-1',
+        type: 'topic-regeneration',
+        input: { existingTopicTitles: [] },
+        userId: 'user-1',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.logError).toHaveBeenCalledWith('[Job job-1] Failed to dispatch to worker', error);
+    expect(mocks.markFailed).toHaveBeenCalledWith('job-1', 'Worker dispatch failed', 'unknown');
   });
 });

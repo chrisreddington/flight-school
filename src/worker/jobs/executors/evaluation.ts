@@ -8,9 +8,9 @@ import {
 import { createEvaluationStreamingSession } from '@/lib/copilot/streaming';
 import { jobStorage } from '@/lib/jobs';
 import type { ChallengeEvaluationInput, ChallengeEvaluationResult } from '@/lib/jobs';
+import { readEvaluationStorage, writeEvaluationStorage } from '@/lib/jobs/storage/evaluation-storage';
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
-import { readEvaluationStorage, writeEvaluationStorage } from '../evaluation-storage';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
 import { reportStep } from './progress';
 import { registerSession, unregisterSession } from './session-registry';

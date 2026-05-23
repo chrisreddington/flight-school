@@ -9,6 +9,8 @@
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
+import { loadShadowActivityEvents } from '@/lib/copilot/activity/shadow-store';
+import { eventsAfterCursor, mergeActivityEventStreams } from '@/lib/copilot/activity/stream-cursor';
 import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import type { AIActivityEvent } from '@/lib/copilot/activity/types';
 import { NextRequest } from 'next/server';
@@ -25,15 +27,22 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
 
   const includeFull = request.nextUrl.searchParams.get('include') === 'full';
+  const cursor = request.nextUrl.searchParams.get('cursor');
+  const shadowEvents = await loadShadowActivityEvents(userId);
+  const liveEvents = activityLogger.getEvents(userId);
+  const initialEvents = eventsAfterCursor(
+    mergeActivityEventStreams(shadowEvents, liveEvents),
+    cursor,
+  );
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
       // Send initial events scoped to this user — through the public DTO
       // so `fullResponse` and MCP tool args never leak.
-      const events = activityLogger
-        .getEvents(userId)
-        .map((event) => toPublicActivityEvent(event, { includeFull }));
+      const events = initialEvents.map((event) =>
+        toPublicActivityEvent(event, { includeFull }),
+      );
       const initData = JSON.stringify({ type: 'init', events });
       controller.enqueue(encoder.encode(`data: ${initData}\n\n`));
 
@@ -47,6 +56,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         try {
           const publicEvent = toPublicActivityEvent(event, { includeFull });
           const eventData = JSON.stringify({ type: 'event', event: publicEvent });
+          controller.enqueue(encoder.encode(`id: ${event.id}\n`));
           controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
         } catch {
           // Stream closed, ignore

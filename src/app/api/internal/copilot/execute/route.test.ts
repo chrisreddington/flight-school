@@ -47,7 +47,7 @@ describe('/api/internal/copilot/execute', () => {
   });
 
   it('returns 404 when worker mode is disabled', async () => {
-    vi.stubEnv('COPILOT_WORKER_ENABLED', '0');
+    vi.stubEnv('COPILOT_WORKER_MODE', '0');
 
     const response = await POST(makeRequest({}));
 
@@ -56,7 +56,7 @@ describe('/api/internal/copilot/execute', () => {
   });
 
   it('returns 401 when bearer auth is missing or wrong', async () => {
-    vi.stubEnv('COPILOT_WORKER_ENABLED', '1');
+    vi.stubEnv('COPILOT_WORKER_MODE', '1');
 
     const response = await POST(makeRequest({}, 'wrong-secret'));
 
@@ -65,7 +65,7 @@ describe('/api/internal/copilot/execute', () => {
   });
 
   it('returns 400 without echoing tokens when the worker request is invalid', async () => {
-    vi.stubEnv('COPILOT_WORKER_ENABLED', '1');
+    vi.stubEnv('COPILOT_WORKER_MODE', '1');
 
     const response = await POST(makeRequest({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
@@ -79,7 +79,7 @@ describe('/api/internal/copilot/execute', () => {
   });
 
   it('executes valid worker requests in-process', async () => {
-    vi.stubEnv('COPILOT_WORKER_ENABLED', '1');
+    vi.stubEnv('COPILOT_WORKER_MODE', '1');
     const request = {
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'hello',
@@ -96,7 +96,7 @@ describe('/api/internal/copilot/execute', () => {
   });
 
   it('returns 500 without echoing tokens when execution fails', async () => {
-    vi.stubEnv('COPILOT_WORKER_ENABLED', '1');
+    vi.stubEnv('COPILOT_WORKER_MODE', '1');
     mocks.executeCopilotChatInWorkerRuntime.mockRejectedValue(new Error('SDK failed for ghu_user'));
 
     const response = await POST(makeRequest({
