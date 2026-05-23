@@ -57,8 +57,9 @@
  * leaves the templated sibling intact, which is what we actually want.
  *
  * The unique discriminator is `next.bubble === "true"` (a Next.js-internal
- * flag set at span creation). Defensive backup: bare-method span name
- * (`"GET"`, `"HTTP GET"`, etc.) on `SpanKind.SERVER` with no `http.route`.
+ * flag set at span creation, present on the bubble and absent on the
+ * keeper). See {@link isNextjsBubbleSpan} for why a name-based backup
+ * was previously tried and removed.
  */
 
 import {
@@ -75,14 +76,6 @@ import { SpanKind } from '@opentelemetry/api';
 const PROXY_PATH = '/api/otel/v1/traces';
 
 const NOT_RECORD: SamplingResult = { decision: SamplingDecision.NOT_RECORD };
-
-/**
- * Matches the bare HTTP-method names that the Next.js bubble SERVER span
- * uses (e.g. `"GET"`, `"HTTP POST"`). The templated sibling that we want
- * to keep is named `"GET /api/route"`, which does not match this regex
- * because of the trailing path segment.
- */
-const BARE_METHOD_SPAN_NAME = /^(HTTP )?(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/;
 
 /**
  * Allowlist of `next.span_type` values to drop. These correspond to
@@ -160,33 +153,35 @@ export function isProxyRouteSpan(
  * span — the bare-method sibling that loses the route template. Exposed
  * for unit testing.
  *
- * Primary discriminator: `next.bubble === "true"` (Next.js-internal flag
- * set at span creation). Defensive backup: bare-method span name on
- * `SpanKind.SERVER` with no `http.route` (which is also not yet populated
- * at sampler stage but, when present at this stage, would always be on the
- * keeper sibling — never on the bubble).
+ * Discriminator: `next.bubble === "true"` (a Next.js-internal flag set at
+ * span creation, only on the bubble span — never on the keeper).
+ *
+ * **Why no name-based backup.** A previous version of this function
+ * included a defensive backup that dropped any bare-method SERVER span
+ * (`"GET"`, `"POST"`, …) without `http.route`. That backup was buggy:
+ * `shouldSample()` runs at `startSpan()` time, before Next.js renames the
+ * keeper span from `"POST"` → `"POST /api/route"` and before
+ * `http.route` is populated. At that moment the keeper sibling looked
+ * identical to the bubble (bare method, no `http.route`) and the backup
+ * dropped it too. Because the dropped keeper became the parent of every
+ * route-handler, GitHub-request, and worker-side span, the entire
+ * downstream trace tree vanished via `ParentBasedSampler` propagation.
+ *
+ * The primary `next.bubble` flag is unambiguous and is set at span
+ * creation, so it is reliable on its own. If a future Next.js version
+ * stops emitting `next.bubble`, the bubble span will resurface in
+ * dashboards — accept that trade-off rather than risk silent data loss.
  */
 export function isNextjsBubbleSpan(
-  spanName: string,
   spanKind: SpanKind | undefined,
   attrs: Attributes | undefined,
 ): boolean {
-  // SERVER-kind only; bubble is always a SERVER span.
   if (spanKind !== undefined && spanKind !== SpanKind.SERVER) {
     return false;
   }
 
   const bubble = attrs?.['next.bubble'];
-  if (bubble === 'true' || bubble === true) {
-    return true;
-  }
-
-  // Backup: bare-method name + no http.route.
-  if (BARE_METHOD_SPAN_NAME.test(spanName) && !attrs?.['http.route']) {
-    return true;
-  }
-
-  return false;
+  return bubble === 'true' || bubble === true;
 }
 
 /**
@@ -230,7 +225,7 @@ export function createTelemetryHygieneSampler(): Sampler {
       if (isProxyRouteSpan(spanName, attributes)) {
         return NOT_RECORD;
       }
-      if (isNextjsBubbleSpan(spanName, spanKind, attributes)) {
+      if (isNextjsBubbleSpan(spanKind, attributes)) {
         return NOT_RECORD;
       }
       if (isNextjsFrameworkStubSpan(spanKind, attributes)) {

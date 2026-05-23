@@ -98,7 +98,14 @@ describe('createTelemetryHygieneSampler', () => {
     expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
   });
 
-  it('drops bare-method SERVER spans without http.route as a defensive backup', () => {
+  it('keeps a bare-method SERVER span without next.bubble (the keeper at startSpan time)', () => {
+    // CRITICAL REGRESSION TEST. At shouldSample()/startSpan() time, Next.js
+    // has not yet renamed the keeper SERVER span from "POST" to
+    // "POST /api/route" and has not yet populated `http.route`. The keeper
+    // and the bubble are indistinguishable by name — only `next.bubble`
+    // discriminates. A previous defensive-backup branch caught the keeper
+    // here and dropped the entire downstream trace tree via ParentBased
+    // propagation.
     const sampler = createTelemetryHygieneSampler();
     for (const name of ['GET', 'POST', 'HTTP GET', 'PUT', 'DELETE']) {
       const result = sampler.shouldSample(
@@ -106,10 +113,17 @@ describe('createTelemetryHygieneSampler', () => {
         traceId,
         name,
         SpanKind.SERVER,
-        {},
+        {
+          'next.span_type': 'BaseServer.handleRequest',
+          'http.target': '/api/profile',
+          // next.bubble: absent (this is the keeper)
+          // http.route: absent (not yet populated at sampler time)
+        },
         [],
       );
-      expect(result.decision, `name=${name}`).toBe(SamplingDecision.NOT_RECORD);
+      expect(result.decision, `name=${name}`).toBe(
+        SamplingDecision.RECORD_AND_SAMPLED,
+      );
     }
   });
 
@@ -222,36 +236,39 @@ describe('createTelemetryHygieneSampler', () => {
 describe('isNextjsBubbleSpan', () => {
   it('matches a bare GET SERVER span with next.bubble', () => {
     expect(
-      isNextjsBubbleSpan('GET', SpanKind.SERVER, { 'next.bubble': 'true' }),
+      isNextjsBubbleSpan(SpanKind.SERVER, { 'next.bubble': 'true' }),
     ).toBe(true);
   });
 
   it('matches even when next.bubble is the literal boolean true', () => {
     expect(
-      isNextjsBubbleSpan('GET', SpanKind.SERVER, { 'next.bubble': true }),
+      isNextjsBubbleSpan(SpanKind.SERVER, { 'next.bubble': true }),
     ).toBe(true);
   });
 
-  it('matches bare HTTP-method names without next.bubble (defensive backup)', () => {
-    expect(isNextjsBubbleSpan('GET', SpanKind.SERVER, {})).toBe(true);
-    expect(isNextjsBubbleSpan('HTTP POST', SpanKind.SERVER, {})).toBe(true);
+  it('does NOT match a bare-method SERVER span without next.bubble', () => {
+    // REGRESSION GUARD: the keeper looks like this at startSpan() time.
+    expect(isNextjsBubbleSpan(SpanKind.SERVER, {})).toBe(false);
+    expect(isNextjsBubbleSpan(SpanKind.SERVER, { 'http.target': '/api/x' })).toBe(
+      false,
+    );
   });
 
   it('does not match templated SERVER spans (those carry http.route)', () => {
     expect(
-      isNextjsBubbleSpan('GET /api/profile', SpanKind.SERVER, {
+      isNextjsBubbleSpan(SpanKind.SERVER, {
         'http.route': '/api/profile',
       }),
     ).toBe(false);
   });
 
   it('does not match CLIENT spans (outbound fetches named GET)', () => {
-    expect(isNextjsBubbleSpan('GET', SpanKind.CLIENT, {})).toBe(false);
+    expect(isNextjsBubbleSpan(SpanKind.CLIENT, { 'next.bubble': 'true' })).toBe(
+      false,
+    );
   });
 
-  it('does not match arbitrary span names', () => {
-    expect(
-      isNextjsBubbleSpan('resolve page components', SpanKind.INTERNAL, {}),
-    ).toBe(false);
+  it('does not match arbitrary span kinds', () => {
+    expect(isNextjsBubbleSpan(SpanKind.INTERNAL, {})).toBe(false);
   });
 });
