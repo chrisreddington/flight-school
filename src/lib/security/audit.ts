@@ -25,6 +25,7 @@ const log = logger.withTag('Audit');
 
 export type AuditEventType =
   | 'copilot.session.create'
+  | 'job.create'
   | 'auth.signin'
   | 'rate-limit.blocked'
   | 'session-cap.blocked'

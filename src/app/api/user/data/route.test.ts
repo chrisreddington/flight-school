@@ -4,11 +4,11 @@ const {
   requireUserContextMock,
   readCredentialsFromJwtMock,
   clearActivityMock,
-  getAllJobsMock,
-  deleteForUserMock,
+  deleteWorkerJobsForUserMock,
   deleteDirMock,
   markUserDeletedMock,
-  cancelRunningJobMock,
+  clearUserTombstoneMock,
+  captureTraceMock,
   UnauthorizedErrorMock,
 } = vi.hoisted(() => {
   class UnauthorizedErrorMock extends Error {}
@@ -16,11 +16,11 @@ const {
     requireUserContextMock: vi.fn(),
     readCredentialsFromJwtMock: vi.fn(),
     clearActivityMock: vi.fn(),
-    getAllJobsMock: vi.fn(),
-    deleteForUserMock: vi.fn(),
+    deleteWorkerJobsForUserMock: vi.fn(),
     deleteDirMock: vi.fn(),
     markUserDeletedMock: vi.fn(),
-    cancelRunningJobMock: vi.fn(),
+    clearUserTombstoneMock: vi.fn(),
+    captureTraceMock: vi.fn(),
     UnauthorizedErrorMock,
   };
 });
@@ -37,11 +37,12 @@ vi.mock('@/lib/copilot/activity/logger', () => ({
   },
 }));
 
-vi.mock('@/lib/jobs', () => ({
-  jobStorage: {
-    getAll: getAllJobsMock,
-    deleteForUser: deleteForUserMock,
-  },
+vi.mock('@/lib/observability/context-propagation', () => ({
+  captureTracePropagationHeaders: captureTraceMock,
+}));
+
+vi.mock('../../jobs/worker-client', () => ({
+  deleteWorkerJobsForUser: deleteWorkerJobsForUserMock,
 }));
 
 vi.mock('@/lib/storage/utils', () => ({
@@ -50,10 +51,7 @@ vi.mock('@/lib/storage/utils', () => ({
 
 vi.mock('@/lib/storage/tombstone', () => ({
   markUserDeleted: markUserDeletedMock,
-}));
-
-vi.mock('../../jobs/route', () => ({
-  cancelRunningJob: cancelRunningJobMock,
+  clearUserTombstone: clearUserTombstoneMock,
 }));
 
 import { DELETE } from './route';
@@ -83,9 +81,8 @@ beforeEach(() => {
   const nowSec = Math.floor(Date.now() / 1000);
   requireUserContextMock.mockResolvedValue({ userId: 'user-1', login: 'alice' });
   readCredentialsFromJwtMock.mockResolvedValue({ lastSignInAt: nowSec });
-  getAllJobsMock.mockResolvedValue([]);
-  deleteForUserMock.mockResolvedValue({ deleted: 2 });
-  cancelRunningJobMock.mockResolvedValue(true);
+  deleteWorkerJobsForUserMock.mockResolvedValue({ deleted: 2, cancelled: 0 });
+  captureTraceMock.mockReturnValue({});
 });
 
 afterEach(() => {
@@ -113,7 +110,7 @@ describe('DELETE /api/user/data', () => {
     expect(response.status).toBe(401);
     expect(body.code).toBe('recent_auth_required');
     expect(body.windowSeconds).toBe(300);
-    expect(deleteForUserMock).not.toHaveBeenCalled();
+    expect(deleteWorkerJobsForUserMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 when confirmLogin is missing or invalid', async () => {
@@ -138,24 +135,14 @@ describe('DELETE /api/user/data', () => {
     expect(body).toEqual({ error: 'Cross-origin requests are not allowed' });
   });
 
-  it('cancels owned running jobs and deletes only caller data', async () => {
-    getAllJobsMock.mockResolvedValue([
-      { id: 'run-1', userId: 'user-1', status: 'running' },
-      { id: 'pending-1', userId: 'user-1', status: 'pending' },
-      { id: 'done-1', userId: 'user-1', status: 'completed' },
-      { id: 'other-user', userId: 'user-2', status: 'running' },
-    ]);
-    cancelRunningJobMock.mockImplementation(async (jobId: string) => jobId === 'run-1');
-    deleteForUserMock.mockResolvedValue({ deleted: 3 });
+  it('forwards job deletion to the worker and reports both counts', async () => {
+    deleteWorkerJobsForUserMock.mockResolvedValue({ deleted: 3, cancelled: 1 });
 
     const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(cancelRunningJobMock).toHaveBeenCalledTimes(2);
-    expect(cancelRunningJobMock).toHaveBeenCalledWith('run-1');
-    expect(cancelRunningJobMock).toHaveBeenCalledWith('pending-1');
-    expect(deleteForUserMock).toHaveBeenCalledWith('user-1');
+    expect(deleteWorkerJobsForUserMock).toHaveBeenCalledWith('user-1', undefined);
     expect(clearActivityMock).toHaveBeenCalledWith('user-1');
     expect(deleteDirMock).toHaveBeenCalledWith('users/user-1');
     expect(markUserDeletedMock).toHaveBeenCalledTimes(2);
@@ -168,5 +155,19 @@ describe('DELETE /api/user/data', () => {
         storageDirDeleted: true,
       },
     });
+  });
+
+  it('rolls back the tombstone and returns 503 when worker delete fails', async () => {
+    deleteWorkerJobsForUserMock.mockRejectedValue(new Error('worker down'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({ error: 'Job service temporarily unavailable. Please retry.' });
+    expect(markUserDeletedMock).toHaveBeenCalledTimes(1);
+    expect(clearUserTombstoneMock).toHaveBeenCalledWith('user-1');
+    expect(clearActivityMock).not.toHaveBeenCalled();
+    expect(deleteDirMock).not.toHaveBeenCalled();
   });
 });

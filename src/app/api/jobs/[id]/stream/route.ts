@@ -14,12 +14,13 @@
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import { jobStorage } from '@/lib/jobs';
 import {
   captureTracePropagationHeaders,
   mergeTracePropagationHeaders,
 } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
+
+import { getWorkerJob } from '../../worker-client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,14 +47,30 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const job = await jobStorage.get(id);
-  if (!job || job.userId !== userId) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-  }
-
+  // Check worker config BEFORE the ownership probe. If the worker is
+  // unconfigured we want a deterministic 503 instead of the probe
+  // throwing inside `getWorkerJob`.
   const workerConfig = getCopilotWorkerConfig();
   if (!workerConfig) {
     return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
+  }
+
+  // Capture trace context once — used for both the ownership probe and
+  // the SSE proxy fetch so both legs land on the same trace.
+  const traceCtxRaw = captureTracePropagationHeaders();
+  const traceCtx = Object.keys(traceCtxRaw).length > 0 ? traceCtxRaw : undefined;
+
+  let job;
+  try {
+    job = await getWorkerJob(id, userId, traceCtx);
+  } catch {
+    return NextResponse.json(
+      { error: 'Job service temporarily unavailable. Please retry.' },
+      { status: 503 },
+    );
+  }
+  if (!job) {
+    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
   }
 
   const urlObj = new URL(request.url);
@@ -72,9 +89,9 @@ export async function GET(request: NextRequest, { params }: Params) {
       'x-user-id': userId,
       accept: 'text/event-stream',
     },
-    // Capture the active OTel context (e.g. the Next.js request span) so
-    // the worker's SSE producer span is linked into the same trace.
-    captureTracePropagationHeaders(),
+    // Reuse the context we captured for the ownership probe so the SSE
+    // producer span is linked into the same trace as the proxy span.
+    traceCtxRaw,
   );
   if (lastEventId !== null) upstreamHeaders['last-event-id'] = lastEventId;
 

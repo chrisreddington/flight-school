@@ -2,7 +2,6 @@ import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
 import type { BackgroundJob } from '@/lib/jobs/storage';
 import type { JobListDTO } from '@/lib/jobs/redact';
 import type {
-  DispatchJobExecutionToWorkerRequest,
   DispatchableJobInput,
   DispatchableJobType,
   WorkerDispatchCredentials,
@@ -28,42 +27,6 @@ function buildHeaders(secret: string, traceContext?: TracePropagationHeaders) {
     },
     traceContext ?? {},
   );
-}
-
-export async function dispatchJobExecutionToWorker(
-  request: DispatchJobExecutionToWorkerRequest,
-): Promise<void> {
-  const config = getRequiredWorkerConfig();
-  const { traceContext, ...dispatchRequest } = request;
-  const headers = buildHeaders(config.secret, traceContext);
-
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs/execute`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(dispatchRequest),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job dispatch failed with HTTP ${response.status}`);
-  }
-}
-
-export async function cancelWorkerJob(
-  jobId: string,
-  traceContext?: TracePropagationHeaders,
-): Promise<void> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, traceContext);
-
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs/cancel`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ jobId }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job cancel failed with HTTP ${response.status}`);
-  }
 }
 
 /**
@@ -155,6 +118,8 @@ export interface CancelWorkerJobRecordResult {
   cancelled: boolean;
   alreadyTerminal?: boolean;
   status?: string;
+  /** True when the worker reported the job missing (404). */
+  notFound?: boolean;
 }
 
 export async function cancelWorkerJobRecord(
@@ -171,6 +136,9 @@ export async function cancelWorkerJobRecord(
     { method: 'DELETE', headers },
   );
 
+  if (response.status === 404) {
+    return { cancelled: false, notFound: true };
+  }
   if (!response.ok) {
     throw new Error(`Copilot worker job cancel-record failed with HTTP ${response.status}`);
   }

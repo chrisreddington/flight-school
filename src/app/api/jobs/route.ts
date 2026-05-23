@@ -1,7 +1,13 @@
 /**
- * Jobs API - Create and List Jobs
- * POST /api/jobs - Create a new background job
- * GET /api/jobs - List all jobs (optional ?type= filter)
+ * Jobs API - Create and List Jobs (web tier, thin proxy)
+ *
+ * After Phase 2B.2 the web tier owns NO job state. POST proxies the
+ * create request to the worker (`POST /api/internal/jobs`), which
+ * runs the atomic check-then-create primitive and dispatches the
+ * executor. GET proxies the redacted list endpoint.
+ *
+ * POST /api/jobs - Create a new background job (proxy → worker)
+ * GET  /api/jobs - List the caller's jobs (proxy → worker)
  */
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
@@ -14,8 +20,6 @@ import type {
   GoalRegenerationInput,
   TopicRegenerationInput,
 } from '@/lib/jobs';
-import { jobStorage } from '@/lib/jobs';
-import { redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import {
@@ -23,10 +27,14 @@ import {
   toClientTriggerSpanAttributes,
   type ClientTriggerMetadata,
 } from '@/lib/observability/trigger-metadata';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { CHAT_GUARD } from '@/lib/security/route-defaults';
 import { trace } from '@opentelemetry/api';
 import { NextRequest, NextResponse } from 'next/server';
-import { dispatchJobExecution, type DispatchableJobInput, type DispatchableJobType } from './dispatcher';
-import { cancelWorkerJob } from './worker-client';
+
+import { createWorkerJob, listWorkerJobs, type CreateWorkerJobInput } from './worker-client';
+import type { DispatchableJobInput, DispatchableJobType } from '@/lib/jobs/dispatch';
 
 const log = logger.withTag('Jobs API');
 
@@ -61,48 +69,35 @@ function toJobCausalityContext(
   };
 }
 
-/** 
- * Cancel a running job by ID.
- * Marks as cancelled in storage and destroys session if available.
- */
-export async function cancelRunningJob(jobId: string): Promise<boolean> {
-  const job = await jobStorage.get(jobId);
-  if (!job) {
-    log.debug(`[Job ${jobId}] Job not found in storage`);
-    return false;
-  }
-  
-  if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
-    log.debug(`[Job ${jobId}] Job already in terminal state: ${job.status}`);
-    return false;
-  }
-  
-  log.info(`[Job ${jobId}] Marking job as cancelled in storage`);
-  await jobStorage.markCancelled(jobId);
-
+export async function POST(request: NextRequest) {
   try {
-    await cancelWorkerJob(jobId);
+    // Per-route guards: job creation is the public edge that initiates AI
+    // work (chat-response, regenerations, evaluations). Rate-limit +
+    // concurrent-cap + audit live exactly here so the same protections
+    // apply whether the user calls `/api/copilot` directly or queues
+    // a background job.
+    return await withUserGuards(
+      { ...CHAT_GUARD, eventType: 'job.create', auditMetadata: { route: '/api/jobs' } },
+      async ({ userId }) => handleCreateJob(request, userId),
+    );
   } catch (err) {
-    log.warn(`[Job ${jobId}] Failed to forward cancellation to worker`, err);
+    const guardResponse = guardErrorResponse(err);
+    if (guardResponse) return guardResponse;
+    throw err;
   }
-  
-  return true;
 }
 
-export async function POST(request: NextRequest) {
-  const { userId } = await requireUserContext();
+async function handleCreateJob(request: NextRequest, userId: string) {
   const body = await parseJsonBodyWithFallback<CreateJobRequest>(request, {} as CreateJobRequest);
-  
+
   if (!body.type) {
     return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
   }
 
   // Hard precondition: ensure the shared TokenStore has a refresh-capable
   // record for this user before we enqueue any work. Background executors
-  // resolve a fresh `ghu_` token from the store at run-time (see
-  // resolveFreshGitHubToken); if the store is unwritable now, the executor
-  // will have no credentials later and the job will silently fail. Returning
-  // 503 here lets the caller retry with backoff.
+  // resolve a fresh `ghu_` token from the store at run-time; if the store
+  // is unwritable now, the executor will have no credentials later.
   const seedResult = await seedTokenStoreFromJwt(userId);
   if (seedResult.status === 'error') {
     log.error('Refusing to enqueue job: token-store seed failed', {
@@ -129,14 +124,13 @@ export async function POST(request: NextRequest) {
   }
   const causality = toJobCausalityContext(traceContext, triggerMetadata);
 
-  // Phase D / rubber-duck #9 — server-validated assistantMessageId for
-  // chat jobs. The id is the stable handle the executor's streaming
-  // scratchpad uses to reconcile deltas to a single assistant message,
-  // and the `(threadId, assistantMessageId)` pair is treated as the
-  // per-user idempotency key for this endpoint.
+  // Phase D — server-validated assistantMessageId for chat jobs. The id
+  // is the stable handle the executor's streaming scratchpad uses to
+  // reconcile deltas to a single assistant message. The worker enforces
+  // the `(threadId, assistantMessageId)` uniqueness inside its atomic
+  // create primitive; we just normalise the shape here.
   if (body.type === 'chat-response') {
     const chatInput = body.input as ChatResponseInput | undefined;
-    const threadId = chatInput?.threadId;
     let assistantMessageId = chatInput?.assistantMessageId;
 
     if (assistantMessageId !== undefined) {
@@ -147,61 +141,35 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
-      // Backwards-compat fallback for pre-Phase-D clients. Once the
-      // client always sends an id, this branch can be deleted.
+      // Backwards-compat fallback for pre-Phase-D clients.
       assistantMessageId = crypto.randomUUID();
-    }
-
-    if (threadId) {
-      const existing = await jobStorage.getAll();
-      const collision = existing.find((j) =>
-        j.userId === userId
-        && j.type === 'chat-response'
-        && (j.status === 'pending' || j.status === 'running')
-        && (j.input as { threadId?: string; assistantMessageId?: string } | undefined)?.threadId === threadId
-        && (j.input as { threadId?: string; assistantMessageId?: string } | undefined)?.assistantMessageId === assistantMessageId,
-      );
-      if (collision) {
-        log.info('Idempotency hit on chat job; returning existing record', {
-          userId,
-          threadId,
-          assistantMessageId,
-          existingJobId: collision.id,
-        });
-        return NextResponse.json({
-          id: collision.id,
-          type: collision.type,
-          status: collision.status,
-          createdAt: collision.createdAt,
-        });
-      }
     }
 
     body.input = { ...chatInput, assistantMessageId } as ChatResponseInput;
   }
 
-  const job = await jobStorage.create({
+  const proxyInput: CreateWorkerJobInput = {
     id: jobId,
     type: body.type,
     targetId: body.targetId,
     userId,
     causality,
-    input: body.input as unknown as Record<string, unknown>,
-  });
-  
-  // Start execution async (fire and forget). Jobs carry only the userId on
-  // their payload — the executor resolves a fresh `ghu_` token from the
-  // TokenStore at run-time (see resolveFreshGitHubToken) so queued / retried
-  // work cannot use a stale access token captured at submission.
-  dispatchJobExecution({
-    jobId,
-    type: body.type,
-    input: body.input as DispatchableJobInput,
-    userId,
+    input: body.input as unknown as DispatchableJobInput,
     credentials: await getWorkerDispatchCredentials(),
     traceContext: hasTraceContext(traceContext) ? traceContext : undefined,
-  });
-  
+  };
+
+  let job;
+  try {
+    job = await createWorkerJob(proxyInput);
+  } catch (err) {
+    log.error('Failed to create job on worker', { userId, type: body.type, err });
+    return NextResponse.json(
+      { error: 'Job service temporarily unavailable. Please retry.' },
+      { status: 503 },
+    );
+  }
+
   return NextResponse.json({
     id: job.id,
     type: job.type,
@@ -226,24 +194,26 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireUserContext();
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type');
-    const status = searchParams.get('status');
+    const type = searchParams.get('type') ?? undefined;
+    const status = searchParams.get('status') ?? undefined;
+    const traceContext = captureTracePropagationHeaders();
 
-    jobStorage.invalidateCache();
-    let jobs = type ? await jobStorage.getByType(type) : await jobStorage.getAll();
+    const jobs = await listWorkerJobs({
+      userId,
+      type,
+      status,
+      traceContext: hasTraceContext(traceContext) ? traceContext : undefined,
+    });
 
-    // Multi-tenant invariant: only return jobs owned by the caller.
-    jobs = jobs.filter(job => job.userId === userId);
-
-    if (status) {
-      jobs = jobs.filter(job => job.status === status);
-    }
-
-    return NextResponse.json({ jobs: jobs.map(redactJobForList) });
+    return NextResponse.json({ jobs });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });
     }
-    throw err;
+    log.error('Failed to list jobs from worker', { err });
+    return NextResponse.json(
+      { error: 'Job service temporarily unavailable. Please retry.' },
+      { status: 503 },
+    );
   }
 }

@@ -13,12 +13,9 @@
  */
 
 import { logger } from '@/lib/logger';
-import {
-  redactTerminalJobs,
-  sweepAllUsers,
-  sweepOrphanJobs,
-  sweepStaleRunningJobs,
-} from '@/lib/storage/retention';
+import { sweepAllUsers } from '@/lib/storage/user-retention';
+import { sweepWorkerJobs } from '@/app/api/jobs/worker-client';
+import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { CronAuthError, verifyCronRequest } from '@/lib/security/cron-auth';
 import { NextResponse } from 'next/server';
 
@@ -34,22 +31,55 @@ export async function POST(request: Request) {
     log.info('Cron sweep starting', { callerAppid });
 
     const nowMs = Date.now();
-    const userSweeps = await sweepAllUsers(nowMs);
-    const staleRunning = await sweepStaleRunningJobs(nowMs);
-    const orphanJobs = await sweepOrphanJobs();
-    const redactedJobs = await redactTerminalJobs();
+    const traceCtxRaw = captureTracePropagationHeaders();
+    const traceCtx = Object.keys(traceCtxRaw).length > 0 ? traceCtxRaw : undefined;
+
+    // Run user and worker sweeps independently so a worker outage doesn't
+    // block local cleanup (and vice versa). Surface per-step status in
+    // the response so on-call can see exactly which side failed.
+    const [userResult, jobResult] = await Promise.allSettled([
+      sweepAllUsers(nowMs),
+      sweepWorkerJobs({ nowMs, traceContext: traceCtx }),
+    ]);
+
+    const userSweeps = userResult.status === 'fulfilled' ? userResult.value : null;
+    const jobSweeps = jobResult.status === 'fulfilled' ? jobResult.value : null;
+
+    if (userResult.status === 'rejected') {
+      log.error('Cron user-sweep failed', { error: userResult.reason });
+    }
+    if (jobResult.status === 'rejected') {
+      log.error('Cron job-sweep failed', { error: jobResult.reason });
+    }
 
     const summary = {
-      threads: userSweeps.threads,
-      evaluations: userSweeps.evaluations,
-      scratchpads: userSweeps.scratchpads,
-      staleRunningJobs: staleRunning,
-      orphanJobs,
-      redactedTerminalJobs: redactedJobs,
+      threads: userSweeps?.threads ?? null,
+      evaluations: userSweeps?.evaluations ?? null,
+      scratchpads: userSweeps?.scratchpads ?? null,
+      staleRunningJobs: jobSweeps?.staleRunningJobs ?? null,
+      orphanJobs: jobSweeps?.orphanJobs ?? null,
+      redactedTerminalJobs: jobSweeps?.redactedTerminalJobs ?? null,
     };
 
-    log.info('Cron sweep complete', summary);
-    return NextResponse.json({ success: true, summary, sweptAt: new Date(nowMs).toISOString() });
+    const steps = {
+      userSweep: userResult.status,
+      jobSweep: jobResult.status,
+    };
+
+    const allOk = userResult.status === 'fulfilled' && jobResult.status === 'fulfilled';
+    log.info('Cron sweep complete', { summary, steps, allOk });
+
+    return NextResponse.json(
+      {
+        success: allOk,
+        summary,
+        steps,
+        sweptAt: new Date(nowMs).toISOString(),
+      },
+      // Partial success surfaces as 207 so monitoring can alert without
+      // re-running a healthy step. Total success stays 200.
+      { status: allOk ? 200 : 207 },
+    );
   } catch (err) {
     if (err instanceof CronAuthError) {
       log.warn('Cron auth rejected', { message: err.message });

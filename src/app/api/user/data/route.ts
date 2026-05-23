@@ -25,12 +25,13 @@
 
 import { requireUserContext, UnauthorizedError, readCredentialsFromJwt } from '@/lib/auth/context';
 import { activityLogger } from '@/lib/copilot/activity/logger';
-import { jobStorage } from '@/lib/jobs';
+import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { deleteDir } from '@/lib/storage/utils';
-import { markUserDeleted } from '@/lib/storage/tombstone';
+import { markUserDeleted, clearUserTombstone } from '@/lib/storage/tombstone';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
-import { cancelRunningJob } from '../../jobs/route';
+
+import { deleteWorkerJobsForUser } from '../../jobs/worker-client';
 
 const log = logger.withTag('UserDataAPI');
 
@@ -136,19 +137,33 @@ export async function DELETE(request: NextRequest) {
     // instead of recreating the user's directory.
     await markUserDeleted(userId);
 
-    // Cancel any in-flight jobs for this user before removing their records.
-    const allJobs = await jobStorage.getAll();
-    const ownedRunning = allJobs.filter(
-      (j) => j.userId === userId && (j.status === 'running' || j.status === 'pending'),
-    );
-
-    let jobsCancelled = 0;
-    for (const job of ownedRunning) {
-      const cancelled = await cancelRunningJob(job.id);
-      if (cancelled) jobsCancelled += 1;
+    // Cancel any in-flight jobs for this user AND delete their records
+    // in one worker call. The worker enforces the cancel-then-delete
+    // ordering so executors see terminal intent before records vanish.
+    //
+    // If this call fails we MUST roll back the tombstone — leaving the
+    // user marked `.deleted` with their data intact wedges them into a
+    // state where future writes silently no-op (rubber-duck Codex 2B.2).
+    const traceCtxRaw = captureTracePropagationHeaders();
+    const traceCtx = Object.keys(traceCtxRaw).length > 0 ? traceCtxRaw : undefined;
+    let jobsDeleted: number;
+    let jobsCancelled: number;
+    try {
+      const result = await deleteWorkerJobsForUser(userId, traceCtx);
+      jobsDeleted = result.deleted;
+      jobsCancelled = result.cancelled;
+    } catch (err) {
+      log.error(`[user ${userId}] Worker job deletion failed; rolling back tombstone`, { err });
+      try {
+        await clearUserTombstone(userId);
+      } catch (rollbackErr) {
+        log.error(`[user ${userId}] Tombstone rollback failed`, { err: rollbackErr });
+      }
+      return NextResponse.json(
+        { error: 'Job service temporarily unavailable. Please retry.' },
+        { status: 503 },
+      );
     }
-
-    const { deleted: jobsDeleted } = await jobStorage.deleteForUser(userId);
 
     // Clear this user's slice of the activity buffer.
     activityLogger.clear(userId);

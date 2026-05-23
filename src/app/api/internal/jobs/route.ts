@@ -28,7 +28,7 @@ import { logger } from '@/lib/logger';
 import { withExtractedTraceContext } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { scheduleWorkerJobExecution } from './execute/executor';
+import { scheduleWorkerJobExecution } from '@/worker/jobs/scheduler';
 
 const log = logger.withTag('InternalJobs');
 

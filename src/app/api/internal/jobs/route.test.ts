@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   withExtractedTraceContext: vi.fn(),
 }));
 
-vi.mock('./execute/executor', () => ({
+vi.mock('@/worker/jobs/scheduler', () => ({
   scheduleWorkerJobExecution: mocks.scheduleWorkerJobExecution,
 }));
 

@@ -5,22 +5,15 @@ const mocks = vi.hoisted(() => ({
   seedTokenStoreFromJwt: vi.fn(),
   buildWorkerDispatchCredentials: vi.fn(),
   captureTracePropagationHeaders: vi.fn(),
-  dispatchJobExecution: vi.fn(),
-  cancelWorkerJob: vi.fn(),
+  createWorkerJob: vi.fn(),
+  listWorkerJobs: vi.fn(),
   getActiveSpan: vi.fn(),
   setSpanAttributes: vi.fn(),
-  jobStorage: {
-    create: vi.fn(),
-    get: vi.fn(),
-    getAll: vi.fn(),
-    getByType: vi.fn(),
-    markCancelled: vi.fn(),
-    invalidateCache: vi.fn(),
-  },
 }));
 
 vi.mock('@/lib/auth/context', () => ({
   requireUserContext: mocks.requireUserContext,
+  UnauthorizedError: class extends Error {},
 }));
 
 vi.mock('@/lib/auth/seed', () => ({
@@ -34,44 +27,43 @@ vi.mock('@/lib/observability/context-propagation', () => ({
 
 vi.mock('@opentelemetry/api', () => ({
   SpanStatusCode: { OK: 1, ERROR: 2 },
-  context: {
-    active: vi.fn(() => ({})),
-    with: vi.fn((_ctx: unknown, operation: () => unknown) => operation()),
-  },
-  metrics: {
-    getMeter: vi.fn(() => ({
-      createCounter: vi.fn(() => ({ add: vi.fn() })),
-      createHistogram: vi.fn(() => ({ record: vi.fn() })),
-    })),
-  },
   trace: {
     getActiveSpan: mocks.getActiveSpan,
-    getSpan: vi.fn(),
-    getTracer: vi.fn(() => ({
-      startSpan: vi.fn(() => ({
-        end: vi.fn(),
-        recordException: vi.fn(),
+    getSpan: () => undefined,
+    getTracer: () => ({
+      startSpan: () => ({
+        setAttribute: vi.fn(),
+        setAttributes: vi.fn(),
         setStatus: vi.fn(),
-      })),
-    })),
-    setSpan: vi.fn((ctx: unknown) => ctx),
-    wrapSpanContext: vi.fn((ctx: unknown) => ctx),
+        recordException: vi.fn(),
+        end: vi.fn(),
+      }),
+      startActiveSpan: (_n: string, fn: (s: unknown) => unknown) => fn({
+        setAttribute: vi.fn(),
+        setAttributes: vi.fn(),
+        setStatus: vi.fn(),
+        recordException: vi.fn(),
+        end: vi.fn(),
+      }),
+    }),
   },
-}));
-
-vi.mock('./dispatcher', () => ({
-  dispatchJobExecution: mocks.dispatchJobExecution,
+  metrics: {
+    getMeter: () => ({
+      createHistogram: () => ({ record: vi.fn() }),
+      createCounter: () => ({ add: vi.fn() }),
+      createUpDownCounter: () => ({ add: vi.fn() }),
+    }),
+  },
+  context: { active: () => ({}) },
+  propagation: { inject: vi.fn(), extract: vi.fn() },
 }));
 
 vi.mock('./worker-client', () => ({
-  cancelWorkerJob: mocks.cancelWorkerJob,
+  createWorkerJob: mocks.createWorkerJob,
+  listWorkerJobs: mocks.listWorkerJobs,
 }));
 
-vi.mock('@/lib/jobs', () => ({
-  jobStorage: mocks.jobStorage,
-}));
-
-import { POST, cancelRunningJob } from './route';
+import { GET, POST } from './route';
 
 function makeRequest(body: unknown, headers?: Record<string, string>) {
   return new Request('http://localhost/api/jobs', {
@@ -81,241 +73,155 @@ function makeRequest(body: unknown, headers?: Record<string, string>) {
   }) as never;
 }
 
-describe('POST /api/jobs', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.requireUserContext.mockResolvedValue({ userId: 'user-1', login: 'alice' });
-    mocks.seedTokenStoreFromJwt.mockResolvedValue({ status: 'ok' });
-    mocks.buildWorkerDispatchCredentials.mockResolvedValue({
-      accessToken: 'ghu_user',
-      refreshToken: 'ghr_user',
-      expiresAt: 1_700_000_000,
-    });
-    mocks.captureTracePropagationHeaders.mockReturnValue({
-      traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
-      tracestate: 'vendor=value',
-    });
-    mocks.getActiveSpan.mockReturnValue({
-      setAttributes: mocks.setSpanAttributes,
-    });
-    mocks.jobStorage.create.mockImplementation(async (job: { id: string; type: string }) => ({
-      ...job,
-      status: 'pending',
-      createdAt: '2026-05-23T01:00:00.000Z',
-    }));
-    mocks.jobStorage.getAll.mockResolvedValue([]);
-  });
+function makeGetRequest(query = '') {
+  return new Request(`http://localhost/api/jobs${query ? `?${query}` : ''}`, {
+    method: 'GET',
+  }) as never;
+}
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.requireUserContext.mockResolvedValue({ userId: 'user-1', login: 'alice' });
+  mocks.seedTokenStoreFromJwt.mockResolvedValue({ status: 'ok' });
+  mocks.buildWorkerDispatchCredentials.mockResolvedValue({
+    accessToken: 'ghu_user',
+    refreshToken: 'ghr_user',
+    expiresAt: 1_700_000_000,
+  });
+  mocks.captureTracePropagationHeaders.mockReturnValue({
+    traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
+    tracestate: 'vendor=value',
+  });
+  mocks.getActiveSpan.mockReturnValue({ setAttributes: mocks.setSpanAttributes });
+  mocks.createWorkerJob.mockImplementation(async (input: { id: string; type: string }) => ({
+    id: input.id,
+    type: input.type,
+    status: 'pending',
+    createdAt: '2026-05-23T01:00:00.000Z',
+    userId: 'user-1',
+    input: {},
+  }));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe('POST /api/jobs (proxy)', () => {
+  it('returns 400 when type is missing', async () => {
+    const res = await POST(makeRequest({}));
+    expect(res.status).toBe(400);
+    expect(mocks.createWorkerJob).not.toHaveBeenCalled();
   });
 
   it('returns 503 and does not dispatch when token-store seeding fails', async () => {
     mocks.seedTokenStoreFromJwt.mockResolvedValue({
       status: 'error',
-      error: new Error('cosmos down'),
+      error: new Error('boom'),
     });
 
-    const response = await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+    const res = await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
 
-    expect(response.status).toBe(503);
-    expect(mocks.jobStorage.create).not.toHaveBeenCalled();
-    expect(mocks.dispatchJobExecution).not.toHaveBeenCalled();
+    expect(res.status).toBe(503);
+    expect(mocks.createWorkerJob).not.toHaveBeenCalled();
   });
 
-  it('persists token-free job payloads and dispatches with userId', async () => {
-    await POST(makeRequest({ type: 'topic-regeneration', input: { existingTopicTitles: [] } }));
+  it('forwards a generated id, normalised input, credentials and trace context', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
 
-    expect(mocks.jobStorage.create).toHaveBeenCalledTimes(1);
-    const stored = mocks.jobStorage.create.mock.calls[0][0];
-    const serialised = JSON.stringify(stored);
-    expect(serialised).not.toContain('ghu_');
-    expect(serialised).not.toContain('accessToken');
-    expect(serialised).not.toContain('gitHubToken');
-
-    expect(mocks.dispatchJobExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'topic-regeneration',
-        userId: 'user-1',
+    const res = await POST(
+      makeRequest({
+        type: 'chat-response',
+        input: { threadId: 't1', prompt: 'hi' },
       }),
     );
+
+    expect(res.status).toBe(200);
+    expect(mocks.createWorkerJob).toHaveBeenCalledTimes(1);
+    const input = mocks.createWorkerJob.mock.calls[0][0];
+    expect(input).toMatchObject({
+      type: 'chat-response',
+      userId: 'user-1',
+      credentials: expect.objectContaining({ accessToken: 'ghu_user' }),
+      traceContext: expect.objectContaining({ traceparent: expect.any(String) }),
+    });
+    expect(input.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(input.input.assistantMessageId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(input.causality).toMatchObject({
+      traceparent: expect.any(String),
+      capturedAt: expect.any(String),
+    });
+  });
+
+  it('rejects malformed assistantMessageId', async () => {
+    const res = await POST(
+      makeRequest({
+        type: 'chat-response',
+        input: { threadId: 't1', prompt: 'hi', assistantMessageId: 'not-a-uuid' },
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.createWorkerJob).not.toHaveBeenCalled();
   });
 
   it('omits dispatch credentials in production unless explicitly enabled', async () => {
     vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('COPILOT_WORKER_DISPATCH_CREDENTIALS', '');
 
-    await POST(makeRequest({ type: 'goal-regeneration', input: { existingGoalTitles: [] } }));
+    await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
 
-    expect(mocks.buildWorkerDispatchCredentials).not.toHaveBeenCalled();
-    expect(mocks.dispatchJobExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        credentials: undefined,
-      }),
-    );
+    const input = mocks.createWorkerJob.mock.calls[0][0];
+    expect(input.credentials).toBeUndefined();
   });
 
   it('includes dispatch credentials in production when explicitly enabled', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('COPILOT_WORKER_DISPATCH_CREDENTIALS', '1');
 
-    await POST(makeRequest({ type: 'goal-regeneration', input: { existingGoalTitles: [] } }));
+    await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
 
-    expect(mocks.buildWorkerDispatchCredentials).toHaveBeenCalledTimes(1);
-    expect(mocks.dispatchJobExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        credentials: {
-          accessToken: 'ghu_user',
-          refreshToken: 'ghr_user',
-          expiresAt: 1_700_000_000,
-        },
-      }),
-    );
+    const input = mocks.createWorkerJob.mock.calls[0][0];
+    expect(input.credentials).toMatchObject({ accessToken: 'ghu_user' });
   });
 
-  it('captures trace context and forwards it in dispatch request metadata', async () => {
-    await POST(makeRequest({ type: 'goal-regeneration', input: { existingGoalTitles: [] } }));
+  it('returns 503 when worker create throws', async () => {
+    mocks.createWorkerJob.mockRejectedValue(new Error('worker down'));
 
-    expect(mocks.captureTracePropagationHeaders).toHaveBeenCalledTimes(1);
-    expect(mocks.dispatchJobExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        traceContext: {
-          traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
-          tracestate: 'vendor=value',
-        },
-      }),
-    );
+    const res = await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+    expect(res.status).toBe(503);
   });
 
-  it('stores causality context on the persisted job record', async () => {
-    await POST(makeRequest({ type: 'topic-regeneration', input: { existingTopicTitles: [] } }));
-
-    expect(mocks.jobStorage.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        causality: expect.objectContaining({
-          traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
-          tracestate: 'vendor=value',
-        }),
-      }),
-    );
-  });
-
-  it('stores validated client trigger metadata in job causality', async () => {
-    await POST(
-      makeRequest(
-        { type: 'goal-regeneration', input: { existingGoalTitles: [] } },
-        {
-          'x-flight-school-trigger-source': 'ai-focus',
-          'x-flight-school-trigger-action': 'skip-goal',
-          'x-flight-school-trigger-page-path': '/skills',
-          'x-flight-school-trigger-navigation-elapsed-ms': '910',
-          'x-flight-school-trigger-target-type': 'goal',
-          'x-flight-school-trigger-target-id': 'goal-123',
-          'x-flight-school-trigger-correlation-id': 'b9e8ad89-c6c4-42ef-ad52-f74f0bec71a6',
-        },
-      ),
-    );
-
-    expect(mocks.jobStorage.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        causality: expect.objectContaining({
-          trigger: {
-            source: 'ai-focus',
-            action: 'skip-goal',
-            pagePath: '/skills',
-            navigationElapsedMs: 910,
-            targetType: 'goal',
-            targetId: 'goal-123',
-            correlationId: 'b9e8ad89-c6c4-42ef-ad52-f74f0bec71a6',
-          },
-        }),
-      }),
-    );
-  });
-
-  it('ignores malformed trigger metadata headers', async () => {
-    await POST(
-      makeRequest(
-        { type: 'goal-regeneration', input: { existingGoalTitles: [] } },
-        {
-          'x-flight-school-trigger-source': 'ai-focus',
-          'x-flight-school-trigger-action': 'skip-goal',
-          'x-flight-school-trigger-correlation-id': 'not-a-uuid',
-        },
-      ),
-    );
-
-    expect(mocks.jobStorage.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        causality: expect.not.objectContaining({
-          trigger: expect.anything(),
-        }),
-      }),
-    );
-  });
-
-  it('adds client trigger attributes to the active span', async () => {
-    await POST(
-      makeRequest(
-        { type: 'goal-regeneration', input: { existingGoalTitles: [] } },
-        {
-          'x-flight-school-trigger-source': 'ai-focus',
-          'x-flight-school-trigger-action': 'skip-goal',
-          'x-flight-school-trigger-page-path': '/skills',
-          'x-flight-school-trigger-navigation-elapsed-ms': '910',
-          'x-flight-school-trigger-target-type': 'goal',
-          'x-flight-school-trigger-target-id': 'goal-123',
-          'x-flight-school-trigger-correlation-id': 'b9e8ad89-c6c4-42ef-ad52-f74f0bec71a6',
-        },
-      ),
-    );
-
-    expect(mocks.setSpanAttributes).toHaveBeenCalledWith(
-      expect.objectContaining({
-        'app.trigger.source': 'ai-focus',
-        'app.trigger.action': 'skip-goal',
-        'app.trigger.page_path': '/skills',
-        'app.trigger.navigation_elapsed_ms': 910,
-        'app.trigger.target_type': 'goal',
-        'app.trigger.target_id': 'goal-123',
-        'app.trigger.correlation_id': 'b9e8ad89-c6c4-42ef-ad52-f74f0bec71a6',
-      }),
-    );
+  it('responds with the canonical minimal job shape', async () => {
+    const res = await POST(makeRequest({ type: 'topic-regeneration', input: {} }));
+    const body = await res.json();
+    expect(body).toEqual({
+      id: expect.any(String),
+      type: 'topic-regeneration',
+      status: 'pending',
+      createdAt: '2026-05-23T01:00:00.000Z',
+    });
   });
 });
 
-describe('cancelRunningJob', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('GET /api/jobs (proxy)', () => {
+  it('proxies to listWorkerJobs with userId and filters', async () => {
+    mocks.listWorkerJobs.mockResolvedValue([{ id: 'j1', status: 'running' }]);
+    const res = await GET(makeGetRequest('type=chat-response&status=running'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ jobs: [{ id: 'j1', status: 'running' }] });
+    expect(mocks.listWorkerJobs).toHaveBeenCalledWith({
+      userId: 'user-1',
+      type: 'chat-response',
+      status: 'running',
+      traceContext: expect.objectContaining({ traceparent: expect.any(String) }),
+    });
   });
 
-  it('returns false when the job does not exist', async () => {
-    mocks.jobStorage.get.mockResolvedValue(undefined);
-
-    await expect(cancelRunningJob('job-1')).resolves.toBe(false);
-    expect(mocks.jobStorage.markCancelled).not.toHaveBeenCalled();
-  });
-
-  it('returns false when the job is already terminal', async () => {
-    mocks.jobStorage.get.mockResolvedValue({ id: 'job-1', status: 'completed' });
-
-    await expect(cancelRunningJob('job-1')).resolves.toBe(false);
-    expect(mocks.jobStorage.markCancelled).not.toHaveBeenCalled();
-  });
-
-  it('marks job cancelled and forwards cancellation to worker', async () => {
-    mocks.jobStorage.get.mockResolvedValue({ id: 'job-1', status: 'running' });
-    mocks.cancelWorkerJob.mockResolvedValue(undefined);
-
-    await expect(cancelRunningJob('job-1')).resolves.toBe(true);
-    expect(mocks.jobStorage.markCancelled).toHaveBeenCalledWith('job-1');
-    expect(mocks.cancelWorkerJob).toHaveBeenCalledWith('job-1');
-  });
-
-  it('still returns true when worker cancellation forwarding fails', async () => {
-    mocks.jobStorage.get.mockResolvedValue({ id: 'job-1', status: 'running' });
-    mocks.cancelWorkerJob.mockRejectedValue(new Error('network down'));
-
-    await expect(cancelRunningJob('job-1')).resolves.toBe(true);
-    expect(mocks.jobStorage.markCancelled).toHaveBeenCalledWith('job-1');
+  it('returns 503 when worker list throws', async () => {
+    mocks.listWorkerJobs.mockRejectedValue(new Error('worker down'));
+    const res = await GET(makeGetRequest());
+    expect(res.status).toBe(503);
   });
 });

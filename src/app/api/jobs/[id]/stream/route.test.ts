@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   requireUserContext: vi.fn(),
-  jobsGet: vi.fn(),
+  getWorkerJob: vi.fn(),
   getCopilotWorkerConfig: vi.fn(),
   fetchImpl: vi.fn(),
   mergeTracePropagationHeaders: vi.fn(),
@@ -17,8 +17,8 @@ vi.mock('@/lib/api', () => ({
   handleUnauthorizedError: mocks.handleUnauthorizedError,
 }));
 
-vi.mock('@/lib/jobs', () => ({
-  jobStorage: { get: mocks.jobsGet },
+vi.mock('../../worker-client', () => ({
+  getWorkerJob: mocks.getWorkerJob,
 }));
 
 vi.mock('@/lib/copilot/execution/config', () => ({
@@ -72,20 +72,20 @@ describe('/api/jobs/[id]/stream', () => {
   });
 
   it('returns 404 when the job is not owned by the user', async () => {
-    mocks.jobsGet.mockResolvedValue({ id: 'j1', userId: 'someone-else' });
+    mocks.getWorkerJob.mockResolvedValue(null);
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(404);
   });
 
   it('returns 503 when the worker is not configured', async () => {
-    mocks.jobsGet.mockResolvedValue({ id: 'j1', userId: 'u1' });
+    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
     mocks.getCopilotWorkerConfig.mockReturnValue(null);
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(503);
   });
 
   it('proxies the worker SSE stream on success', async () => {
-    mocks.jobsGet.mockResolvedValue({ id: 'j1', userId: 'u1' });
+    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
     const upstreamBody = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode('data: hi\n\n'));
@@ -108,14 +108,14 @@ describe('/api/jobs/[id]/stream', () => {
   });
 
   it('returns 404 when worker reports the job missing', async () => {
-    mocks.jobsGet.mockResolvedValue({ id: 'j1', userId: 'u1' });
+    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
     mocks.fetchImpl.mockResolvedValue(new Response(null, { status: 404 }));
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(404);
   });
 
   it('returns 502 when the worker is unreachable', async () => {
-    mocks.jobsGet.mockResolvedValue({ id: 'j1', userId: 'u1' });
+    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
     mocks.fetchImpl.mockRejectedValue(new Error('connect ECONNREFUSED'));
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(502);

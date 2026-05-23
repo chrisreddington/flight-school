@@ -63,10 +63,44 @@ describe('worker job architecture boundaries', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('uses worker dispatch from the web dispatcher module', () => {
-    const dispatcherPath = path.join(APP_ROOT, 'api/jobs/dispatcher.ts');
-    const source = readFileSync(dispatcherPath, 'utf8');
+  it('keeps jobStorage out of all web API routes (worker owns the index)', () => {
+    const apiRoot = path.join(APP_ROOT, 'api');
+    const internalRoot = path.join(apiRoot, 'internal');
+    // Storage-layer modules that expose the job index. Any import of
+    // these from a non-internal web route is an architecture violation.
+    const FORBIDDEN_SPECIFIERS = new Set(['@/lib/jobs', '@/lib/jobs/storage']);
+    const offenders = sourceFiles(apiRoot)
+      .filter((filePath) => !filePath.endsWith('.test.ts'))
+      // The internal routes are the worker-side handlers — they're
+      // allowed to touch jobStorage. Everything else under `src/app/api/`
+      // is the multi-tenant web surface and must go through worker-client.
+      .filter((filePath) => !filePath.startsWith(internalRoot))
+      .flatMap((filePath) => {
+        const rel = path.relative(process.cwd(), filePath).replaceAll(path.sep, '/');
+        const source = readFileSync(filePath, 'utf8');
+        // Match real top-level imports of the storage-layer modules but
+        // not type-only imports of helper types like `BackgroundJob` or
+        // `ChatResponseInput`.
+        const hits: string[] = [];
+        for (const match of source.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+          const spec = match[1];
+          if (!FORBIDDEN_SPECIFIERS.has(spec)) continue;
+          const importLine = source.slice(0, match.index).match(/import[^;]*$/)?.[0] ?? '';
+          if (/\bjobStorage\b/.test(importLine)) {
+            hits.push(`${rel} imports jobStorage from ${spec}`);
+          }
+        }
+        return hits;
+      });
+    expect(offenders).toEqual([]);
+  });
 
-    expect(source).toContain('dispatchJobExecutionToWorker');
+  it('routes worker job calls through the worker-client module', () => {
+    const jobsRoot = path.join(APP_ROOT, 'api/jobs');
+    const workerClient = path.join(jobsRoot, 'worker-client.ts');
+    const source = readFileSync(workerClient, 'utf8');
+
+    expect(source).toContain('createWorkerJob');
+    expect(source).toContain('cancelWorkerJobRecord');
   });
 });

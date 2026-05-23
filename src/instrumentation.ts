@@ -106,20 +106,25 @@ export async function register(): Promise<void> {
       process.once('SIGTERM', () => shutdown('SIGTERM'));
     }
 
-    try {
-      const { jobStorage } = await import('@/lib/jobs');
-      const jobs = await jobStorage.getAll();
-      const staleJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running');
+    // Phase 2B.2: restart-sweep only runs in the WORKER process. The
+    // web tier no longer owns jobStorage. Without this gate every
+    // running web replica would compete to mark jobs failed on boot.
+    if (process.env.COPILOT_WORKER_MODE === '1') {
+      try {
+        const { jobStorage } = await import('@/lib/jobs');
+        const jobs = await jobStorage.getAll();
+        const staleJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running');
 
-      await Promise.all(
-        staleJobs.map((job) => jobStorage.markFailed(job.id, 'Server process restarted'))
-      );
+        await Promise.all(
+          staleJobs.map((job) => jobStorage.markFailed(job.id, 'Server process restarted'))
+        );
 
-      if (staleJobs.length > 0) {
-        log.info(`Marked ${staleJobs.length} stale jobs as failed on startup`);
+        if (staleJobs.length > 0) {
+          log.info(`Marked ${staleJobs.length} stale jobs as failed on startup`);
+        }
+      } catch (err) {
+        log.warn('Failed to mark stale jobs on startup', { err });
       }
-    } catch (err) {
-      log.warn('Failed to mark stale jobs on startup', { err });
     }
   }
 }
