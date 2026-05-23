@@ -211,7 +211,19 @@ export async function consumeSSE(options: ConsumeSSEOptions): Promise<void> {
             recoveredThisConnect = true;
             onReconnectRecovered?.();
           }
-          const result = onMessage(event);
+          let result: void | { terminal?: boolean };
+          try {
+            result = onMessage(event);
+          } catch (err) {
+            // Caller-supplied `onMessage` threw. Surface via `onWarn` and
+            // skip this frame rather than tearing down the connection and
+            // triggering a reconnect — a bug in the caller (e.g. JSON
+            // parse error on a malformed frame) must not cause an
+            // unbounded reconnect loop that exhausts the 10-minute wall
+            // clock budget for no reason.
+            onWarn?.(err);
+            return;
+          }
           if (result?.terminal) {
             signalledTerminal = true;
             throw new TerminalSignal();
@@ -299,8 +311,18 @@ async function runOneConnection(params: RunOneConnectionParams): Promise<void> {
       parser.feed(decoder.decode(value, { stream: true }));
     }
   } finally {
-    // Ensure the underlying body is released; ignore errors (the stream
-    // may already be cancelled by the AbortController).
+    // Cancel the underlying body before releasing the lock. `cancel()`
+    // signals the network layer to stop buffering chunks (important when
+    // exiting via TerminalSignal, where the connection would otherwise
+    // linger until GC); `releaseLock()` then detaches the reader. Errors
+    // are ignored — the stream may already be cancelled via the
+    // AbortController, in which case both calls are no-ops that may
+    // throw.
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
     try {
       reader.releaseLock();
     } catch {

@@ -444,4 +444,68 @@ describe('consumeSSE', () => {
     await vi.runAllTimersAsync();
     await assertion;
   });
+
+  it('does NOT reconnect when onMessage throws — surfaces via onWarn and continues', async () => {
+    // REGRESSION GUARD: a caller bug in `onMessage` (e.g. malformed JSON
+    // parse) must not blow up the connection and trigger an unbounded
+    // reconnect loop. The frame should be skipped via `onWarn` and the
+    // stream should continue.
+    fake.enqueue({
+      chunks: ['data: bad\n\n', 'data: good\n\n'],
+    });
+
+    const warnings: unknown[] = [];
+    const seen: string[] = [];
+
+    await consumeSSE({
+      buildUrl: () => '/api/test',
+      signal: new AbortController().signal,
+      fetchImpl: fake.fetchImpl,
+      onMessage: (evt) => {
+        if (evt.data === 'bad') {
+          throw new Error('caller bug: parse failed');
+        }
+        seen.push(evt.data);
+        return { terminal: true };
+      },
+      onWarn: (err) => warnings.push(err),
+    });
+
+    expect(seen).toEqual(['good']);
+    expect(warnings).toHaveLength(1);
+    expect((warnings[0] as Error).message).toBe('caller bug: parse failed');
+    expect(fake.callCount()).toBe(1); // single connection, no reconnects
+  });
+
+  it('cancels the response body on TerminalSignal exit', async () => {
+    // REGRESSION GUARD: when the caller signals terminal, the underlying
+    // body must be cancelled (not just locked) so the network layer can
+    // release buffers instead of waiting for GC.
+    let cancelled = false;
+    const fetchImpl: typeof fetch = async () => {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: hello\n\n'));
+          // Leave the stream open intentionally so cancel() is observable.
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+
+    await consumeSSE({
+      buildUrl: () => '/api/test',
+      signal: new AbortController().signal,
+      fetchImpl,
+      onMessage: () => ({ terminal: true }),
+    });
+
+    expect(cancelled).toBe(true);
+  });
 });
