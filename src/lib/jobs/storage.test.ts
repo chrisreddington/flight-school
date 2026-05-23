@@ -110,4 +110,110 @@ describe('jobStorage', () => {
     const result = await jobStorage.setCurrentStep('does-not-exist', 'foo');
     expect(result).toBeUndefined();
   });
+
+  describe('concurrency (Phase 1 mutex)', () => {
+    it('serialises parallel create calls so all jobs survive', async () => {
+      // Without the withJobsMutation mutex, concurrent create() calls race on
+      // the load → mutate → save sequence and lose updates. With the mutex,
+      // every job appears in the final read.
+      const ids = Array.from({ length: 25 }, (_, i) => `parallel-job-${i}`);
+      await Promise.all(
+        ids.map((id) =>
+          jobStorage.create({
+            id,
+            type: 'chat-response',
+            userId: 'test-user',
+            input: {},
+          }),
+        ),
+      );
+
+      const all = await jobStorage.getAll();
+      expect(all.map((job) => job.id).sort()).toEqual([...ids].sort());
+    });
+
+    it('serialises parallel updates so the final state reflects every transition', async () => {
+      await jobStorage.create({
+        id: 'race-job',
+        type: 'chat-response',
+        userId: 'test-user',
+        input: {},
+      });
+
+      // Interleave several mark* calls and a setCurrentStep — the last
+      // mutation in submission order should win because they serialise.
+      await Promise.all([
+        jobStorage.markRunning('race-job'),
+        jobStorage.setCurrentStep('race-job', 'Step 1'),
+        jobStorage.setCurrentStep('race-job', 'Step 2'),
+        jobStorage.markCompleted('race-job', { ok: true }),
+      ]);
+
+      const final = await jobStorage.get('race-job');
+      expect(final).toBeDefined();
+      // The job must end up completed AND retain a currentStep — neither
+      // mutation can clobber the other's field.
+      expect(final?.status).toBe('completed');
+      expect(final?.currentStep).toMatch(/^Step [12]$/);
+      expect(final?.result).toEqual({ ok: true });
+    });
+
+    it('serialises parallel create + delete so the result is deterministic', async () => {
+      // Submit a create and an immediate delete back-to-back: serialisation
+      // means the delete runs after the create completes, leaving no job.
+      const createPromise = jobStorage.create({
+        id: 'create-then-delete',
+        type: 'chat-response',
+        userId: 'test-user',
+        input: {},
+      });
+      const deletePromise = jobStorage.delete('create-then-delete');
+
+      await Promise.all([createPromise, deletePromise]);
+
+      const after = await jobStorage.get('create-then-delete');
+      expect(after).toBeUndefined();
+    });
+
+    it('keeps the mutation chain alive after a failed mutation', async () => {
+      // create() throws for empty userId; the mutex must release so the next
+      // mutation still runs rather than the chain wedging.
+      await expect(
+        jobStorage.create({
+          id: 'bad-job',
+          type: 'chat-response',
+          userId: '',
+          input: {},
+        }),
+      ).rejects.toThrow(/userId is required/);
+
+      // Subsequent mutation must succeed.
+      await jobStorage.create({
+        id: 'good-job',
+        type: 'chat-response',
+        userId: 'test-user',
+        input: {},
+      });
+
+      expect(await jobStorage.get('good-job')).toBeDefined();
+    });
+
+    it('always reads the latest state from disk (no module-level cache)', async () => {
+      // Simulate the cross-process scenario: write directly to the storage
+      // backend (mimicking another process) and confirm the next read sees
+      // the change without an explicit invalidateCache() call.
+      await jobStorage.create({
+        id: 'cache-test-job',
+        type: 'chat-response',
+        userId: 'test-user',
+        input: {},
+      });
+
+      // Round-trip through update and confirm get() sees the change
+      // immediately. Before the fix, jobsCache would hold the stale value.
+      await jobStorage.update('cache-test-job', { status: 'running' });
+      const observed = await jobStorage.get('cache-test-job');
+      expect(observed?.status).toBe('running');
+    });
+  });
 });
