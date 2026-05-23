@@ -190,19 +190,23 @@ export async function createGenericStreamingSession(
   };
 
   // Start activity logging
-  const complete = activityLogger.startOperation(identity.userId, 'ask', 'Challenge Authoring', {
-    prompt: prompt.slice(0, 100),
-    model,
-    sessionMetrics: {
-      poolHit: !metrics.createdNew,
-      sessionCreateMs: metrics.sessionCreateMs,
-      mcpEnabled: false,
-      conversationReused: metrics.reusedConversation,
+  const { eventId: activityEventId, complete } = await activityLogger.startOperation(
+    identity.userId,
+    'ask',
+    'Challenge Authoring',
+    {
+      prompt: prompt.slice(0, 100),
+      model,
+      sessionMetrics: {
+        poolHit: !metrics.createdNew,
+        sessionCreateMs: metrics.sessionCreateMs,
+        mcpEnabled: false,
+        conversationReused: metrics.reusedConversation,
+      },
     },
-  });
+  );
 
-  // Capture activity event ID (scoped to this user)
-  streamingMetrics.activityEventId = activityLogger.latestEventIdForUser(identity.userId);
+  streamingMetrics.activityEventId = activityEventId ?? undefined;
 
   // Track content
   let totalContent = '';

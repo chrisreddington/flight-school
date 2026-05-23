@@ -100,7 +100,7 @@ export function wrapSessionWithLogging(
         ? ({ ...sessionMetrics } as Record<string, unknown>)
         : undefined;
 
-      complete = activityLogger.startOperation(userId, 'ask', operationName, {
+      const started = await activityLogger.startOperation(userId, 'ask', operationName, {
         prompt: inputPrompt.slice(0, 100),
         model,
         metadata,
@@ -111,6 +111,7 @@ export function wrapSessionWithLogging(
           conversationReused: sessionMetrics.reusedConversation,
         } : undefined,
       });
+      complete = started.complete;
 
       try {
         log.info(`Sending prompt for: ${operationName}`);

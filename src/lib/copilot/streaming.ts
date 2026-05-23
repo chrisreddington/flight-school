@@ -133,31 +133,31 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
   let totalContent = '';
 
   // Start activity logging
-  const complete = activityLogger.startOperation(userId, 'ask', operationName, {
-    prompt: prompt.slice(0, 100),
-    model,
-    sessionMetrics: metrics ? {
-      poolHit: !metrics.createdNew,
-      sessionCreateMs: metrics.sessionCreateMs,
-      mcpEnabled: metrics.mcpEnabled,
-      conversationReused: metrics.reusedConversation,
-    } : undefined,
-    // Server-side metrics (will be updated with client metrics later)
-    serverMetrics: {
-      firstTokenMs: null, // Will be set when first delta arrives
-      totalMs: 0, // Will be set when stream completes
+  const { eventId: activityEventId, complete } = await activityLogger.startOperation(
+    userId,
+    'ask',
+    operationName,
+    {
+      prompt: prompt.slice(0, 100),
+      model,
+      sessionMetrics: metrics ? {
+        poolHit: !metrics.createdNew,
+        sessionCreateMs: metrics.sessionCreateMs,
+        mcpEnabled: metrics.mcpEnabled,
+        conversationReused: metrics.reusedConversation,
+      } : undefined,
+      // Server-side metrics (will be updated when stream completes)
+      serverMetrics: {
+        firstTokenMs: null,
+        totalMs: 0,
+      },
     },
-  });
-
-  // Capture the activity event ID so we can return it to the client
-  // The client will use this to update the event with client-side metrics.
-  // Scoped to this user to avoid leaking other tenants' event IDs.
-  const activityEventId = activityLogger.latestEventIdForUser(userId);
+  );
 
   // Create async generator for streaming events
   const streamingMetrics = {
     firstDeltaMs: null as number | null,
-    activityEventId, // Pass this to the client
+    activityEventId: activityEventId ?? undefined,
   };
   const tracer = trace.getTracer(INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION);
 
@@ -310,25 +310,22 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
 
       // Success - complete logging with server-side metrics
       const durationMs = Date.now() - startTime;
-      complete({
-        text: totalContent.slice(0, 100),
-        fullResponse: totalContent,
-        toolsUsed: toolCalls.map((t) => t.name),
-        metadata: { 
+      complete(
+        {
+          text: totalContent.slice(0, 100),
+          fullResponse: totalContent,
           toolsUsed: toolCalls.map((t) => t.name),
-          firstTokenMs: streamingMetrics.firstDeltaMs,
+          metadata: {
+            toolsUsed: toolCalls.map((t) => t.name),
+            firstTokenMs: streamingMetrics.firstDeltaMs,
+          },
         },
-      });
-      
-      // Update server metrics in the event input
-      if (activityEventId) {
-        const events = activityLogger.getEvents(userId);
-        const event = events.find(e => e.id === activityEventId);
-        if (event && event.input?.serverMetrics) {
-          event.input.serverMetrics.firstTokenMs = streamingMetrics.firstDeltaMs;
-          event.input.serverMetrics.totalMs = durationMs;
-        }
-      }
+        undefined,
+        {
+          firstTokenMs: streamingMetrics.firstDeltaMs,
+          totalMs: durationMs,
+        },
+      );
 
       recordAiStreamMetrics({
         model,

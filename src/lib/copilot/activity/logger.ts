@@ -1,291 +1,110 @@
 /**
- * AI Activity Logger
- * 
- * Singleton that captures all Copilot SDK operations for the Activity Panel.
- * Uses a circular buffer to prevent memory issues in long-running sessions.
+ * Activity logger selector.
+ *
+ * Picks the right implementation at module-load time based on
+ * `process.env.COPILOT_WORKER_MODE`:
+ *  - `'1'` → in-process worker singleton (`logger-worker.ts`)
+ *  - anything else → thin HTTP client wrapper (`logger-client.ts`)
+ *
+ * Callers should always import {@link activityLogger} from this module
+ * so they pick up the correct impl transparently.
  */
-
-import { logger } from '@/lib/logger';
-import { nowMs } from '@/lib/utils/date-utils';
-import { appendShadowActivityEvent } from './shadow-store';
+import { activityLoggerClient } from './logger-client';
+import { activityLoggerWorker } from './logger-worker';
 import type {
-    ActivityListener,
-    AIActivityEvent,
-    AIActivityInput,
-    AIActivityOutput,
-    AIActivityStats,
-    AIActivityStatus,
-    AIActivityType,
+  AIActivityInput,
+  AIActivityOutput,
+  AIActivityStatus,
+  AIActivityType,
 } from './types';
 
-/** Function returned by startOperation to complete the event */
-export type CompleteOperation = (output?: AIActivityOutput, error?: string) => void;
+/**
+ * Closure returned by {@link ActivityLogger.startOperation}. Call
+ * exactly once when the operation completes (success or error). The
+ * `serverMetrics` parameter lets callers attach server-side timing at
+ * completion time instead of mutating retained event state.
+ */
+export type CompleteOperation = (
+  output?: AIActivityOutput,
+  error?: string,
+  serverMetrics?: {
+    firstTokenMs?: number | null;
+    totalMs?: number;
+  },
+) => void;
 
-class AIActivityLogger {
-  private static instance: AIActivityLogger;
-  private events: AIActivityEvent[] = [];
-  private listeners: Set<ActivityListener> = new Set();
-  private maxEvents = 100; // Circular buffer size
-
-  private constructor() {
-    // Private constructor for singleton
-  }
-
-  static getInstance(): AIActivityLogger {
-    if (!AIActivityLogger.instance) {
-      AIActivityLogger.instance = new AIActivityLogger();
-    }
-    return AIActivityLogger.instance;
-  }
-
-  /**
-   * Start logging an SDK operation.
-   * Returns a function to call when the operation completes.
-   *
-   * @param userId - Owner of this event. Required for multi-tenant
-   *   filtering — events without an owning user are never surfaced via
-   *   `/api/ai-activity`. Must come from a server-resolved identity
-   *   (Auth.js session or a request-bound `SessionIdentity`), never from
-   *   client input.
-   */
+/**
+ * Shared shape between the worker singleton and the HTTP client
+ * wrapper. Both surfaces converge to:
+ *  - `startOperation` returning a Promise — awaiting it guarantees
+ *    the event id is known before the caller begins streaming.
+ *  - `logEvent` as a fire-and-forget surface.
+ *  - `updateWithClientMetrics` returning a Promise<boolean> matching
+ *    the existing 404 semantics in `/api/ai-activity/metrics`.
+ *  - `clear` returning a Promise so the worker impl can flush its
+ *    durable store; the client impl is a no-op.
+ */
+export interface ActivityLogger {
   startOperation(
     userId: string,
     type: AIActivityType,
     operation: string,
-    input?: AIActivityInput
-  ): CompleteOperation {
-    const event: AIActivityEvent = {
-      id: this.generateId(),
-      userId,
-      timestamp: new Date(),
-      type,
-      operation,
-      input,
-      latencyMs: 0,
-      status: 'pending',
-    };
-
-    this.addEvent(event);
-    const startTime = performance.now();
-
-    // Return completion function
-    return (output?: AIActivityOutput, error?: string) => {
-      // Use client total time if available (single source of truth for UI)
-      // Otherwise fall back to server-side measurement
-      const clientTotalMs = event.input?.clientMetrics?.totalMs;
-      event.latencyMs = clientTotalMs ?? Math.round(performance.now() - startTime);
-      
-      event.output = output;
-      event.error = error;
-      event.status = error ? 'error' : 'success';
-      
-      // Notify listeners with a NEW object reference to ensure React detects the change
-      // This prevents flakiness where React doesn't see mutations to the same object
-      this.notifyListeners({ ...event });
-      void appendShadowActivityEvent(event).catch((shadowError) => {
-        logger.warn('Failed to update activity shadow event', { error: shadowError }, 'AIActivityLogger');
-      });
-    };
-  }
-
-  /**
-   * Log a quick event that doesn't need timing (e.g., internal operations).
-   *
-   * @param userId - Owner of this event. Required for multi-tenant
-   *   filtering. See {@link startOperation} for sourcing rules.
-   */
+    input?: AIActivityInput,
+  ): Promise<{ eventId: string | null; complete: CompleteOperation }>;
   logEvent(
     userId: string,
     type: AIActivityType,
     operation: string,
     input?: AIActivityInput,
     output?: AIActivityOutput,
-    status: AIActivityStatus = 'success'
-  ): void {
-    const event: AIActivityEvent = {
-      id: this.generateId(),
+    status?: AIActivityStatus,
+  ): void;
+  updateWithClientMetrics(
+    userId: string,
+    eventId: string,
+    clientMetrics: { firstTokenMs?: number; totalMs?: number },
+  ): Promise<boolean>;
+  clear(userId: string): Promise<void>;
+}
+
+const isWorker = process.env.COPILOT_WORKER_MODE === '1';
+
+/**
+ * Wrap the synchronous worker impl in a thin adapter so the public
+ * shape matches the async HTTP client. The adapter awaits
+ * `ensureHydrated` for the user before forwarding to the worker
+ * singleton; without this, an in-process caller (streaming, logged
+ * session, authoring) racing the durable-store load could append
+ * events to the bus before hydration completes, and hydration would
+ * then duplicate them. We keep the inner worker methods synchronous
+ * because the HTTP routes already await hydration before calling them.
+ */
+const workerAdapter: ActivityLogger = {
+  async startOperation(userId, type, operation, input) {
+    await activityLoggerWorker.ensureHydrated(userId);
+    const { eventId, complete } = activityLoggerWorker.startOperation(
       userId,
-      timestamp: new Date(),
       type,
       operation,
       input,
-      output,
-      latencyMs: 0,
-      status,
-    };
-    this.addEvent(event);
-  }
+    );
+    return { eventId, complete };
+  },
+  logEvent(userId, type, operation, input, output, status) {
+    // Fire-and-forget — defer the bus append until hydration completes
+    // so durable-store events don't reappear as duplicates.
+    void (async () => {
+      await activityLoggerWorker.ensureHydrated(userId);
+      activityLoggerWorker.logEvent(userId, type, operation, input, output, status);
+    })();
+  },
+  async updateWithClientMetrics(userId, eventId, clientMetrics) {
+    await activityLoggerWorker.ensureHydrated(userId);
+    return activityLoggerWorker.updateWithClientMetrics(userId, eventId, clientMetrics);
+  },
+  async clear(userId) {
+    await activityLoggerWorker.clear(userId);
+  },
+};
 
-  private generateId(): string {
-    return `${nowMs()}-${Math.random().toString(36).slice(2, 9)}`;
-  }
-
-  private addEvent(event: AIActivityEvent): void {
-    this.events.push(event);
-    // Circular buffer - remove oldest if over limit
-    if (this.events.length > this.maxEvents) {
-      this.events.shift();
-    }
-    // Notify with a new object reference for React change detection
-    this.notifyListeners({ ...event });
-    void appendShadowActivityEvent(event).catch((shadowError) => {
-      logger.warn('Failed to append activity shadow event', { error: shadowError }, 'AIActivityLogger');
-    });
-  }
-
-  private notifyListeners(event: AIActivityEvent): void {
-    this.listeners.forEach((listener) => {
-      try {
-        listener(event);
-      } catch (e) {
-        logger.error('Listener error', { error: e }, 'AIActivityLogger');
-      }
-    });
-  }
-
-  /**
-   * Subscribe to activity events. Returns unsubscribe function.
-   */
-  subscribe(listener: ActivityListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  /**
-   * Get events visible to a specific user.
-   *
-   * Multi-tenant invariant: events without a userId or whose userId does
-   * not match are never returned. Pass the userId resolved from
-   * {@link requireUserContext} on every call.
-   */
-  getEvents(userId: string): AIActivityEvent[] {
-    return this.events.filter(e => e.userId === userId);
-  }
-
-  /**
-   * Get the most recently logged event ID for a specific user. Used by
-   * streaming routes that need to correlate a just-started event back
-   * to the client without leaking other tenants' IDs.
-   */
-  latestEventIdForUser(userId: string): string | undefined {
-    for (let i = this.events.length - 1; i >= 0; i--) {
-      if (this.events[i].userId === userId) {
-        return this.events[i].id;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Internal: get all events regardless of owner. Tests and the in-memory
-   * stats computation use this; **never** surface the result to a HTTP
-   * response.
-   */
-  _getAllEventsUnscoped(): AIActivityEvent[] {
-    return [...this.events];
-  }
-
-  /**
-   * Get statistics about events visible to a specific user.
-   *
-   * Stats are computed only over events owned by `userId` so cross-tenant
-   * counts and token totals never leak.
-   */
-  getStats(userId: string): AIActivityStats {
-    const byType: Record<AIActivityType, number> = {
-      embed: 0,
-      ask: 0,
-      session: 0,
-      tool: 0,
-      error: 0,
-      internal: 0,
-    };
-
-    let totalLatency = 0;
-    let totalTokens = 0;
-    let count = 0;
-
-    for (const event of this.events) {
-      if (event.userId !== userId) continue;
-      count++;
-      byType[event.type] = (byType[event.type] || 0) + 1;
-      totalLatency += event.latencyMs;
-      if (event.output?.tokens) {
-        totalTokens += event.output.tokens.input + event.output.tokens.output;
-      }
-    }
-
-    return {
-      total: count,
-      avgLatency: count > 0 ? Math.round(totalLatency / count) : 0,
-      totalTokens,
-      byType,
-    };
-  }
-
-  /**
-   * Update an existing event with client-side metrics.
-   * Used to add client-side performance data after streaming completes.
-   *
-   * @param userId - Owner of the event. Updates only succeed when the
-   *   event's `userId` matches; cross-user updates are silently dropped.
-   * @param eventId - The event ID to update
-   * @param clientMetrics - Client-side performance metrics
-   * @returns Whether the event was found, owned by `userId`, and updated.
-   */
-  updateWithClientMetrics(userId: string, eventId: string, clientMetrics: {
-    firstTokenMs?: number;
-    totalMs?: number;
-  }): boolean {
-    const event = this.events.find((e) => e.id === eventId);
-    if (!event || event.userId !== userId) {
-      return false;
-    }
-
-    // Add client metrics to event input
-    if (!event.input) {
-      event.input = {};
-    }
-    event.input.clientMetrics = clientMetrics;
-
-    // Update latencyMs to reflect client total (single source of truth for UI)
-    if (clientMetrics.totalMs != null) {
-      event.latencyMs = clientMetrics.totalMs;
-    }
-
-    // Notify listeners with updated event
-    this.notifyListeners({ ...event });
-    return true;
-  }
-
-  /**
-   * Clear events. When `userId` is provided, only that user's events are
-   * removed; otherwise the whole buffer is wiped (process-shutdown / tests).
-   */
-  clear(userId?: string): void {
-    if (userId) {
-      this.events = this.events.filter(e => e.userId !== userId);
-    } else {
-      this.events = [];
-    }
-    // Notify listeners of clear (empty event)
-    this.listeners.forEach((listener) => {
-      try {
-        listener({
-          id: 'clear',
-          userId: userId ?? '',
-          timestamp: new Date(),
-          type: 'internal',
-          operation: 'clear',
-          latencyMs: 0,
-          status: 'success',
-        });
-      } catch {
-        // Ignore listener errors on clear
-      }
-    });
-  }
-}
-
-/** Singleton instance of the activity logger */
-export const activityLogger = AIActivityLogger.getInstance();
+export const activityLogger: ActivityLogger = isWorker ? workerAdapter : activityLoggerClient;

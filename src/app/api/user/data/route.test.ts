@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   requireUserContextMock,
   readCredentialsFromJwtMock,
-  clearActivityMock,
+  deleteWorkerActivityMock,
   deleteWorkerJobsForUserMock,
   deleteDirMock,
   markUserDeletedMock,
@@ -15,7 +15,7 @@ const {
   return {
     requireUserContextMock: vi.fn(),
     readCredentialsFromJwtMock: vi.fn(),
-    clearActivityMock: vi.fn(),
+    deleteWorkerActivityMock: vi.fn(),
     deleteWorkerJobsForUserMock: vi.fn(),
     deleteDirMock: vi.fn(),
     markUserDeletedMock: vi.fn(),
@@ -31,14 +31,12 @@ vi.mock('@/lib/auth/context', () => ({
   UnauthorizedError: UnauthorizedErrorMock,
 }));
 
-vi.mock('@/lib/copilot/activity/logger', () => ({
-  activityLogger: {
-    clear: clearActivityMock,
-  },
-}));
-
 vi.mock('@/lib/observability/context-propagation', () => ({
   captureTracePropagationHeaders: captureTraceMock,
+}));
+
+vi.mock('../../ai-activity/worker-client', () => ({
+  deleteWorkerActivityForUser: deleteWorkerActivityMock,
 }));
 
 vi.mock('../../jobs/worker-client', () => ({
@@ -82,6 +80,7 @@ beforeEach(() => {
   requireUserContextMock.mockResolvedValue({ userId: 'user-1', login: 'alice' });
   readCredentialsFromJwtMock.mockResolvedValue({ lastSignInAt: nowSec });
   deleteWorkerJobsForUserMock.mockResolvedValue({ deleted: 2, cancelled: 0 });
+  deleteWorkerActivityMock.mockResolvedValue(undefined);
   captureTraceMock.mockReturnValue({});
 });
 
@@ -143,7 +142,7 @@ describe('DELETE /api/user/data', () => {
 
     expect(response.status).toBe(200);
     expect(deleteWorkerJobsForUserMock).toHaveBeenCalledWith('user-1', undefined);
-    expect(clearActivityMock).toHaveBeenCalledWith('user-1');
+    expect(deleteWorkerActivityMock).toHaveBeenCalledWith('user-1', undefined);
     expect(deleteDirMock).toHaveBeenCalledWith('users/user-1');
     expect(markUserDeletedMock).toHaveBeenCalledTimes(2);
     expect(body).toEqual({
@@ -157,6 +156,21 @@ describe('DELETE /api/user/data', () => {
     });
   });
 
+  it('reports partial failure when worker activity DELETE fails', async () => {
+    deleteWorkerActivityMock.mockRejectedValue(new Error('worker activity down'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.summary.activityEventsCleared).toBe(false);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.failed).toEqual(['activity']);
+    // Storage still wiped despite partial activity failure.
+    expect(deleteDirMock).toHaveBeenCalledWith('users/user-1');
+  });
+
   it('rolls back the tombstone and returns 503 when worker delete fails', async () => {
     deleteWorkerJobsForUserMock.mockRejectedValue(new Error('worker down'));
 
@@ -167,7 +181,7 @@ describe('DELETE /api/user/data', () => {
     expect(body).toEqual({ error: 'Job service temporarily unavailable. Please retry.' });
     expect(markUserDeletedMock).toHaveBeenCalledTimes(1);
     expect(clearUserTombstoneMock).toHaveBeenCalledWith('user-1');
-    expect(clearActivityMock).not.toHaveBeenCalled();
+    expect(deleteWorkerActivityMock).not.toHaveBeenCalled();
     expect(deleteDirMock).not.toHaveBeenCalled();
   });
 });

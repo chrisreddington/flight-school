@@ -1,22 +1,32 @@
 /**
- * AI Activity Stream API Route (Server-Sent Events)
- * GET /api/ai-activity/stream
+ * Web SSE proxy for AI activity events.
  *
- * Pushes activity events to clients in real-time using SSE.
- * **Per-user**: only events owned by the authenticated caller are emitted.
+ * `GET /api/ai-activity/stream?cursor=&include=`
+ *
+ * Forwards transparently to `/api/internal/ai-activity/stream` —
+ * pipes the upstream body verbatim (no parse/re-emit) so SSE
+ * semantics, ids, and heartbeats are preserved end-to-end. Honours
+ * `Last-Event-ID` for resume.
  */
-
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
-import { activityLogger } from '@/lib/copilot/activity/logger';
-import { loadShadowActivityEvents } from '@/lib/copilot/activity/shadow-store';
-import { eventsAfterCursor, mergeActivityEventStreams } from '@/lib/copilot/activity/stream-cursor';
-import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
-import type { AIActivityEvent } from '@/lib/copilot/activity/types';
-import { NextRequest } from 'next/server';
+import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
+import {
+  captureTracePropagationHeaders,
+  mergeTracePropagationHeaders,
+} from '@/lib/observability/context-propagation';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const SSE_HEADERS: HeadersInit = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache, no-transform',
+  Connection: 'keep-alive',
+  'X-Accel-Buffering': 'no',
+  'Transfer-Encoding': 'chunked',
+};
 
 export async function GET(request: NextRequest): Promise<Response> {
   let userId: string;
@@ -26,69 +36,56 @@ export async function GET(request: NextRequest): Promise<Response> {
     return handleUnauthorizedError(err);
   }
 
-  const includeFull = request.nextUrl.searchParams.get('include') === 'full';
+  const workerConfig = getCopilotWorkerConfig();
+  if (!workerConfig) {
+    return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
+  }
+
+  const forwardParams = new URLSearchParams();
+  const include = request.nextUrl.searchParams.get('include');
+  if (include) forwardParams.set('include', include);
   const cursor = request.nextUrl.searchParams.get('cursor');
-  const shadowEvents = await loadShadowActivityEvents(userId);
-  const liveEvents = activityLogger.getEvents(userId);
-  const initialEvents = eventsAfterCursor(
-    mergeActivityEventStreams(shadowEvents, liveEvents),
-    cursor,
+  if (cursor) forwardParams.set('cursor', cursor);
+
+  const qs = forwardParams.toString();
+  const upstreamUrl = `${workerConfig.baseUrl}/api/internal/ai-activity/stream${
+    qs ? `?${qs}` : ''
+  }`;
+
+  const headers: Record<string, string> = mergeTracePropagationHeaders(
+    {
+      authorization: `Bearer ${workerConfig.secret}`,
+      'x-user-id': userId,
+      accept: 'text/event-stream',
+    },
+    captureTracePropagationHeaders(),
   );
-  const encoder = new TextEncoder();
+  const lastEventId = request.headers.get('last-event-id');
+  if (lastEventId !== null) headers['last-event-id'] = lastEventId;
 
-  const stream = new ReadableStream({
-    start(controller) {
-      // Send initial events scoped to this user — through the public DTO
-      // so `fullResponse` and MCP tool args never leak.
-      const events = initialEvents.map((event) =>
-        toPublicActivityEvent(event, { includeFull }),
-      );
-      const initData = JSON.stringify({ type: 'init', events });
-      controller.enqueue(encoder.encode(`data: ${initData}\n\n`));
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method: 'GET',
+      headers,
+      signal: request.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      return new Response(null, { status: 499 });
+    }
+    return NextResponse.json({ error: 'Worker unreachable' }, { status: 502 });
+  }
 
-      // Subscribe to new events — filter by userId AND redact before
-      // forwarding. Both gates are necessary; one without the other
-      // would either leak content or another user's events.
-      const unsubscribe = activityLogger.subscribe((event: AIActivityEvent) => {
-        if (controller.desiredSize === null) return;
-        if (event.userId !== userId) return;
+  if (!upstream.ok || !upstream.body) {
+    // Forward upstream status/body so debugging shows the real failure
+    // instead of a generic 502. Preserve the JSON content-type when the
+    // upstream emitted JSON; otherwise fall back to text/plain.
+    const status = upstream.status || 502;
+    const text = await upstream.text().catch(() => '');
+    const contentType = upstream.headers.get('content-type') ?? 'text/plain; charset=utf-8';
+    return new Response(text, { status, headers: { 'content-type': contentType } });
+  }
 
-        try {
-          const publicEvent = toPublicActivityEvent(event, { includeFull });
-          const eventData = JSON.stringify({ type: 'event', event: publicEvent });
-          controller.enqueue(encoder.encode(`id: ${event.id}\n`));
-          controller.enqueue(encoder.encode(`data: ${eventData}\n\n`));
-        } catch {
-          // Stream closed, ignore
-        }
-      });
-
-      // Heartbeat to keep connection alive (every 30s)
-      const heartbeat = setInterval(() => {
-        if (controller.desiredSize === null) {
-          clearInterval(heartbeat);
-          return;
-        }
-
-        try {
-          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
-        } catch {
-          clearInterval(heartbeat);
-        }
-      }, 30000);
-
-      return () => {
-        clearInterval(heartbeat);
-        unsubscribe();
-      };
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  });
+  return new Response(upstream.body, { status: 200, headers: SSE_HEADERS });
 }

@@ -24,13 +24,13 @@
  */
 
 import { requireUserContext, UnauthorizedError, readCredentialsFromJwt } from '@/lib/auth/context';
-import { activityLogger } from '@/lib/copilot/activity/logger';
 import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { deleteDir } from '@/lib/storage/utils';
 import { markUserDeleted, clearUserTombstone } from '@/lib/storage/tombstone';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { deleteWorkerActivityForUser } from '../../ai-activity/worker-client';
 import { deleteWorkerJobsForUser } from '../../jobs/worker-client';
 
 const log = logger.withTag('UserDataAPI');
@@ -49,6 +49,8 @@ interface DeleteSummary {
   jobsDeleted: number;
   activityEventsCleared: boolean;
   storageDirDeleted: boolean;
+  partial?: boolean;
+  failed?: string[];
 }
 
 interface DeleteRequestBody {
@@ -165,8 +167,20 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Clear this user's slice of the activity buffer.
-    activityLogger.clear(userId);
+    // Clear this user's slice of the activity buffer via the worker.
+    // The web-side `activityLogger.clear` is a no-op in the new model;
+    // the worker DELETE is authoritative. Run it in parallel with the
+    // jobs cleanup-implied tombstone but await it BEFORE wiping the
+    // user directory so late activity writes don't recreate the dir.
+    let activityEventsCleared = true;
+    const failed: string[] = [];
+    try {
+      await deleteWorkerActivityForUser(userId, traceCtx);
+    } catch (err) {
+      log.error(`[user ${userId}] Worker activity deletion failed`, { err });
+      activityEventsCleared = false;
+      failed.push('activity');
+    }
 
     // Wipe the entire per-user storage directory (threads, evaluations,
     // suggestions, focus, etc.). `deleteDir` is recursive and a no-op
@@ -182,8 +196,9 @@ export async function DELETE(request: NextRequest) {
     const summary: DeleteSummary = {
       jobsCancelled,
       jobsDeleted,
-      activityEventsCleared: true,
+      activityEventsCleared,
       storageDirDeleted: true,
+      ...(failed.length > 0 ? { partial: true, failed } : {}),
     };
 
     log.info(`[user ${userId}] data deletion complete`, summary);

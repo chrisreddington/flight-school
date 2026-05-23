@@ -15,7 +15,7 @@ vi.mock('./sessions', async () => {
 vi.mock('./activity/logger', () => ({
   activityLogger: {
     logEvent: vi.fn(),
-    startOperation: vi.fn(() => vi.fn()),
+    startOperation: vi.fn(async () => ({ eventId: 'evt-1', complete: vi.fn() })),
   },
 }));
 

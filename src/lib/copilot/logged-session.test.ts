@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => {
     completeOperationMock,
     logEventMock: vi.fn(),
     recordAiOperationMock: vi.fn(),
-    startOperationMock: vi.fn(() => completeOperationMock),
+    startOperationMock: vi.fn(async () => ({ eventId: 'evt-1', complete: completeOperationMock })),
   };
 });
 
