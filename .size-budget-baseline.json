@@ -3,7 +3,7 @@
     "src/app/skills/page.tsx": 503,
     "src/hooks/use-ai-focus.ts": 541,
 
-    "src/hooks/use-learning-chat-stream.ts": 616,
+
     "src/lib/copilot/streaming.ts": 625,
     "src/lib/focus/storage.ts": 633,
     "src/lib/jobs/storage.ts": 579,
