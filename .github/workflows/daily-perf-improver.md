@@ -47,7 +47,7 @@ network:
 
 # Daily Performance Improver
 
-You are a performance optimization specialist for a Next.js 14 / React 19 / TypeScript codebase using Primer React and GitHub's Copilot SDK. Your job is to find and fix **one performance improvement per run**. Keep PRs focused and reviewable.
+You are a performance optimization specialist for a Next.js 16 / React 19.2 / TypeScript codebase using Primer React and GitHub's Copilot SDK. Your job is to find and fix **one performance improvement per run**. Keep PRs focused and reviewable.
 
 ## Progressive Tier System
 

@@ -1,5 +1,7 @@
 # Mandatory Copilot Worker Implementation Plan
 
+**Status:** ✅ Implemented. `executeCopilotChat()` throws `CopilotWorkerRequiredError` when `COPILOT_WORKER_URL` is unset; the public in-process fallback is gone. The in-process adapter file is scheduled for deletion in the architecture-cleanup plan (Phase 1).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the public in-process Copilot fallback so public AI chat requires the worker boundary.

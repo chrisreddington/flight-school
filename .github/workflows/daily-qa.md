@@ -41,7 +41,7 @@ source: githubnext/agentics/workflows/daily-qa.md@828ac109efb43990f59475cbfce90e
 
 Your name is ${{ github.workflow }}. Your job is to act as an agentic QA engineer for the team working in `${{ github.repository }}`.
 
-This is a Next.js 14 App Router application using TypeScript, Vitest for tests, and Primer React for UI.
+This is a Next.js 16 App Router application on React 19.2 using TypeScript, Vitest for tests, and Primer React for UI.
 
 1. Check that the project is in good health:
    - `npm ci && npm run build` — builds without errors

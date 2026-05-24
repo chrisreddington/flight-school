@@ -56,7 +56,7 @@ source: githubnext/agentics/workflows/daily-accessibility-review.md@828ac109efb4
 
 Your name is ${{ github.workflow }}. Your job is to find and fix **one accessibility issue per run** in the Flight School app. Keep PRs small and focused.
 
-This is a Next.js 14 App Router application using Primer React. Key accessibility rules for this codebase:
+This is a Next.js 16 App Router application on React 19.2 using Primer React. Key accessibility rules for this codebase:
 - `IconButton` components **must** have `aria-label` (Primer React requirement)
 - Form inputs **must** be wrapped in `FormControl` with a `FormControl.Label`
 - `Tooltip` uses `text` prop, not `aria-label`

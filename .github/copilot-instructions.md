@@ -11,7 +11,7 @@
 
 ## Architecture Overview
 
-Next.js 14 App Router application with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes to protect credentials.
+Next.js 16 App Router application on React 19.2 with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes (or Server Components / Server Actions) to protect credentials. Public Copilot chat execution is routed to a mandatory private worker service.
 
 **Data Flow**: Dashboard → `/api/profile` (Octokit direct) → `/api/focus` (Copilot SDK creative generation) → UI
 

@@ -1,5 +1,7 @@
 # Local Per-user Copilot Runtime Implementation Plan
 
+**Status:** ✅ Implemented. The per-user runtime pool lives in `src/lib/copilot/runtime/` and `/api/internal/copilot/execute` uses it. Retained for historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make local worker mode execute Copilot chat through one SDK-spawned CLI process and `COPILOT_HOME` per GitHub user.
