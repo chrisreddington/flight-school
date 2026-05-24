@@ -41,6 +41,7 @@ import { createLearningChatSendTrigger } from '@/lib/observability/job-trigger-b
 import { operationsManager } from '@/lib/operations';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
+import type { ChatResponseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
 import { useLearningChatStream } from './use-learning-chat-stream';
@@ -49,13 +50,39 @@ import { useThreads, type UseThreadsReturn } from './use-threads';
 const log = logger.withTag('useLearningChat');
 
 // ============================================================================
+// Pure helpers (module scope to keep useCallback bodies short)
+// ============================================================================
+
+/** Title used to seed an auto-created thread. Caps at 30 chars + ellipsis. */
+function deriveAutoTitle(message: string): string {
+  return message.length > 30 ? `${message.slice(0, 30)}...` : message;
+}
+
+/**
+ * Storage is the source of truth for `isStreaming`; React state can lag
+ * by up to one poll interval, so we always re-read from storage before
+ * dispatching a new chat job.
+ */
+async function isStorageStreaming(threadId: string): Promise<boolean> {
+  const fresh = await threadStore.getById(threadId);
+  return fresh?.isStreaming === true;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
 /** Options for sending a learning chat message */
 interface SendLearningMessageOptions {
-  /** Enable GitHub MCP tools for repo exploration */
-  useGitHubTools?: boolean;
+  /** Base chat profile to use (defaults to `'learning'`). */
+  profile?: ChatResponseProfileId;
+  /**
+   * Capability selection for this turn. `'auto'` lets the server elevate
+   * based on prompt heuristics; an explicit array opts into specific
+   * MCP/native capabilities. Omitting the field uses the profile's
+   * defaults.
+   */
+  capabilities?: CapabilitiesArg;
   /** Override repos (defaults to active thread's repos) */
   repos?: RepoReference[];
   /** Explicit thread ID to send to (avoids race condition with async state updates) */
@@ -156,168 +183,117 @@ export function useLearningChat(): UseLearningChatReturn {
   });
 
   /**
-   * Send a message and save to the active thread.
-   *
-   * Handles:
-   * 1. Adding user message to thread
-   * 2. Streaming the response
-   * 3. Saving assistant message to thread on completion
-   *
-   * Now supports multiple concurrent streams - each thread can stream independently.
-   *
-   * @param content - Message content
-   * @param options - Send options
+   * Resolve which thread a new message targets: explicit id wins, then the
+   * active thread, then auto-create one with a title derived from the
+   * message. Auto-rename placeholder threads on first send so the sidebar
+   * always shows something meaningful.
    */
+  const resolveTargetThread = useCallback(
+    async (
+      message: string,
+      explicitThreadId: string | undefined,
+      repos: RepoReference[] | undefined,
+    ): Promise<Thread> => {
+      const located = explicitThreadId
+        ? await threadStore.getById(explicitThreadId)
+        : activeThread;
+      if (located) {
+        const isPlaceholder = located.title === 'New Thread' && located.messages.length === 0;
+        if (!isPlaceholder) return located;
+        const renamed = await threadStore.rename(located.id, deriveAutoTitle(message));
+        if (!renamed) return located;
+        await refreshThreads();
+        return renamed;
+      }
+      return createThread({
+        title: deriveAutoTitle(message),
+        context: repos && repos.length > 0 ? { repos } : undefined,
+      }, true);
+    },
+    [activeThread, createThread, refreshThreads],
+  );
+
+  /**
+   * POST to `/api/jobs` to start the worker chat-response job, then seed
+   * the client-side stream store and operations snapshot in the order the
+   * SSE-attach effect expects.
+   */
+  const startChatJob = useCallback(
+    async (
+      targetThreadId: string,
+      message: string,
+      effectiveRepos: RepoReference[],
+      profile: ChatResponseProfileId,
+      capabilities: CapabilitiesArg | undefined,
+    ): Promise<void> => {
+      const assistantMessageId = crypto.randomUUID();
+      const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
+        type: 'chat-response',
+        targetId: targetThreadId,
+        input: {
+          threadId: targetThreadId,
+          prompt: message,
+          assistantMessageId,
+          profile,
+          ...(capabilities !== undefined ? { capabilities } : {}),
+          repos: effectiveRepos.map((r) => r.fullName),
+        },
+      }, {
+        clientTrigger: createLearningChatSendTrigger(targetThreadId, assistantMessageId),
+      });
+
+      // Seed the chat-stream store BEFORE registering with operationsManager
+      // so the SSE-attach effect finds a pre-existing record.
+      registerStream(jobId, targetThreadId, assistantMessageId);
+      operationsManager.registerExistingJob(
+        jobId,
+        'chat-response',
+        targetThreadId,
+        assistantMessageId,
+      );
+      await refreshThreads();
+    },
+    [refreshThreads, registerStream],
+  );
+
   const sendMessage = useCallback(
     async (content: string, options: SendLearningMessageOptions = {}) => {
       const message = content.trim();
       if (!message) return;
 
-      const { useGitHubTools = false, repos, threadId: explicitThreadId } = options;
-      log.debug('sendMessage called:', { explicitThreadId, hasActiveThread: !!activeThread });
+      const { profile = 'learning', capabilities, repos, threadId: explicitThreadId } = options;
+      const thread = await resolveTargetThread(message, explicitThreadId, repos);
 
-      /**
-       * Locate the thread the message belongs to:
-       *  1. explicit id wins (bypasses React-state lag after just-created threads),
-       *  2. otherwise the active thread,
-       *  3. otherwise auto-create one titled from the first ~30 chars.
-       */
-      const resolveTargetThread = async (): Promise<Thread> => {
-        if (explicitThreadId) {
-          const byId = await threadStore.getById(explicitThreadId);
-          if (byId) {
-            log.debug('Looked up thread by explicit ID:', { title: byId.title });
-            return byId;
-          }
-        }
-        if (activeThread) {
-          log.debug('Using activeThread:', { title: activeThread.title });
-          return activeThread;
-        }
-        const title = message.length > 30 ? `${message.slice(0, 30)}...` : message;
-        log.debug('Auto-creating thread with title:', title);
-        return createThread({
-          title,
-          context: repos && repos.length > 0 ? { repos } : undefined,
-        }, true);
-      };
-
-      /**
-       * Auto-rename the placeholder "New Thread" using the first message so
-       * the sidebar shows something meaningful. Persists via threadStore and
-       * refreshes React state. Returns the (possibly renamed) thread.
-       */
-      const ensureMeaningfulTitle = async (thread: Thread): Promise<Thread> => {
-        const isPlaceholderTitle = thread.title === 'New Thread' && thread.messages.length === 0;
-        if (!isPlaceholderTitle) return thread;
-
-        const autoTitle = message.length > 30 ? `${message.slice(0, 30)}...` : message;
-        log.debug('Auto-renaming new thread:', { from: thread.title, to: autoTitle });
-        const renamed = await threadStore.rename(thread.id, autoTitle);
-        if (!renamed) return thread;
-        await refreshThreads();
-        return renamed;
-      };
-
-      /**
-       * Storage is the source of truth for `isStreaming`; React state can lag
-       * by up to one poll interval, so re-read from storage to avoid double-
-       * dispatching a chat job to a thread that already has one in flight.
-       */
-      const isAlreadyStreaming = async (threadId: string): Promise<boolean> => {
-        const fresh = await threadStore.getById(threadId);
-        return fresh?.isStreaming === true;
-      };
-
-      const appendUserMessage = async (thread: Thread): Promise<Message> => {
-        const userMessage: Message = {
-          id: generateMessageId(),
-          role: 'user',
-          content: message,
-          timestamp: now(),
-        };
-        await updateActiveThread({ messages: [...thread.messages, userMessage] }, thread.id);
-        return userMessage;
-      };
-
-      /**
-       * POST to `/api/jobs` to start the worker chat-response job, then
-       * seed the client-side stream store and operations snapshot in the
-       * order the SSE-attach effect expects.
-       */
-      const startChatJob = async (
-        targetThreadId: string,
-        effectiveRepos: RepoReference[],
-      ): Promise<void> => {
-        log.debug('Starting background job for chat response', { threadId: targetThreadId });
-        // Stable id for streaming delta reconciliation and chat job idempotency.
-        const assistantMessageId = crypto.randomUUID();
-        const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
-          type: 'chat-response',
-          targetId: targetThreadId,
-          input: {
-            threadId: targetThreadId,
-            prompt: message,
-            assistantMessageId,
-            learningMode: true,
-            useGitHubTools,
-            repos: effectiveRepos.map((r) => r.fullName),
-          },
-        }, {
-          clientTrigger: createLearningChatSendTrigger(targetThreadId, assistantMessageId),
-        });
-        log.debug(`Started job ${jobId} for thread ${targetThreadId}`);
-
-        // Seed the chat-stream store BEFORE registering with operationsManager
-        // so the SSE-attach effect finds a pre-existing record and never has
-        // to fall back to the defensive synthetic-record path.
-        registerStream(jobId, targetThreadId, assistantMessageId);
-
-        // Chat creation uses raw apiPost (not startBackgroundJob) because chat
-        // streams over SSE and does not want the per-job status poll attached.
-        // We register the job into the operations snapshot here so the SSE
-        // subscription hook can find the jobId for this thread.
-        operationsManager.registerExistingJob(
-          jobId,
-          'chat-response',
-          targetThreadId,
-          assistantMessageId,
-        );
-
-        await refreshThreads();
-      };
-
-      let thread = await resolveTargetThread();
-      thread = await ensureMeaningfulTitle(thread);
-      log.debug('Using thread:', { id: thread.id, title: thread.title });
-
-      const targetThreadId = thread.id;
-      if (await isAlreadyStreaming(targetThreadId)) {
-        log.warn(`Thread ${targetThreadId} is already streaming`);
+      if (await isStorageStreaming(thread.id)) {
+        log.warn(`Thread ${thread.id} is already streaming`);
         return;
       }
 
       const effectiveRepos = repos ?? thread.context?.repos ?? [];
-      const userMessage = await appendUserMessage(thread);
+      const userMessage: Message = {
+        id: generateMessageId(),
+        role: 'user',
+        content: message,
+        timestamp: now(),
+      };
+      await updateActiveThread({ messages: [...thread.messages, userMessage] }, thread.id);
 
       // Mark pending IMMEDIATELY so polling fires before storage flips isStreaming.
-      markStreamPending(targetThreadId, userMessage.id);
+      markStreamPending(thread.id, userMessage.id);
 
       try {
-        await startChatJob(targetThreadId, effectiveRepos);
+        await startChatJob(thread.id, message, effectiveRepos, profile, capabilities);
       } catch (err) {
         log.error('Failed to start chat response job:', err);
-        clearPendingStream(targetThreadId);
+        clearPendingStream(thread.id);
       }
     },
     [
-      activeThread,
       clearPendingStream,
-      createThread,
       markStreamPending,
-      registerStream,
+      resolveTargetThread,
+      startChatJob,
       updateActiveThread,
-      refreshThreads,
     ]
   );
 

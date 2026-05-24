@@ -1,5 +1,7 @@
 # Worker Job Execution Split Implementation Plan
 
+**Status:** ✅ Implemented. Job executors and the per-user session registry live under `src/worker/`; web code under `src/app/` only orchestrates submission, listing, and cancellation. Retained for historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move background job execution and cancellation onto the Copilot worker process and make that ownership obvious in the code layout.

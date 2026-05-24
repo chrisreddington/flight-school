@@ -82,7 +82,7 @@ vi.mock('@/lib/logger', () => ({
 vi.mock('./sessions', () => ({
   CHAT_MODEL: 'claude-haiku-4.5',
   getConversationSession: mocks.getConversationSession,
-  getCopilotGithubMcpTools: vi.fn(() => []),
+  getConversationCapabilities: vi.fn(() => undefined),
 }));
 
 vi.mock('./activity/logger', () => ({
@@ -118,20 +118,18 @@ vi.mock('@opentelemetry/api', () => ({
   },
 }));
 
-import { createStreamingChatSession } from './streaming';
+import { createChatStreamingSession } from './streaming';
 
-describe('createStreamingChatSession telemetry', () => {
+describe('createChatStreamingSession telemetry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('records stream metrics and emits lifecycle span events', async () => {
-    const streaming = await createStreamingChatSession(
+    const streaming = await createChatStreamingSession(
       { userId: 'user-1', gitHubToken: 'ghu_token' },
       'hello',
-      true,
-      'Chat',
-      'conv-1',
+      { profile: 'chat', capabilities: ['github'], operationName: 'Chat', conversationId: 'conv-1' },
     );
 
     const events = [];
@@ -167,5 +165,29 @@ describe('createStreamingChatSession telemetry', () => {
       }),
     );
     expect(mocks.spanEnd).toHaveBeenCalled();
+  });
+
+  it('rejects a mismatched pre-resolved profile as a caller bug', async () => {
+    await expect(
+      createChatStreamingSession(
+        { userId: 'user-1', gitHubToken: 'ghu_token' },
+        'hello',
+        {
+          profile: 'chat',
+          capabilities: ['github'],
+          operationName: 'Chat',
+          conversationId: 'conv-1',
+          resolved: {
+            profileId: 'learning',
+            model: 'claude-haiku-4.5',
+            systemMessage: '',
+            capabilities: [],
+            capabilityFingerprint: 'caps=none;sys=0',
+            wasAutoElevated: false,
+            requestedCapabilities: undefined,
+          },
+        },
+      ),
+    ).rejects.toThrow('does not match factory profile');
   });
 });

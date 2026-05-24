@@ -1,297 +1,48 @@
 /**
- * Habits Management Page
+ * `/habits` — Server-rendered habits management page.
  *
- * Dedicated page for viewing and managing all habits.
- * Shows active habits, completed habits, and overall statistics.
+ * Reads the user's habit collection on the server and partitions it into
+ * active/completed/abandoned buckets so the client island can paint
+ * immediately. {@link HabitsClient} owns every interaction.
  */
 
-'use client';
+import { redirect } from 'next/navigation';
 
 import { AppHeader } from '@/components/AppHeader';
-import { HabitStatsSection } from '@/components/Habits/habit-stats-section';
-import { HabitListSection } from '@/components/Habits/habit-list-section';
-import { ProfileNav } from '@/components/ProfileNav';
-import { useBreadcrumb } from '@/contexts/breadcrumb-context';
-import { habitStore } from '@/lib/habits';
-import {
-  checkInHabit,
-  skipHabitDay,
-  undoCheckIn,
-} from '@/lib/habits/state-machine';
+import { readUserHabits } from '@/lib/habits/server';
 import type { HabitWithHistory } from '@/lib/habits/types';
-import { logger } from '@/lib/logger';
-import {
-  LightBulbIcon,
-} from '@primer/octicons-react';
-import {
-  Banner,
-  Heading,
-  Spinner,
-  Stack,
-  Text,
-  useConfirm,
-} from '@primer/react';
-import { useCallback, useEffect, useState } from 'react';
-import styles from './habits.module.css';
+import { requireGuardedRscContext } from '@/lib/security/guard';
 import layoutStyles from '@/styles/two-column-layout.module.css';
-import dynamic from 'next/dynamic';
 
-// Lazy-load dialog components — they are only needed on first user interaction,
-// so we defer their JS chunk until the user opens a dialog.
-const HabitCreationDialog = dynamic(
-  () => import('@/components/Habits/HabitCreationDialog').then(m => ({ default: m.HabitCreationDialog })),
-  { ssr: false }
-);
-const HabitEditDialog = dynamic(
-  () => import('@/components/Habits/HabitEditDialog').then(m => ({ default: m.HabitEditDialog })),
-  { ssr: false }
-);
+import { HabitsClient } from './_components/HabitsClient';
 
-export default function HabitsPage() {
-  useBreadcrumb('/habits', 'Habits', '/habits');
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeHabits, setActiveHabits] = useState<HabitWithHistory[]>([]);
-  const [completedHabits, setCompletedHabits] = useState<HabitWithHistory[]>([]);
-  const [abandonedHabits, setAbandonedHabits] = useState<HabitWithHistory[]>([]);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingHabit, setEditingHabit] = useState<HabitWithHistory | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const confirm = useConfirm();
-
-  const loadHabits = useCallback(async () => {
-    try {
-      setLoadError(null);
-      const [active, completed, abandoned] = await Promise.all([
-        habitStore.getActive(),
-        habitStore.getCompleted(),
-        habitStore.getAbandoned(),
-      ]);
-      setActiveHabits(active);
-      setCompletedHabits(completed);
-      setAbandonedHabits(abandoned);
-    } catch (error) {
-      logger.error('Failed to load habits', { error }, 'HabitsPage');
-      setLoadError('Failed to load habits. Please try refreshing the page.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHabits();
-  }, [loadHabits]);
-
-  const handleCheckIn = useCallback(
-    async (habit: HabitWithHistory, value: number | boolean) => {
-      setActionError(null);
-      try {
-        const updated = checkInHabit(habit, value);
-        await habitStore.update(updated);
-        await loadHabits();
-      } catch (error) {
-        logger.error('Failed to check in', { error, habitId: habit.id }, 'HabitsPage');
-        setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
-      }
-    },
-    [loadHabits]
-  );
-
-  const handleSkip = useCallback(
-    async (habit: HabitWithHistory) => {
-      setActionError(null);
-      try {
-        const updated = skipHabitDay(habit);
-        await habitStore.update(updated);
-        await loadHabits();
-      } catch (error) {
-        logger.error('Failed to skip', { error, habitId: habit.id }, 'HabitsPage');
-        setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
-      }
-    },
-    [loadHabits]
-  );
-
-  const handleUndo = useCallback(
-    async (habit: HabitWithHistory) => {
-      setActionError(null);
-      try {
-        const updated = undoCheckIn(habit);
-        await habitStore.update(updated);
-        await loadHabits();
-      } catch (error) {
-        logger.error('Failed to undo check-in', { error, habitId: habit.id }, 'HabitsPage');
-        setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
-      }
-    },
-    [loadHabits]
-  );
-
-  const handleDelete = useCallback(
-    async (habit: HabitWithHistory) => {
-      setActionError(null);
-      const confirmed = await confirm({
-        title: 'Delete Habit',
-        content: `Are you sure you want to delete "${habit.title}"? This action cannot be undone.`,
-        confirmButtonContent: 'Delete',
-        confirmButtonType: 'danger',
-      });
-
-      if (confirmed) {
-        try {
-          await habitStore.delete(habit.id);
-          await loadHabits();
-          logger.info('Habit deleted', { habitId: habit.id }, 'HabitsPage');
-        } catch (error) {
-          logger.error('Failed to delete habit', { error, habitId: habit.id }, 'HabitsPage');
-          setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
-        }
-      }
-    },
-    [confirm, loadHabits]
-  );
-
-  const handleStop = useCallback(
-    async (habit: HabitWithHistory) => {
-      setActionError(null);
-      const confirmed = await confirm({
-        title: 'Stop Habit',
-        content: `Are you sure you want to stop "${habit.title}"? You can always view it in the Stopped Habits section.`,
-        confirmButtonContent: 'Stop Habit',
-        confirmButtonType: 'danger',
-      });
-
-      if (confirmed) {
-        try {
-          const updated: HabitWithHistory = { ...habit, state: 'abandoned' };
-          await habitStore.update(updated);
-          await loadHabits();
-          logger.info('Habit stopped', { habitId: habit.id }, 'HabitsPage');
-        } catch (error) {
-          logger.error('Failed to stop habit', { error, habitId: habit.id }, 'HabitsPage');
-          setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
-        }
-      }
-    },
-    [confirm, loadHabits]
-  );
-
-  // Calculate statistics
-  const totalCheckIns = [...activeHabits, ...completedHabits].reduce(
-    (sum, h) => sum + h.checkIns.length,
-    0
-  );
-  const totalCompletions = completedHabits.length;
-  const currentStreaks = activeHabits.filter((h) => h.currentDay > 0).length;
-
-  if (isLoading) {
-    return (
-      <div className={layoutStyles.root}>
-        <AppHeader />
-        <main className={layoutStyles.main}>
-          <aside className={layoutStyles.sidebar}>
-            <ProfileNav />
-            <div className={layoutStyles.sidebarCard}>
-              <Spinner size="medium" />
-            </div>
-          </aside>
-          <div className={styles.content}>
-            <Stack align="center" justify="center" style={{ flex: 1, padding: '48px' }}>
-              <Spinner size="large" />
-              <Text>Loading habits...</Text>
-            </Stack>
-          </div>
-        </main>
-      </div>
-    );
+function partitionByState(habits: HabitWithHistory[]) {
+  const active: HabitWithHistory[] = [];
+  const completed: HabitWithHistory[] = [];
+  const abandoned: HabitWithHistory[] = [];
+  for (const habit of habits) {
+    if (habit.state === 'completed') completed.push(habit);
+    else if (habit.state === 'abandoned') abandoned.push(habit);
+    else active.push(habit);
   }
+  return { active, completed, abandoned };
+}
+
+export default async function HabitsPage() {
+  const ctx = await requireGuardedRscContext('page.view');
+  if (!ctx) redirect('/sign-in?callbackUrl=/habits');
+
+  const collection = await readUserHabits();
+  const { active, completed, abandoned } = partitionByState(collection.habits);
 
   return (
     <div className={layoutStyles.root}>
       <AppHeader />
-
-      <main className={layoutStyles.main}>
-        {/* Left Sidebar */}
-        <aside className={layoutStyles.sidebar}>
-          <ProfileNav />
-
-          <HabitStatsSection
-            activeHabitsCount={activeHabits.length}
-            totalCheckIns={totalCheckIns}
-            currentStreaks={currentStreaks}
-            totalCompletions={totalCompletions}
-            onNewHabitClick={() => setIsCreateDialogOpen(true)}
-          />
-
-          <div className={`${layoutStyles.sidebarCard} ${styles.tipCard}`}>
-            <p className={styles.tipTitle}>
-              <LightBulbIcon size={12} /> Pro Tip
-            </p>
-            <p className={styles.tipText}>
-              Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
-            </p>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <div className={styles.content}>
-          {/* Header */}
-          <div className={styles.header}>
-            <Heading as="h1">My Habits</Heading>
-            <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: '4px' }}>
-              Track your progress and build lasting habits
-            </Text>
-          </div>
-
-          {loadError && (
-            <Banner
-              title="Failed to load habits"
-              description={loadError}
-              variant="critical"
-            />
-          )}
-          {actionError && (
-            <Banner
-              title="Action failed"
-              description={actionError}
-              variant="critical"
-              onDismiss={() => setActionError(null)}
-            />
-          )}
-
-          <HabitListSection
-            activeHabits={activeHabits}
-            completedHabits={completedHabits}
-            abandonedHabits={abandonedHabits}
-            onCheckIn={handleCheckIn}
-            onSkip={handleSkip}
-            onUndo={handleUndo}
-            onEdit={setEditingHabit}
-            onStop={handleStop}
-            onDelete={handleDelete}
-            onNewHabitClick={() => setIsCreateDialogOpen(true)}
-          />
-        </div>
-      </main>
-
-      {/* Dialogs — rendered conditionally so their chunks load on first use */}
-      {isCreateDialogOpen && (
-        <HabitCreationDialog
-          isOpen={isCreateDialogOpen}
-          onClose={() => setIsCreateDialogOpen(false)}
-          onCreated={loadHabits}
-        />
-      )}
-
-      {editingHabit && (
-        <HabitEditDialog
-          habit={editingHabit}
-          isOpen={true}
-          onClose={() => setEditingHabit(null)}
-          onUpdated={loadHabits}
-        />
-      )}
+      <HabitsClient
+        initialActive={active}
+        initialCompleted={completed}
+        initialAbandoned={abandoned}
+      />
     </div>
   );
 }

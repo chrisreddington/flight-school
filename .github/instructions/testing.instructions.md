@@ -7,6 +7,8 @@ description: Testing best practices for Vitest and Playwright tests
 
 > **📌 SINGLE SOURCE OF TRUTH**: This file defines ALL testing standards for this project. Agents and other instruction files MUST reference this file rather than duplicating testing rules.
 
+> **🪤 Companion skill**: [`tests-that-respect-boundaries`](../skills/tests-that-respect-boundaries/SKILL.md) is the day-to-day practical contract — observable assertions only, system-seam mocks only, table-driven, ≤ 400 LOC per file. Two CI scripts (`check-file-sizes.mjs`, `check-test-boundaries.mjs`) enforce it. Read that skill before writing or modifying any test.
+
 Guidelines for writing clear, maintainable tests with Vitest (unit) and Playwright (E2E).
 
 ## Testing Philosophy: The Test Pyramid

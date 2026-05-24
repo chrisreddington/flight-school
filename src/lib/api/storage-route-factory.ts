@@ -19,10 +19,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { readStorage, writeStorage, deleteStorage, ensureDir } from '@/lib/storage/utils';
-import { userScopedFilename } from '@/lib/storage/user-scope';
+import {
+  resolveUserScopedPath,
+  type SchemaGuard,
+} from '@/lib/storage/user-storage';
+import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
 import { apiSuccess, validationErrorResponse } from './response-utils';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { authErrorResponse } from './auth-errors';
 import type { logger } from '@/lib/logger';
 
 /**
@@ -43,7 +46,7 @@ interface StorageRouteConfig<T> {
   /** Logger instance for route operations */
   logger: LoggerInstance;
   /** Type guard function to validate schema structure */
-  validateSchema: (data: unknown) => data is T;
+  validateSchema: SchemaGuard<T>;
   /**
    * Optional async hook invoked on GET after the storage file is read,
    * allowing the route to mutate the response body before it's
@@ -81,35 +84,25 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
   /**
    * Resolves the per-user storage path or returns an HTTP response describing
    * why the request can't proceed (401 for missing auth, 400 for an
-   * unrepresentable userId). Also ensures the per-user directory exists with
-   * a restrictive mode so the first write doesn't fail with ENOENT.
+   * unrepresentable userId). Delegates the heavy lifting to
+   * {@link resolveUserScopedPath} and translates its typed errors into HTTP
+   * responses appropriate for an API route.
    */
   async function resolveScopedPath(): Promise<
     { ok: true; path: string; userId: string } | { ok: false; response: NextResponse }
   > {
-    let userId: string;
     try {
-      ({ userId } = await requireUserContext());
+      const resolved = await resolveUserScopedPath(filename);
+      return { ok: true, ...resolved };
     } catch (error) {
-      if (error instanceof UnauthorizedError) {
-        return {
-          ok: false,
-          response: NextResponse.json({ error: 'Authentication required' }, { status: 401 }),
-        };
+      const authResponse = authErrorResponse(error);
+      if (authResponse) return { ok: false, response: authResponse };
+      if (error instanceof Error && /unsafe userId/i.test(error.message)) {
+        logger.warn('Rejected unsafe userId', { error });
+        return { ok: false, response: validationErrorResponse('Invalid user identifier') };
       }
       throw error;
     }
-
-    let scopedPath: string;
-    try {
-      scopedPath = userScopedFilename(userId, filename);
-    } catch (error) {
-      logger.warn('Rejected unsafe userId', { error });
-      return { ok: false, response: validationErrorResponse('Invalid user identifier') };
-    }
-
-    await ensureDir(`users/${userId}`, { mode: 0o700 });
-    return { ok: true, path: scopedPath, userId };
   }
 
   /**

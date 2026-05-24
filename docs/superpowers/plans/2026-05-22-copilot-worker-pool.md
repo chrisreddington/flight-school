@@ -1,5 +1,7 @@
 # Copilot Worker Pool Implementation Plan
 
+**Status:** ✅ Implemented (superseded by the mandatory-worker + per-user-runtime plans). Retained for historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move Copilot execution behind a stable internal boundary so the web layer can later delegate to a worker service with per-user runtime isolation.

@@ -10,11 +10,8 @@
  * The worker is the only place that owns the event store.
  */
 import { logger } from '@/lib/logger';
-import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import {
-  captureTracePropagationHeaders,
-  mergeTracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
+import { workerFetchJson } from '@/lib/copilot/execution/worker-fetch';
+import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 
 import type {
   AIActivityInput,
@@ -25,7 +22,7 @@ import type {
 
 const log = logger.withTag('ActivityLoggerClient');
 
-export type CompleteOperation = (
+type CompleteOperation = (
   output?: AIActivityOutput,
   error?: string,
   serverMetrics?: {
@@ -33,30 +30,6 @@ export type CompleteOperation = (
     totalMs?: number;
   },
 ) => void;
-
-function requireConfig() {
-  const config = getCopilotWorkerConfig();
-  if (!config) {
-    throw new Error('Copilot worker is required for activity logging');
-  }
-  return config;
-}
-
-function buildHeaders(userId: string) {
-  const config = requireConfig();
-  const trace = captureTracePropagationHeaders();
-  return {
-    config,
-    headers: mergeTracePropagationHeaders(
-      {
-        authorization: `Bearer ${config.secret}`,
-        'content-type': 'application/json',
-        'x-user-id': userId,
-      },
-      trace,
-    ),
-  };
-}
 
 interface PostEventBody {
   type: AIActivityType;
@@ -67,22 +40,18 @@ interface PostEventBody {
   error?: string;
 }
 
+// Activity logging must never block AI work — swallow transport errors and
+// return null so the caller can fall back to a local-only completion path.
 async function postEvent(userId: string, body: PostEventBody): Promise<string | null> {
   try {
-    const { config, headers } = buildHeaders(userId);
-    const response = await fetch(`${config.baseUrl}/api/internal/ai-activity/event`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      log.warn('Activity POST failed', { status: response.status });
-      return null;
-    }
-    const parsedResponse = (await response.json()) as { id?: string };
-    return typeof parsedResponse.id === 'string' ? parsedResponse.id : null;
+    const result = await workerFetchJson<{ id?: string }>(
+      '/api/internal/ai-activity/event',
+      { method: 'POST', headers: { 'x-user-id': userId }, body: JSON.stringify(body) },
+      { errorContext: 'activity post', traceContext: captureTracePropagationHeaders() },
+    );
+    return typeof result?.id === 'string' ? result.id : null;
   } catch (err) {
-    log.warn('Activity POST threw', { err });
+    log.warn('Activity POST failed', { err });
     return null;
   }
 }
@@ -102,23 +71,18 @@ async function patchEvent(
   body: PatchEventBody,
 ): Promise<boolean> {
   try {
-    const { config, headers } = buildHeaders(userId);
-    const response = await fetch(
-      `${config.baseUrl}/api/internal/ai-activity/event/${encodeURIComponent(eventId)}`,
+    const result = await workerFetchJson<unknown>(
+      `/api/internal/ai-activity/event/${encodeURIComponent(eventId)}`,
+      { method: 'PATCH', headers: { 'x-user-id': userId }, body: JSON.stringify(body) },
       {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(body),
+        errorContext: 'activity patch',
+        traceContext: captureTracePropagationHeaders(),
+        allowNotFound: true,
       },
     );
-    if (response.status === 404) return false;
-    if (!response.ok) {
-      log.warn('Activity PATCH failed', { status: response.status });
-      return false;
-    }
-    return true;
+    return result !== null;
   } catch (err) {
-    log.warn('Activity PATCH threw', { err });
+    log.warn('Activity PATCH failed', { err });
     return false;
   }
 }

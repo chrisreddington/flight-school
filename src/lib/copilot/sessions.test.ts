@@ -27,6 +27,15 @@ vi.mock('./mcp', () => ({
 
 import { getConversationSession, createSessionWithMetrics } from './sessions';
 
+const chatOptions = (userId: string, gitHubToken: string) => ({
+  userId,
+  gitHubToken,
+  profile: 'chat' as const,
+  capabilities: [] as const,
+  systemMessage: 'system',
+  model: 'claude-haiku-4.5',
+});
+
 describe('getConversationSession multitenant cache', () => {
   beforeEach(() => {
     createSessionMock.mockReset();
@@ -35,32 +44,16 @@ describe('getConversationSession multitenant cache', () => {
   });
 
   it('does not leak sessions between users sharing a conversationId', async () => {
-    const a = await getConversationSession('userA', 'conv1', 'pool', {
-      userId: 'userA',
-      gitHubToken: 'ghu_aaa',
-      includeMcpTools: false,
-    });
-    const b = await getConversationSession('userB', 'conv1', 'pool', {
-      userId: 'userB',
-      gitHubToken: 'ghu_bbb',
-      includeMcpTools: false,
-    });
+    const a = await getConversationSession('conv1', chatOptions('userA', 'ghu_aaa'));
+    const b = await getConversationSession('conv1', chatOptions('userB', 'ghu_bbb'));
 
     expect(a.session).not.toBe(b.session);
     expect(createSessionMock).toHaveBeenCalledTimes(2);
   });
 
   it('reuses a cached session for the same user + conversationId', async () => {
-    const first = await getConversationSession('userReuse', 'conv-reuse', 'pool', {
-      userId: 'userReuse',
-      gitHubToken: 'ghu_aaa',
-      includeMcpTools: false,
-    });
-    const second = await getConversationSession('userReuse', 'conv-reuse', 'pool', {
-      userId: 'userReuse',
-      gitHubToken: 'ghu_aaa',
-      includeMcpTools: false,
-    });
+    const first = await getConversationSession('conv-reuse', chatOptions('userReuse', 'ghu_aaa'));
+    const second = await getConversationSession('conv-reuse', chatOptions('userReuse', 'ghu_aaa'));
 
     expect(second.session).toBe(first.session);
     expect(second.metrics.reusedConversation).toBe(true);
@@ -68,11 +61,7 @@ describe('getConversationSession multitenant cache', () => {
   });
 
   it('forwards gitHubToken to CopilotClient.createSession', async () => {
-    await getConversationSession('userToken', 'conv-token', 'pool', {
-      userId: 'userToken',
-      gitHubToken: 'ghu_token_xyz',
-      includeMcpTools: false,
-    });
+    await getConversationSession('conv-token', chatOptions('userToken', 'ghu_token_xyz'));
 
     expect(createSessionMock).toHaveBeenCalledTimes(1);
     const call = createSessionMock.mock.calls[0][0];
@@ -81,11 +70,7 @@ describe('getConversationSession multitenant cache', () => {
 
   it('throws when userId is missing (multi-tenant invariant)', async () => {
     await expect(
-      getConversationSession('', 'conv-x', 'pool', {
-        userId: '',
-        gitHubToken: 'ghu_x',
-        includeMcpTools: false,
-      }),
+      getConversationSession('conv-x', chatOptions('', 'ghu_x')),
     ).rejects.toThrow(/userId required for session cache key/);
     expect(createSessionMock).not.toHaveBeenCalled();
   });
@@ -99,11 +84,7 @@ describe('createSessionWithMetrics gitHubToken invariant (D4)', () => {
 
   it('throws when gitHubToken is an empty string', async () => {
     await expect(
-      createSessionWithMetrics({
-        userId: 'u1',
-        gitHubToken: '',
-        includeMcpTools: false,
-      }),
+      createSessionWithMetrics(chatOptions('u1', '')),
     ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
     expect(createSessionMock).not.toHaveBeenCalled();
   });
@@ -111,18 +92,14 @@ describe('createSessionWithMetrics gitHubToken invariant (D4)', () => {
   it('throws when gitHubToken field is missing entirely', async () => {
     await expect(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createSessionWithMetrics({ userId: 'u1', includeMcpTools: false } as any),
+      createSessionWithMetrics({ userId: 'u1', profile: 'chat', capabilities: [], systemMessage: 's', model: 'm' } as any),
     ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 
   it('throws from getConversationSession when gitHubToken is empty', async () => {
     await expect(
-      getConversationSession('u1', 'conv-y', 'pool', {
-        userId: 'u1',
-        gitHubToken: '',
-        includeMcpTools: false,
-      }),
+      getConversationSession('conv-y', chatOptions('u1', '')),
     ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
     expect(createSessionMock).not.toHaveBeenCalled();
   });
@@ -142,11 +119,7 @@ describe('entitlement failure handling (P5)', () => {
     createSessionMock.mockRejectedValueOnce(new Error('User is not entitled to Copilot'));
 
     await expect(
-      getConversationSession('userNoLicense', 'conv-x', 'pool', {
-        userId: 'userNoLicense',
-        gitHubToken: 'ghu_x',
-        includeMcpTools: false,
-      }),
+      getConversationSession('conv-x', chatOptions('userNoLicense', 'ghu_x')),
     ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
   });
 
@@ -155,20 +128,12 @@ describe('entitlement failure handling (P5)', () => {
     createSessionMock.mockRejectedValueOnce(new Error('No active Copilot subscription'));
 
     await expect(
-      getConversationSession('userCached', 'conv-1', 'pool', {
-        userId: 'userCached',
-        gitHubToken: 'ghu_x',
-        includeMcpTools: false,
-      }),
+      getConversationSession('conv-1', chatOptions('userCached', 'ghu_x')),
     ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
 
     // Second call should short-circuit without invoking the SDK again.
     await expect(
-      getConversationSession('userCached', 'conv-2', 'pool', {
-        userId: 'userCached',
-        gitHubToken: 'ghu_x',
-        includeMcpTools: false,
-      }),
+      getConversationSession('conv-2', chatOptions('userCached', 'ghu_x')),
     ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
 
     expect(createSessionMock).toHaveBeenCalledTimes(1);
@@ -179,11 +144,7 @@ describe('entitlement failure handling (P5)', () => {
     createSessionMock.mockRejectedValueOnce(networkError);
 
     await expect(
-      getConversationSession('userNet', 'conv-net', 'pool', {
-        userId: 'userNet',
-        gitHubToken: 'ghu_x',
-        includeMcpTools: false,
-      }),
+      getConversationSession('conv-net', chatOptions('userNet', 'ghu_x')),
     ).rejects.toBe(networkError);
   });
 });

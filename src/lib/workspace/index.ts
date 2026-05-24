@@ -37,3 +37,6 @@ export { workspaceStore } from './storage';
 // Templates
 export { createEmptyFile, getWorkspaceTemplate } from './templates';
 
+// Builder
+export { createWorkspaceFromTemplate } from './builder';
+

@@ -118,17 +118,18 @@ describe('multi-tenant auth/token isolation', () => {
   });
 
   describe('Copilot conversation cache per-user isolation', () => {
-    it('does not share sessions across users for the same poolKey + conversationId', async () => {
-      const a = await getConversationSession('userA', 'shared-conv', 'pool', {
-        userId: 'userA',
-        gitHubToken: TOKEN_A,
-        includeMcpTools: false,
-      });
-      const b = await getConversationSession('userB', 'shared-conv', 'pool', {
-        userId: 'userB',
-        gitHubToken: TOKEN_B,
-        includeMcpTools: false,
-      });
+    const chatOpts = (userId: string, token: string) => ({
+      userId,
+      gitHubToken: token,
+      profile: 'chat' as const,
+      capabilities: [] as const,
+      systemMessage: 'system',
+      model: 'claude-haiku-4.5',
+    });
+
+    it('does not share sessions across users for the same profile + conversationId', async () => {
+      const a = await getConversationSession('shared-conv', chatOpts('userA', TOKEN_A));
+      const b = await getConversationSession('shared-conv', chatOpts('userB', TOKEN_B));
 
       expect(a.session).not.toBe(b.session);
       expect(createSessionMock).toHaveBeenCalledTimes(2);
@@ -138,16 +139,8 @@ describe('multi-tenant auth/token isolation', () => {
 
     it('handles concurrent requests from two users without crossing tokens', async () => {
       const [a, b] = await Promise.all([
-        getConversationSession('userA', 'conv-A', 'pool', {
-          userId: 'userA',
-          gitHubToken: TOKEN_A,
-          includeMcpTools: false,
-        }),
-        getConversationSession('userB', 'conv-B', 'pool', {
-          userId: 'userB',
-          gitHubToken: TOKEN_B,
-          includeMcpTools: false,
-        }),
+        getConversationSession('conv-A', chatOpts('userA', TOKEN_A)),
+        getConversationSession('conv-B', chatOpts('userB', TOKEN_B)),
       ]);
 
       expect(a.session).not.toBe(b.session);
@@ -156,16 +149,8 @@ describe('multi-tenant auth/token isolation', () => {
     });
 
     it('still hits the cache for the same user + conversation on a follow-up turn', async () => {
-      const first = await getConversationSession('userA', 'multi-turn', 'pool', {
-        userId: 'userA',
-        gitHubToken: TOKEN_A,
-        includeMcpTools: false,
-      });
-      const second = await getConversationSession('userA', 'multi-turn', 'pool', {
-        userId: 'userA',
-        gitHubToken: TOKEN_A,
-        includeMcpTools: false,
-      });
+      const first = await getConversationSession('multi-turn', chatOpts('userA', TOKEN_A));
+      const second = await getConversationSession('multi-turn', chatOpts('userA', TOKEN_A));
       expect(second.session).toBe(first.session);
       expect(second.metrics.reusedConversation).toBe(true);
       expect(createSessionMock).toHaveBeenCalledTimes(1);

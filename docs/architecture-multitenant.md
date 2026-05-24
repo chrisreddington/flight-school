@@ -10,7 +10,10 @@ Flight School is multi-tenant: every incoming HTTP request is authenticated as
 a specific GitHub user, and that user's GitHub App user-to-server (`ghu_`)
 token flows all the way down to GitHub API calls **and** to the Copilot SDK
 session that handles AI work for that request. There is no process-wide token,
-no Octokit singleton, and no shared identity between users.
+no Octokit singleton, and no shared identity between users. Public Copilot
+execution is routed to a mandatory private worker with a per-user runtime
+pool — the web layer never runs the Copilot SDK in-process for public
+traffic.
 
 ## High-level data flow
 
@@ -18,14 +21,18 @@ no Octokit singleton, and no shared identity between users.
 flowchart LR
     Browser([Browser])
 
-    subgraph NextProc["Next.js server process"]
+    subgraph NextProc["Next.js server (Web/API)"]
         AuthJS["Auth.js v5<br/>GitHub App OAuth"]
-        Route["API route<br/>+ withUserGuards"]
-        Exec["Copilot execution boundary<br/>executeCopilotChat()"]
-        Ctx["getUserContext()<br/>requireUserContext()"]
+        Route["API route<br/>+ withGuardedRoute"]
+        Ctx["requireGuardedUserContext()"]
         Oct["getOctokitForRequest()<br/>(fresh per request)"]
-        Sess["createLoggedChatSession(<br/>{ userId, gitHubToken })"]
-        Client["CopilotClient<br/>(singleton, useLoggedInUser:false)"]
+        Exec["copilot/execution/<br/>worker dispatch"]
+    end
+
+    subgraph WorkerProc["Worker (Next.js, COPILOT_WORKER_MODE=1)"]
+        WRoute["/api/internal/copilot/*<br/>(bearer-auth)"]
+        Sess["createLogged*Session(<br/>{ userId, gitHubToken })"]
+        Client["CopilotClient<br/>(per-user pool)"]
         MCP["getMcpServerConfig({ token })<br/>(rebuilt per call)"]
     end
 
@@ -37,76 +44,69 @@ flowchart LR
     AuthJS --> Route
     Route --> Ctx
     Ctx --> Oct --> GH
-    Route --> Exec --> Sess
+    Route --> Exec -->|HTTP+Bearer| WRoute
+    WRoute --> Sess
     Sess --> Client --> Copilot
     Sess --> MCP --> MCPSrv
 ```
 
-## Current Copilot runtime model and limitation
+## Copilot runtime model
 
 The Copilot SDK supports per-session GitHub identity via
-[`SessionOptions.gitHubToken`](https://github.com/github/copilot-sdk). Because
-of that, we construct **one** `CopilotClient` per Node process (see
-`src/lib/copilot/sessions.ts`):
+[`SessionOptions.gitHubToken`](https://github.com/github/copilot-sdk). We use
+that aggressively so the worker can multiplex many tenants safely:
 
-- The client is created with `useLoggedInUser: false`, so it never inherits
-  the host's ambient `gh auth` identity.
-- Every `copilot.createSession({ ... })` call passes the caller's
-  `gitHubToken`, scoping that session — and every tool call inside it — to
-  that user.
-- MCP server config is **rebuilt per call** with the same per-session token
-  (`getMcpServerConfig({ token })` in `src/lib/copilot/mcp.ts`), so MCP HTTP
-  requests carry the requesting user's `Authorization` header.
+- **No `useLoggedInUser: true` anywhere.** Every `CopilotClient` is created
+  with `useLoggedInUser: false`, so the SDK never inherits the host's
+  ambient `gh auth` identity.
+- **Every session passes `gitHubToken`.** `copilot.createSession({ ... })`
+  is always called with the requesting user's `ghu_` token, scoping the
+  session — and every tool call inside it — to that user.
+- **MCP config is rebuilt per call.** `getMcpServerConfig({ token })` in
+  `src/lib/copilot/mcp.ts` throws when no token is supplied and never
+  caches a config across users; MCP HTTP requests carry the requesting
+  user's `Authorization` header.
 
-Result: a single long-lived Copilot CLI subprocess multiplexes work for many
-users without sharing their GitHub identity.
+### Execution boundary is worker-only
 
-This is an **exploratory shared-runtime design**, not the strongest
-multi-tenant isolation pattern from the Copilot SDK scaling guidance. It gives
-per-session identity isolation for quota, model routing, content exclusion, and
-MCP calls, but it does not isolate Copilot CLI process memory, crashes, or
-session-state files per user. A production-oriented public platform should move
-Copilot execution behind an internal worker service with a per-user runtime pool
-before claiming production-grade multi-tenant isolation.
+Public chat execution is mandatory-worker. `src/lib/copilot/execution/`
+dispatches `executeCopilotChat()` to the private worker over HTTP:
 
-Target direction:
+- If `COPILOT_WORKER_URL` is unset, `executeCopilotChat()` throws a typed
+  `CopilotWorkerRequiredError` and `/api/copilot` fails fast. The web
+  process never runs the SDK in-process for public chat.
+- The web process posts to `/api/internal/copilot/execute` on the worker
+  with a bearer secret and a timeout.
+- Auth.js middleware allows `/api/internal/*` through so the route-specific
+  bearer-secret gate (not session auth) can run.
+- The public web Container App does **not** set `COPILOT_WORKER_ENABLED`;
+  only the private worker app does.
 
-1. Route code calls an internal Copilot execution boundary instead of direct SDK
-   session factories.
-2. Background jobs call a dispatcher boundary instead of wiring job executors
-   directly from the route.
-3. A private worker service resolves fresh user credentials from the token store
-   at execution time.
-4. The worker owns a per-user Copilot runtime pool, including user-specific
-   `COPILOT_HOME`, runtime TTL, health checks, and eviction.
-5. Web replicas remain responsible for auth, HTTP, UI streaming, and job
-   submission; workers own Copilot runtime lifecycle.
+### Per-user runtime pool on the worker
 
-See
-[`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md)
-for the worker-pool design.
+The worker owns a per-user Copilot runtime pool
+(`src/lib/copilot/runtime/`). Each runtime owns:
 
-### Worker service foundation
+- A separate SDK-spawned `CopilotClient` + Copilot CLI child process.
+- A user-specific `COPILOT_HOME` directory.
+- An idle TTL, a max-active cap, and an eviction loop.
 
-The worker-service slice makes the HTTP worker transport mandatory for public
-chat execution:
+Runtime controls:
 
-- Public chat execution requires `COPILOT_WORKER_URL`; if it is unset,
-  `/api/copilot` fails fast instead of running in the web process.
-- When configured, the web process posts to
-  `/api/internal/copilot/execute` on the worker with a bearer secret and a
-  timeout.
-- The worker route executes chat through a per-user runtime pool. Each runtime
-  owns a separate SDK-spawned `CopilotClient`/CLI child process and
-  user-specific `COPILOT_HOME`.
-- Middleware allows `/api/internal/*` through Auth.js so the route-specific
-  bearer-secret gate can run.
-- The public web Container App does **not** set `COPILOT_WORKER_ENABLED`; only
-  the private worker app does.
+| Env | Default | Purpose |
+|---|---|---|
+| `COPILOT_RUNTIME_IDLE_TTL_MS` | `600000` (10 min) | Idle runtime is evicted after this. |
+| `COPILOT_RUNTIME_MAX_ACTIVE` | `3` | Maximum concurrent active per-user runtimes. |
+| `COPILOT_RUNTIME_HOME_ROOT` | `$FLIGHT_SCHOOL_DATA_DIR/copilot-runtimes` | Root for per-user `COPILOT_HOME` dirs. |
 
-Durable async job execution through Service Bus remains future work.
-External `cliUrl` runtime servers also remain deferred because the installed
-SDK rejects `cliUrl` combined with `gitHubToken` / `useLoggedInUser`.
+Constructing a `CopilotClient` outside `src/lib/copilot/sessions.ts` (or
+the per-user runtime pool, which is the legitimate site for it) is an
+anti-pattern. The singleton-client rule applies to **the web layer**; the
+runtime pool legitimately creates one client per active user.
+
+Durable async job execution through Service Bus and external `cliUrl`
+runtime servers remain future work; the installed SDK rejects `cliUrl`
+combined with `gitHubToken` / `useLoggedInUser`.
 
 ## Cross-cutting guarantees
 
@@ -119,10 +119,25 @@ SDK rejects `cliUrl` combined with `gitHubToken` / `useLoggedInUser`.
   signs in via the OAuth flow just like production.
 - **User-keyed chat session cache.** The Copilot conversation cache key is
   `${userId}:${poolKey}:${conversationId}` (see `chatSessionCache` in
-  `src/lib/copilot/sessions.ts`). Two users sharing a conversation ID never
-  collide.
+  `src/lib/copilot/sessions.ts`), where `poolKey` is the capability
+  fingerprint produced by `composeCapabilityFingerprint(capabilities,
+  systemMessage)` in `src/lib/copilot/fingerprint.ts`. The fingerprint
+  hashes the resolved capability surface AND the composed system
+  message, so two sessions with the same caps but different prompts
+  never share a pooled CLI process. Two users sharing a conversation
+  ID never collide.
+- **Capability surface is monotonic-add per conversation.** Resolved
+  capabilities are persisted to the per-user/per-conversation memory in
+  `src/lib/copilot/conversation-capabilities.ts` BEFORE `sendAndWait`,
+  in both the streaming chat factory and the direct worker path
+  (`runtime/session-executor.ts`). A mid-turn failure does not shrink
+  the next turn's surface. Memory is bounded (TTL + LRU) per user.
 - **MCP config rebuilt per call.** `getMcpServerConfig` throws if no token is
   supplied and never caches a config across users.
+  `buildMcpServersForCapabilities(selections, credentials)` in
+  `src/lib/copilot/capabilities.ts` strict-throws when a selected MCP
+  capability has no credential — preserves the
+  fingerprint-equals-installed-surface invariant.
 - **Audit log on every guarded operation.** `withUserGuards` in
   `src/lib/security/guard.ts` emits an audit event (with `hashUserId` of the
   caller) for each rate-limited, capped session creation.
@@ -137,13 +152,16 @@ SDK rejects `cliUrl` combined with `gitHubToken` / `useLoggedInUser`.
 | Auth.js session | `src/lib/auth/config.ts` | `auth`, `handlers`, `signIn`, `signOut` |
 | User context in handlers | `src/lib/auth/context.ts` | `getUserContext`, `requireUserContext`, `UnauthorizedError` |
 | Per-request Octokit | `src/lib/github/client.ts` | `getOctokitForRequest`, `getOctokitForToken` |
-| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, worker HTTP client, worker-required guard |
-| Copilot session factory | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
-| Logged session helpers | `src/lib/copilot/server.ts` | `createLoggedChatSession`, `createLoggedCoachSession`, `SessionIdentity` |
+| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, `executeCopilotCoachJob`, `openCopilotAuthoringStreamViaWorker` |
+| Copilot session factory (worker-only) | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
+| Logged session helpers (worker-only) | `src/lib/copilot/server.ts` | `createLoggedCoachSession`, `createLoggedLightweightCoachSession`, `wrapSessionWithLogging` |
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
+| Capability + profile composition | `src/lib/copilot/profiles.ts`, `src/lib/copilot/capabilities.ts` | `resolveProfile`, `buildMcpServersForCapabilities`, `CapabilityCredentialResolver` |
+| Session-cache fingerprint contract | `src/lib/copilot/fingerprint.ts` | `composeCapabilityFingerprint`, `capabilityFingerprintOf` |
+| Per-conversation capability memory | `src/lib/copilot/conversation-capabilities.ts` | `getConversationCapabilities`, `rememberConversationCapabilities` |
 | Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution` (web -> worker HTTP dispatch) |
 | Prototype runtime-pool contracts | `src/lib/copilot/runtime/` | `createPerUserRuntimePool`, `CopilotRuntimePool` |
-| Route guard composition | `src/lib/security/guard.ts` | `withUserGuards` |
+| Route guard composition | `src/lib/security/guard.ts` | `requireGuardedUserContext`, `withUserGuards`, `withGuardedRoute` |
 | Audit + abuse controls | `src/lib/security/` | `auditLog`, `checkRateLimit`, `acquireSlot` |
 
 ## Storage isolation
@@ -210,6 +228,19 @@ note alongside the code.
 - Writing or reading server-side storage files at the storage root rather
   than under `users/{userId}/...`. All storage routes derive the userId from
   `requireUserContext()`; the caller is never trusted to supply it.
+- **Bypassing the guard primitive in Server Actions or Server Components.**
+  Every exported `'use server'` action and every Server Component data
+  loader that touches per-user data must call the shared
+  `requireGuardedUserContext()` core (the same primitive `withUserGuards`
+  uses for API routes). Duplicating auth/rate-limit/audit logic into a
+  Server Action — or skipping it — is an automatic review block.
+- **Caching per-user data without a tenant-scoped tag.** Every
+  `'use cache'` directive, `cacheTag()`, `revalidateTag()`, and
+  `updateTag()` must include the user scope as part of the key (minimum
+  `user:${userId}`, extended with `:session:`, `:repo:`, `:installation:`
+  when the cached data is keyed on those). The only exception is data
+  explicitly tagged `public:` with a one-line justification — and per-user
+  GitHub data can never qualify.
 
 ## Related docs
 

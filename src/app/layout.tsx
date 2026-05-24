@@ -1,5 +1,6 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -17,7 +18,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <ErrorBoundary>
-          <Providers>{children}</Providers>
+          {/* Suspense boundary required by Next 16 cacheComponents: providers
+              use usePathname() (dynamic IO), so the whole interactive shell
+              must render below a boundary. */}
+          <Suspense fallback={null}>
+            <Providers>{children}</Providers>
+          </Suspense>
         </ErrorBoundary>
       </body>
     </html>

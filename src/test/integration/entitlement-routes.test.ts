@@ -15,14 +15,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
   requireUserContextMock: vi.fn(),
-  // copilot/server.ts
-  createLoggedLightweightCoachSessionMock: vi.fn(),
-  createLoggedCoachSessionMock: vi.fn(),
+  // copilot/execution — worker dispatch primitives used by every coach caller
+  executeCopilotCoachJobMock: vi.fn(),
+  openCopilotAuthoringStreamMock: vi.fn(),
   // higher-level generator helpers
   generateGuidedPlanMock: vi.fn(),
   generateTopicQuizMock: vi.fn(),
   generateWhatsNextMock: vi.fn(),
-  // authoring streaming session
+  // authoring streaming session (still needed for direct module tests; routes go via worker dispatch)
   createGenericStreamingSessionMock: vi.fn(),
   // octokit / profile fetch — always fail softly so we focus on the AI path
   getOctokitForRequestMock: vi.fn(),
@@ -39,9 +39,12 @@ vi.mock('@/lib/auth/context', () => ({
   },
 }));
 
-vi.mock('@/lib/copilot/server', () => ({
-  createLoggedLightweightCoachSession: hoisted.createLoggedLightweightCoachSessionMock,
-  createLoggedCoachSession: hoisted.createLoggedCoachSessionMock,
+vi.mock('@/lib/copilot/execution', () => ({
+  executeCopilotCoachJob: hoisted.executeCopilotCoachJobMock,
+  openCopilotAuthoringStreamViaWorker: hoisted.openCopilotAuthoringStreamMock,
+}));
+
+vi.mock('@/lib/copilot/session-identity', () => ({
   createSessionIdentity: (ctx: { userId: string; accessToken: string }) => ({
     userId: ctx.userId,
     gitHubToken: ctx.accessToken,
@@ -132,7 +135,7 @@ afterEach(() => {
 describe('AI route entitlement mapping (D2)', () => {
   describe('POST /api/focus', () => {
     it('returns 402 copilot_required when SDK throws CopilotEntitlementRequiredError', async () => {
-      hoisted.createLoggedLightweightCoachSessionMock.mockRejectedValue(
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(
         new CopilotEntitlementRequiredError('Need Copilot'),
       );
       const { POST } = await import('@/app/api/focus/route');
@@ -143,7 +146,7 @@ describe('AI route entitlement mapping (D2)', () => {
     });
 
     it('falls back to static content for unrelated errors', async () => {
-      hoisted.createLoggedLightweightCoachSessionMock.mockRejectedValue(new Error('boom'));
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(new Error('boom'));
       const { POST } = await import('@/app/api/focus/route');
       const res = await POST(jsonRequest('http://localhost/api/focus', { component: 'goal' }));
       expect(res.status).toBe(200);
@@ -157,7 +160,7 @@ describe('AI route entitlement mapping (D2)', () => {
       ['goal', 'goal'],
       ['learningTopics', 'learningTopics'],
     ] as const)('returns only the requested %s fallback component for unrelated errors', async (component, key) => {
-      hoisted.createLoggedLightweightCoachSessionMock.mockRejectedValue(new Error('boom'));
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(new Error('boom'));
       const { POST } = await import('@/app/api/focus/route');
       const res = await POST(jsonRequest('http://localhost/api/focus', { component }));
 
@@ -261,8 +264,8 @@ describe('AI route entitlement mapping (D2)', () => {
   });
 
   describe('POST /api/challenge/author', () => {
-    it('returns 402 when createGenericStreamingSession throws CopilotEntitlementRequiredError', async () => {
-      hoisted.createGenericStreamingSessionMock.mockRejectedValue(
+    it('returns 402 when worker stream dispatch throws CopilotEntitlementRequiredError', async () => {
+      hoisted.openCopilotAuthoringStreamMock.mockRejectedValue(
         new CopilotEntitlementRequiredError(),
       );
       const { POST } = await import('@/app/api/challenge/author/route');
@@ -277,7 +280,7 @@ describe('AI route entitlement mapping (D2)', () => {
     });
 
     it('returns 500 for unrelated errors', async () => {
-      hoisted.createGenericStreamingSessionMock.mockRejectedValue(new Error('boom'));
+      hoisted.openCopilotAuthoringStreamMock.mockRejectedValue(new Error('boom'));
       const { POST } = await import('@/app/api/challenge/author/route');
       const res = await POST(
         jsonRequest('http://localhost/api/challenge/author', {
@@ -290,7 +293,7 @@ describe('AI route entitlement mapping (D2)', () => {
 
   describe('POST /api/challenge/solve', () => {
     it('returns 402 when createLoggedCoachSession throws CopilotEntitlementRequiredError', async () => {
-      hoisted.createLoggedCoachSessionMock.mockRejectedValue(
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(
         new CopilotEntitlementRequiredError(),
       );
       const { POST } = await import('@/app/api/challenge/solve/route');
@@ -312,7 +315,7 @@ describe('AI route entitlement mapping (D2)', () => {
     });
 
     it('returns 500 for unrelated errors', async () => {
-      hoisted.createLoggedCoachSessionMock.mockRejectedValue(new Error('boom'));
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(new Error('boom'));
       const { POST } = await import('@/app/api/challenge/solve/route');
       const res = await POST(
         jsonRequest('http://localhost/api/challenge/solve', {

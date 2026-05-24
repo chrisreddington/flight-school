@@ -1,4 +1,9 @@
-import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from '@/lib/copilot/execution/types';
+import type {
+  CopilotChatExecutionRequest,
+  CopilotChatExecutionResult,
+  CopilotCoachJobRequest,
+  CopilotCoachJobResult,
+} from '@/lib/copilot/execution/types';
 import { logger } from '@/lib/logger';
 import { createPerUserRuntimePool } from './per-user-pool';
 import { getCopilotRuntimeConfig } from './config';
@@ -26,6 +31,15 @@ export async function executeCopilotChatInWorkerRuntime(
     gitHubToken: request.identity.gitHubToken,
   });
   return runtime.executeChat(request);
+}
+
+export async function executeCopilotCoachJobInWorkerRuntime(
+  request: CopilotCoachJobRequest,
+): Promise<CopilotCoachJobResult> {
+  const runtime = await pool.getRuntime(request.identity.userId, {
+    gitHubToken: request.identity.gitHubToken,
+  });
+  return runtime.executeCoachJob(request);
 }
 
 export async function shutdownCopilotWorkerRuntimes(): Promise<void> {

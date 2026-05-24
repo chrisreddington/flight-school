@@ -29,6 +29,17 @@ export interface SessionCreationMetrics {
  * partition the session cache and bind the underlying SDK session to the
  * caller's GitHub identity. Defaulting either field would let sessions leak
  * between users sharing a sticky-routed process — see {@link getConversationSession}.
+ *
+ * Profile invariant: callers MUST resolve a `BaseProfileId` via
+ * `resolveProfile(profileId, { prompt })` and pass the resolved profile id,
+ * the composed `systemMessage`, and the resolved `capabilities` set through
+ * this options bag. The session cache key extends with the profile id and a
+ * stable capability fingerprint so two surfaces with different capability
+ * surfaces never collide.
+ *
+ * NOTE: This type is consumed from Web/API code (route handlers, hooks) and
+ * MUST stay free of `@github/copilot-sdk` type imports. `CapabilitySelection`
+ * and `BaseProfileId` are pure value/type modules.
  */
 export interface SessionOptions {
   /**
@@ -47,22 +58,39 @@ export interface SessionOptions {
    * Required (multi-tenant invariant — see file-level remarks).
    */
   gitHubToken: string;
-  /** System message mode */
+  /** Resolved chat profile id. See `@/lib/copilot/profiles`. */
+  profile: import('./profile-types').BaseProfileId;
+  /**
+   * Already-resolved capability selections (from `resolveProfile`). The
+   * cache key includes a stable fingerprint of this set, so callers MUST
+   * pass the same shape across turns of the same conversation.
+   */
+  capabilities: readonly import('./capabilities').CapabilitySelection[];
+  /**
+   * Precomputed capability fingerprint (from `resolveProfile`). Optional
+   * — when supplied, the session factory and cache layer skip a
+   * recomputation. The fingerprint MUST match
+   * `composeCapabilityFingerprint(capabilities, effectiveSystemMessage)`
+   * (capabilities surface AND a hash of the composed system message);
+   * omitting the system-message hash silently breaks the
+   * equal-fingerprint-equals-effective-prompt cache invariant.
+   */
+  capabilityFingerprint?: string;
+  /**
+   * Mirror of `resolved.requestedCapabilities` for telemetry. Logged on
+   * the session-create span; not part of the cache key.
+   */
+  requestedCapabilities?: import('./profile-types').CapabilitiesArg | 'default';
+  /** Mirror of `resolved.wasAutoElevated` for telemetry. */
+  wasAutoElevated?: boolean;
+  /**
+   * Composed system message (typically `resolved.systemMessage`). Optional
+   * for surfaces that prefer to layer the prompt directly on the user
+   * message.
+   */
   systemMessage?: string;
-  /** Whether to include MCP GitHub tools */
-  includeMcpTools?: boolean;
-  /** MCP tool allowlist (defaults to full access) */
-  tools?: string[];
-  /** Model override (defaults to standard) */
+  /** Model override (defaults to the profile's resolved model). */
   model?: string;
-}
-
-/**
- * Session with its creation metrics
- */
-export interface SessionWithMetrics {
-  session: import('@github/copilot-sdk').CopilotSession;
-  metrics: SessionCreationMetrics;
 }
 
 // ============================================================================

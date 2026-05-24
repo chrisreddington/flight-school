@@ -11,9 +11,46 @@
 
 ## Architecture Overview
 
-Next.js 14 App Router application with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes to protect credentials.
+Next.js 16 App Router application on React 19.2 with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes (or Server Components / Server Actions) to protect credentials. Public Copilot chat execution is routed to a mandatory private worker service.
 
 **Data Flow**: Dashboard → `/api/profile` (Octokit direct) → `/api/focus` (Copilot SDK creative generation) → UI
+
+### Next 16 / React 19.2 build flags
+
+`next.config.ts` enables two opt-in features that the rest of the codebase
+must respect:
+
+- **`reactCompiler: true`** — the compiler auto-memoises components, so don't add `useMemo` / `useCallback` / `React.memo` unless a profile shows it's needed. If a Primer component breaks the compiler's Rules of React, opt that file out with `"use no memo"` and leave a `TODO:` comment.
+- **`experimental.cacheComponents: true`** — Partial Prerender mode. Any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
+
+**Route-segment config is forbidden under `cacheComponents`.** Do not add
+`export const dynamic = '…'` or `export const runtime = 'nodejs'` to any
+route — Next 16 infers dynamism from the route's actual API use, and Node
+is the project-wide default. CI guard `scripts/check-server-fetch-tenancy.mjs`
+enforces that every server-side `fetch` is either explicitly `cache: 'no-store'`,
+tagged for revalidation, or annotated `// public-cache:` with a justification.
+
+### Server Components for data-driven pages
+
+Pages that load per-user JSON storage (e.g. `/skills`, `/habits`) render as
+async Server Components. The pattern:
+
+1. Page calls `requireGuardedRscContext('page.view')` from
+   `@/lib/security/guard`; redirect to `/sign-in` if it returns `null`.
+   This emits a `page.view` audit event and applies the per-user rate
+   limit / session cap policy that protects API routes — RSC pages share
+   the same guard primitive.
+2. Page calls a server-side reader (`readUserSkillsProfile`,
+   `readUserHabits`, …) backed by `src/lib/storage/user-storage.ts`. These
+   helpers resolve the user, validate the path with `userScopedFilename`,
+   and return the schema-checked payload.
+3. Page hands the payload to a `_components/XxxClient.tsx` island marked
+   `'use client'`. The island uses the data as its initial state and
+   handles all subsequent interaction.
+
+The storage-route API factory (`createStorageRoute`) delegates to the same
+`resolveUserScopedPath` helper, so the API and RSC paths share one tenancy
+implementation.
 
 ## Multi-tenant design
 
@@ -58,9 +95,19 @@ Rules:
   any environment, including local dev. The OAuth flow is the only auth path.
 - **No `gh auth token` fallback.** The client module does not shell out;
   every token comes from the Auth.js session.
-- **Hot AI routes should use `withUserGuards`** (`src/lib/security/guard.ts`),
+- **Hot AI routes should use `withGuardedRoute`** (`src/lib/security/guard.ts`),
   which composes `requireUserContext` + rate limit + concurrent-session cap +
-  audit log around the handler.
+  audit log + standard error → `NextResponse` mapping around the handler.
+  The module exports three layered primitives:
+  - `requireGuardedUserContext(policy)` — transport-agnostic core; returns
+    `{ ctx, release }` (where `ctx` is the `UserContext`) or throws a typed
+    error. Always call `release()` from a `finally` block. Use this from
+    Server Actions and RSC data loaders.
+  - `withUserGuards(opts, work)` — wraps the core for non-route callers that
+    handle their own response shape (e.g. background jobs).
+  - `withGuardedRoute(opts, work)` — the route adapter: maps `UnauthorizedError`
+    and entitlement errors to the standard JSON responses automatically, so
+    route handlers don't need an outer `knownApiErrorResponse` catch.
 
 ### `gh` CLI fallback is gone
 
@@ -70,20 +117,29 @@ must sign in through the same OAuth flow as production. The
 
 ### Copilot SDK: per-session GitHub identity
 
-The `CopilotClient` is constructed once with `useLoggedInUser: false` (see
-`src/lib/copilot/sessions.ts`). Every session passes the user's token via
-`SessionOptions.gitHubToken`, and the MCP server config is rebuilt per call
-with that same token (see `src/lib/copilot/mcp.ts`).
+The `CopilotClient` lives inside the worker (`src/worker/jobs/executors/`).
+**Web/API never invoke the SDK in-process**. All AI work — chat, coach, hints,
+authoring, evaluation — is dispatched to the worker through
+`src/lib/copilot/execution/` (`executeCopilotChat`, `executeCopilotCoachJob`,
+`openCopilotAuthoringStreamViaWorker`). See
+`.github/skills/copilot-sdk-worker-only/SKILL.md`. The boundary script
+`scripts/check-copilot-sdk-boundary.mjs` enforces this.
 
 ```typescript
-import {
-  createLoggedChatSession,
-  createLoggedCoachSession,
-  type SessionIdentity,
-} from '@/lib/copilot/server';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { requireUserContext } from '@/lib/auth/context';
 
-const identity: SessionIdentity = { userId, gitHubToken: accessToken };
-const session = await createLoggedChatSession(identity, 'chat', prompt);
+const ctx = await requireUserContext();
+const identity = createSessionIdentity(ctx);
+const result = await executeCopilotCoachJob({
+  identity,
+  variant: 'lightweight',
+  operationName: 'Daily focus',
+  prompt,
+  inputSummary: 'focus',
+});
+return result.response;
 ```
 
 Chat session cache keys include `userId` so two users sharing a
@@ -96,8 +152,9 @@ Chat session cache keys include `userId` so two users sharing a
 | Fetch user data | `octokit.rest.users.getAuthenticated()` | Fast, deterministic |
 | List repositories | `octokit.rest.repos.listForAuthenticatedUser()` | Fast, deterministic |
 | Get activity events | `octokit.rest.activity.listEventsForAuthenticatedUser()` | Fast, deterministic |
-| Creative AI generation | Copilot SDK session via `createLoggedCoachSession` | AI adds real value |
-| Multi-turn chat | Copilot SDK session via `createLoggedChatSession` (+ MCP) | Conversation context |
+| Creative AI generation | `executeCopilotCoachJob` (worker dispatch) | AI adds real value |
+| Multi-turn chat | `executeCopilotChat` (worker dispatch) | Conversation context |
+| Streaming authoring | `openCopilotAuthoringStreamViaWorker` (worker SSE proxy) | Live token stream |
 
 ### Code Location
 
@@ -105,8 +162,10 @@ Chat session cache keys include `userId` so two users sharing a
 |------|---------|
 | `src/lib/auth/` | Auth.js v5 config, user-context resolution, token store |
 | `src/lib/github/` | Per-request Octokit factories + GitHub data access |
-| `src/lib/copilot/` | Copilot SDK sessions (per-session `gitHubToken`), MCP config |
-| `src/lib/security/` | `withUserGuards`, rate limit, session cap, audit log |
+| `src/lib/copilot/execution/` | Worker-dispatch primitives — the ONLY SDK call paths from Web/API |
+| `src/lib/copilot/` | Session-identity helpers, SDK adapters (worker-internal only) |
+| `src/worker/jobs/executors/` | Where the SDK actually runs |
+| `src/lib/security/` | `requireGuardedUserContext` / `withUserGuards` / `withGuardedRoute`, rate limit, session cap, audit log |
 
 ### Never Use SDK For
 
@@ -116,29 +175,36 @@ Chat session cache keys include `userId` so two users sharing a
 
 ## Critical Patterns
 
-### Copilot SDK Usage (`src/lib/copilot/`)
+### Copilot SDK Usage (worker-only)
 
-The SDK is used authentically for:
-- **Creative generation** (daily focus): AI genuinely adds personalization value
-- **Multi-turn chat**: Core SDK use case with conversation context
-- **MCP tool access**: Real-time GitHub exploration during chat
+The SDK runs inside the worker. Web and API code dispatch to it via
+`src/lib/copilot/execution/`:
+
+- **Coach jobs** (focus, hints, quiz, suggestions, guided plans):
+  `executeCopilotCoachJob({ identity, variant, operationName, prompt, inputSummary })`.
+- **Multi-turn chat**: `executeCopilotChat(...)`.
+- **Streaming authoring**: `openCopilotAuthoringStreamViaWorker(...)` —
+  returns a `Response` whose body the public route pipes back to the client.
 
 ```typescript
-// Create a session for chat or coaching. The caller must supply the
-// per-request user identity so the session inherits their GitHub token.
-import {
-  createLoggedChatSession,
-  createLoggedCoachSession,
-} from '@/lib/copilot/server';
-import { requireUserContext } from '@/lib/auth/context';
+// Dispatch a coach job from any authenticated route handler.
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { withGuardedRoute } from '@/lib/security/guard';
 
-const { userId, accessToken } = await requireUserContext();
-const session = await createLoggedChatSession(
-  { userId, gitHubToken: accessToken },
-  'chat',
-  prompt,
-);
-const response = await session.sendAndWait({ prompt });
+export async function POST() {
+  return withGuardedRoute(QUIZ_GUARD, async (ctx) => {
+    const identity = createSessionIdentity(ctx);
+    const result = await executeCopilotCoachJob({
+      identity,
+      variant: 'lightweight',
+      operationName: 'Topic quiz',
+      prompt,
+      inputSummary: 'quiz',
+    });
+    return Response.json(result.response);
+  });
+}
 ```
 
 ### Graceful Degradation
@@ -384,10 +450,12 @@ Use `/analyze-tech-debt` prompt for comprehensive analysis. Available commands:
 
 ## Code quality contract
 
-Two skills enforce non-negotiable standards on every change. Invoke them
+Three skills enforce non-negotiable standards on every change. Invoke them
 proactively — they are not optional:
 
 - **[`readable-code`](.github/skills/readable-code/SKILL.md)** — *Apply when writing or refactoring TS/TSX.* The bar: a reader who has never seen this codebase before should understand any file from names alone. Rules cover descriptive naming (no `data`/`result`/`x`), plain control flow (no nested ternaries or bitwise tricks), and comments that explain **why** not **what**. Hard rule: TSDoc lines ≤ function body lines. The authoritative rules sit in [`typescript.instructions.md`](.github/instructions/typescript.instructions.md) and [`documentation.instructions.md`](.github/instructions/documentation.instructions.md); the skill is the practical companion.
+
+- **[`panel-review`](.github/skills/panel-review/SKILL.md)** — *Mandatory for any non-trivial architectural change.* Convenes a six-reviewer panel (three models × architect + developer personas) that critiques the plan before code lands and re-reviews every milestone until consensus. Every finding of every severity fix-forwards in the next round; the loop exits only when 6/6 SHIP with zero findings. Use the panel for multi-file refactors, cross-cutting cleanups, performance work, or any change where "wrong design" costs more than "wrong implementation".
 
 - **[`doc-currency`](.github/skills/doc-currency/SKILL.md)** — *Mandatory before `task_complete` for any non-trivial change.* Maps the area you touched to its authoritative docs (OTel skill, multi-tenant arch doc, copilot-instructions, README, …) and updates the specifics that drifted. Doc updates ship in the same commit as the code, never as a follow-up PR.
 

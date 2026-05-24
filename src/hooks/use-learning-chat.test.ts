@@ -1,502 +1,293 @@
 /**
- * useLearningChat Hook Tests
+ * useLearningChat hook tests.
  *
- * Tests for the learning chat hook covering:
- * - S4: Chat operations tracked in unified operations store
- * - S6: File-based recovery for streaming messages
- * - S5: Concurrent stream tracking across threads
+ * Scope: the orchestration unique to `useLearningChat` — primarily `sendMessage`.
+ * SSE/stream concerns live in `use-learning-chat-stream.test.ts`; the peer hook
+ * is stubbed here so a single integration surface (fetch) drives the scenarios.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Thread } from '@/lib/threads';
+import { useLearningChat } from './use-learning-chat';
 
-// Test the core logic patterns used by useLearningChat
+// --- Peer hook + tiny module stubs -----------------------------------------
+const streamState = vi.hoisted(() => ({
+  registered: [] as Array<{ jobId: string; threadId: string; assistantId: string }>,
+  marked: [] as Array<{ threadId: string; userMessageId: string }>,
+  cleared: [] as string[],
+  pending: new Set<string>(),
+  reset() {
+    this.registered.length = 0;
+    this.marked.length = 0;
+    this.cleared.length = 0;
+    this.pending.clear();
+  },
+}));
 
-describe('useLearningChat core logic', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+vi.mock('./use-learning-chat-stream', () => ({
+  useLearningChatStream: () => ({
+    allStreamingThreadIds: Array.from(streamState.pending),
+    clearPendingStream: (id: string) => {
+      streamState.cleared.push(id);
+      streamState.pending.delete(id);
+    },
+    isStreaming: streamState.pending.size > 0,
+    markStreamPending: (threadId: string, userMessageId: string) => {
+      streamState.marked.push({ threadId, userMessageId });
+      streamState.pending.add(threadId);
+    },
+    registerStream: (jobId: string, threadId: string, assistantId: string) => {
+      streamState.registered.push({ jobId, threadId, assistantId });
+    },
+    stopStreaming: () => {},
+    streamingAssistantMessageId: null,
+    streamingContent: '',
+    streamingThreadId: null,
+    streamingToolEvents: [],
+  }),
+}));
+
+const opsRegistered = vi.hoisted(() => [] as Array<{ jobId: string; threadId: string }>);
+vi.mock('@/lib/operations', () => ({
+  operationsManager: {
+    registerExistingJob: (jobId: string, _t: string, threadId: string) =>
+      opsRegistered.push({ jobId, threadId }),
+  },
+}));
+
+vi.mock('@/lib/utils/id-generator', () => ({
+  generateId: (prefix: string) => `${prefix}-fixed`,
+  generateMessageId: () => 'msg-fixed',
+}));
+
+vi.mock('@/lib/utils/date-utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/utils/date-utils')>();
+  return { ...actual, now: () => '2026-01-01T00:00:00.000Z' };
+});
+
+// trigger-metadata requires a v4 UUID for correlationId/assistantMessageId.
+const ASSISTANT_ID = '00000000-0000-4000-8000-000000000000';
+Object.defineProperty(globalThis, 'crypto', {
+  configurable: true,
+  value: { ...globalThis.crypto, randomUUID: () => ASSISTANT_ID },
+});
+
+// --- In-memory fetch responder (apiPost/apiGet → global.fetch from setup.ts) -
+
+interface FakeBackend {
+  threads: Thread[];
+  jobIdSeq: number;
+  jobFailure?: Error;
+  jobPosts: Array<Record<string, unknown>>;
+}
+const backend: FakeBackend = { threads: [], jobIdSeq: 0, jobPosts: [] };
+
+const json = (body: unknown, init: ResponseInit = {}): Response =>
+  new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+    ...init,
   });
 
-  describe('streamStateToThreadMessage conversion', () => {
-    it('should convert completed stream to message', () => {
-      const state = {
-        status: 'complete',
-        content: 'This is the AI response',
-        streamingBuffer: '',
-        startedAt: 1000,
-        completedAt: 2500,
-        toolCalls: [{ name: 'search', arguments: {} }],
-        hasActionableItem: true,
-        clientFirstTokenMs: 150,
-        serverMeta: { totalMs: 1200, sessionPoolHit: true, mcpEnabled: true },
-      };
-
-      // Replicate the conversion logic
-      const rawContent = state.content || state.streamingBuffer || '';
-      const content = rawContent;
-      
-      // Build message object
-      const message = {
-        role: 'assistant',
-        content,
-        toolCalls: state.toolCalls?.map((tc) => tc.name),
-        hasActionableItem: state.hasActionableItem,
-        perf: {
-          clientTotalMs: state.completedAt && state.startedAt
-            ? Math.round(state.completedAt - state.startedAt)
-            : undefined,
-          clientFirstTokenMs: state.clientFirstTokenMs,
-          serverTotalMs: state.serverMeta?.totalMs,
-          sessionPoolHit: state.serverMeta?.sessionPoolHit ?? undefined,
-        },
-      };
-
-      expect(message.content).toBe('This is the AI response');
-      expect(message.toolCalls).toEqual(['search']);
-      expect(message.hasActionableItem).toBe(true);
-      expect(message.perf.clientTotalMs).toBe(1500);
-      expect(message.perf.clientFirstTokenMs).toBe(150);
-      expect(message.perf.serverTotalMs).toBe(1200);
-    });
-
-    it('should use streamingBuffer when content is empty', () => {
-      const state = {
-        status: 'aborted',
-        content: '',
-        streamingBuffer: 'Partial response before abort',
-      };
-
-      const rawContent = state.content || state.streamingBuffer || '';
-      expect(rawContent).toBe('Partial response before abort');
-    });
-
-    it('should add interruption note for aborted streams', () => {
-      const state = {
-        status: 'aborted',
-        content: 'Partial response',
-      };
-
-      const rawContent = state.content || '';
-      let content = rawContent;
-      
-      if (state.status === 'aborted' && content) {
-        content += '\n\n*(Response stopped)*';
-      }
-
-      expect(content).toContain('*(Response stopped)*');
-    });
-
-    it('should return null for error without content', () => {
-      const state = {
-        status: 'error',
-        content: '',
-        streamingBuffer: '',
-      };
-
-      const rawContent = state.content || state.streamingBuffer || '';
-      
-      // Don't create a message for errors without content
-      const shouldCreate = !(state.status === 'error' && !rawContent);
-      
-      expect(shouldCreate).toBe(false);
-    });
+function installFetch(): void {
+  vi.mocked(global.fetch).mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (url === '/api/threads/storage' && method === 'GET') {
+      return json({ threads: backend.threads });
+    }
+    if (url === '/api/threads/storage' && method === 'POST') {
+      backend.threads = (JSON.parse((init?.body as string) ?? '{"threads":[]}') as {
+        threads: Thread[];
+      }).threads;
+      return json({ ok: true });
+    }
+    if (url === '/api/jobs' && method === 'POST') {
+      backend.jobPosts.push(JSON.parse((init?.body as string) ?? '{}'));
+      if (backend.jobFailure) return json({ error: backend.jobFailure.message }, { status: 500 });
+      backend.jobIdSeq += 1;
+      return json({ id: `job-${backend.jobIdSeq}` });
+    }
+    return json({ error: `unexpected ${method} ${url}` }, { status: 404 });
   });
+}
 
-  describe('streaming message management', () => {
-    it('should upsert streaming message when existing', () => {
-      const thread = {
-        id: 'thread-1',
-        messages: [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-          { id: 'streaming', role: 'assistant', content: 'Old content' },
-        ],
-      };
+const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
+  id: 'thread-1',
+  title: 'Existing Thread',
+  context: { repos: [] },
+  messages: [],
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
 
-      const newContent = 'Updated streaming content';
-      
-      // Find existing streaming message
-      const existingIndex = thread.messages.findIndex((m) => m.id === 'streaming');
-      expect(existingIndex).toBe(1);
+async function renderHookWithSeed(seed: Thread[] = []) {
+  backend.threads = seed;
+  const view = renderHook(() => useLearningChat());
+  await waitFor(() => expect(view.result.current.isThreadsLoading).toBe(false));
+  return view;
+}
 
-      // Update it
-      const updatedMessages = [...thread.messages];
-      updatedMessages[existingIndex] = {
-        ...updatedMessages[existingIndex],
-        content: newContent,
-      };
+// --- Tests -----------------------------------------------------------------
 
-      expect(updatedMessages[1].content).toBe(newContent);
-      expect(updatedMessages.length).toBe(2); // Same count
-    });
+beforeEach(() => {
+  streamState.reset();
+  opsRegistered.length = 0;
+  backend.threads = [];
+  backend.jobIdSeq = 0;
+  backend.jobFailure = undefined;
+  backend.jobPosts = [];
+  installFetch();
+});
 
-    it('should add streaming message when none exists', () => {
-      const thread = {
-        id: 'thread-1',
-        messages: [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-        ],
-      };
-
-      const existingIndex = thread.messages.findIndex((m) => m.id === 'streaming');
-      expect(existingIndex).toBe(-1);
-
-      // Add new streaming message
-      const newMessages = [
-        ...thread.messages,
-        { id: 'streaming', role: 'assistant', content: 'New streaming content' },
-      ];
-
-      expect(newMessages.length).toBe(2);
-      expect(newMessages[1].id).toBe('streaming');
-    });
-
-    it('should remove streaming message', () => {
-      const thread = {
-        id: 'thread-1',
-        messages: [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-          { id: 'streaming', role: 'assistant', content: 'Streaming...' },
-        ],
-      };
-
-      const filteredMessages = thread.messages.filter((m) => m.id !== 'streaming');
-      
-      expect(filteredMessages.length).toBe(1);
-      expect(filteredMessages[0].id).toBe('msg-1');
-    });
-  });
-
-  describe('interrupted message finalization', () => {
-    it('should finalize interrupted streaming message', () => {
-      const thread = {
-        id: 'thread-1',
-        messages: [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-          { id: 'streaming', role: 'assistant', content: 'Partial response' },
-        ],
-      };
-
-      const streamingMessage = thread.messages.find((m) => m.id === 'streaming');
-      expect(streamingMessage).toBeDefined();
-
-      const trimmedContent = streamingMessage!.content.trim();
-      expect(trimmedContent).toBeTruthy();
-
-      // Add interruption note if not present
-      const interruptionNote = '*(Response interrupted)*';
-      const content = streamingMessage!.content.includes(interruptionNote)
-        ? streamingMessage!.content
-        : `${streamingMessage!.content}\n\n${interruptionNote}`;
-
-      expect(content).toContain('*(Response interrupted)*');
-    });
-
-    it('should remove empty streaming message during finalization', () => {
-      const thread = {
-        id: 'thread-1',
-        messages: [
-          { id: 'msg-1', role: 'user', content: 'Hello' },
-          { id: 'streaming', role: 'assistant', content: '   ' }, // Only whitespace
-        ],
-      };
-
-      const streamingMessage = thread.messages.find((m) => m.id === 'streaming');
-      const trimmedContent = streamingMessage!.content.trim();
-      
-      // Empty after trim - should be removed, not finalized
-      expect(trimmedContent).toBe('');
-    });
-  });
-
-  describe('concurrent stream tracking', () => {
-    it('should track multiple streaming thread IDs', () => {
-      const activeStreams = new Map([
-        ['thread-1', { status: 'streaming', content: 'Response 1...' }],
-        ['thread-2', { status: 'streaming', content: 'Response 2...' }],
-        ['thread-3', { status: 'streaming', content: 'Response 3...' }],
-      ]);
-
-      const streamingThreadIds = Array.from(activeStreams.keys());
-      
-      expect(streamingThreadIds).toHaveLength(3);
-      expect(streamingThreadIds).toContain('thread-1');
-      expect(streamingThreadIds).toContain('thread-2');
-      expect(streamingThreadIds).toContain('thread-3');
-    });
-
-    it('should get streaming content for specific thread', () => {
-      const activeStreams = new Map([
-        ['thread-1', { content: 'Content for thread 1' }],
-        ['thread-2', { content: 'Content for thread 2' }],
-      ]);
-
-      const getStreamingContent = (threadId: string): string => {
-        return activeStreams.get(threadId)?.content ?? '';
-      };
-
-      expect(getStreamingContent('thread-1')).toBe('Content for thread 1');
-      expect(getStreamingContent('thread-2')).toBe('Content for thread 2');
-      expect(getStreamingContent('thread-unknown')).toBe('');
-    });
-
-    it('should check if specific conversation is streaming', () => {
-      const activeStreams = new Map([
-        ['thread-1', { status: 'streaming' }],
-        ['thread-2', { status: 'complete' }],
-      ]);
-
-      const isStreamingConversation = (threadId: string): boolean => {
-        const stream = activeStreams.get(threadId);
-        return stream?.status === 'streaming';
-      };
-
-      expect(isStreamingConversation('thread-1')).toBe(true);
-      expect(isStreamingConversation('thread-2')).toBe(false);
-      expect(isStreamingConversation('thread-unknown')).toBe(false);
-    });
-  });
-
-  describe('background job state tracking', () => {
-    it('should detect active background job for thread', () => {
-      const mockOperationsManager = {
-        operations: new Map([
-          ['op-1', { type: 'chat-response', status: 'in-progress', meta: { targetId: 'thread-1' } }],
-          ['op-2', { type: 'chat-response', status: 'complete', meta: { targetId: 'thread-2' } }],
-        ]),
-        hasActiveChatJob: function(threadId: string): boolean {
-          for (const op of this.operations.values()) {
-            if (op.type === 'chat-response' && 
-                op.status === 'in-progress' && 
-                op.meta.targetId === threadId) {
-              return true;
-            }
-          }
-          return false;
-        },
-      };
-
-      expect(mockOperationsManager.hasActiveChatJob('thread-1')).toBe(true);
-      expect(mockOperationsManager.hasActiveChatJob('thread-2')).toBe(false);
-      expect(mockOperationsManager.hasActiveChatJob('thread-unknown')).toBe(false);
-    });
-
-    it('should combine SSE and background job streaming states', () => {
-      const sseStreaming = false;
-      const hasActiveBackgroundJob = true;
-
-      // isStreaming should be true if EITHER is active
-      const isStreaming = sseStreaming || hasActiveBackgroundJob;
-      
-      expect(isStreaming).toBe(true);
-    });
+describe('useLearningChat — composed state surface', () => {
+  it('exposes thread state and the action API', async () => {
+    const { result } = await renderHookWithSeed([makeThread()]);
+    expect(result.current.threads.map((t) => t.id)).toEqual(['thread-1']);
+    expect(result.current.activeThread?.id).toBe('thread-1');
+    expect(result.current.activeThreadId).toBe('thread-1');
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.streamingThreadIds).toEqual([]);
+    expect(typeof result.current.sendMessage).toBe('function');
+    expect(typeof result.current.stopStreaming).toBe('function');
   });
 });
 
-describe('pending stream cleanup logic', () => {
-  it('should keep pending when thread is not yet in storage', () => {
-    const pending = new Map([['thread-1', 'user-msg-1']]);
-    const threads: unknown[] = [];
+describe('useLearningChat.sendMessage — short-circuits without dispatching', () => {
+  it.each<[string, string, () => Thread[]]>([
+    ['empty string', '', () => [makeThread()]],
+    ['whitespace only', '   \t\n  ', () => [makeThread()]],
+    ['thread already streaming in storage', 'Hi', () => [makeThread({ isStreaming: true })]],
+  ])('%s', async (_, content, seed) => {
+    const { result } = await renderHookWithSeed(seed());
 
-    const stillPending = new Map<string, string>();
-    for (const [threadId, userMsgId] of pending) {
-      const thread = threads.find((t: unknown) => (t as { id: string }).id === threadId);
-      if (!thread) {
-        stillPending.set(threadId, userMsgId);
-      }
-    }
-    expect(stillPending.size).toBe(1);
-  });
+    await act(async () => {
+      await result.current.sendMessage(content);
+    });
 
-  it('should clear pending when thread.isStreaming becomes true', () => {
-    const pending = new Map([['thread-1', 'user-msg-1']]);
-    const threads = [{ id: 'thread-1', isStreaming: true, messages: [] }];
-
-    const stillPending = new Map<string, string>();
-    for (const [threadId, userMsgId] of pending) {
-      const thread = threads.find(t => t.id === threadId);
-      if (!thread) {
-        stillPending.set(threadId, userMsgId);
-      } else if (thread.isStreaming) {
-        // Storage has caught up - remove from pending
-      } else {
-        stillPending.set(threadId, userMsgId);
-      }
-    }
-    expect(stillPending.size).toBe(0);
-  });
-
-  it('should NOT clear pending due to prior assistant messages in existing conversation', () => {
-    const pending = new Map([['thread-1', 'user-msg-3']]);
-    const threads = [{
-      id: 'thread-1',
-      isStreaming: false,
-      messages: [
-        { id: 'user-msg-1', role: 'user', content: 'Hello' },
-        { id: 'ai-msg-1', role: 'assistant', content: 'Hi there' },
-        { id: 'user-msg-3', role: 'user', content: 'Follow-up question' },
-      ],
-    }];
-
-    const stillPending = new Map<string, string>();
-    for (const [threadId, userMsgId] of pending) {
-      const thread = threads.find(t => t.id === threadId);
-      if (!thread) {
-        stillPending.set(threadId, userMsgId);
-      } else if (thread.isStreaming) {
-        // no-op
-      } else {
-        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
-        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
-        const hasNewResponse =
-          userMsgIdx !== -1 &&
-          thread.messages
-            .slice(userMsgIdx + 1)
-            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
-        if (!hasStreamingMsg && !hasNewResponse) {
-          stillPending.set(threadId, userMsgId);
-        }
-      }
-    }
-    expect(stillPending.size).toBe(1);
-  });
-
-  it('should clear pending once new AI response appears after the user message', () => {
-    const pending = new Map([['thread-1', 'user-msg-3']]);
-    const threads = [{
-      id: 'thread-1',
-      isStreaming: false,
-      messages: [
-        { id: 'user-msg-1', role: 'user', content: 'Hello' },
-        { id: 'ai-msg-1', role: 'assistant', content: 'Hi there' },
-        { id: 'user-msg-3', role: 'user', content: 'Follow-up' },
-        { id: 'ai-msg-2', role: 'assistant', content: 'New response' },
-      ],
-    }];
-
-    const stillPending = new Map<string, string>();
-    for (const [threadId, userMsgId] of pending) {
-      const thread = threads.find(t => t.id === threadId);
-      if (!thread) {
-        stillPending.set(threadId, userMsgId);
-      } else if (thread.isStreaming) {
-        // no-op
-      } else {
-        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
-        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
-        const hasNewResponse =
-          userMsgIdx !== -1 &&
-          thread.messages
-            .slice(userMsgIdx + 1)
-            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
-        if (!hasStreamingMsg && !hasNewResponse) {
-          stillPending.set(threadId, userMsgId);
-        }
-      }
-    }
-    expect(stillPending.size).toBe(0);
-  });
-
-  it('should keep pending while only a streaming-in-progress message exists', () => {
-    const pending = new Map([['thread-1', 'user-msg-3']]);
-    const threads = [{
-      id: 'thread-1',
-      isStreaming: false,
-      messages: [
-        { id: 'user-msg-3', role: 'user', content: 'Question' },
-        { id: 'streaming-job-123', role: 'assistant', content: 'Thinking... ▊' },
-      ],
-    }];
-
-    const stillPending = new Map<string, string>();
-    for (const [threadId, userMsgId] of pending) {
-      const thread = threads.find(t => t.id === threadId);
-      if (!thread) {
-        stillPending.set(threadId, userMsgId);
-      } else if (thread.isStreaming) {
-        // no-op
-      } else {
-        const hasStreamingMsg = thread.messages.some(m => m.id.startsWith('streaming-'));
-        const userMsgIdx = thread.messages.findIndex(m => m.id === userMsgId);
-        const hasNewResponse =
-          userMsgIdx !== -1 &&
-          thread.messages
-            .slice(userMsgIdx + 1)
-            .some(m => m.role === 'assistant' && !m.id.startsWith('streaming-'));
-        if (!hasStreamingMsg && !hasNewResponse) {
-          stillPending.set(threadId, userMsgId);
-        }
-      }
-    }
-    expect(stillPending.size).toBe(0);
+    expect(backend.jobPosts).toEqual([]);
+    expect(streamState.marked).toEqual([]);
+    expect(streamState.registered).toEqual([]);
+    expect(opsRegistered).toEqual([]);
   });
 });
 
-describe('useLearningChat interface contract', () => {
-  it('should define expected state shape', () => {
-    interface Thread {
-      id: string;
-      title: string;
-      messages: unknown[];
-    }
+describe('useLearningChat.sendMessage — target thread resolution', () => {
+  it('dispatches against the currently active thread', async () => {
+    const { result } = await renderHookWithSeed([makeThread({ id: 'thread-active' })]);
 
-    interface UseLearningChatState {
-      threads: Thread[];
-      activeThread: Thread | null;
-      activeThreadId: string | null;
-      isThreadsLoading: boolean;
-      isStreaming: boolean;
-      streamingContent: string;
-      streamingThreadId: string | null;
-      streamingThreadIds: string[];
-    }
+    await act(async () => {
+      await result.current.sendMessage('Hello');
+    });
 
-    const mockState: UseLearningChatState = {
-      threads: [],
-      activeThread: null,
-      activeThreadId: null,
-      isThreadsLoading: false,
-      isStreaming: false,
-      streamingContent: '',
-      streamingThreadId: null,
-      streamingThreadIds: [],
-    };
-
-    expect(Array.isArray(mockState.threads)).toBe(true);
-    expect(typeof mockState.isStreaming).toBe('boolean');
-    expect(typeof mockState.streamingContent).toBe('string');
-    expect(Array.isArray(mockState.streamingThreadIds)).toBe(true);
+    expect(backend.jobPosts[0]).toMatchObject({
+      type: 'chat-response',
+      targetId: 'thread-active',
+      input: expect.objectContaining({ threadId: 'thread-active', prompt: 'Hello' }),
+    });
   });
 
-  it('should define expected action types', () => {
-    interface SendLearningMessageOptions {
-      useGitHubTools?: boolean;
-      repos?: unknown[];
-      threadId?: string;
-    }
+  it('honours an explicit threadId, bypassing the active thread', async () => {
+    const active = makeThread({ id: 'thread-active' });
+    const explicit = makeThread({ id: 'thread-explicit' });
+    const { result } = await renderHookWithSeed([active, explicit]);
 
-    interface UseLearningChatActions {
-      sendMessage: (content: string, options?: SendLearningMessageOptions) => Promise<void>;
-      stopStreaming: () => void;
-      createThread: (options?: unknown) => Promise<unknown>;
-      selectThread: (threadId: string) => void;
-      deleteThread: (threadId: string) => Promise<void>;
-      renameThread: (threadId: string, newTitle: string) => Promise<void>;
-      updateContext: (context: unknown) => Promise<void>;
-    }
+    await act(async () => {
+      await result.current.sendMessage('Hi', { threadId: 'thread-explicit' });
+    });
 
-    const mockActions: UseLearningChatActions = {
-      sendMessage: async () => {},
-      stopStreaming: () => {},
-      createThread: async () => ({}),
-      selectThread: () => {},
-      deleteThread: async () => {},
-      renameThread: async () => {},
-      updateContext: async () => {},
-    };
+    expect(backend.jobPosts[0]).toMatchObject({ targetId: 'thread-explicit' });
+  });
 
-    expect(typeof mockActions.sendMessage).toBe('function');
-    expect(typeof mockActions.stopStreaming).toBe('function');
-    expect(typeof mockActions.createThread).toBe('function');
-    expect(typeof mockActions.selectThread).toBe('function');
-    expect(typeof mockActions.deleteThread).toBe('function');
+  it.each<[string, string, string]>([
+    ['short message → exact title', 'Teach me generics', 'Teach me generics'],
+    ['long message → 30-char prefix + ellipsis',
+      'This is a very lengthy initial question about React hooks',
+      'This is a very lengthy initial...'],
+  ])('auto-creates a thread when none exists (%s)', async (_, message, expectedTitle) => {
+    const { result } = await renderHookWithSeed([]);
+
+    await act(async () => {
+      await result.current.sendMessage(message);
+    });
+
+    expect(backend.threads).toHaveLength(1);
+    expect(backend.threads[0].title).toBe(expectedTitle);
+    expect(backend.jobPosts[0]).toMatchObject({ targetId: backend.threads[0].id });
+  });
+
+  it('renames a placeholder "New Thread" with empty messages on first send', async () => {
+    const placeholder = makeThread({ id: 'thread-new', title: 'New Thread', messages: [] });
+    const { result } = await renderHookWithSeed([placeholder]);
+
+    await act(async () => {
+      await result.current.sendMessage('First question');
+    });
+
+    expect(backend.threads.find((t) => t.id === 'thread-new')?.title).toBe('First question');
+  });
+});
+
+describe('useLearningChat.sendMessage — pending stream bookkeeping', () => {
+  it('marks the thread pending, registers the stream, and exposes it as streaming', async () => {
+    const { result } = await renderHookWithSeed([makeThread({ id: 'thread-x' })]);
+
+    await act(async () => {
+      await result.current.sendMessage('Hi');
+    });
+
+    expect(streamState.marked).toEqual([{ threadId: 'thread-x', userMessageId: 'msg-fixed' }]);
+    expect(streamState.registered).toEqual([
+      { jobId: 'job-1', threadId: 'thread-x', assistantId: ASSISTANT_ID },
+    ]);
+    expect(opsRegistered).toEqual([{ jobId: 'job-1', threadId: 'thread-x' }]);
+    await waitFor(() => expect(result.current.streamingThreadIds).toContain('thread-x'));
+    expect(result.current.isStreaming).toBe(true);
+  });
+
+  it('clears the pending entry when the /api/jobs POST fails', async () => {
+    backend.jobFailure = new Error('boom');
+    const { result } = await renderHookWithSeed([makeThread({ id: 'thread-x' })]);
+
+    await act(async () => {
+      await result.current.sendMessage('Hi');
+    });
+
+    expect(streamState.cleared).toEqual(['thread-x']);
+    expect(streamState.registered).toEqual([]);
+    expect(opsRegistered).toEqual([]);
+    await waitFor(() => expect(result.current.streamingThreadIds).not.toContain('thread-x'));
+  });
+});
+
+describe('useLearningChat.sendMessage — job payload composition', () => {
+  const repo = (n: string) => ({ fullName: `octo/${n}`, owner: 'octo', name: n });
+
+  it.each([
+    ['forwards explicit repos, profile and capabilities',
+      { profile: 'learning' as const, capabilities: ['github'] as const, repos: [repo('one'), repo('two')] },
+      { profile: 'learning', capabilities: ['github'], repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
+    ['falls back to thread.context.repos when none supplied',
+      undefined, { profile: 'learning', repos: ['octo/ctx'] }, [repo('ctx')]],
+    ['defaults to no repos when neither option nor context provides any',
+      undefined, { profile: 'learning', repos: [] }, [] as ReturnType<typeof repo>[]],
+  ] as const)('%s', async (_, options, expected, contextRepos) => {
+    const { result } = await renderHookWithSeed([
+      makeThread({ id: 'thread-x', context: { repos: contextRepos } }),
+    ]);
+    await act(async () => {
+      await result.current.sendMessage('Q', options);
+    });
+    expect(backend.jobPosts[0]).toMatchObject({
+      type: 'chat-response',
+      input: expect.objectContaining({
+        prompt: 'Q',
+        threadId: 'thread-x',
+        assistantMessageId: ASSISTANT_ID,
+        ...expected,
+      }),
+    });
   });
 });

@@ -46,7 +46,6 @@ export function Dashboard() {
     toolsUsed, 
     refetch: refetchFocus, 
     loadingComponents, 
-    componentTimestamps, 
     skipAndReplaceTopic, 
     skipAndReplaceChallenge,
     requestDebugChallenge,
@@ -130,7 +129,7 @@ export function Dashboard() {
   // PERF: Consolidate chat handlers to reduce prop drilling and prevent unnecessary re-renders
   const chatHandlers = useMemo(() => ({
     sendMessage: async (message: string, repos?: RepoReference[]) => {
-      await sendMessage(message, { useGitHubTools: true, repos });
+      await sendMessage(message, { profile: 'learning', capabilities: ['github'], repos });
     },
     createThread,
     selectThread: (threadId: string | null) => {
@@ -160,7 +159,7 @@ export function Dashboard() {
     // Pass threadId explicitly to avoid race condition with async state update
     const seedMessage = `I'd like to explore "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
     
-    await sendMessage(seedMessage, { useGitHubTools: true, threadId: thread.id });
+    await sendMessage(seedMessage, { profile: 'learning', capabilities: ['github'], threadId: thread.id });
   }, [createThread, sendMessage]);
 
   return (
@@ -179,7 +178,6 @@ export function Dashboard() {
               isAIEnabled={isAIEnabled}
               toolsUsed={toolsUsed}
               loadingComponents={loadingComponents}
-              componentTimestamps={componentTimestamps}
               onRefresh={handleRefresh}
               onSkipTopic={handleSkipTopic}
               onStopSkipTopic={handleStopSkipTopic}

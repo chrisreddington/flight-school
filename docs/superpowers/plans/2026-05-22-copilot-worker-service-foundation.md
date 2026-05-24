@@ -1,5 +1,7 @@
 # Copilot Worker Service Foundation Implementation Plan
 
+**Status:** ✅ Implemented and then superseded by `2026-05-22-mandatory-copilot-worker.md` (the in-process fallback no longer exists for public chat). Retained for historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a local HTTP worker path and production ACA worker scaffold for Copilot chat execution while preserving the in-process fallback.

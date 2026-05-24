@@ -38,8 +38,8 @@ import {
   toFileMetadata,
   toWorkspaceFile
 } from '@/lib/workspace/storage';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
-import { validationErrorResponse } from '@/lib/api/response-utils';
+import { requireUserContext } from '@/lib/auth/context';
+import { authErrorResponse, validationErrorResponse } from '@/lib/api';
 import { logger } from '@/lib/logger';
 
 const log = logger.withTag('Workspace Storage API');
@@ -92,12 +92,8 @@ async function resolveUserWorkspacesDir(): Promise<
   try {
     ({ userId } = await requireUserContext());
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return {
-        ok: false,
-        response: NextResponse.json({ error: 'Authentication required' }, { status: 401 }),
-      };
-    }
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return { ok: false, response: authResponse };
     throw error;
   }
 

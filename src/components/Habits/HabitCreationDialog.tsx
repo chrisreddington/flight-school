@@ -5,8 +5,8 @@
  * Supports three tracking modes: time, count, binary.
  */
 
-import { habitStore } from '@/lib/habits';
-import { createHabit, type TrackingConfig } from '@/lib/habits/types';
+import { createHabitAction } from '@/app/habits/actions';
+import type { TrackingConfig } from '@/lib/habits/types';
 import { 
   Banner,
   Checkbox, 
@@ -21,7 +21,7 @@ import {
   TextInput 
 } from '@primer/react';
 import { CalendarIcon, CheckCircleIcon, ClockIcon, NumberIcon } from '@primer/octicons-react';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import styles from './HabitCreationDialog.module.css';
 
 interface HabitCreationDialogProps {
@@ -78,6 +78,11 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   const [customDays, setCustomDays] = useState('');
   const [includesWeekends, setIncludesWeekends] = useState(true);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // useState alone isn't enough for an async double-submit guard — two
+  // synchronous calls within the same tick would both see `false`. The
+  // ref flips atomically and is the real gate; state drives the UI.
+  const submitLockRef = useRef(false);
   
   // Focus management: focus first input when dialog opens
   const titleInputRef = React.useRef<HTMLInputElement>(null);
@@ -101,6 +106,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   }, [totalDays, customDays]);
 
   const handleSubmit = useCallback(async () => {
+    if (submitLockRef.current) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -110,61 +116,73 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
       return;
     }
 
+    // All sync validation runs BEFORE the lock so early-returns don't
+    // briefly toggle isSubmitting and stay structurally consistent with
+    // the other dialogs in this app.
+    let tracking: TrackingConfig;
+    if (trackingMode === 'time') {
+      const min = parseInt(minMinutes, 10);
+      const max = maxMinutes ? parseInt(maxMinutes, 10) : undefined;
+      if (isNaN(min) || min <= 0) {
+        setError('Minimum minutes must be a positive number');
+        return;
+      }
+      if (max !== undefined && (isNaN(max) || max < min)) {
+        setError('Maximum minutes must be greater than minimum');
+        return;
+      }
+      tracking = { mode: 'time', minMinutes: min, maxMinutes: max };
+    } else if (trackingMode === 'count') {
+      const target = parseInt(countTarget, 10);
+      if (isNaN(target) || target <= 0) {
+        setError('Count target must be a positive number');
+        return;
+      }
+      if (!countUnit.trim()) {
+        setError('Count unit is required');
+        return;
+      }
+      tracking = { mode: 'count', target, unit: countUnit.trim() };
+    } else {
+      tracking = { mode: 'binary' };
+    }
+
+    const days = getActiveDays();
+    if (days <= 0) {
+      setError('Duration must be a positive number');
+      return;
+    }
+    if (days > 365) {
+      setError('Duration cannot exceed 365 days');
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     try {
-      let tracking: TrackingConfig;
-      
-      if (trackingMode === 'time') {
-        const min = parseInt(minMinutes, 10);
-        const max = maxMinutes ? parseInt(maxMinutes, 10) : undefined;
-        
-        if (isNaN(min) || min <= 0) {
-          setError('Minimum minutes must be a positive number');
-          return;
-        }
-        if (max !== undefined && (isNaN(max) || max < min)) {
-          setError('Maximum minutes must be greater than minimum');
-          return;
-        }
-        
-        tracking = { mode: 'time', minMinutes: min, maxMinutes: max };
-      } else if (trackingMode === 'count') {
-        const target = parseInt(countTarget, 10);
-        
-        if (isNaN(target) || target <= 0) {
-          setError('Count target must be a positive number');
-          return;
-        }
-        if (!countUnit.trim()) {
-          setError('Count unit is required');
-          return;
-        }
-        
-        tracking = { mode: 'count', target, unit: countUnit.trim() };
-      } else {
-        tracking = { mode: 'binary' };
-      }
-
-      const days = getActiveDays();
-      if (days <= 0) {
-        setError('Duration must be a positive number');
+      const result = await createHabitAction({
+        title: title.trim(),
+        description: description.trim(),
+        tracking,
+        activeDays: days,
+        includesWeekends,
+      });
+      if (!result.ok) {
+        setError(result.error ?? 'Failed to create habit');
         return;
       }
-      if (days > 365) {
-        setError('Duration cannot exceed 365 days');
-        return;
-      }
-
-      const habit = createHabit(title.trim(), description.trim(), tracking, days, includesWeekends);
-      await habitStore.create(habit);
 
       setTitle('');
       setDescription('');
       setError('');
-      
+
       if (onCreated) onCreated();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create habit');
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
   }, [title, description, trackingMode, minMinutes, maxMinutes, countTarget, countUnit, getActiveDays, includesWeekends, onClose, onCreated]);
 
@@ -173,17 +191,24 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
     setTrackingMode(modes[index]);
   };
 
+  const handleClose = useCallback(() => {
+    // Block close while a create is in-flight; remount would reset the
+    // submit lock and let the user double-submit on reopen.
+    if (submitLockRef.current) return;
+    onClose();
+  }, [onClose]);
+
   if (!isOpen) return null;
 
   return (
     <Dialog
       title="Create New Habit"
       subtitle="Build consistency with daily practice"
-      onClose={onClose}
+      onClose={handleClose}
       width="large"
       footerButtons={[
-        { content: 'Cancel', onClick: onClose },
-        { content: 'Create Habit', onClick: handleSubmit, buttonType: 'primary' },
+        { content: 'Cancel', onClick: handleClose, disabled: isSubmitting },
+        { content: isSubmitting ? 'Creating…' : 'Create Habit', onClick: handleSubmit, buttonType: 'primary', disabled: isSubmitting },
       ]}
       aria-describedby={error ? 'habit-creation-error' : undefined}
     >

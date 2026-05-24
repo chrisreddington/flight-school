@@ -19,6 +19,8 @@ import {
 import { getOctokitForRequest } from '@/lib/github/client';
 import { createIssue, createLearningGoalIssue } from '@/lib/github/issues';
 import { logger } from '@/lib/logger';
+import { withGuardedRoute } from '@/lib/security/guard';
+import { ISSUES_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Issues API');
@@ -85,7 +87,6 @@ export async function POST(
   const startTime = nowMs();
   log.info('POST request started');
 
-  // Parse and validate request body
   const parseResult = await parseJsonBody<IssueRequest>(request);
   if (!parseResult.success) {
     return validationErrorResponse(parseResult.error, {
@@ -102,46 +103,49 @@ export async function POST(
 
   const req = parseResult.data;
 
-  try {
-    const octokit = await getOctokitForRequest();
-    let result;
+  return withGuardedRoute(
+    { ...ISSUES_GUARD, eventType: 'issues.create', auditMetadata: { route: '/api/issues', type: req.type } },
+    async () => {
+      try {
+        const octokit = await getOctokitForRequest();
+        const result =
+          req.type === 'generic'
+            ? await createIssue(octokit, {
+                owner: req.owner,
+                repo: req.repo,
+                title: req.title,
+                body: req.body,
+                labels: req.labels,
+              })
+            : await createLearningGoalIssue(
+                octokit,
+                req.owner,
+                req.repo,
+                req.topic,
+                req.description,
+              );
 
-    if (req.type === 'generic') {
-      log.info(`Creating generic issue in ${req.owner}/${req.repo}`);
-      result = await createIssue(octokit, {
-        owner: req.owner,
-        repo: req.repo,
-        title: req.title,
-        body: req.body,
-        labels: req.labels,
-      });
-    } else {
-      log.info(`Creating learning goal issue in ${req.owner}/${req.repo}`);
-      result = await createLearningGoalIssue(
-        octokit,
-        req.owner,
-        req.repo,
-        req.topic,
-        req.description
-      );
-    }
+        const totalTime = nowMs() - startTime;
+        log.info(`Issue #${result.number} created in ${totalTime}ms`);
 
-    const totalTime = nowMs() - startTime;
-    log.info(`Issue #${result.number} created in ${totalTime}ms`);
-
-    return NextResponse.json({
-      success: true,
-      issue: {
-        number: result.number,
-        title: result.title,
-        url: result.htmlUrl,
-      },
-      meta: {
-        createdAt: now(),
-        totalTimeMs: totalTime,
-      },
-    } satisfies IssueResponse);
-  } catch (error) {
-    return handleApiError(error, 'Issues API', startTime);
-  }
+        return NextResponse.json({
+          success: true,
+          issue: {
+            number: result.number,
+            title: result.title,
+            url: result.htmlUrl,
+          },
+          meta: {
+            createdAt: now(),
+            totalTimeMs: totalTime,
+          },
+        } satisfies IssueResponse);
+      } catch (error) {
+        // Keep the JSON envelope contract for non-guard failures
+        // (Octokit / network errors). Guard-related errors are still
+        // mapped to standard responses by withGuardedRoute itself.
+        return handleApiError(error, 'Issues API', startTime);
+      }
+    },
+  ) as Promise<NextResponse<IssueResponse | ErrorResponse>>;
 }

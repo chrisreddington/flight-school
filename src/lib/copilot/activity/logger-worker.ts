@@ -40,7 +40,7 @@ const log = logger.withTag('ActivityLoggerWorker');
  * delta latency) at the moment they call `complete`; this replaces the
  * old pattern of mutating `event.input.serverMetrics` in place.
  */
-export type CompleteOperation = (
+type CompleteOperation = (
   output?: AIActivityOutput,
   error?: string,
   serverMetrics?: {
@@ -307,4 +307,3 @@ class AIActivityLoggerWorker {
 
 /** Worker-only singleton. */
 export const activityLoggerWorker = AIActivityLoggerWorker.getInstance();
-export { AIActivityLoggerWorker };

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getCopilotWorkerConfig: vi.fn(),
   executeCopilotChatViaWorker: vi.fn(),
-  executeCopilotChatInProcess: vi.fn(),
 }));
 
 vi.mock('./config', () => ({
@@ -12,10 +11,6 @@ vi.mock('./config', () => ({
 
 vi.mock('./http-client', () => ({
   executeCopilotChatViaWorker: mocks.executeCopilotChatViaWorker,
-}));
-
-vi.mock('./in-process', () => ({
-  executeCopilotChatInProcess: mocks.executeCopilotChatInProcess,
 }));
 
 import { executeCopilotChat } from './index';
@@ -33,7 +28,7 @@ const result = {
     model: 'claude-haiku-4.5',
     toolsUsed: [],
     totalTimeMs: 10,
-    usedGitHubTools: false,
+    profile: 'chat',
     sessionCreateMs: null,
     sessionPoolHit: null,
     mcpEnabled: null,
@@ -44,7 +39,6 @@ const result = {
 describe('executeCopilotChat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.executeCopilotChatInProcess.mockResolvedValue(result);
     mocks.executeCopilotChatViaWorker.mockResolvedValue(result);
   });
 
@@ -53,7 +47,6 @@ describe('executeCopilotChat', () => {
 
     await expect(executeCopilotChat(request)).rejects.toThrow('Copilot worker is required for chat execution');
 
-    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
     expect(mocks.executeCopilotChatViaWorker).not.toHaveBeenCalled();
   });
 
@@ -64,16 +57,13 @@ describe('executeCopilotChat', () => {
     await expect(executeCopilotChat(request)).resolves.toBe(result);
 
     expect(mocks.executeCopilotChatViaWorker).toHaveBeenCalledWith(config, request);
-    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
   });
 
-  it('propagates worker failures without falling back in-process', async () => {
+  it('propagates worker failures without any in-process fallback', async () => {
     const config = { baseUrl: 'http://localhost:3001', secret: 'local-secret', timeoutMs: 120_000 };
     mocks.getCopilotWorkerConfig.mockReturnValue(config);
     mocks.executeCopilotChatViaWorker.mockRejectedValue(new Error('worker unavailable'));
 
     await expect(executeCopilotChat(request)).rejects.toThrow('worker unavailable');
-
-    expect(mocks.executeCopilotChatInProcess).not.toHaveBeenCalled();
   });
 });

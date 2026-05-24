@@ -6,7 +6,7 @@ The `@github/copilot-sdk` package provides programmatic access to GitHub Copilot
 
 **Repository**: https://github.com/github/copilot-sdk  
 **NPM Package**: `@github/copilot-sdk`  
-**Current Version**: 0.1.20+
+**Current Version**: `1.0.0-beta.4` (see `package.json`)
 
 ## Architecture
 
@@ -22,18 +22,27 @@ MCP Servers (optional)
 
 ## How This Project Uses the SDK
 
-**Server-side** (`lib/copilotService.ts`):
+**Server-side** — sessions are constructed per request, **never** with
+`useLoggedInUser: true`. The per-request user's GitHub token flows into
+every `createSession` call. The CopilotClient itself is constructed inside
+the per-user runtime pool (`src/lib/copilot/runtime/`) and Copilot
+execution is routed through the mandatory worker boundary at
+`src/lib/copilot/execution/`. **Web/API never imports the SDK directly —
+see [`copilot-sdk-worker-only`](../copilot-sdk-worker-only/SKILL.md) for
+the boundary contract.** See
+[`src/lib/copilot/sessions.ts`](../../../src/lib/copilot/sessions.ts) and
+[`docs/architecture-multitenant.md`](../../../docs/architecture-multitenant.md).
 
 ```typescript
-import { CopilotClient, CopilotSession } from '@github/copilot-sdk';
+import { CopilotClient } from '@github/copilot-sdk';
 
-// Singleton service pattern
-const client = new CopilotClient({ logLevel: 'warning', useLoggedInUser: true });
+const client = new CopilotClient({ logLevel: 'warning', useLoggedInUser: false });
 await client.start();
 
 const session = await client.createSession({
   model: 'gpt-5-mini',
   systemMessage: { mode: 'append', content: buildSystemMessage() },
+  gitHubToken,
 });
 
 // Synchronous chat

@@ -9,7 +9,8 @@
 import { NextResponse } from 'next/server';
 import { listDirs } from '@/lib/storage/utils';
 import { WORKSPACES_DIR } from '@/lib/workspace/storage';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { requireUserContext } from '@/lib/auth/context';
+import { handleUnauthorizedError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 
 const log = logger.withTag('Workspace List API');
@@ -21,10 +22,7 @@ export async function GET() {
   try {
     ({ userId } = await requireUserContext());
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-    throw error;
+    return handleUnauthorizedError(error);
   }
 
   if (!SAFE_PATH_SEGMENT.test(userId)) {

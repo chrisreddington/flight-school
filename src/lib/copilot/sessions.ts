@@ -14,18 +14,15 @@ import type { PermissionHandler } from '@github/copilot-sdk';
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import { context, propagation } from '@opentelemetry/api';
 
-import { getMcpServerConfig } from './mcp';
+import { buildMcpServersForCapabilities, mcpCapabilityIdsOf } from './capabilities';
+import { composeCapabilityFingerprint } from './profiles';
+import { rememberConversationCapabilities } from './conversation-capabilities';
 import {
   CopilotEntitlementRequiredError,
   hasNegativeEntitlement,
   isCopilotEntitlementError,
   markNegativeEntitlement,
 } from './entitlement';
-import type {
-  SessionCreationMetrics,
-  SessionOptions,
-  SessionWithMetrics,
-} from './types';
 import { logger } from '@/lib/logger';
 import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
 import {
@@ -36,15 +33,28 @@ import {
   GEN_AI_REQUEST_MODEL,
 } from '@/lib/observability/semconv';
 import { createNewSessionMetrics, createReusedSessionMetrics } from './session-metrics';
+import { formatRequestedCapabilities } from './telemetry-attrs';
+import type { SessionCreationMetrics, SessionOptions } from './types';
+
+/**
+ * Session with its creation metrics.
+ *
+ * @remarks Declared inline (rather than in `./types`) because the
+ * `CopilotSession` reference must stay inside the worker-allowlisted file
+ * boundary — `./types` is consumed from Web/API and may not import the
+ * SDK, even at the type level.
+ */
+export interface SessionWithMetrics {
+  session: CopilotSession;
+  metrics: SessionCreationMetrics;
+}
 
 const log = logger.withTag('Copilot SDK');
 
-// =============================================================================
 // Model Configuration
-// =============================================================================
 
 /** Model tiers for different use cases */
-export const MODEL_TIERS = {
+const MODEL_TIERS = {
   /** Standard model for chat and coaching */
   standard: 'gpt-5-mini',
   /** Faster model for low-latency chat */
@@ -54,18 +64,12 @@ export const MODEL_TIERS = {
 /** Override chat model for performance tuning */
 export const CHAT_MODEL = process.env.COPILOT_CHAT_MODEL ?? MODEL_TIERS.fastChat;
 
-export { getCopilotGithubMcpTools } from './mcp-tools';
-
 const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
   if (request.kind === 'mcp') {
     return { kind: 'approve-once' };
   }
   return { kind: 'reject', feedback: 'MCP tools only for this session.' };
 };
-
-// =============================================================================
-// Singleton Client
-// =============================================================================
 
 let client: CopilotClient | null = null;
 
@@ -97,10 +101,6 @@ async function getCopilotClient(): Promise<CopilotClient> {
   return client;
 }
 
-// =============================================================================
-// Client Warmup
-// =============================================================================
-
 // Track shutdown state in global to survive HMR
 const globalForShutdown = globalThis as typeof globalThis & {
   __isShuttingDown?: boolean;
@@ -108,12 +108,13 @@ const globalForShutdown = globalThis as typeof globalThis & {
 
 let isShuttingDown = globalForShutdown.__isShuttingDown ?? false;
 
-// =============================================================================
-// Conversation Session Caching
-// =============================================================================
-
 const CHAT_SESSION_TTL_MS = 10 * 60 * 1000;
-const CHAT_SESSION_MAX = 20;
+/**
+ * Cache size bumped from 20 → 50 to absorb realistic concurrent-user load
+ * (panel feedback: most smoke-test thread-1 invocations were cold MISSes).
+ * Each entry holds a single SDK session; eviction is LRU.
+ */
+const CHAT_SESSION_MAX = 50;
 
 interface CachedChatSession {
   session: CopilotSession;
@@ -132,6 +133,12 @@ const chatSessionCache = globalForConversationCache.__chatSessionCache ?? new Ma
 if (!globalForConversationCache.__chatSessionCache) {
   globalForConversationCache.__chatSessionCache = chatSessionCache;
 }
+
+// Conversation-→-capability memory lives in `./conversation-capabilities`
+// so the monotonic-across-turns guarantee can be unit-tested without
+// pulling in the SDK-bound session pool. Re-exported from this module
+// so existing call sites keep their import path.
+export { getConversationCapabilities } from './conversation-capabilities';
 
 function pruneChatSessions(): void {
   const now = Date.now();
@@ -160,10 +167,6 @@ function pruneChatSessions(): void {
   }
 }
 
-// =============================================================================
-// Session Factory
-// =============================================================================
-
 /**
  * Create a Copilot session with metrics tracking.
  *
@@ -173,15 +176,17 @@ function pruneChatSessions(): void {
  * also keys on `userId`, and defaulting either field would risk session
  * reuse across GitHub identities.
  *
- * @param options - Session configuration (must include userId + gitHubToken)
- * @param poolKey - Identifier for metrics tracking
+ * The MCP servers map is built from `options.capabilities` (resolved by
+ * the caller via `resolveProfile`); no inline branching on a boolean flag.
+ *
+ * @param options - Session configuration (must include userId, gitHubToken,
+ *   profile, and resolved capabilities)
  * @returns Session and creation metrics
  * @throws {Error} if `options.userId` is missing/empty (multi-tenant invariant)
  * @throws {Error} if `options.gitHubToken` is missing/empty (multi-tenant invariant)
  */
 export async function createSessionWithMetrics(
   options: SessionOptions,
-  poolKey = 'unknown'
 ): Promise<SessionWithMetrics> {
   if (!options.userId) {
     throw new Error('userId required for session cache key — multi-tenant invariant');
@@ -190,7 +195,18 @@ export async function createSessionWithMetrics(
     throw new Error('gitHubToken is required — multi-tenant invariant (no ambient auth)');
   }
   const model = options.model ?? MODEL_TIERS.standard;
-  const includeMcp = options.includeMcpTools === true; // Default to false for speed
+  const capabilities = options.capabilities;
+  const capabilityFingerprint =
+    options.capabilityFingerprint ??
+    composeCapabilityFingerprint(capabilities, options.systemMessage ?? '');
+  const poolKey = `${options.profile}:${capabilityFingerprint}`;
+  const mcpServerIds = mcpCapabilityIdsOf(capabilities);
+  const sortedMcpServerIds = [...mcpServerIds].sort().join(',');
+  const sortedCapabilityIds = [...capabilities]
+    .map((selection) => selection.id)
+    .sort()
+    .join(',');
+  const requestedCapabilitiesAttr = formatRequestedCapabilities(options.requestedCapabilities);
   const startTime = Date.now();
 
   return withSpan(
@@ -200,7 +216,13 @@ export async function createSessionWithMetrics(
       [GEN_AI_REQUEST_MODEL]: model,
       [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
       'copilot.pool_key': poolKey,
-      'copilot.mcp_enabled': includeMcp,
+      'copilot.profile': options.profile,
+      'copilot.profile.elevated': options.wasAutoElevated === true,
+      'copilot.profile.requested_capabilities': requestedCapabilitiesAttr,
+      'copilot.capability.count': capabilities.length,
+      'copilot.capability.ids': sortedCapabilityIds,
+      'copilot.mcp.server_count': mcpServerIds.length,
+      'copilot.mcp.servers': sortedMcpServerIds,
     },
     async () => {
       // P5: short-circuit for users already known to lack a Copilot license.
@@ -215,26 +237,20 @@ export async function createSessionWithMetrics(
 
       try {
         const copilot = await getCopilotClient();
-        let mcpConfig = null;
-        if (includeMcp) {
-          if (options.gitHubToken) {
-            mcpConfig = getMcpServerConfig({
-              token: options.gitHubToken,
-              tools: options.tools,
-            });
-          } else {
-            log.warn('No GitHub token supplied - MCP tools will be disabled');
-          }
-        }
-        const permissionHandler = includeMcp ? mcpOnlyPermissionHandler : approveAll;
+        const mcpServers = buildMcpServersForCapabilities(
+          capabilities,
+          (id) => (id === 'github' ? options.gitHubToken : undefined),
+        );
+        const hasMcpServers = Object.keys(mcpServers).length > 0;
+        const permissionHandler = hasMcpServers ? mcpOnlyPermissionHandler : approveAll;
 
         const session = await copilot.createSession({
           model,
           streaming: true, // Enable streaming for delta events
           onPermissionRequest: permissionHandler,
           // Per-session GitHub identity (multitenancy). Independent of any
-          // client-level token. Only set when the caller supplied one.
-          ...(options.gitHubToken && { gitHubToken: options.gitHubToken }),
+          // client-level token.
+          gitHubToken: options.gitHubToken,
           // Disable built-in tools we don't need; prefer GitHub MCP tools for repo context
           excludedTools: [
             'shell',
@@ -258,11 +274,7 @@ export async function createSessionWithMetrics(
             'gh',
             'curl',
           ],
-          ...(mcpConfig && {
-            mcpServers: {
-              github: mcpConfig,
-            },
-          }),
+          ...(hasMcpServers && { mcpServers }),
           ...(options.systemMessage && {
             systemMessage: {
               mode: 'append',
@@ -279,7 +291,7 @@ export async function createSessionWithMetrics(
           metrics: createNewSessionMetrics({
             poolKey,
             sessionCreateMs,
-            mcpEnabled: Boolean(mcpConfig),
+            mcpEnabled: hasMcpServers,
             model,
           }),
         };
@@ -308,54 +320,57 @@ export async function createSessionWithMetrics(
  * Get or create a session for a conversation (with caching).
  *
  * @remarks
- * For new conversations, creates a fresh session and caches it. For existing
- * conversations, reuses the cached session (multi-turn).
+ * Cache key shape: `${userId}:${profileId}:${capabilityFingerprint}:${conversationId}`.
+ * Two GitHub identities can never share an entry (userId partition); two
+ * surfaces with different capability sets can never share an entry
+ * (fingerprint partition).
  *
- * Multi-tenant invariant: the cache is keyed by `userId` so two GitHub
- * identities can never share a session entry even if they share a
- * `conversationId`. `userId` (caller-supplied) MUST match `options.userId`;
- * we throw if `userId` is missing/empty.
- *
- * @param userId - GitHub user ID. Required to isolate session caches per user.
  * @param conversationId - Optional conversation ID for session reuse
- * @param poolKey - Pool identifier (for logging/metrics)
- * @param options - Session configuration (must include matching userId + gitHubToken)
+ * @param options - Session configuration (profile + capabilities + identity)
  * @returns Session and creation metrics
- * @throws {Error} if `userId` is missing/empty (multi-tenant invariant)
+ * @throws {Error} if `options.userId` is missing/empty (multi-tenant invariant)
  * @throws {Error} if `options.gitHubToken` is missing/empty (multi-tenant invariant)
  */
 export async function getConversationSession(
-  userId: string,
   conversationId: string | undefined,
-  poolKey: string,
   options: SessionOptions
 ): Promise<SessionWithMetrics> {
-  if (!userId) {
+  if (!options.userId) {
     throw new Error('userId required for session cache key — multi-tenant invariant');
   }
   if (!options.gitHubToken) {
     throw new Error('gitHubToken is required — multi-tenant invariant (no ambient auth)');
   }
+  const { userId, profile } = options;
+  const capabilityFingerprint =
+    options.capabilityFingerprint ??
+    composeCapabilityFingerprint(options.capabilities, options.systemMessage ?? '');
+  const capabilityIds = options.capabilities.map((selection) => selection.id);
+
   if (!conversationId) {
-    log.debug('No conversation ID - creating fresh session', { poolKey, userId });
-    return createSessionWithMetrics({ ...options, userId }, poolKey);
+    log.debug('No conversation ID - creating fresh session', { profile, userId });
+    return createSessionWithMetrics({ ...options, capabilityFingerprint });
   }
 
   pruneChatSessions();
 
-  const cacheKey = `${userId}:${poolKey}:${conversationId}`;
+  const cacheKey = `${userId}:${profile}:${capabilityFingerprint}:${conversationId}`;
   const cached = chatSessionCache.get(cacheKey);
   if (cached) {
-    log.debug('Conversation HIT', { conversationId, poolKey, userId });
+    log.debug('Conversation HIT', { conversationId, profile, userId });
     cached.lastUsed = Date.now();
+    rememberConversationCapabilities(userId, conversationId, capabilityIds);
     return {
       session: cached.session,
       metrics: createReusedSessionMetrics(cached.metrics),
     };
   }
 
-  log.debug('Conversation MISS - creating session', { conversationId, poolKey, userId });
-  const { session, metrics } = await createSessionWithMetrics({ ...options, userId }, poolKey);
+  log.debug('Conversation MISS - creating session', { conversationId, profile, userId });
+  const { session, metrics } = await createSessionWithMetrics({
+    ...options,
+    capabilityFingerprint,
+  });
   const cachedMetrics = {
     ...metrics,
     reusedConversation: false,
@@ -367,6 +382,7 @@ export async function getConversationSession(
     metrics: cachedMetrics,
     userId,
   });
+  rememberConversationCapabilities(userId, conversationId, capabilityIds);
 
   return { session, metrics: cachedMetrics };
 }

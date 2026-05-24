@@ -1,5 +1,3 @@
-'use client';
-
 import type { RunResult } from '@/lib/editor/code-runner';
 import { Spinner } from '@primer/react';
 import styles from './CodeOutputPanel.module.css';

@@ -33,7 +33,7 @@ describe('/api/internal/copilot/execute', () => {
         model: 'claude-haiku-4.5',
         toolsUsed: [],
         totalTimeMs: 10,
-        usedGitHubTools: false,
+        profile: 'chat',
         sessionCreateMs: null,
         sessionPoolHit: null,
         mcpEnabled: null,
@@ -83,7 +83,7 @@ describe('/api/internal/copilot/execute', () => {
     const request = {
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'hello',
-      useGitHubTools: false,
+      profile: 'chat',
       conversationId: 'thread-1',
     };
 
@@ -102,6 +102,7 @@ describe('/api/internal/copilot/execute', () => {
     const response = await POST(makeRequest({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'hello',
+      profile: 'chat',
     }));
     const text = await response.text();
 

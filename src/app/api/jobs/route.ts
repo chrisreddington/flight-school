@@ -10,8 +10,8 @@
  * GET  /api/jobs - List the caller's jobs (proxy → worker)
  */
 
-import { parseJsonBodyWithFallback } from '@/lib/api';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { authErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { buildWorkerDispatchCredentials, seedTokenStoreFromJwt } from '@/lib/auth/seed';
 import type {
   ChallengeEvaluationInput,
@@ -27,14 +27,20 @@ import {
   toClientTriggerSpanAttributes,
   type ClientTriggerMetadata,
 } from '@/lib/observability/trigger-metadata';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { CHAT_GUARD } from '@/lib/security/route-defaults';
 import { trace } from '@opentelemetry/api';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { createWorkerJob, listWorkerJobs, type CreateWorkerJobInput } from './worker-client';
 import type { DispatchableJobInput, DispatchableJobType } from '@/lib/jobs/dispatch';
+import {
+  areCapabilitiesAllowedForProfile,
+  isChatResponseProfile,
+  isCapabilitiesArg,
+  CHAT_RESPONSE_PROFILES,
+  type CapabilitiesArg,
+} from '@/lib/copilot/profile-types';
 
 const log = logger.withTag('Jobs API');
 
@@ -70,21 +76,15 @@ function toJobCausalityContext(
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    // Per-route guards: job creation is the public edge that initiates AI
-    // work (chat-response, regenerations, evaluations). Rate-limit +
-    // concurrent-cap + audit live exactly here so the same protections
-    // apply whether the user calls `/api/copilot` directly or queues
-    // a background job.
-    return await withUserGuards(
-      { ...CHAT_GUARD, eventType: 'job.create', auditMetadata: { route: '/api/jobs' } },
-      async ({ userId }) => handleCreateJob(request, userId),
-    );
-  } catch (err) {
-    const guardResponse = guardErrorResponse(err);
-    if (guardResponse) return guardResponse;
-    throw err;
-  }
+  // Per-route guards: job creation is the public edge that initiates AI
+  // work (chat-response, regenerations, evaluations). Rate-limit +
+  // concurrent-cap + audit live exactly here so the same protections
+  // apply whether the user calls `/api/copilot` directly or queues
+  // a background job.
+  return withGuardedRoute(
+    { ...CHAT_GUARD, eventType: 'job.create', auditMetadata: { route: '/api/jobs' } },
+    async ({ userId }) => handleCreateJob(request, userId),
+  );
 }
 
 /**
@@ -113,6 +113,57 @@ async function ensureTokenStoreSeeded(
     );
   }
   return null;
+}
+
+/**
+ * Validate the chat-response wire shape: `input.profile` must be a chat
+ * surface (`chat` | `learning` — the only profiles the streaming worker
+ * supports), and `input.capabilities` (if present) must be `'auto'` or
+ * an array of valid capability ids that all sit within the profile's
+ * allowlist. Rejecting here keeps doomed requests off the worker.
+ */
+function validateChatResponseProfile(
+  body: CreateJobRequest,
+): { ok: true } | { ok: false; response: NextResponse } {
+  if (body.type !== 'chat-response') return { ok: true };
+  const chatInput = body.input as ChatResponseInput | undefined;
+  if (!chatInput || !isChatResponseProfile(chatInput.profile)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error:
+            `Invalid 'profile' for chat-response: must be one of `
+            + `${CHAT_RESPONSE_PROFILES.join(' | ')}.`,
+        },
+        { status: 400 },
+      ),
+    };
+  }
+  if (chatInput.capabilities !== undefined && !isCapabilitiesArg(chatInput.capabilities)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Invalid 'capabilities': must be 'auto' or an array of capability ids." },
+        { status: 400 },
+      ),
+    };
+  }
+  if (
+    !areCapabilitiesAllowedForProfile(
+      chatInput.profile,
+      chatInput.capabilities as CapabilitiesArg | undefined,
+    )
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: `One or more capabilities are not allowed by profile '${chatInput.profile}'.` },
+        { status: 400 },
+      ),
+    };
+  }
+  return { ok: true };
 }
 
 /**
@@ -166,12 +217,16 @@ async function handleCreateJob(request: NextRequest, userId: string) {
     return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
   }
 
-  const seedError = await ensureTokenStoreSeeded(userId, body.type);
-  if (seedError) return seedError;
-
+  // Validate profile BEFORE the token-store seed so a 400 (bad payload)
+  // is never masked as a 503 (credential store unavailable).
   const normalized = normalizeChatAssistantMessageId(body);
   if (!normalized.ok) return normalized.response;
+  const profileCheck = validateChatResponseProfile(normalized.body);
+  if (!profileCheck.ok) return profileCheck.response;
   const finalBody = normalized.body;
+
+  const seedError = await ensureTokenStoreSeeded(userId, finalBody.type);
+  if (seedError) return seedError;
 
   const jobId = crypto.randomUUID();
   const traceContext = captureTracePropagationHeaders();
@@ -237,9 +292,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ jobs });
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return authResponse;
     log.error('Failed to list jobs from worker', { err });
     return NextResponse.json(
       { error: 'Job service temporarily unavailable. Please retry.' },

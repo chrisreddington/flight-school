@@ -13,7 +13,8 @@
  * @see SPEC-002 for acceptance criteria (AC3.1-AC3.4)
  */
 
-import { createLoggedLightweightCoachSession, type SessionIdentity } from './server';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import type { SessionIdentity } from './session-identity';
 import { extractJSON } from '@/lib/utils/json-utils';
 import type { ChallengeDef, HintResult } from './types';
 
@@ -143,16 +144,12 @@ export async function getHint(
   const challengeContext = buildChallengeContext(challenge);
   const prompt = buildHintPrompt(question, currentCode, challengeContext);
 
-  const loggedSession = await createLoggedLightweightCoachSession(
+  const result = await executeCopilotCoachJob({
     identity,
-    'Single Hint',
-    `Hint for ${challenge.title}`
-  );
-
-  try {
-    const result = await loggedSession.sendAndWait(prompt);
-    return parseHintResponse(result.responseText);
-  } finally {
-    loggedSession.destroy();
-  }
+    variant: 'lightweight',
+    operationName: 'Single Hint',
+    prompt,
+    inputSummary: `Hint for ${challenge.title}`,
+  });
+  return parseHintResponse(result.response);
 }

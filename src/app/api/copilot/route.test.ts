@@ -2,17 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   executeCopilotChat: vi.fn(),
-  withUserGuards: vi.fn(),
-  createLoggedChatSession: vi.fn(),
-  createLoggedGitHubChatSession: vi.fn(),
+  withGuardedRoute: vi.fn(),
 }));
 
 vi.mock('@/lib/security/guard', () => ({
-  withUserGuards: mocks.withUserGuards,
-}));
-
-vi.mock('@/lib/security/http', () => ({
-  guardErrorResponse: () => null,
+  withGuardedRoute: mocks.withGuardedRoute,
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -36,8 +30,6 @@ vi.mock('@/lib/copilot/server', () => ({
     userId: ctx.userId,
     gitHubToken: ctx.accessToken,
   }),
-  createLoggedChatSession: mocks.createLoggedChatSession,
-  createLoggedGitHubChatSession: mocks.createLoggedGitHubChatSession,
 }));
 
 import { CopilotWorkerRequiredError } from '@/lib/copilot/execution/worker-required-error';
@@ -54,7 +46,7 @@ function makeRequest(body: unknown) {
 describe('/api/copilot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.withUserGuards.mockImplementation(async (_opts, work) => work({
+    mocks.withGuardedRoute.mockImplementation(async (_opts, work) => work({
       userId: '123',
       login: 'octo',
       accessToken: 'ghu_user',
@@ -67,19 +59,17 @@ describe('/api/copilot', () => {
         model: 'claude-haiku-4.5',
         toolsUsed: [],
         totalTimeMs: 12,
-        usedGitHubTools: false,
+        profile: 'chat',
         sessionCreateMs: 4,
         sessionPoolHit: false,
         mcpEnabled: false,
         sessionReused: false,
       },
     });
-    mocks.createLoggedChatSession.mockRejectedValue(new Error('direct session factory should not be used'));
-    mocks.createLoggedGitHubChatSession.mockRejectedValue(new Error('direct session factory should not be used'));
   });
 
   it('delegates chat execution through the Copilot execution boundary', async () => {
-    const request = makeRequest({ prompt: 'hello', useGitHubTools: false, conversationId: 'thread-1' });
+    const request = makeRequest({ prompt: 'hello', profile: 'chat', conversationId: 'thread-1' });
 
     const response = await POST(request);
     const body = await response.json();
@@ -90,7 +80,7 @@ describe('/api/copilot', () => {
     expect(mocks.executeCopilotChat).toHaveBeenCalledWith({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'hello',
-      useGitHubTools: false,
+      profile: 'chat',
       conversationId: 'thread-1',
     });
   });
@@ -104,16 +94,26 @@ describe('/api/copilot', () => {
     expect(mocks.executeCopilotChat).not.toHaveBeenCalled();
   });
 
+  it.each(['coach', 'evaluation', 'authoring'])(
+    'rejects non-chat-response profile %s with 400 (does not invoke the worker)',
+    async (profile) => {
+      const request = makeRequest({ prompt: 'hello', profile });
+
+      const response = await POST(request);
+
+      // A 200 here would mean the worker accepted the disallowed profile.
+      expect(response.status).toBe(400);
+    },
+  );
+
   it('returns a safe configuration error when the worker is not configured', async () => {
     mocks.executeCopilotChat.mockRejectedValue(new CopilotWorkerRequiredError());
 
-    const response = await POST(makeRequest({ prompt: 'hello with ghu_user token text' }));
+    const response = await POST(makeRequest({ prompt: 'hello with ghu_user token text', profile: 'chat' }));
     const text = await response.text();
 
     expect(response.status).toBe(500);
     expect(text).toContain('Copilot worker is required for chat execution');
     expect(text).not.toContain('ghu_user');
-    expect(mocks.createLoggedChatSession).not.toHaveBeenCalled();
-    expect(mocks.createLoggedGitHubChatSession).not.toHaveBeenCalled();
   });
 });

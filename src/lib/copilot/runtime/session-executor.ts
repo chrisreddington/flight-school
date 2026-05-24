@@ -1,23 +1,45 @@
 import { now } from '@/lib/utils/date-utils';
-import { needsGitHubTools } from '@/lib/utils/content-detection';
 import type { LoggedCopilotSession } from '@/lib/copilot/logged-session';
 import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from '@/lib/copilot/execution/types';
+import {
+  getConversationCapabilities,
+  rememberConversationCapabilities,
+} from '@/lib/copilot/conversation-capabilities';
+import { resolveProfile, type ResolvedProfile } from '@/lib/copilot/profiles';
 
 export type RuntimeSessionFactory = (
   request: CopilotChatExecutionRequest,
-  operationName: string,
+  resolved: ResolvedProfile,
 ) => Promise<LoggedCopilotSession>;
 
 export async function executeChatWithSessionFactory(
   request: CopilotChatExecutionRequest,
   createChatSession: RuntimeSessionFactory,
-  createGitHubChatSession: RuntimeSessionFactory,
 ): Promise<CopilotChatExecutionResult> {
-  const enableGitHub = request.useGitHubTools === true || needsGitHubTools(request.prompt);
-  const sessionType = enableGitHub ? 'GitHub Chat' : 'Chat (fast)';
-  const loggedSession = enableGitHub
-    ? await createGitHubChatSession(request, sessionType)
-    : await createChatSession(request, sessionType);
+  // Fold in carried conversation capabilities so multi-turn `auto`
+  // requests on the direct worker path stay monotonic-add — matches
+  // the streaming chat factory's behaviour (see `streaming.ts`).
+  const resolved = resolveProfile(request.profile, {
+    prompt: request.prompt,
+    capabilities: request.capabilities,
+    conversationCapabilities: getConversationCapabilities(
+      request.identity.userId,
+      request.conversationId,
+    ),
+  });
+  const loggedSession = await createChatSession(request, resolved);
+
+  // Persist resolved capabilities BEFORE send so a mid-turn failure
+  // still carries auto-elevated tools forward to the next turn —
+  // the surface has been committed (system prompt composed, MCP
+  // installed) regardless of whether the LLM completes its reply.
+  if (request.conversationId) {
+    rememberConversationCapabilities(
+      request.identity.userId,
+      request.conversationId,
+      resolved.capabilities.map((selection) => selection.id),
+    );
+  }
 
   try {
     const result = await loggedSession.sendAndWait(request.prompt);
@@ -34,7 +56,7 @@ export async function executeChatWithSessionFactory(
         model: loggedSession.model,
         toolsUsed: result.toolCalls.map((toolCall) => toolCall.name),
         totalTimeMs: result.totalTimeMs,
-        usedGitHubTools: enableGitHub,
+        profile: request.profile,
         sessionCreateMs: loggedSession.sessionMetrics?.sessionCreateMs ?? null,
         sessionPoolHit: loggedSession.sessionMetrics ? !loggedSession.sessionMetrics.createdNew : null,
         mcpEnabled: loggedSession.sessionMetrics?.mcpEnabled ?? null,

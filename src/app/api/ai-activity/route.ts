@@ -17,8 +17,6 @@ import {
 } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 function buildProxyHeaders(userId: string, secret: string) {
   return mergeTracePropagationHeaders(
@@ -57,6 +55,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: buildProxyHeaders(userId, workerConfig.secret),
       signal: request.signal,
+      cache: 'no-store',
     });
     const body = await upstream.text();
     return new Response(body, {

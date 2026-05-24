@@ -1,13 +1,6 @@
-/**
- * Habit Edit Dialog
- * 
- * Modal for editing an existing habit's title and description.
- * Note: Tracking configuration cannot be changed to preserve check-in history integrity.
- */
-
 'use client';
 
-import { habitStore } from '@/lib/habits';
+import { updateHabitAction } from '@/app/habits/actions';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { logger } from '@/lib/logger';
 import {
@@ -18,7 +11,7 @@ import {
   TextInput,
   Textarea,
 } from '@primer/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 interface HabitEditDialogProps {
   habit: HabitWithHistory;
@@ -27,43 +20,52 @@ interface HabitEditDialogProps {
   onUpdated?: () => void;
 }
 
+/**
+ * Modal for editing an existing habit's title/description. Tracking
+ * configuration is immutable to preserve check-in history; the
+ * informational banner in the dialog explains that constraint.
+ */
 export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEditDialogProps) {
   const [title, setTitle] = useState(habit.title);
   const [description, setDescription] = useState(habit.description);
   const [isSaving, setIsSaving] = useState(false);
+  const submitLockRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = useCallback(async () => {
+    if (submitLockRef.current) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
     }
-
+    submitLockRef.current = true;
     setIsSaving(true);
     setError(null);
-
     try {
-      const updated: HabitWithHistory = {
-        ...habit,
+      const result = await updateHabitAction(habit.id, {
         title: title.trim(),
         description: description.trim(),
-      };
-
-      await habitStore.update(updated);
+      });
+      if (!result.ok) {
+        setError(result.error ?? 'Failed to save changes. Please try again.');
+        return;
+      }
       logger.info('Habit updated', { habitId: habit.id }, 'HabitEditDialog');
-      
       if (onUpdated) onUpdated();
       onClose();
     } catch (err) {
       logger.error('Failed to update habit', { error: err }, 'HabitEditDialog');
       setError('Failed to save changes. Please try again.');
     } finally {
+      submitLockRef.current = false;
       setIsSaving(false);
     }
   }, [habit, title, description, onUpdated, onClose]);
 
   const handleClose = useCallback(() => {
-    // Reset form state on close
+    // Block close while a save is in-flight; remount would reset the
+    // submit lock and let the user double-submit on reopen.
+    if (submitLockRef.current) return;
     setTitle(habit.title);
     setDescription(habit.description);
     setError(null);

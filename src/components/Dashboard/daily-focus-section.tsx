@@ -30,7 +30,7 @@ import {
 } from '@primer/react';
 import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
 import {
     getDynamicChallenge,
@@ -47,11 +47,6 @@ interface DailyFocusSectionProps {
   isAIEnabled: boolean;
   toolsUsed: string[];
   loadingComponents: string[];
-  componentTimestamps: {
-    challenge: string | null;
-    goal: string | null;
-    learningTopics: string | null;
-  };
   onRefresh: (components?: string[]) => void;
   /** Callback to skip a single topic and get a replacement */
   onSkipTopic?: (skippedTopic: LearningTopic, existingTopicTitles: string[]) => void;
@@ -86,7 +81,6 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   isAIEnabled,
   toolsUsed,
   loadingComponents,
-  componentTimestamps,
   onRefresh,
   onSkipTopic,
   onStopSkipTopic,
@@ -110,11 +104,17 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   // Use local state if set, otherwise fall back to aiFocus data
   const calibrationNeeded: CalibrationNeededItem[] = calibrationItems ?? aiFocus?.calibrationNeeded ?? [];
   
-  // Sync calibration items when aiFocus changes (e.g., on initial load or refresh)
-  // Only update if we haven't started managing locally yet
-  if (calibrationItems === null && aiFocus?.calibrationNeeded && aiFocus.calibrationNeeded.length > 0) {
-    setCalibrationItems(aiFocus.calibrationNeeded);
-  }
+  // Seed local calibration state from the fresh aiFocus payload once
+  // (subsequent edits stay client-side until the next focus refresh).
+  // Doing this in useEffect rather than during render avoids the Strict
+  // Mode warning about setState-in-render.
+  useEffect(() => {
+    if (calibrationItems !== null) return;
+    const incoming = aiFocus?.calibrationNeeded;
+    if (incoming && incoming.length > 0) {
+      setCalibrationItems(incoming);
+    }
+  }, [aiFocus?.calibrationNeeded, calibrationItems]);
   
   // Handle calibration item changes (from InlineCalibration)
   const handleCalibrationChange = useCallback((items: CalibrationNeededItem[]) => {
@@ -262,7 +262,6 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onStopSkip={onStopSkipChallenge}
                   isSkipping={skippingChallengeIds.has(challenge.id)}
                   refreshDisabled={isChallengeRefreshDisabled}
-                  timestamp={componentTimestamps.challenge}
                   queueCount={queueRemaining}
                   showIssueContextBadge={challenge.contextSource === 'issue'}
                   onAdvanceQueue={isCustomChallenge ? handleAdvanceQueue : undefined}

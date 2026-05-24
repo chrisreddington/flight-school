@@ -1,173 +1,69 @@
-import {
-    CHAT_SYSTEM_PROMPT,
-    COACH_LIGHTWEIGHT_PROMPT,
-    COACH_SYSTEM_PROMPT,
-    GITHUB_CHAT_SYSTEM_PROMPT,
-} from './prompts';
-import {
-    CHAT_MODEL,
-    createSessionWithMetrics,
-    getConversationSession,
-    MODEL_TIERS,
-} from './sessions';
+import { resolveProfile } from './profiles';
+import type { BaseProfileId, CapabilitiesArg } from './profile-types';
+import { createSessionWithMetrics } from './sessions';
 import { wrapSessionWithLogging } from './logged-session';
-import { getCopilotGithubMcpTools } from './mcp-tools';
 import type { SessionIdentity } from './session-identity';
-import type { SessionOptions } from './types';
 
-export { createSessionIdentity, type SessionIdentity } from './session-identity';
 export { wrapSessionWithLogging } from './logged-session';
 
 type LoggedSingleTurnSessionOptions = {
   identity: SessionIdentity;
   operationName: string;
   inputPrompt: string;
-  model: string;
-  poolKey: string;
-  sessionOptions: SessionOptions;
+  profile: BaseProfileId;
+  capabilities?: CapabilitiesArg;
 };
 
 async function createLoggedSingleTurnSession({
   identity,
   operationName,
   inputPrompt,
-  model,
-  poolKey,
-  sessionOptions,
+  profile,
+  capabilities,
 }: LoggedSingleTurnSessionOptions): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const { session, metrics } = await createSessionWithMetrics(sessionOptions, poolKey);
+  const resolved = resolveProfile(profile, { prompt: inputPrompt, capabilities });
+  const { session, metrics } = await createSessionWithMetrics({
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
+    profile: resolved.profileId,
+    capabilities: resolved.capabilities,
+    capabilityFingerprint: resolved.capabilityFingerprint,
+    requestedCapabilities: resolved.requestedCapabilities,
+    wasAutoElevated: resolved.wasAutoElevated,
+    systemMessage: resolved.systemMessage,
+    model: resolved.model,
+  });
   return wrapSessionWithLogging(
     identity.userId,
     session,
     operationName,
     inputPrompt,
-    model,
+    resolved.model,
     undefined,
     metrics,
   );
 }
 
-type LoggedConversationSessionOptions = LoggedSingleTurnSessionOptions & {
-  conversationId?: string;
-};
-
-async function createLoggedConversationSession({
-  identity,
-  operationName,
-  inputPrompt,
-  model,
-  poolKey,
-  sessionOptions,
-  conversationId,
-}: LoggedConversationSessionOptions): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const { session, metrics } = await getConversationSession(
-    identity.userId,
-    conversationId,
-    poolKey,
-    sessionOptions,
-  );
-  return wrapSessionWithLogging(
-    identity.userId,
-    session,
-    operationName,
-    inputPrompt,
-    model,
-    undefined,
-    metrics,
-    !conversationId,
-  );
-}
-
-/** Create a logged coach session with GitHub MCP tools for focus generation. */
+/**
+ * Create a logged single-turn coach session.
+ *
+ * Capability selection is orthogonal to the profile: pass
+ * `capabilities: ['github']` (the default) for an MCP-grounded coach,
+ * or `capabilities: []` for the fast lightweight path. There is no
+ * separate lightweight profile — the voice is identical, only the
+ * tool surface differs.
+ */
 export async function createLoggedCoachSession(
   identity: SessionIdentity,
   operationName = 'Coach Session',
-  inputPrompt = ''
+  inputPrompt = '',
+  capabilities: CapabilitiesArg = ['github'],
 ): Promise<ReturnType<typeof wrapSessionWithLogging>> {
   return createLoggedSingleTurnSession({
     identity,
     operationName,
     inputPrompt,
-    model: MODEL_TIERS.standard,
-    poolKey: 'coach:mcp',
-    sessionOptions: {
-      includeMcpTools: true,
-      tools: ['get_me', 'list_user_repositories'],
-      systemMessage: COACH_SYSTEM_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
-  });
-}
-
-/** Create a lightweight logged coach session without MCP tools. */
-export async function createLoggedLightweightCoachSession(
-  identity: SessionIdentity,
-  operationName = 'Coach Session (fast)',
-  inputPrompt = ''
-): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  return createLoggedSingleTurnSession({
-    identity,
-    operationName,
-    inputPrompt,
-    model: MODEL_TIERS.fastChat,
-    poolKey: 'coach:lightweight',
-    sessionOptions: {
-      includeMcpTools: false,
-      model: MODEL_TIERS.fastChat,
-      systemMessage: COACH_LIGHTWEIGHT_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
-  });
-}
-
-/** Create a lightweight logged chat session for multi-turn conversations. */
-export async function createLoggedChatSession(
-  identity: SessionIdentity,
-  operationName = 'Chat Session',
-  inputPrompt = '',
-  conversationId?: string
-): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  return createLoggedConversationSession({
-    identity,
-    operationName,
-    inputPrompt,
-    model: CHAT_MODEL,
-    poolKey: 'chat:lightweight',
-    conversationId,
-    sessionOptions: {
-      includeMcpTools: false,
-      model: CHAT_MODEL,
-      systemMessage: CHAT_SYSTEM_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
-  });
-}
-
-/** Create a logged chat session with GitHub MCP tools enabled. */
-export async function createLoggedGitHubChatSession(
-  identity: SessionIdentity,
-  operationName = 'GitHub Chat Session',
-  inputPrompt = '',
-  conversationId?: string
-): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const chatTools = getCopilotGithubMcpTools();
-  return createLoggedConversationSession({
-    identity,
-    operationName,
-    inputPrompt,
-    model: CHAT_MODEL,
-    poolKey: 'chat:mcp',
-    conversationId,
-    sessionOptions: {
-      includeMcpTools: true,
-      model: CHAT_MODEL,
-      ...(chatTools && chatTools.length > 0 && { tools: chatTools }),
-      systemMessage: GITHUB_CHAT_SYSTEM_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
+    profile: 'coach',
+    capabilities,
   });
 }

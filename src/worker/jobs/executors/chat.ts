@@ -31,10 +31,17 @@
  * @module worker/jobs/executors/chat
  */
 
-import { createLearningStreamingSession, createStreamingChatSession } from '@/lib/copilot/streaming';
+import { createChatStreamingSession } from '@/lib/copilot/streaming';
+import { buildCapabilityContextPrompt } from '@/lib/copilot/capabilities';
+import { resolveProfile } from '@/lib/copilot/profiles';
+import {
+  isBaseProfileId,
+  isChatResponseProfile,
+  CHAT_RESPONSE_PROFILES,
+} from '@/lib/copilot/profile-types';
+import { getConversationCapabilities } from '@/lib/copilot/sessions';
 import { jobStorage } from '@/lib/jobs';
 import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
-import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage';
 import { logger } from '@/lib/logger';
 import type { Message, ToolCallEvent } from '@/lib/threads';
@@ -50,7 +57,7 @@ import { upsertMessageById } from './thread-consolidation';
 const log = logger.withTag('JobChatExecutor');
 
 /** Annotation appended when the user (DELETE) stopped the stream. */
-export const RESPONSE_STOPPED_ANNOTATION = '\n\n*(Response stopped)*';
+const RESPONSE_STOPPED_ANNOTATION = '\n\n*(Response stopped)*';
 /** Annotation appended when the worker or sweeper interrupted the stream. */
 export const RESPONSE_INTERRUPTED_ANNOTATION = '\n\n*(Response interrupted)*';
 
@@ -76,17 +83,37 @@ export async function executeChatResponse(
   input: ChatResponseInput,
   userId: string,
 ): Promise<void> {
-  await jobStorage.markRunning(jobId);
-
   const {
     threadId,
     prompt,
     assistantMessageId: providedAssistantId,
-    learningMode = false,
-    useGitHubTools = false,
+    profile,
+    capabilities,
     repos,
   } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
+
+  // Validate BEFORE markRunning so malformed input can't leave a job
+  // stuck in `running` with no terminal event. Worker validation is
+  // defence-in-depth — the HTTP / IPC routes reject these too.
+  if (!isBaseProfileId(profile)) {
+    throw new Error(`Invalid chat profile: ${String(profile)}`);
+  }
+  if (!isChatResponseProfile(profile)) {
+    throw new Error(
+      `chat-response job only supports ${CHAT_RESPONSE_PROFILES.join(' | ')} profiles, got '${profile}'`,
+    );
+  }
+  // Resolve once on the raw user prompt. The streaming factory reuses
+  // this `ResolvedProfile` so `shouldElevate` is never re-evaluated
+  // against the worker-decorated `contextualPrompt`.
+  const preResolved = resolveProfile(profile, {
+    prompt,
+    capabilities,
+    conversationCapabilities: getConversationCapabilities(userId, threadId),
+  });
+
+  await jobStorage.markRunning(jobId);
 
   let fullContent = '';
   const toolCalls: string[] = [];
@@ -164,14 +191,22 @@ export async function executeChatResponse(
       throw new Error(`Thread ${threadId} not found`);
     }
 
-    const contextualPrompt = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
-    if (contextualPrompt !== prompt) {
-      log.debug(`[Job ${jobId}] Added repository context for ${repos?.length ?? 0} repos`);
+    const capabilityContext = buildCapabilityContextPrompt(preResolved.capabilities, {
+      repositories: repos,
+    });
+    const contextualPrompt = capabilityContext
+      ? `${capabilityContext}\n\nUser question: ${prompt}`
+      : prompt;
+    if (capabilityContext) {
+      log.debug(`[Job ${jobId}] Added capability context (${capabilityContext.length} chars)`);
     }
 
-    const session = learningMode
-      ? await createLearningStreamingSession(identity, contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId)
-      : await createStreamingChatSession(identity, contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId);
+    const session = await createChatStreamingSession(identity, contextualPrompt, {
+      profile,
+      resolved: preResolved,
+      operationName: `Job: ${jobId}`,
+      conversationId: threadId,
+    });
 
     registerSession(jobId, {
       destroy: async () => {

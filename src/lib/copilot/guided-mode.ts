@@ -1,5 +1,6 @@
 import { extractJSON } from '@/lib/utils/json-utils';
-import { createLoggedLightweightCoachSession, type SessionIdentity } from './server';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import type { SessionIdentity } from './session-identity';
 import type { GuidedPlan, GuidedStep, ScaffoldLevel } from './guided-mode-types';
 import { getGuidedPlanFallback } from './guided-mode-types';
 
@@ -72,15 +73,17 @@ Step 1: orient thinking and identify key inputs/outputs. Step 2: prompt planning
 JSON only:
 {"steps":[{"stepNumber":1,"title":"","instruction":"","elaborationPrompt":"Why does this approach work here?"}]}`;
 
-  const loggedSession = await createLoggedLightweightCoachSession(identity, 'Guided Challenge Plan', challenge.title);
-
   try {
-    const result = await loggedSession.sendAndWait(prompt);
-    const parsed = extractJSON<RawGuidedPlan>(result.responseText, 'Guided Challenge Plan');
+    const result = await executeCopilotCoachJob({
+      identity,
+      variant: 'lightweight',
+      operationName: 'Guided Challenge Plan',
+      prompt,
+      inputSummary: challenge.title,
+    });
+    const parsed = extractJSON<RawGuidedPlan>(result.response, 'Guided Challenge Plan');
     return normalizePlan(parsed, challenge);
   } catch {
     return getGuidedPlanFallback(challenge);
-  } finally {
-    loggedSession.destroy();
   }
 }

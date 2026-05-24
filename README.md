@@ -20,14 +20,14 @@ Flight School is a sample implementation showing how to build AI-powered develop
 > - Issues, PRs, and observations are welcome, but there is no SLA, roadmap
 >   commitment, or stability guarantee on anything in this repo.
 >
-> The current Copilot SDK integration provides **per-user identity isolation**
-> by passing each authenticated user's GitHub token into every SDK session.
-> It does **not** provide production-grade per-user Copilot CLI process
-> isolation: each app process currently owns a shared in-process SDK runtime.
-> The codebase now has an internal execution boundary and prototype per-user
-> runtime-pool contracts, but routes still execute in-process. See
-> [Multi-tenant Architecture](docs/architecture-multitenant.md) for the current
-> model and the worker-service target.
+> The Copilot SDK integration provides **per-user identity isolation** by
+> passing each authenticated user's GitHub token into every SDK session, and
+> public chat execution is **routed through a mandatory private Copilot
+> worker** with a per-user runtime pool. Each user gets a separate
+> SDK-spawned Copilot CLI child process and a separate `COPILOT_HOME`.
+> Public-facing routes do not execute the SDK in-process — if
+> `COPILOT_WORKER_URL` is unset, AI routes fail fast. See
+> [Multi-tenant Architecture](docs/architecture-multitenant.md) for details.
 
 ## Getting Started
 

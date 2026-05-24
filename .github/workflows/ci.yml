@@ -29,6 +29,9 @@ jobs:
       - name: Lint code
         run: npm run lint
 
+      - name: Run guardrails (sizes, test boundaries, cache, SDK boundary)
+        run: npm run check:guardrails
+
       - name: Run tests
         run: npm test
 

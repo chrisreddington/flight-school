@@ -17,8 +17,8 @@ import {
 } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+// Streaming SSE connection: hold the route open for the stream lifetime.
+export const maxDuration = 300;
 
 const SSE_HEADERS: HeadersInit = {
   'Content-Type': 'text/event-stream',
@@ -69,6 +69,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       method: 'GET',
       headers,
       signal: request.signal,
+      cache: 'no-store',
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') {

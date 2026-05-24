@@ -159,7 +159,6 @@ export async function createGenericStreamingSession(
   const model = CHAT_MODEL;
   const isValidation = action === 'validate';
   const systemMessage = isValidation ? VALIDATION_SYSTEM_PROMPT : AUTHORING_SYSTEM_PROMPT;
-  const poolKey = isValidation ? 'authoring:validate' : 'authoring:conversation';
 
   // Generate new conversation ID if not provided
   const newConversationId = conversationId || `author-${nowMs()}-${Math.random().toString(36).substring(7)}`;
@@ -169,15 +168,14 @@ export async function createGenericStreamingSession(
 
   // Get or create session (reuses session for same conversation)
   const { session, metrics } = await getConversationSession(
-    identity.userId,
     newConversationId,
-    poolKey,
     {
-      includeMcpTools: false, // Authoring doesn't need GitHub tools
-      model,
-      systemMessage,
       userId: identity.userId,
       gitHubToken: identity.gitHubToken,
+      profile: 'authoring',
+      capabilities: [],
+      systemMessage,
+      model,
     }
   );
 

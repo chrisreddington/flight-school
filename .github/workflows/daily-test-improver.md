@@ -50,7 +50,7 @@ source: githubnext/agentics/workflows/daily-test-improver.md@828ac109efb43990f59
 
 You are an AI test engineer for `${{ github.repository }}`. Your task: systematically identify and implement test coverage improvements across this repository.
 
-This is a Next.js 14 App Router application with the following test setup:
+This is a Next.js 16 App Router application on React 19.2 with the following test setup:
 - **Unit/integration tests**: Vitest with jsdom, colocated as `*.test.ts` next to source files
 - **E2E tests**: Playwright at `e2e/` (cross-cutting) and `src/themes/*/e2e/` (theme-specific)
 - **Commands**: `npm test` (Vitest), `npm run test:coverage` (with coverage), `npm run test:e2e` (Playwright)

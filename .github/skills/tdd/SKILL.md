@@ -227,5 +227,6 @@ If at any point you find yourself debugging without a failing test on screen, st
 ## See also
 
 - [`.github/instructions/testing.instructions.md`](../../instructions/testing.instructions.md) — authoritative testing rules (pyramid, mocking, naming, Playwright vs. Vitest).
+- [`.github/skills/tests-that-respect-boundaries/SKILL.md`](../tests-that-respect-boundaries/SKILL.md) — the practical contract for *what to assert on* (observable behaviour, not the mock) and the CI scripts that enforce it.
 - [`.github/skills/tsdocs/SKILL.md`](../tsdocs/SKILL.md) — how to document the behaviour your tests now lock in.
 - [`.github/skills/solid/SKILL.md`](../solid/SKILL.md) — design principles that make code easy to test (and that TDD pressures you toward naturally).

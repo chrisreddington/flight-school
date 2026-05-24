@@ -16,6 +16,15 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/history',
 }));
 
+vi.mock('@/app/habits/actions', () => ({
+  updateHabitAction: vi.fn().mockResolvedValue({ ok: true }),
+  createHabitAction: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
+vi.mock('@/app/challenge/actions', () => ({
+  updateChallengeAction: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock('@/hooks/use-active-operations', () => ({
   useActiveOperations: () => ({
     activeTopicIds: new Set<string>(),

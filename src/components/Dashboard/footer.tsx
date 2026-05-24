@@ -1,5 +1,3 @@
-'use client';
-
 import { HeartFillIcon } from '@primer/octicons-react';
 import { Link, Stack, Text } from '@primer/react';
 import styles from './Dashboard.module.css';

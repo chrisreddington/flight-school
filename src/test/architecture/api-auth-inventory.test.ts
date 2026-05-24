@@ -7,13 +7,15 @@ const API_ROUTE_ROOT = path.join(process.cwd(), 'src/app/api');
 type Boundary =
   | 'public'
   | 'requireUserContext'
-  | 'withUserGuards'
+  | 'withGuardedRoute'
   | 'createStorageRoute'
   | 'getOctokitForRequest'
   | 'verifyCronRequest'
   | 'internalWorkerSecret';
 
 const ROUTE_BOUNDARIES: Record<string, Boundary> = {
+  'internal/copilot/authoring/route.ts': 'internalWorkerSecret',
+  'internal/copilot/coach/route.ts': 'internalWorkerSecret',
   'internal/copilot/execute/route.ts': 'internalWorkerSecret',
   'internal/ai-activity/route.ts': 'internalWorkerSecret',
   'internal/ai-activity/event/route.ts': 'internalWorkerSecret',
@@ -28,36 +30,35 @@ const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   'ai-activity/route.ts': 'requireUserContext',
   'ai-activity/stream/route.ts': 'requireUserContext',
   'auth/[...nextauth]/route.ts': 'public',
-  'challenge/author/route.ts': 'requireUserContext',
-  'challenge/evaluate/route.ts': 'withUserGuards',
-  'challenge/hint/route.ts': 'withUserGuards',
+  'challenge/author/route.ts': 'withGuardedRoute',
+  'challenge/hint/route.ts': 'withGuardedRoute',
   'challenge/solve/route.ts': 'requireUserContext',
   'challenges/queue/route.ts': 'createStorageRoute',
-  'copilot/route.ts': 'withUserGuards',
+  'copilot/route.ts': 'withGuardedRoute',
   'cron/sweep/route.ts': 'verifyCronRequest',
   'evaluations/[id]/route.ts': 'requireUserContext',
-  'focus/route.ts': 'withUserGuards',
+  'focus/route.ts': 'withGuardedRoute',
   'focus/storage/route.ts': 'createStorageRoute',
-  'guided-plan/route.ts': 'requireUserContext',
+  'guided-plan/route.ts': 'withGuardedRoute',
   'habits/storage/route.ts': 'createStorageRoute',
   'health/route.ts': 'public',
-  'issues/route.ts': 'getOctokitForRequest',
+  'issues/route.ts': 'withGuardedRoute',
   'jobs/[id]/route.ts': 'requireUserContext',
   'jobs/[id]/stream/route.ts': 'requireUserContext',
   // `jobs/route.ts` is a mixed boundary: POST is wrapped in
-  // `withUserGuards` (rate-limit + concurrent-cap + audit) because it
+  // `withGuardedRoute` (rate-limit + concurrent-cap + audit) because it
   // initiates AI work; GET uses `requireUserContext` only (a redacted
   // list is a cheap read). The inventory marker uses the strongest
   // boundary present in the file.
-  'jobs/route.ts': 'withUserGuards',
+  'jobs/route.ts': 'withGuardedRoute',
   'otel/v1/traces/route.ts': 'requireUserContext',
   'profile/route.ts': 'getOctokitForRequest',
   'profile/storage/route.ts': 'createStorageRoute',
-  'quiz/route.ts': 'requireUserContext',
+  'quiz/route.ts': 'withGuardedRoute',
   'repos/create-from-workspace/route.ts': 'getOctokitForRequest',
   'repos/create/route.ts': 'requireUserContext',
   'skills/storage/route.ts': 'createStorageRoute',
-  'suggestions/route.ts': 'withUserGuards',
+  'suggestions/route.ts': 'withGuardedRoute',
   'threads/storage/route.ts': 'createStorageRoute',
   'user/data/route.ts': 'requireUserContext',
   'workspace/storage/list/route.ts': 'requireUserContext',
@@ -67,7 +68,7 @@ const ROUTE_BOUNDARIES: Record<string, Boundary> = {
 const SOURCE_MARKERS: Record<Boundary, string | null> = {
   public: null,
   requireUserContext: 'requireUserContext(',
-  withUserGuards: 'withUserGuards(',
+  withGuardedRoute: 'withGuardedRoute(',
   createStorageRoute: 'createStorageRoute(',
   getOctokitForRequest: 'getOctokitForRequest(',
   verifyCronRequest: 'verifyCronRequest(',
@@ -102,7 +103,31 @@ describe('API route auth inventory', () => {
         if (!marker) return null;
 
         const source = readFileSync(filePath, 'utf8');
-        return source.includes(marker) ? null : `${key} missing ${marker}`;
+        if (source.includes(marker)) return null;
+
+        // The route may delegate to a handler module from `@/lib/...`
+        // (named `handle*Request`). When it does, follow that import
+        // and check the marker there. Keeps thin route shims valid.
+        const handlerMatch = source.match(/from\s+['"](@\/lib\/[^'"]+)['"]/g);
+        if (handlerMatch) {
+          for (const fromClause of handlerMatch) {
+            const importPath = fromClause.match(/@\/lib\/[^'"]+/)?.[0];
+            if (!importPath) continue;
+            const handlerPath = path.join(
+              process.cwd(),
+              'src',
+              importPath.replace('@/', ''),
+            ) + '.ts';
+            try {
+              const handlerSource = readFileSync(handlerPath, 'utf8');
+              if (handlerSource.includes(marker)) return null;
+            } catch {
+              // Handler module not found at that path; keep looking.
+            }
+          }
+        }
+
+        return `${key} missing ${marker}`;
       })
       .filter(Boolean);
 

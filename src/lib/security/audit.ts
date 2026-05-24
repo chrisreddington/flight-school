@@ -30,7 +30,10 @@ export type AuditEventType =
   | 'rate-limit.blocked'
   | 'session-cap.blocked'
   | 'job.credentials_missing'
-  | 'job.credentials_refresh_failed';
+  | 'job.credentials_refresh_failed'
+  | 'storage.write'
+  | 'issues.create'
+  | 'page.view';
 
 export interface AuditEvent {
   type: AuditEventType;

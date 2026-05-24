@@ -1,4 +1,18 @@
-import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from './types';
+import {
+  CHAT_RESPONSE_PROFILE_SET,
+  isCapabilitiesArg,
+  areCapabilitiesAllowedForProfile,
+  type ChatResponseProfileId,
+  type CapabilitiesArg,
+} from '@/lib/copilot/profile-types';
+import type {
+  CopilotChatExecutionRequest,
+  CopilotChatExecutionResult,
+  CopilotCoachJobRequest,
+  CopilotCoachJobResult,
+  CopilotCoachVariant,
+  CopilotToolCallRecord,
+} from './types';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -6,13 +20,20 @@ export function parseCopilotWorkerChatRequest(value: unknown): CopilotChatExecut
   const record = requireRecord(value, 'request');
   const identity = requireRecord(record.identity, 'identity');
 
+  const profile = requireChatResponseProfile(record.profile, 'profile');
+  const capabilities = requireCapabilities(record.capabilities, 'capabilities');
+  if (!areCapabilitiesAllowedForProfile(profile, capabilities)) {
+    throw new Error(`capabilities are not allowed by profile '${profile}'`);
+  }
+
   return {
     identity: {
       userId: requireString(identity.userId, 'identity.userId'),
       gitHubToken: requireString(identity.gitHubToken, 'identity.gitHubToken'),
     },
     prompt: requireString(record.prompt, 'prompt'),
-    useGitHubTools: optionalBoolean(record.useGitHubTools, 'useGitHubTools'),
+    profile,
+    capabilities,
     conversationId: optionalString(record.conversationId, 'conversationId'),
   };
 }
@@ -29,13 +50,68 @@ export function parseCopilotWorkerChatResult(value: unknown): CopilotChatExecuti
       model: requireString(meta.model, 'meta.model'),
       toolsUsed: requireStringArray(meta.toolsUsed, 'meta.toolsUsed'),
       totalTimeMs: requireNumber(meta.totalTimeMs, 'meta.totalTimeMs'),
-      usedGitHubTools: requireBoolean(meta.usedGitHubTools, 'meta.usedGitHubTools'),
+      profile: requireChatResponseProfile(meta.profile, 'meta.profile'),
       sessionCreateMs: nullableNumber(meta.sessionCreateMs, 'meta.sessionCreateMs'),
       sessionPoolHit: nullableBoolean(meta.sessionPoolHit, 'meta.sessionPoolHit'),
       mcpEnabled: nullableBoolean(meta.mcpEnabled, 'meta.mcpEnabled'),
       sessionReused: nullableBoolean(meta.sessionReused, 'meta.sessionReused'),
     },
   };
+}
+
+export function parseCopilotWorkerCoachRequest(value: unknown): CopilotCoachJobRequest {
+  const record = requireRecord(value, 'request');
+  const identity = requireRecord(record.identity, 'identity');
+
+  return {
+    identity: {
+      userId: requireString(identity.userId, 'identity.userId'),
+      gitHubToken: requireString(identity.gitHubToken, 'identity.gitHubToken'),
+    },
+    variant: requireVariant(record.variant),
+    operationName: requireString(record.operationName, 'operationName'),
+    prompt: requireString(record.prompt, 'prompt'),
+    inputSummary: optionalString(record.inputSummary, 'inputSummary'),
+  };
+}
+
+export function parseCopilotWorkerCoachResult(value: unknown): CopilotCoachJobResult {
+  const record = requireRecord(value, 'result');
+  const meta = requireRecord(record.meta, 'meta');
+
+  return {
+    response: requireString(record.response, 'response'),
+    toolCalls: requireToolCalls(record.toolCalls),
+    meta: {
+      generatedAt: requireString(meta.generatedAt, 'meta.generatedAt'),
+      model: requireString(meta.model, 'meta.model'),
+      operationName: requireString(meta.operationName, 'meta.operationName'),
+      variant: requireVariant(meta.variant),
+      totalTimeMs: requireNumber(meta.totalTimeMs, 'meta.totalTimeMs'),
+      sessionCreateMs: nullableNumber(meta.sessionCreateMs, 'meta.sessionCreateMs'),
+      mcpEnabled: requireBoolean(meta.mcpEnabled, 'meta.mcpEnabled'),
+    },
+  };
+}
+
+function requireChatResponseProfile(value: unknown, name: string): ChatResponseProfileId {
+  if (typeof value !== 'string' || !CHAT_RESPONSE_PROFILE_SET.has(value as ChatResponseProfileId)) {
+    throw new Error(`${name} must be a chat-response profile (chat | learning)`);
+  }
+  return value as ChatResponseProfileId;
+}
+
+function requireCapabilities(value: unknown, name: string): CapabilitiesArg | undefined {
+  if (value === undefined) return undefined;
+  if (!isCapabilitiesArg(value)) {
+    throw new Error(`${name} must be 'auto' or an array of valid capability ids`);
+  }
+  return value;
+}
+
+function requireVariant(value: unknown): CopilotCoachVariant {
+  if (value === 'lightweight' || value === 'coach') return value;
+  throw new Error(`variant must be 'lightweight' or 'coach'`);
 }
 
 function requireRecord(value: unknown, name: string): UnknownRecord {
@@ -67,11 +143,6 @@ function requireBoolean(value: unknown, name: string): boolean {
   return value;
 }
 
-function optionalBoolean(value: unknown, name: string): boolean | undefined {
-  if (value === undefined) return undefined;
-  return requireBoolean(value, name);
-}
-
 function nullableBoolean(value: unknown, name: string): boolean | null {
   if (value === null) return null;
   return requireBoolean(value, name);
@@ -96,7 +167,7 @@ function requireStringArray(value: unknown, name: string): string[] {
   return value;
 }
 
-function requireToolCalls(value: unknown): CopilotChatExecutionResult['toolCalls'] {
+function requireToolCalls(value: unknown): CopilotToolCallRecord[] {
   if (!Array.isArray(value)) {
     throw new Error('toolCalls must be an array');
   }

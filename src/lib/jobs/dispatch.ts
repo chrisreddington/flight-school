@@ -5,7 +5,6 @@ import type {
   GoalRegenerationInput,
   TopicRegenerationInput,
 } from '@/lib/jobs';
-import type { TracePropagationHeaders } from '@/lib/observability/context-propagation';
 
 export type DispatchableJobType =
   | 'topic-regeneration'
@@ -32,9 +31,4 @@ export interface WorkerDispatchCredentials {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
-}
-
-export interface DispatchJobExecutionToWorkerRequest extends DispatchJobExecutionRequest {
-  credentials?: WorkerDispatchCredentials;
-  traceContext?: TracePropagationHeaders;
 }

@@ -50,8 +50,9 @@ are no boot-time fallbacks and no CLI back doors.
 | `getAuthMethod()` / `invalidateTokenCache()` | Removed | No process-wide token cache exists |
 | `gh auth token` CLI fallback | Removed | Sign in via OAuth even in local dev |
 | Module-scope Octokit singleton | Removed | `getOctokitForRequest()` per call |
-| `new CopilotClient(...)` in feature code | Forbidden | Use `createLoggedChatSession` / `createLoggedCoachSession` |
-| Copilot session without `gitHubToken` | Forbidden | Pass `SessionIdentity { userId, gitHubToken }` |
+| `new CopilotClient(...)` in feature code | Forbidden | All Copilot SDK calls run in the worker. From Web/API, dispatch via `executeCopilotChat` / `executeCopilotCoachJob` / `openCopilotAuthoringStreamViaWorker` in `@/lib/copilot/execution`. |
+| `createLoggedChatSession` / `createLoggedCoachSession` in feature code | Forbidden | Same as above — these are worker-internal factories. See `.github/skills/copilot-sdk-worker-only/SKILL.md`. |
+| Copilot session without `gitHubToken` | Forbidden | Worker dispatch primitives carry the identity automatically. |
 | Sharing chat session cache across users | Removed | Cache key now includes `userId` |
 
 ## Before / after
@@ -91,18 +92,32 @@ export async function GET() {
 }
 ```
 
-For AI-backed routes, prefer `withUserGuards`:
+For AI-backed routes, prefer `withGuardedRoute` (composes `withUserGuards` + standard error mapping):
 
 ```typescript
-import { withUserGuards } from '@/lib/security/guard';
+import { withGuardedRoute } from '@/lib/security/guard';
 
 export async function POST(req: Request) {
-  return withUserGuards(
+  return withGuardedRoute(
     { rateLimit: { limit: 30, windowMs: 60_000 }, concurrentCap: 3, eventType: 'copilot.session.create' },
-    async ({ userId, accessToken }) => {
+    async (ctx) => {
+      const { userId, accessToken } = ctx;
       // ...
     },
   );
+}
+```
+
+For non-route callers (Server Actions, RSC loaders) use the core directly:
+
+```typescript
+import { requireGuardedUserContext } from '@/lib/security/guard';
+
+const { ctx, release } = await requireGuardedUserContext({ eventType: 'habit.update' });
+try {
+  // ctx.userId, ctx.accessToken, ctx.login
+} finally {
+  release();
 }
 ```
 
@@ -139,16 +154,31 @@ const session = await createChatSession();
 **After:**
 
 ```typescript
-import { createLoggedChatSession, type SessionIdentity } from '@/lib/copilot/server';
-import { requireUserContext } from '@/lib/auth/context';
+import { executeCopilotChat } from '@/lib/copilot/execution';
+import { requireGuardedUserContext } from '@/lib/security/guard';
 
-const { userId, accessToken } = await requireUserContext();
-const identity: SessionIdentity = { userId, gitHubToken: accessToken };
-const session = await createLoggedChatSession(identity, 'chat', prompt);
+const { ctx, release } = await requireGuardedUserContext({
+  eventType: 'chat.request',
+});
+try {
+  const result = await executeCopilotChat({
+    identity: { userId: ctx.userId, gitHubToken: ctx.accessToken },
+    operationName: 'chat',
+    prompt,
+  });
+  return result;
+} finally {
+  release();
+}
 ```
 
-The same shape applies to `createLoggedCoachSession`,
-`createLoggedLightweightCoachSession`, and `createLoggedGitHubChatSession`.
+All Copilot SDK calls execute inside the isolated worker process. From any
+Web Frontend or Web API code path, dispatch via the execution primitives
+exported from `@/lib/copilot/execution` — `executeCopilotChat`,
+`executeCopilotCoachJob`, and `openCopilotAuthoringStreamViaWorker`. The
+`scripts/check-copilot-sdk-boundary.mjs` guardrail blocks any direct SDK
+or session-factory import outside the worker allowlist. See
+`.github/skills/copilot-sdk-worker-only/SKILL.md`.
 
 ## Verifying the upgrade
 
