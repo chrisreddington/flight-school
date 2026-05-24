@@ -1,3 +1,4 @@
+import type { ChatProfileId } from '@/lib/copilot/profiles';
 import type {
   CopilotChatExecutionRequest,
   CopilotChatExecutionResult,
@@ -6,6 +7,17 @@ import type {
   CopilotCoachVariant,
   CopilotToolCallRecord,
 } from './types';
+
+const CHAT_PROFILE_IDS = new Set<ChatProfileId>([
+  'chat',
+  'chat-github',
+  'learning',
+  'learning-github',
+  'evaluation',
+  'coach',
+  'coach-lightweight',
+  'authoring',
+]);
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -19,7 +31,7 @@ export function parseCopilotWorkerChatRequest(value: unknown): CopilotChatExecut
       gitHubToken: requireString(identity.gitHubToken, 'identity.gitHubToken'),
     },
     prompt: requireString(record.prompt, 'prompt'),
-    useGitHubTools: optionalBoolean(record.useGitHubTools, 'useGitHubTools'),
+    profile: requireProfile(record.profile, 'profile'),
     conversationId: optionalString(record.conversationId, 'conversationId'),
   };
 }
@@ -36,7 +48,7 @@ export function parseCopilotWorkerChatResult(value: unknown): CopilotChatExecuti
       model: requireString(meta.model, 'meta.model'),
       toolsUsed: requireStringArray(meta.toolsUsed, 'meta.toolsUsed'),
       totalTimeMs: requireNumber(meta.totalTimeMs, 'meta.totalTimeMs'),
-      usedGitHubTools: requireBoolean(meta.usedGitHubTools, 'meta.usedGitHubTools'),
+      profile: requireProfile(meta.profile, 'meta.profile'),
       sessionCreateMs: nullableNumber(meta.sessionCreateMs, 'meta.sessionCreateMs'),
       sessionPoolHit: nullableBoolean(meta.sessionPoolHit, 'meta.sessionPoolHit'),
       mcpEnabled: nullableBoolean(meta.mcpEnabled, 'meta.mcpEnabled'),
@@ -80,6 +92,13 @@ export function parseCopilotWorkerCoachResult(value: unknown): CopilotCoachJobRe
   };
 }
 
+function requireProfile(value: unknown, name: string): ChatProfileId {
+  if (typeof value !== 'string' || !CHAT_PROFILE_IDS.has(value as ChatProfileId)) {
+    throw new Error(`${name} must be a valid ChatProfileId`);
+  }
+  return value as ChatProfileId;
+}
+
 function requireVariant(value: unknown): CopilotCoachVariant {
   if (value === 'lightweight' || value === 'coach') return value;
   throw new Error(`variant must be 'lightweight' or 'coach'`);
@@ -112,11 +131,6 @@ function requireBoolean(value: unknown, name: string): boolean {
     throw new Error(`${name} must be a boolean`);
   }
   return value;
-}
-
-function optionalBoolean(value: unknown, name: string): boolean | undefined {
-  if (value === undefined) return undefined;
-  return requireBoolean(value, name);
 }
 
 function nullableBoolean(value: unknown, name: string): boolean | null {

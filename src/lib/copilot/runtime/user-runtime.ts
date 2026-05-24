@@ -1,15 +1,11 @@
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import type { CopilotSession, PermissionHandler } from '@github/copilot-sdk';
 
-import { getCopilotGithubMcpTools } from '@/lib/copilot/mcp-tools';
-import { getMcpServerConfig } from '@/lib/copilot/mcp';
-import {
-  CHAT_MODEL,
-} from '@/lib/copilot/sessions';
-import { CHAT_SYSTEM_PROMPT, GITHUB_CHAT_SYSTEM_PROMPT } from '@/lib/copilot/prompts';
+import { buildMcpServersForCapabilities } from '@/lib/copilot/capabilities';
 import { wrapSessionWithLogging } from '@/lib/copilot/logged-session';
 import type { SessionCreationMetrics } from '@/lib/copilot/types';
 import type { CopilotChatExecutionRequest } from '@/lib/copilot/execution/types';
+import type { ResolvedProfile } from '@/lib/copilot/profiles';
 import { executeChatWithSessionFactory } from './session-executor';
 import { executeCoachJobInRuntime } from './coach-executor';
 import type { CopilotRuntime } from './types';
@@ -41,11 +37,10 @@ export async function createCopilotUserRuntime({
   return {
     userId,
     copilotHome,
-    executeChat: (request) => executeChatWithSessionFactory(
-      request,
-      (chatRequest, operationName) => createRuntimeLoggedSession(client, chatRequest, operationName, false),
-      (chatRequest, operationName) => createRuntimeLoggedSession(client, chatRequest, operationName, true),
-    ),
+    executeChat: (request) =>
+      executeChatWithSessionFactory(request, (chatRequest, resolved) =>
+        createRuntimeLoggedSession(client, chatRequest, resolved),
+      ),
     executeCoachJob: (request) => executeCoachJobInRuntime(request),
     async disconnect() {
       const errors = await client.stop();
@@ -59,37 +54,37 @@ export async function createCopilotUserRuntime({
 async function createRuntimeLoggedSession(
   client: CopilotClient,
   request: CopilotChatExecutionRequest,
-  operationName: string,
-  includeMcp: boolean,
+  resolved: ResolvedProfile,
 ) {
   const startTime = Date.now();
-  const session = await createRuntimeSession(client, request, includeMcp);
+  const session = await createRuntimeSession(client, request, resolved);
   const sessionCreateMs = Date.now() - startTime;
   return wrapSessionWithLogging(
     request.identity.userId,
     session,
-    operationName,
+    `Worker ${resolved.profileId}`,
     request.prompt,
-    CHAT_MODEL,
+    resolved.model,
     undefined,
-    createRuntimeSessionMetrics(operationName, sessionCreateMs, includeMcp),
+    createRuntimeSessionMetrics(resolved, sessionCreateMs),
   );
 }
 
 async function createRuntimeSession(
   client: CopilotClient,
   request: CopilotChatExecutionRequest,
-  includeMcp: boolean,
+  resolved: ResolvedProfile,
 ): Promise<CopilotSession> {
-  const chatTools = includeMcp ? getCopilotGithubMcpTools() : null;
-  const mcpConfig = includeMcp
-    ? getMcpServerConfig({ token: request.identity.gitHubToken, tools: chatTools ?? undefined })
-    : null;
+  const mcpServers = buildMcpServersForCapabilities(
+    resolved.capabilities,
+    request.identity.gitHubToken,
+  );
+  const hasMcp = Object.keys(mcpServers).length > 0;
 
   return client.createSession({
-    model: CHAT_MODEL,
+    model: resolved.model,
     streaming: true,
-    onPermissionRequest: includeMcp ? mcpOnlyPermissionHandler : approveAll,
+    onPermissionRequest: hasMcp ? mcpOnlyPermissionHandler : approveAll,
     gitHubToken: request.identity.gitHubToken,
     excludedTools: [
       'shell',
@@ -113,25 +108,24 @@ async function createRuntimeSession(
       'gh',
       'curl',
     ],
-    ...(mcpConfig && { mcpServers: { github: mcpConfig } }),
+    ...(hasMcp ? { mcpServers } : {}),
     systemMessage: {
       mode: 'append',
-      content: includeMcp ? GITHUB_CHAT_SYSTEM_PROMPT : CHAT_SYSTEM_PROMPT,
+      content: resolved.systemMessage,
     },
   });
 }
 
 function createRuntimeSessionMetrics(
-  operationName: string,
+  resolved: ResolvedProfile,
   sessionCreateMs: number,
-  mcpEnabled: boolean,
 ): SessionCreationMetrics {
   return {
-    poolKey: operationName === 'GitHub Chat' ? 'worker:chat:mcp' : 'worker:chat:lightweight',
+    poolKey: `worker:${resolved.profileId}:${resolved.capabilityFingerprint}`,
     createdNew: true,
     sessionCreateMs,
-    mcpEnabled,
-    model: CHAT_MODEL,
+    mcpEnabled: resolved.capabilities.length > 0,
+    model: resolved.model,
     reusedConversation: false,
   };
 }

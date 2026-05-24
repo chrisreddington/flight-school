@@ -59,7 +59,7 @@ describe('/api/copilot', () => {
         model: 'claude-haiku-4.5',
         toolsUsed: [],
         totalTimeMs: 12,
-        usedGitHubTools: false,
+        profile: 'chat',
         sessionCreateMs: 4,
         sessionPoolHit: false,
         mcpEnabled: false,
@@ -69,7 +69,7 @@ describe('/api/copilot', () => {
   });
 
   it('delegates chat execution through the Copilot execution boundary', async () => {
-    const request = makeRequest({ prompt: 'hello', useGitHubTools: false, conversationId: 'thread-1' });
+    const request = makeRequest({ prompt: 'hello', profile: 'chat', conversationId: 'thread-1' });
 
     const response = await POST(request);
     const body = await response.json();
@@ -80,7 +80,7 @@ describe('/api/copilot', () => {
     expect(mocks.executeCopilotChat).toHaveBeenCalledWith({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'hello',
-      useGitHubTools: false,
+      profile: 'chat',
       conversationId: 'thread-1',
     });
   });
@@ -97,7 +97,7 @@ describe('/api/copilot', () => {
   it('returns a safe configuration error when the worker is not configured', async () => {
     mocks.executeCopilotChat.mockRejectedValue(new CopilotWorkerRequiredError());
 
-    const response = await POST(makeRequest({ prompt: 'hello with ghu_user token text' }));
+    const response = await POST(makeRequest({ prompt: 'hello with ghu_user token text', profile: 'chat' }));
     const text = await response.text();
 
     expect(response.status).toBe(500);

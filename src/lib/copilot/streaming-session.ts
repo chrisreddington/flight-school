@@ -2,7 +2,7 @@
  * Internal Copilot streaming session factory. Wires up an SDK conversation
  * session, translates SDK events into our `StreamEvent` union, and emits
  * telemetry on completion. The public `streaming.ts` entry points wrap this
- * with the appropriate system prompt and pool key.
+ * with the appropriate profile.
  */
 
 import { logger } from '@/lib/logger';
@@ -18,11 +18,9 @@ import {
 import { context, trace } from '@opentelemetry/api';
 
 import { activityLogger } from './activity/logger';
-import {
-  CHAT_MODEL,
-  getCopilotGithubMcpTools,
-  getConversationSession,
-} from './sessions';
+import type { CapabilitySelection } from './capabilities';
+import type { ChatProfileId } from './profiles';
+import { getConversationSession } from './sessions';
 import {
   type StreamContext,
   pumpEventQueue,
@@ -34,12 +32,13 @@ import type { StreamEvent, StreamingSession, StreamingToolCall } from './types';
 /** Configuration for creating a streaming session. */
 export interface StreamingSessionConfig {
   prompt: string;
-  useGitHubTools: boolean;
+  profile: ChatProfileId;
+  capabilities: readonly CapabilitySelection[];
   operationName: string;
   conversationId?: string;
   systemMessage: string;
-  /** Pool key prefix (e.g., 'chat' or 'learning') */
-  poolKeyPrefix: string;
+  /** Resolved model (from `resolveProfile().model`). */
+  model: string;
   /** Tag for logger output */
   logPrefix: string;
   userId: string;
@@ -49,7 +48,7 @@ export interface StreamingSessionConfig {
 /**
  * Generic streaming session factory used by chat, learning, and evaluation
  * flows. All public factories funnel through this; the only thing that varies
- * is the system message and pool key.
+ * is the profile (which carries system message, model, and capabilities).
  *
  * @internal
  */
@@ -58,38 +57,28 @@ export async function createGenericStreamingSession(
 ): Promise<StreamingSession> {
   const {
     prompt,
-    useGitHubTools,
+    profile,
+    capabilities,
     operationName,
     conversationId,
     systemMessage,
-    poolKeyPrefix,
+    model,
     logPrefix,
     userId,
     gitHubToken,
   } = config;
   const startTime = Date.now();
   const log = logger.withTag(logPrefix);
-  const model = CHAT_MODEL;
+  const mcpServerCount = capabilities.length;
 
-  const poolKey = useGitHubTools ? `${poolKeyPrefix}:mcp` : `${poolKeyPrefix}:lightweight`;
-
-  const githubMcpTools = getCopilotGithubMcpTools();
-  const { session, metrics } = useGitHubTools
-    ? await getConversationSession(userId, conversationId, poolKey, {
-        includeMcpTools: true,
-        model,
-        ...(githubMcpTools.length > 0 ? { tools: githubMcpTools } : {}),
-        systemMessage,
-        userId,
-        gitHubToken,
-      })
-    : await getConversationSession(userId, conversationId, poolKey, {
-        includeMcpTools: false,
-        model,
-        systemMessage,
-        userId,
-        gitHubToken,
-      });
+  const { session, metrics } = await getConversationSession(conversationId, {
+    userId,
+    gitHubToken,
+    profile,
+    capabilities,
+    systemMessage,
+    model,
+  });
 
   const toolCalls: StreamingToolCall[] = [];
   let totalContent = '';
@@ -127,7 +116,8 @@ export async function createGenericStreamingSession(
         [GEN_AI_REQUEST_MODEL]: model,
         [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
         'app.operation': operationName,
-        'ai.mcp_enabled': useGitHubTools,
+        'copilot.profile': profile,
+        'copilot.mcp.server_count': mcpServerCount,
       },
     });
     streamSpan.addEvent('stream.started');
@@ -231,7 +221,8 @@ export async function createGenericStreamingSession(
 
     const buildContext = (): StreamContext => ({
       model,
-      useGitHubTools,
+      profile,
+      mcpServerCount,
       metrics,
       startTime,
       streamingMetrics,

@@ -6,14 +6,14 @@ describe('parseCopilotWorkerChatRequest', () => {
     const request = parseCopilotWorkerChatRequest({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'Explain closures',
-      useGitHubTools: false,
+      profile: 'chat',
       conversationId: 'thread-1',
     });
 
     expect(request).toEqual({
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'Explain closures',
-      useGitHubTools: false,
+      profile: 'chat',
       conversationId: 'thread-1',
     });
   });
@@ -36,7 +36,7 @@ describe('parseCopilotWorkerChatResult', () => {
         model: 'claude-haiku-4.5',
         toolsUsed: [],
         totalTimeMs: 10,
-        usedGitHubTools: false,
+        profile: 'chat',
         sessionCreateMs: null,
         sessionPoolHit: null,
         mcpEnabled: null,

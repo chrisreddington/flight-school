@@ -46,7 +46,7 @@ describe('createCopilotUserRuntime', () => {
         model: 'claude-haiku-4.5',
         toolsUsed: [],
         totalTimeMs: 10,
-        usedGitHubTools: false,
+        profile: 'chat',
         sessionCreateMs: null,
         sessionPoolHit: null,
         mcpEnabled: null,
@@ -71,19 +71,18 @@ describe('createCopilotUserRuntime', () => {
     }));
   });
 
-  it('executes chat through the runtime client session factories', async () => {
+  it('executes chat through the runtime client session factory', async () => {
     const runtime = await createCopilotUserRuntime({
       userId: '123',
       gitHubToken: 'ghu_user',
       copilotHome: '/tmp/runtimes/123',
     });
-    const request = { identity: { userId: '123', gitHubToken: 'ghu_user' }, prompt: 'hello' };
+    const request = { identity: { userId: '123', gitHubToken: 'ghu_user' }, prompt: 'hello', profile: 'chat' as const };
 
     await expect(runtime.executeChat(request)).resolves.toMatchObject({ response: 'answer' });
 
     expect(mocks.executeChatWithSessionFactory).toHaveBeenCalledWith(
       request,
-      expect.any(Function),
       expect.any(Function),
     );
   });

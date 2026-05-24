@@ -7,9 +7,9 @@
 export function buildRepositoryContextPrompt(
   prompt: string,
   repos: string[] | undefined,
-  useGitHubTools: boolean,
+  hasGitHubCapability: boolean,
 ): string {
-  if (!useGitHubTools || !repos || repos.length === 0) {
+  if (!hasGitHubCapability || !repos || repos.length === 0) {
     return prompt;
   }
 

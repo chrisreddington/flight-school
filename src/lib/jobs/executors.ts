@@ -57,8 +57,8 @@ export interface ChatResponseInput {
   assistantMessageId?: string;
   /** Repository full names (e.g., 'owner/repo') to focus MCP tools on */
   repos?: string[];
-  learningMode?: boolean;
-  useGitHubTools?: boolean;
+  /** Chat profile that drives model, prompt, and MCP capabilities. */
+  profile: import('@/lib/copilot/profiles').ChatProfileId;
 }
 
 /** Result from chat response background job */

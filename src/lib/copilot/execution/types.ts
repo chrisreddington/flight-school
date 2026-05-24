@@ -1,9 +1,10 @@
+import type { ChatProfileId } from '@/lib/copilot/profiles';
 import type { SessionIdentity } from '@/lib/copilot/session-identity';
 
 export interface CopilotChatExecutionRequest {
   identity: SessionIdentity;
   prompt: string;
-  useGitHubTools?: boolean;
+  profile: ChatProfileId;
   conversationId?: string;
 }
 
@@ -22,7 +23,7 @@ export interface CopilotChatExecutionResult {
     model: string;
     toolsUsed: string[];
     totalTimeMs: number;
-    usedGitHubTools: boolean;
+    profile: ChatProfileId;
     sessionCreateMs: number | null;
     sessionPoolHit: boolean | null;
     mcpEnabled: boolean | null;

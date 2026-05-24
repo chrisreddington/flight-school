@@ -1,11 +1,11 @@
 /**
  * Tests for content detection utilities.
  *
- * Covers actionable content and GitHub tools detection patterns.
+ * Covers actionable content detection patterns.
  */
 
 import { describe, it, expect } from 'vitest';
-import { detectActionableContent, needsGitHubTools } from './content-detection';
+import { detectActionableContent } from './content-detection';
 
 describe('detectActionableContent', () => {
   describe('follow-up suggestions', () => {
@@ -127,55 +127,3 @@ describe('detectActionableContent', () => {
   });
 });
 
-describe('needsGitHubTools', () => {
-  describe('GitHub keywords', () => {
-    it.each([
-      { prompt: 'Search my github repos', keyword: 'github' },
-      { prompt: 'Explore the repo structure', keyword: 'repo' },
-      { prompt: 'Look at the repository', keyword: 'repository' },
-      { prompt: 'Can you explore repo for me?', keyword: 'explore repo' },
-      { prompt: 'Please explore repository contents', keyword: 'explore repository' },
-      { prompt: 'Search code in this project', keyword: 'search code' },
-    ])('should detect $keyword', ({ prompt }) => {
-      expect(needsGitHubTools(prompt)).toBe(true);
-    });
-  });
-
-  describe('non-GitHub prompts', () => {
-    it.each([
-      'Explain how React hooks work',
-      'What is TypeScript?',
-      'Help me understand async/await',
-      'How do I write unit tests?',
-      'What are best practices for error handling?',
-    ])('should not detect GitHub tools need in "%s"', (prompt) => {
-      expect(needsGitHubTools(prompt)).toBe(false);
-    });
-  });
-
-  describe('case insensitivity', () => {
-    it.each([
-      'GITHUB',
-      'GitHub',
-      'github',
-      'REPO',
-      'Repo',
-      'REPOSITORY',
-    ])('should detect %s regardless of case', (keyword) => {
-      expect(needsGitHubTools(`Tell me about ${keyword}`)).toBe(true);
-    });
-  });
-
-  describe('partial matches', () => {
-    it('should detect keyword within sentence', () => {
-      expect(needsGitHubTools('I want to search my github account')).toBe(true);
-      expect(needsGitHubTools('What files are in the repo?')).toBe(true);
-    });
-
-    it('should not match partial words', () => {
-      // 'repo' is contained in 'report' but we're checking includes
-      // This will match because 'repo' is a substring - documenting actual behavior
-      expect(needsGitHubTools('Generate a report')).toBe(true); // 'repo' in 'report'
-    });
-  });
-});

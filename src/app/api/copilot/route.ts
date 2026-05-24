@@ -3,8 +3,9 @@
  * POST /api/copilot
  *
  * Uses Copilot SDK (standard model) for conversational chat.
- * OPTIMIZED: Uses lightweight session without MCP tools for fast responses.
- * For GitHub exploration, set `useGitHubTools: true` in the request body.
+ * The caller selects the chat profile (e.g. `'chat'`, `'chat-github'`,
+ * `'learning'`, `'learning-github'`) which controls model, system prompt,
+ * and which MCP capabilities are attached.
  */
 
 import { parseJsonBody } from '@/lib/api';
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const { prompt, useGitHubTools, conversationId } = parseResult.data;
+    const { prompt, profile, conversationId } = parseResult.data;
 
     return await withGuardedRoute(
       { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
         const result = await executeCopilotChat({
           identity,
           prompt,
-          useGitHubTools,
+          profile,
           conversationId,
         });
 

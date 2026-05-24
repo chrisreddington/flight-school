@@ -6,8 +6,6 @@ import { describe, it, expect } from 'vitest';
 import {
   COACH_SYSTEM_PROMPT,
   COACH_LIGHTWEIGHT_PROMPT,
-  CHAT_SYSTEM_PROMPT,
-  GITHUB_CHAT_SYSTEM_PROMPT,
   buildChallengePrompt,
   buildGoalPrompt,
   buildLearningTopicsPrompt,
@@ -29,16 +27,6 @@ describe('System Prompts', () => {
   it('should have COACH_LIGHTWEIGHT_PROMPT defined', () => {
     expect(COACH_LIGHTWEIGHT_PROMPT).toBeDefined();
     expect(COACH_LIGHTWEIGHT_PROMPT).toContain('developer growth coach');
-  });
-
-  it('should have CHAT_SYSTEM_PROMPT defined', () => {
-    expect(CHAT_SYSTEM_PROMPT).toBeDefined();
-    expect(CHAT_SYSTEM_PROMPT).toContain('developer assistant');
-  });
-
-  it('should have GITHUB_CHAT_SYSTEM_PROMPT defined', () => {
-    expect(GITHUB_CHAT_SYSTEM_PROMPT).toBeDefined();
-    expect(GITHUB_CHAT_SYSTEM_PROMPT).toContain('GitHub tools');
   });
 });
 

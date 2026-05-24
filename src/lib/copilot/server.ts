@@ -1,8 +1,7 @@
-import { COACH_LIGHTWEIGHT_PROMPT, COACH_SYSTEM_PROMPT } from './prompts';
-import { createSessionWithMetrics, MODEL_TIERS } from './sessions';
+import { resolveProfile, type ChatProfileId } from './profiles';
+import { createSessionWithMetrics } from './sessions';
 import { wrapSessionWithLogging } from './logged-session';
 import type { SessionIdentity } from './session-identity';
-import type { SessionOptions } from './types';
 
 export { wrapSessionWithLogging } from './logged-session';
 
@@ -10,26 +9,30 @@ type LoggedSingleTurnSessionOptions = {
   identity: SessionIdentity;
   operationName: string;
   inputPrompt: string;
-  model: string;
-  poolKey: string;
-  sessionOptions: SessionOptions;
+  profile: ChatProfileId;
 };
 
 async function createLoggedSingleTurnSession({
   identity,
   operationName,
   inputPrompt,
-  model,
-  poolKey,
-  sessionOptions,
+  profile,
 }: LoggedSingleTurnSessionOptions): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const { session, metrics } = await createSessionWithMetrics(sessionOptions, poolKey);
+  const resolved = resolveProfile(profile, { prompt: inputPrompt });
+  const { session, metrics } = await createSessionWithMetrics({
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
+    profile: resolved.profileId,
+    capabilities: resolved.capabilities,
+    systemMessage: resolved.systemMessage,
+    model: resolved.model,
+  });
   return wrapSessionWithLogging(
     identity.userId,
     session,
     operationName,
     inputPrompt,
-    model,
+    resolved.model,
     undefined,
     metrics,
   );
@@ -45,15 +48,7 @@ export async function createLoggedCoachSession(
     identity,
     operationName,
     inputPrompt,
-    model: MODEL_TIERS.standard,
-    poolKey: 'coach:mcp',
-    sessionOptions: {
-      includeMcpTools: true,
-      tools: ['get_me', 'list_user_repositories'],
-      systemMessage: COACH_SYSTEM_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
+    profile: 'coach',
   });
 }
 
@@ -67,14 +62,6 @@ export async function createLoggedLightweightCoachSession(
     identity,
     operationName,
     inputPrompt,
-    model: MODEL_TIERS.fastChat,
-    poolKey: 'coach:lightweight',
-    sessionOptions: {
-      includeMcpTools: false,
-      model: MODEL_TIERS.fastChat,
-      systemMessage: COACH_LIGHTWEIGHT_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
+    profile: 'coach-lightweight',
   });
 }

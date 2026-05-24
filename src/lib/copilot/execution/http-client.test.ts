@@ -20,7 +20,7 @@ describe('executeCopilotChatViaWorker', () => {
         model: 'claude-haiku-4.5',
         toolsUsed: [],
         totalTimeMs: 10,
-        usedGitHubTools: false,
+        profile: 'chat',
         sessionCreateMs: null,
         sessionPoolHit: null,
         mcpEnabled: null,

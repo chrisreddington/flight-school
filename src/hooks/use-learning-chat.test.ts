@@ -266,13 +266,13 @@ describe('useLearningChat.sendMessage — job payload composition', () => {
   const repo = (n: string) => ({ fullName: `octo/${n}`, owner: 'octo', name: n });
 
   it.each([
-    ['forwards explicit repos and useGitHubTools',
-      { useGitHubTools: true, repos: [repo('one'), repo('two')] },
-      { useGitHubTools: true, repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
+    ['forwards explicit repos and profile',
+      { profile: 'learning-github' as const, repos: [repo('one'), repo('two')] },
+      { profile: 'learning-github', repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
     ['falls back to thread.context.repos when none supplied',
-      undefined, { useGitHubTools: false, repos: ['octo/ctx'] }, [repo('ctx')]],
+      undefined, { profile: 'learning', repos: ['octo/ctx'] }, [repo('ctx')]],
     ['defaults to no repos when neither option nor context provides any',
-      undefined, { useGitHubTools: false, repos: [] }, [] as ReturnType<typeof repo>[]],
+      undefined, { profile: 'learning', repos: [] }, [] as ReturnType<typeof repo>[]],
   ] as const)('%s', async (_, options, expected, contextRepos) => {
     const { result } = await renderHookWithSeed([
       makeThread({ id: 'thread-x', context: { repos: contextRepos } }),
@@ -286,7 +286,6 @@ describe('useLearningChat.sendMessage — job payload composition', () => {
         prompt: 'Q',
         threadId: 'thread-x',
         assistantMessageId: ASSISTANT_ID,
-        learningMode: true,
         ...expected,
       }),
     });

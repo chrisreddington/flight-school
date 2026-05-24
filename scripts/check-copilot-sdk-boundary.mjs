@@ -58,6 +58,7 @@ const SDK_ALLOWED_FILES = new Set([
   'src/lib/copilot/sessions.ts',
   'src/lib/copilot/logged-session.ts',
   'src/lib/copilot/mcp.ts',
+  'src/lib/copilot/capabilities.ts',
 ]);
 
 // Factory imports are allowed only in worker-runtime modules and the

@@ -12,6 +12,7 @@ import {
 import { GEN_AI_OPERATION } from '@/lib/observability/semconv';
 import { type Span, SpanStatusCode } from '@opentelemetry/api';
 
+import type { ChatProfileId } from './profiles';
 import type { StreamEvent, StreamingToolCall } from './types';
 
 /**
@@ -21,7 +22,8 @@ import type { StreamEvent, StreamingToolCall } from './types';
  */
 export interface StreamContext {
   readonly model: string;
-  readonly useGitHubTools: boolean;
+  readonly profile: ChatProfileId;
+  readonly mcpServerCount: number;
   readonly metrics: { createdNew: boolean } | undefined;
   readonly startTime: number;
   readonly streamingMetrics: { firstDeltaMs: number | null };
@@ -104,7 +106,7 @@ export function recordTerminalSuccess(
 
   recordAiStreamMetrics({
     model: ctx.model,
-    mcpEnabled: ctx.useGitHubTools,
+    mcpEnabled: ctx.mcpServerCount > 0,
     poolHit: ctx.metrics ? !ctx.metrics.createdNew : null,
     firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
     durationMs,
@@ -147,7 +149,7 @@ export function recordTerminalError(
   recordAiOperation('streamSession', durationMs, ctx.model, 'error');
   recordAiStreamMetrics({
     model: ctx.model,
-    mcpEnabled: ctx.useGitHubTools,
+    mcpEnabled: ctx.mcpServerCount > 0,
     poolHit: ctx.metrics ? !ctx.metrics.createdNew : null,
     firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
     durationMs,

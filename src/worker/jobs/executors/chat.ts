@@ -82,11 +82,12 @@ export async function executeChatResponse(
     threadId,
     prompt,
     assistantMessageId: providedAssistantId,
-    learningMode = false,
-    useGitHubTools = false,
+    profile,
     repos,
   } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
+  const isLearningProfile = profile === 'learning' || profile === 'learning-github';
+  const hasGitHubCapability = profile === 'chat-github' || profile === 'learning-github';
 
   let fullContent = '';
   const toolCalls: string[] = [];
@@ -164,14 +165,14 @@ export async function executeChatResponse(
       throw new Error(`Thread ${threadId} not found`);
     }
 
-    const contextualPrompt = buildRepositoryContextPrompt(prompt, repos, useGitHubTools);
+    const contextualPrompt = buildRepositoryContextPrompt(prompt, repos, hasGitHubCapability);
     if (contextualPrompt !== prompt) {
       log.debug(`[Job ${jobId}] Added repository context for ${repos?.length ?? 0} repos`);
     }
 
-    const session = learningMode
-      ? await createLearningStreamingSession(identity, contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId)
-      : await createStreamingChatSession(identity, contextualPrompt, useGitHubTools, `Job: ${jobId}`, threadId);
+    const session = isLearningProfile
+      ? await createLearningStreamingSession(identity, contextualPrompt, profile, `Job: ${jobId}`, threadId)
+      : await createStreamingChatSession(identity, contextualPrompt, profile, `Job: ${jobId}`, threadId);
 
     registerSession(jobId, {
       destroy: async () => {

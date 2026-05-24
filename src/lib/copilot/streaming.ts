@@ -2,7 +2,7 @@
  * Copilot SDK Streaming Support
  *
  * Public factories for real-time chat/learning/evaluation responses. Each
- * factory selects a system prompt + pool key prefix and delegates to
+ * factory selects a chat profile and delegates to
  * `createGenericStreamingSession`, which owns the SDK plumbing and telemetry.
  *
  * @see createStreamingChatSession for basic chat streaming
@@ -10,40 +10,22 @@
  * @see createEvaluationStreamingSession for challenge evaluation
  */
 
+import { resolveProfile, type ChatProfileId } from './profiles';
 import { createGenericStreamingSession } from './streaming-session';
 import type { StreamingSession } from './types';
-
-/**
- * Learning lens system prompt for educational chat sessions.
- *
- * Implements the learning-focused response pattern from copilot-instructions.md:
- * step-by-step reasoning, follow-up suggestions, and references to the user's
- * code when relevant.
- *
- * @see SPEC-001 AC3.1, AC3.2
- */
-const LEARNING_LENS_SYSTEM_PROMPT = `You are a developer learning companion.
-
-When responding:
-1. Explain your reasoning step-by-step
-2. Suggest 2-3 follow-up questions or experiments
-3. Reference the user's code when relevant
-4. Be conversational but focused
-
-If user wants a quick answer, skip the explanations.`;
 
 /**
  * Create a streaming chat session that yields events as they arrive.
  *
  * @param identity - per-request `{ userId, gitHubToken }` from `requireUserContext`
  * @param prompt - The user's message
- * @param useGitHubTools - Whether to include MCP GitHub tools
+ * @param profile - Chat profile id (`'chat'` or `'chat-github'`)
  * @param operationName - Name for activity logging
  * @param conversationId - Optional conversation ID for session reuse
  *
  * @example
  * ```typescript
- * const { stream, cleanup } = await createStreamingChatSession(identity, "hello", false);
+ * const { stream, cleanup } = await createStreamingChatSession(identity, "hello", 'chat');
  * for await (const event of stream) {
  *   if (event.type === 'delta') process.stdout.write(event.content);
  *   if (event.type === 'done') break;
@@ -54,24 +36,19 @@ If user wants a quick answer, skip the explanations.`;
 export async function createStreamingChatSession(
   identity: { userId: string; gitHubToken: string },
   prompt: string,
-  useGitHubTools: boolean,
+  profile: ChatProfileId,
   operationName = 'Chat',
   conversationId?: string,
 ): Promise<StreamingSession> {
-  const systemMessage = useGitHubTools
-    ? `You are a helpful developer assistant with access to GitHub tools.
-Be conversational, helpful, and concise. Reference specific repos when relevant.`
-    : `You are a helpful developer assistant.
-
-Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
-
+  const resolved = resolveProfile(profile, { prompt });
   return createGenericStreamingSession({
     prompt,
-    useGitHubTools,
+    profile: resolved.profileId,
+    capabilities: resolved.capabilities,
     operationName,
     conversationId,
-    systemMessage,
-    poolKeyPrefix: 'chat',
+    systemMessage: resolved.systemMessage,
+    model: resolved.model,
     logPrefix: 'Copilot Streaming',
     userId: identity.userId,
     gitHubToken: identity.gitHubToken,
@@ -80,35 +57,27 @@ Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
 
 /**
  * Create a learning-focused streaming chat session. Uses the
- * `LEARNING_LENS_SYSTEM_PROMPT` so responses explain reasoning, suggest
- * follow-ups, and connect to the user's context.
+ * `learning` / `learning-github` profile so responses explain reasoning,
+ * suggest follow-ups, and connect to the user's context.
  *
  * @see SPEC-001 for learning chat requirements (AC3.1, AC3.2)
  */
 export async function createLearningStreamingSession(
   identity: { userId: string; gitHubToken: string },
   prompt: string,
-  useGitHubTools: boolean,
+  profile: ChatProfileId,
   operationName = 'Learning Chat',
   conversationId?: string,
 ): Promise<StreamingSession> {
-  // When GitHub tools are available we extend the prompt so the AI prefers MCP
-  // over guessing or local shell/filesystem fallbacks.
-  const systemMessage = useGitHubTools
-    ? `${LEARNING_LENS_SYSTEM_PROMPT}
-
-You have access to GitHub MCP tools. When the user asks about repositories, use those tools to explore them — search code, read files, and get repo details.
-Never use local shell/filesystem/web tools for repository questions.
-Always use GitHub tools to look up real information rather than guessing.`
-    : LEARNING_LENS_SYSTEM_PROMPT;
-
+  const resolved = resolveProfile(profile, { prompt });
   return createGenericStreamingSession({
     prompt,
-    useGitHubTools,
+    profile: resolved.profileId,
+    capabilities: resolved.capabilities,
     operationName,
     conversationId,
-    systemMessage,
-    poolKeyPrefix: 'learning',
+    systemMessage: resolved.systemMessage,
+    model: resolved.model,
     logPrefix: 'Copilot Learning',
     userId: identity.userId,
     gitHubToken: identity.gitHubToken,
@@ -120,6 +89,10 @@ Always use GitHub tools to look up real information rather than guessing.`
  * evaluation is independent (no conversation reuse) and never needs GitHub
  * tools.
  *
+ * The caller layers the evaluation-specific system prompt because the
+ * `evaluation` profile has no base prompt — the surface owns the entire
+ * instruction set.
+ *
  * @see SPEC-002 for challenge evaluation requirements
  */
 export async function createEvaluationStreamingSession(
@@ -128,13 +101,15 @@ export async function createEvaluationStreamingSession(
   systemMessage: string,
   operationName = 'Challenge Evaluation',
 ): Promise<StreamingSession> {
+  const resolved = resolveProfile('evaluation');
   return createGenericStreamingSession({
     prompt,
-    useGitHubTools: false,
+    profile: resolved.profileId,
+    capabilities: resolved.capabilities,
     operationName,
     conversationId: undefined,
     systemMessage,
-    poolKeyPrefix: 'evaluation',
+    model: resolved.model,
     logPrefix: 'Copilot Evaluation',
     userId: identity.userId,
     gitHubToken: identity.gitHubToken,

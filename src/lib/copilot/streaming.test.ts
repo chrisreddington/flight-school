@@ -129,7 +129,7 @@ describe('createStreamingChatSession telemetry', () => {
     const streaming = await createStreamingChatSession(
       { userId: 'user-1', gitHubToken: 'ghu_token' },
       'hello',
-      true,
+      'chat-github',
       'Chat',
       'conv-1',
     );

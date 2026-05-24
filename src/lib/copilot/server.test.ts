@@ -58,35 +58,35 @@ describe('logged Copilot session factories', () => {
 
     expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1', gitHubToken: 'ghu_1' }),
-      expect.any(String),
     );
   });
 
-  it('creates coach sessions with MCP repository tools and the coach pool', async () => {
+  it('creates coach sessions with the coach profile and github capability', async () => {
     await createLoggedCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Daily Focus', 'prompt');
 
     expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        includeMcpTools: true,
-        tools: ['get_me', 'list_user_repositories'],
+        profile: 'coach',
         userId: 'u1',
         gitHubToken: 'ghu_1',
       }),
-      'coach:mcp',
     );
+    const opts = createSessionWithMetricsMock.mock.calls[0][0];
+    expect(opts.capabilities.length).toBeGreaterThan(0);
+    expect(opts.capabilities[0].id).toBe('github');
   });
 
-  it('creates lightweight coach sessions without MCP tools and with the lightweight pool', async () => {
+  it('creates lightweight coach sessions with the coach-lightweight profile and no capabilities', async () => {
     await createLoggedLightweightCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' });
 
     expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        includeMcpTools: false,
-        model: expect.any(String),
+        profile: 'coach-lightweight',
         userId: 'u1',
         gitHubToken: 'ghu_1',
       }),
-      'coach:lightweight',
     );
+    const opts = createSessionWithMetricsMock.mock.calls[0][0];
+    expect(opts.capabilities).toHaveLength(0);
   });
 });

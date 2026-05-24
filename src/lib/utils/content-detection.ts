@@ -40,26 +40,3 @@ const ACTIONABLE_PATTERNS = [
 export function detectActionableContent(content: string): boolean {
   return ACTIONABLE_PATTERNS.some(pattern => pattern.test(content));
 }
-
-// =============================================================================
-// GitHub Tools Detection
-// =============================================================================
-
-/** Keywords that suggest user wants GitHub tools */
-const GITHUB_KEYWORDS = [
-  'github', 'repo', 'repository', 'explore repo', 'explore repository', 'search code',
-];
-
-/**
- * Check if prompt suggests need for GitHub tools.
- *
- * Detects keywords that indicate the user wants to explore GitHub
- * repositories or search code.
- *
- * @param prompt - User's prompt text
- * @returns Whether the prompt suggests GitHub tools are needed
- */
-export function needsGitHubTools(prompt: string): boolean {
-  const lower = prompt.toLowerCase();
-  return GITHUB_KEYWORDS.some(kw => lower.includes(kw));
-}

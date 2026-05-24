@@ -46,18 +46,32 @@ RULES:
 7. Use "not yet" language: encourage growth, don't judge gaps`;
 
 /**
- * System prompt for learning chat sessions.
+ * Capability-neutral base prompt for general chat surfaces.
+ *
+ * Voice and tone only — capability-specific instructions (e.g. "use the
+ * GitHub MCP tools") live on the capability `promptAddendum` in
+ * `./capabilities` and are composed in by `resolveProfile`.
  */
-export const CHAT_SYSTEM_PROMPT = `You are a helpful developer assistant.
+export const CHAT_BASE_PROMPT = `You are a helpful developer assistant.
 
-Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
+Be conversational, helpful, and concise.`;
 
 /**
- * System prompt for GitHub-enabled chat sessions.
+ * Capability-neutral base prompt for learning chat surfaces.
+ *
+ * See {@link CHAT_BASE_PROMPT} for the composition contract.
  */
-export const GITHUB_CHAT_SYSTEM_PROMPT = `You are a helpful developer assistant with access to GitHub tools.
+export const LEARNING_LENS_PROMPT = `You are a developer learning companion.
 
-Be conversational, helpful, and concise. Reference specific repos when relevant.`;
+When responding:
+1. Explain your reasoning step-by-step
+2. Suggest 2-3 follow-up questions or experiments
+3. Reference the user's code when relevant
+4. Be conversational but focused
+
+If user wants a quick answer, skip the explanations.`;
+
+
 
 /**
  * Builds a focus generation prompt with compact profile context.
