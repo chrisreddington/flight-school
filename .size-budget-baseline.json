@@ -1,10 +1,5 @@
 {
-  "production": {
-
-
-
-    "src/lib/operations/active-operations.ts": 725
-  },
+  "production": {},
   "test": {
     "src/hooks/use-ai-activity.test.ts": 708,
     "src/hooks/use-custom-challenge-queue.test.ts": 807,
