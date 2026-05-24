@@ -4,8 +4,7 @@ import { generateWhatsNext, getWhatsNextFallback, type WhatsNextResult } from '@
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { SUGGESTIONS_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -30,37 +29,31 @@ export async function POST(request: NextRequest) {
     difficulty: body.challengeDifficulty?.trim() || 'beginner',
   };
 
-  try {
-    return await withUserGuards(
-      { ...SUGGESTIONS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/suggestions' } },
-      async (ctx) => {
-        const { context: profileContext } = await buildProfileContext({
-          maxChars: 1000,
-          logger: log,
-          context: 'suggestions',
-        });
+  return withGuardedRoute(
+    { ...SUGGESTIONS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/suggestions' } },
+    async (ctx) => {
+      const { context: profileContext } = await buildProfileContext({
+        maxChars: 1000,
+        logger: log,
+        context: 'suggestions',
+      });
 
-        try {
-          const result: WhatsNextResult = await generateWhatsNext(
-            createSessionIdentity(ctx),
-            completedChallenge,
-            profileContext
-          );
-          return NextResponse.json(result);
-        } catch (error) {
-          // D2: Re-throw entitlement errors so the outer guardErrorResponse
-          // maps them to 402. Static fallback is only for unrelated failures.
-          if (isCopilotEntitlementError(error)) {
-            throw error;
-          }
-          log.error('Failed to generate suggestions', error);
-          return NextResponse.json(getWhatsNextFallback(completedChallenge));
+      try {
+        const result: WhatsNextResult = await generateWhatsNext(
+          createSessionIdentity(ctx),
+          completedChallenge,
+          profileContext
+        );
+        return NextResponse.json(result);
+      } catch (error) {
+        // D2: Re-throw entitlement errors so the outer guard adapter
+        // maps them to 402. Static fallback is only for unrelated failures.
+        if (isCopilotEntitlementError(error)) {
+          throw error;
         }
-      },
-    );
-  } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-    throw error;
-  }
+        log.error('Failed to generate suggestions', error);
+        return NextResponse.json(getWhatsNextFallback(completedChallenge));
+      }
+    },
+  );
 }

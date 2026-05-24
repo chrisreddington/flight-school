@@ -3,8 +3,7 @@ import { generateGuidedPlan, getGuidedPlanFallback } from '@/lib/copilot/guided-
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { PLAN_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -32,39 +31,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     difficulty: body.challengeDifficulty?.trim() || 'beginner',
   };
 
-  try {
-    return await withUserGuards(
-      { ...PLAN_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/guided-plan' } },
-      async (ctx) => {
-        const { context: profileContext } = await buildProfileContext({
-          maxChars: 1000,
-          logger: log,
-          context: 'guided plan',
-        });
+  return withGuardedRoute(
+    { ...PLAN_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/guided-plan' } },
+    async (ctx) => {
+      const { context: profileContext } = await buildProfileContext({
+        maxChars: 1000,
+        logger: log,
+        context: 'guided plan',
+      });
 
-        try {
-          const plan = await generateGuidedPlan(
-            createSessionIdentity(ctx),
-            challenge,
-            profileContext,
-          );
-          return NextResponse.json(plan);
-        } catch (error) {
-          // Re-throw entitlement / known API errors so the outer guard
-          // adapter maps them (e.g. 402) rather than masking them with
-          // the static fallback.
-          const knownResponse = knownApiErrorResponse(error);
-          if (knownResponse) return knownResponse;
-          log.error('Failed to generate guided plan', error);
-          return NextResponse.json(getGuidedPlanFallback(challenge));
-        }
-      },
-    );
-  } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-    const knownResponse = knownApiErrorResponse(error);
-    if (knownResponse) return knownResponse;
-    throw error;
-  }
+      try {
+        const plan = await generateGuidedPlan(
+          createSessionIdentity(ctx),
+          challenge,
+          profileContext,
+        );
+        return NextResponse.json(plan);
+      } catch (error) {
+        // Re-throw entitlement / known API errors so the outer guard
+        // adapter maps them (e.g. 402) rather than masking them with
+        // the static fallback.
+        const knownResponse = knownApiErrorResponse(error);
+        if (knownResponse) return knownResponse;
+        log.error('Failed to generate guided plan', error);
+        return NextResponse.json(getGuidedPlanFallback(challenge));
+      }
+    },
+  );
 }

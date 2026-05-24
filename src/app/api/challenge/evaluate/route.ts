@@ -35,8 +35,7 @@ import { createSessionIdentity } from '@/lib/copilot/server';
 import { createEvaluationStreamingSession } from '@/lib/copilot/streaming';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { EVAL_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest } from 'next/server';
 
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     const { challenge, files } = parseResult.data;
 
-    return await withUserGuards(
+    return await withGuardedRoute(
       {
         ...EVAL_GUARD,
         eventType: 'copilot.session.create',
@@ -181,9 +180,6 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to start evaluation';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

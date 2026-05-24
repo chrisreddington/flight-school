@@ -44,8 +44,10 @@ import 'server-only';
 
 import { requireUserContext, type UserContext } from '@/lib/auth/context';
 import { auditLog, hashUserId, type AuditEventType } from '@/lib/security/audit';
+import { guardErrorResponse } from '@/lib/security/http';
 import { checkRateLimit, RateLimitedError } from '@/lib/security/rate-limit';
 import { acquireSlot } from '@/lib/security/session-cap';
+import type { NextResponse } from 'next/server';
 
 export interface GuardOptions {
   /** Sliding-window rate limit. Skip the field to disable rate limiting. */
@@ -138,5 +140,29 @@ export async function withUserGuards<T>(
     return await work(ctx);
   } finally {
     release();
+  }
+}
+
+/**
+ * Route adapter that combines {@link withUserGuards} with the standard
+ * guard-error mapping. Every authenticated AI route should use this
+ * instead of hand-rolling the `try { withUserGuards } catch
+ * (guardErrorResponse)` pattern.
+ *
+ * Unknown errors are re-thrown so Next.js renders the framework 500 —
+ * routes that need a custom fallback should still catch inside `work`
+ * (see e.g. quiz/route.ts where `knownApiErrorResponse` runs ahead of
+ * the static fallback to preserve paying-customer 402s).
+ */
+export async function withGuardedRoute<R extends Response>(
+  opts: GuardOptions,
+  work: (ctx: UserContext) => Promise<R>,
+): Promise<R | NextResponse> {
+  try {
+    return await withUserGuards(opts, work);
+  } catch (error) {
+    const response = guardErrorResponse(error);
+    if (response) return response;
+    throw error;
   }
 }

@@ -21,7 +21,7 @@
  * @see SPEC-006 for custom challenge authoring requirements (S1, AC1.1-AC1.4)
  */
 
-import { createSSEResponse, knownApiErrorResponse, parseJsonBody } from '@/lib/api';
+import { createSSEResponse, parseJsonBody } from '@/lib/api';
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { nowMs } from '@/lib/utils/date-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
@@ -29,8 +29,7 @@ import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-par
 import type { AuthoringContext } from '@/lib/challenge/authoring/types';
 import { validateAuthoringRequest } from '@/lib/challenge/authoring/validation';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { AUTHOR_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest } from 'next/server';
 
@@ -72,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const { prompt, conversationId, context, action } = parseResult.data;
 
-    return await withUserGuards(
+    return await withGuardedRoute(
       {
         ...AUTHOR_GUARD,
         eventType: 'copilot.session.create',
@@ -139,11 +138,6 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-    const knownResponse = knownApiErrorResponse(error);
-    if (knownResponse) return knownResponse;
-
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to start authoring session';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

@@ -16,8 +16,7 @@ import {
 import { executeCopilotChat } from '@/lib/copilot/execution';
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { CHAT_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -39,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const { prompt, useGitHubTools, conversationId } = parseResult.data;
 
-    return await withUserGuards(
+    return await withGuardedRoute(
       { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
       async (ctx) => {
         const identity = createSessionIdentity(ctx);
@@ -57,9 +56,6 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-
     const totalTime = nowMs() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
     log.error(`Error after ${totalTime}ms:`, errorMessage);

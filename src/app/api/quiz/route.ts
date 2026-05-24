@@ -3,8 +3,7 @@ import { generateTopicQuiz, type QuizResult } from '@/lib/copilot/quiz';
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { QUIZ_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -58,43 +57,35 @@ export async function POST(request: NextRequest) {
   const topicTitle = body.topicTitle?.trim() || 'This topic';
   const topicDescription = body.topicDescription?.trim() || '';
 
-  try {
-    return await withUserGuards(
-      { ...QUIZ_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/quiz' } },
-      async (ctx) => {
-        const { context: profileContext } = await buildProfileContext({
-          maxChars: 500,
-          logger: log,
-          context: 'quiz generation',
-        });
+  return withGuardedRoute(
+    { ...QUIZ_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/quiz' } },
+    async (ctx) => {
+      const { context: profileContext } = await buildProfileContext({
+        maxChars: 500,
+        logger: log,
+        context: 'quiz generation',
+      });
 
-        try {
-          const quiz = await generateTopicQuiz(
-            createSessionIdentity(ctx),
-            topicTitle,
-            topicDescription,
-            profileContext,
-          );
-          return NextResponse.json(quiz);
-        } catch (error) {
-          // Map known errors (entitlement → 402, etc.) before the
-          // generic AI-unavailable fallback so paying-customer signals
-          // are never silently swallowed by the static placeholder.
-          const knownResponse = knownApiErrorResponse(error);
-          if (knownResponse) return knownResponse;
-          if (isAIUnavailableError(error)) {
-            return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
-          }
-          log.error('Failed to generate quiz', error);
-          return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+      try {
+        const quiz = await generateTopicQuiz(
+          createSessionIdentity(ctx),
+          topicTitle,
+          topicDescription,
+          profileContext,
+        );
+        return NextResponse.json(quiz);
+      } catch (error) {
+        // Map known errors (entitlement → 402, etc.) before the
+        // generic AI-unavailable fallback so paying-customer signals
+        // are never silently swallowed by the static placeholder.
+        const knownResponse = knownApiErrorResponse(error);
+        if (knownResponse) return knownResponse;
+        if (isAIUnavailableError(error)) {
+          return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
         }
-      },
-    );
-  } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-    const knownResponse = knownApiErrorResponse(error);
-    if (knownResponse) return knownResponse;
-    throw error;
-  }
+        log.error('Failed to generate quiz', error);
+        return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+      }
+    },
+  );
 }

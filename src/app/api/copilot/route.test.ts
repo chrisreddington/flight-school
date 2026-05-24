@@ -2,15 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   executeCopilotChat: vi.fn(),
-  withUserGuards: vi.fn(),
+  withGuardedRoute: vi.fn(),
 }));
 
 vi.mock('@/lib/security/guard', () => ({
-  withUserGuards: mocks.withUserGuards,
-}));
-
-vi.mock('@/lib/security/http', () => ({
-  guardErrorResponse: () => null,
+  withGuardedRoute: mocks.withGuardedRoute,
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -50,7 +46,7 @@ function makeRequest(body: unknown) {
 describe('/api/copilot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.withUserGuards.mockImplementation(async (_opts, work) => work({
+    mocks.withGuardedRoute.mockImplementation(async (_opts, work) => work({
       userId: '123',
       login: 'octo',
       accessToken: 'ghu_user',

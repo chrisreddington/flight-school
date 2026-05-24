@@ -27,8 +27,7 @@ import {
   toClientTriggerSpanAttributes,
   type ClientTriggerMetadata,
 } from '@/lib/observability/trigger-metadata';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { CHAT_GUARD } from '@/lib/security/route-defaults';
 import { trace } from '@opentelemetry/api';
 import { NextRequest, NextResponse } from 'next/server';
@@ -70,21 +69,15 @@ function toJobCausalityContext(
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    // Per-route guards: job creation is the public edge that initiates AI
-    // work (chat-response, regenerations, evaluations). Rate-limit +
-    // concurrent-cap + audit live exactly here so the same protections
-    // apply whether the user calls `/api/copilot` directly or queues
-    // a background job.
-    return await withUserGuards(
-      { ...CHAT_GUARD, eventType: 'job.create', auditMetadata: { route: '/api/jobs' } },
-      async ({ userId }) => handleCreateJob(request, userId),
-    );
-  } catch (err) {
-    const guardResponse = guardErrorResponse(err);
-    if (guardResponse) return guardResponse;
-    throw err;
-  }
+  // Per-route guards: job creation is the public edge that initiates AI
+  // work (chat-response, regenerations, evaluations). Rate-limit +
+  // concurrent-cap + audit live exactly here so the same protections
+  // apply whether the user calls `/api/copilot` directly or queues
+  // a background job.
+  return withGuardedRoute(
+    { ...CHAT_GUARD, eventType: 'job.create', auditMetadata: { route: '/api/jobs' } },
+    async ({ userId }) => handleCreateJob(request, userId),
+  );
 }
 
 /**

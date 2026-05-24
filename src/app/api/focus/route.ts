@@ -36,8 +36,7 @@ import { buildProfileContext } from '@/lib/github/profile-context';
 import type { CompactDeveloperProfile } from '@/lib/github/types';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { FOCUS_GUARD } from '@/lib/security/route-defaults';
 import type { SkillProfile } from '@/lib/skills/types';
 import { NextRequest, NextResponse } from 'next/server';
@@ -281,17 +280,10 @@ async function generateFocus(identity: SessionIdentity, options: {
 
 
 export async function GET() {
-  try {
-    const result = await withUserGuards(
-      { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'GET' } },
-      (ctx) => generateFocus(createSessionIdentity(ctx)),
-    );
-    return NextResponse.json(result);
-  } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-    throw error;
-  }
+  return withGuardedRoute(
+    { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'GET' } },
+    async (ctx) => NextResponse.json(await generateFocus(createSessionIdentity(ctx))),
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -304,22 +296,15 @@ export async function POST(request: NextRequest) {
     debugMode?: boolean;
   }>(request, {});
 
-  try {
-    const result = await withUserGuards(
-      { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'POST', component: body.component } },
-      (ctx) => generateFocus(createSessionIdentity(ctx), {
-        component: body.component,
-        skillProfile: body.skillProfile,
-        existingTopicTitles: body.existingTopicTitles,
-        reviewTopics: body.reviewTopics,
-        interleavingHint: body.interleavingHint,
-        debugMode: body.debugMode,
-      }),
-    );
-    return NextResponse.json(result);
-  } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse;
-    throw error;
-  }
+  return withGuardedRoute(
+    { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'POST', component: body.component } },
+    async (ctx) => NextResponse.json(await generateFocus(createSessionIdentity(ctx), {
+      component: body.component,
+      skillProfile: body.skillProfile,
+      existingTopicTitles: body.existingTopicTitles,
+      reviewTopics: body.reviewTopics,
+      interleavingHint: body.interleavingHint,
+      debugMode: body.debugMode,
+    })),
+  );
 }

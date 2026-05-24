@@ -28,8 +28,7 @@ import { createSessionIdentity } from '@/lib/copilot/server';
 import { getHint } from '@/lib/copilot/hints';
 import type { ChallengeDef, HintResult } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';
-import { withUserGuards } from '@/lib/security/guard';
-import { guardErrorResponse } from '@/lib/security/http';
+import { withGuardedRoute } from '@/lib/security/guard';
 import { EVAL_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -92,7 +91,7 @@ interface ErrorResponse {
  */
 export async function POST(
   request: NextRequest
-): Promise<NextResponse<HintResponse | ErrorResponse>> {
+): Promise<NextResponse> {
   const startTime = nowMs();
   log.info('POST request started');
 
@@ -126,7 +125,7 @@ export async function POST(
   try {
     log.info(`Getting hint for: ${challenge.title}`);
 
-    return await withUserGuards(
+    return await withGuardedRoute(
       { ...EVAL_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/challenge/hint', challengeTitle: challenge.title } },
       async (ctx) => {
         const hintResult: HintResult = await getHint(
@@ -153,8 +152,6 @@ export async function POST(
       },
     );
   } catch (error) {
-    const guardResponse = guardErrorResponse(error);
-    if (guardResponse) return guardResponse as NextResponse<HintResponse | ErrorResponse>;
     return handleApiError(error, 'Hint API', startTime);
   }
 }
