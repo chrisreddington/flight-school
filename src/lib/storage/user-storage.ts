@@ -30,7 +30,7 @@ export type SchemaGuard<T> = (data: unknown) => data is T;
  * and ensures the directory exists. Returns the resolved path + userId, or
  * throws if the caller isn't authenticated / the userId isn't safe.
  */
-async function resolveUserScopedPath(filename: string): Promise<{ path: string; userId: string }> {
+export async function resolveUserScopedPath(filename: string): Promise<{ path: string; userId: string }> {
   const { userId } = await requireUserContext();
   const path = userScopedFilename(userId, filename);
   await ensureDir(`users/${userId}`, { mode: 0o700 });
