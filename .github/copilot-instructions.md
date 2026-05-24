@@ -30,6 +30,24 @@ is the project-wide default. CI guard `scripts/check-server-fetch-tenancy.mjs`
 enforces that every server-side `fetch` is either explicitly `cache: 'no-store'`,
 tagged for revalidation, or annotated `// public-cache:` with a justification.
 
+### Server Components for data-driven pages
+
+Pages that load per-user JSON storage (e.g. `/skills`, `/habits`) render as
+async Server Components. The pattern:
+
+1. Page calls `getUserContext()`; redirect to `/sign-in` if unauthenticated.
+2. Page calls a server-side reader (`readUserSkillsProfile`,
+   `readUserHabits`, …) backed by `src/lib/storage/user-storage.ts`. These
+   helpers resolve the user, validate the path with `userScopedFilename`,
+   and return the schema-checked payload.
+3. Page hands the payload to a `_components/XxxClient.tsx` island marked
+   `'use client'`. The island uses the data as its initial state and
+   handles all subsequent interaction.
+
+The storage-route API factory (`createStorageRoute`) delegates to the same
+`resolveUserScopedPath` helper, so the API and RSC paths share one tenancy
+implementation.
+
 ## Multi-tenant design
 
 Flight School is **multi-tenant**: every request is authenticated as a specific
