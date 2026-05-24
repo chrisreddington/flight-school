@@ -33,9 +33,11 @@ function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
 function transientNetworkMessage(error: unknown): string | null {
   if (!(error instanceof Error)) return null;
   const message = error.message;
-  return error.name === 'AbortError' || ['Load failed', 'Failed to fetch'].includes(message) || message.startsWith('NetworkError')
-    ? message
-    : null;
+  const isTransient =
+    error.name === 'AbortError' ||
+    ['Load failed', 'Failed to fetch'].includes(message) ||
+    message.startsWith('NetworkError');
+  return isTransient ? message : null;
 }
 
 export async function readFocusStorage(): Promise<FocusStorageSchema> {

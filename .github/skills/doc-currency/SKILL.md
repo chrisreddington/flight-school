@@ -74,6 +74,36 @@ Doc updates follow the same proportionality as TSDoc:
 - Update the "Custom metrics registry" table when adding a metric — that's
   literally why it exists.
 
+## Step 3a — Evergreen, not blow-by-blow
+
+**Documentation captures the current state of the system, not the
+history of how it got there.** A reader coming to the docs for the
+first time does not need to know what we tried before, what regression
+we recovered from, or which commit introduced a rule. They need to
+know what is true today and what they must do to stay aligned with it.
+
+Anti-patterns to avoid in docs:
+
+- ❌ "Yesterday we discovered that…" / "In commit X we changed…" / "We used to do Y but now…"
+- ❌ Lists of phases, attempts, or migration notes that the codebase no longer references.
+- ❌ Verbatim copies of session transcripts, rubber-duck critiques, or chat history.
+- ❌ "Previously, this worked because…" — if it doesn't work that way now, drop the previous explanation.
+
+What to write instead:
+
+- ✅ "We do X because Y." (Present tense. Active voice. Current reality.)
+- ✅ "Don't do Z — it causes W." (Concrete invariant the reader needs.)
+- ✅ "See `path/file.ts:N` for the implementation." (Pointer the reader can verify.)
+
+Migration notes have a legitimate but narrow place: when a new pattern
+replaces an old one **that still appears in the codebase** so readers
+recognise the deprecated form and can finish the migration. Once the
+old form is gone, the migration note goes with it.
+
+If today's change unwinds an earlier approach, **remove the earlier
+explanation** rather than layering a "but now we do…" paragraph on top
+of it. The doc tree is not append-only.
+
 ## Step 4 — Verify
 
 After updating docs:

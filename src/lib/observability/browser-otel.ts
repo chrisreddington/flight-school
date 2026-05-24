@@ -87,30 +87,27 @@ export function initBrowserOtel(): void {
       new FetchInstrumentation({
         // Never instrument our own export path — it would cause recursive
         // self-tracing and a feedback loop with the BatchSpanProcessor.
-        ignoreUrls: [/\/api\/otel\/v1\/traces/],
+        // Also skip the long-lived SSE stream endpoint: FetchInstrumentation
+        // clones the response and reads the clone to completion to close
+        // its span, which can interfere with incremental delivery of chat
+        // tokens on some runtimes. The worker emits its own server-side
+        // spans for the chat session, so we don't lose observability.
+        ignoreUrls: [
+          /\/api\/otel\/v1\/traces/,
+          /\/api\/jobs\/[^/]+\/stream(?:\?|$)/,
+        ],
         clearTimingResources: true,
         // Strip query strings from URL-shaped span attributes so we never
         // leak tokens, ids, or search terms into the trace backend.
         // Also rename the span from the generic "HTTP GET" default to
         // "GET /api/foo" so the trace list is scannable.
         applyCustomAttributesOnSpan: (span, request) => {
-          const url =
-            typeof request === 'string'
-              ? request
-              : 'url' in request && typeof request.url === 'string'
-                ? request.url
-                : undefined;
-          const method =
-            typeof request === 'object' && request !== null && 'method' in request
-              ? typeof request.method === 'string'
-                ? request.method.toUpperCase()
-                : 'GET'
-              : 'GET';
-          if (url) {
-            const sanitized = stripQueryString(url);
-            span.setAttribute('http.url', sanitized);
-            span.updateName(`${method} ${extractPathname(sanitized)}`);
-          }
+          const requestUrl = extractRequestUrl(request);
+          if (!requestUrl) return;
+          const sanitizedUrl = stripQueryString(requestUrl);
+          const requestMethod = extractRequestMethod(request);
+          span.setAttribute('http.url', sanitizedUrl);
+          span.updateName(`${requestMethod} ${extractPathname(sanitizedUrl)}`);
         },
       }),
     ],
@@ -135,6 +132,25 @@ export function initBrowserOtel(): void {
 }
 
 /**
+ * Pulls the URL string from any of the shapes `fetch()` accepts —
+ * a string, a `URL`, or a `Request`. Returns `undefined` when none of
+ * the shapes carry a usable URL.
+ */
+function extractRequestUrl(request: Request | RequestInit): string | undefined {
+  if ('url' in request && typeof request.url === 'string') return request.url;
+  return undefined;
+}
+
+/**
+ * Returns the uppercase HTTP method for a `fetch()` argument. Defaults
+ * to `GET` when no explicit method is supplied.
+ */
+function extractRequestMethod(request: Request | RequestInit): string {
+  if (typeof request.method !== 'string') return 'GET';
+  return request.method.toUpperCase();
+}
+
+/**
  * Installs an outer wrapper around `window.fetch` so each call runs with
  * the current `page.view` span active in the OTel context. The wrapper
  * is idempotent across HMR reloads via a `Symbol.for` marker — a second
@@ -146,21 +162,21 @@ export function initBrowserOtel(): void {
  * context before the inner patched fetch runs `startSpan`.
  */
 function wrapWindowFetch(): void {
-  const current = window.fetch as WrappedFetch;
-  if (current[FETCH_WRAPPED_MARKER]) return;
+  const currentFetch = window.fetch as WrappedFetch;
+  if (currentFetch[FETCH_WRAPPED_MARKER]) return;
 
-  const inner = current.bind(window);
-  const wrapper: WrappedFetch = function flightSchoolFetch(
+  const instrumentedFetch = currentFetch.bind(window);
+  const pageViewAwareFetch: WrappedFetch = function flightSchoolFetch(
     this: typeof window,
     ...args: Parameters<typeof window.fetch>
   ) {
     const pageSpan = getCurrentPageView();
     if (!pageSpan) {
-      return inner(...args);
+      return instrumentedFetch(...args);
     }
-    const ctx = trace.setSpan(context.active(), pageSpan);
-    return context.with(ctx, () => inner(...args));
+    const contextWithPageSpan = trace.setSpan(context.active(), pageSpan);
+    return context.with(contextWithPageSpan, () => instrumentedFetch(...args));
   } as WrappedFetch;
-  wrapper[FETCH_WRAPPED_MARKER] = true;
-  window.fetch = wrapper;
+  pageViewAwareFetch[FETCH_WRAPPED_MARKER] = true;
+  window.fetch = pageViewAwareFetch;
 }
