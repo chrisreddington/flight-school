@@ -3,8 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   executeCopilotChat: vi.fn(),
   withUserGuards: vi.fn(),
-  createLoggedChatSession: vi.fn(),
-  createLoggedGitHubChatSession: vi.fn(),
 }));
 
 vi.mock('@/lib/security/guard', () => ({
@@ -36,8 +34,6 @@ vi.mock('@/lib/copilot/server', () => ({
     userId: ctx.userId,
     gitHubToken: ctx.accessToken,
   }),
-  createLoggedChatSession: mocks.createLoggedChatSession,
-  createLoggedGitHubChatSession: mocks.createLoggedGitHubChatSession,
 }));
 
 import { CopilotWorkerRequiredError } from '@/lib/copilot/execution/worker-required-error';
@@ -74,8 +70,6 @@ describe('/api/copilot', () => {
         sessionReused: false,
       },
     });
-    mocks.createLoggedChatSession.mockRejectedValue(new Error('direct session factory should not be used'));
-    mocks.createLoggedGitHubChatSession.mockRejectedValue(new Error('direct session factory should not be used'));
   });
 
   it('delegates chat execution through the Copilot execution boundary', async () => {
@@ -113,7 +107,5 @@ describe('/api/copilot', () => {
     expect(response.status).toBe(500);
     expect(text).toContain('Copilot worker is required for chat execution');
     expect(text).not.toContain('ghu_user');
-    expect(mocks.createLoggedChatSession).not.toHaveBeenCalled();
-    expect(mocks.createLoggedGitHubChatSession).not.toHaveBeenCalled();
   });
 });

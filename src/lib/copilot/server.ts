@@ -1,17 +1,6 @@
-import {
-    CHAT_SYSTEM_PROMPT,
-    COACH_LIGHTWEIGHT_PROMPT,
-    COACH_SYSTEM_PROMPT,
-    GITHUB_CHAT_SYSTEM_PROMPT,
-} from './prompts';
-import {
-    CHAT_MODEL,
-    createSessionWithMetrics,
-    getConversationSession,
-    MODEL_TIERS,
-} from './sessions';
+import { COACH_LIGHTWEIGHT_PROMPT, COACH_SYSTEM_PROMPT } from './prompts';
+import { createSessionWithMetrics, MODEL_TIERS } from './sessions';
 import { wrapSessionWithLogging } from './logged-session';
-import { getCopilotGithubMcpTools } from './mcp-tools';
 import type { SessionIdentity } from './session-identity';
 import type { SessionOptions } from './types';
 
@@ -44,37 +33,6 @@ async function createLoggedSingleTurnSession({
     model,
     undefined,
     metrics,
-  );
-}
-
-type LoggedConversationSessionOptions = LoggedSingleTurnSessionOptions & {
-  conversationId?: string;
-};
-
-async function createLoggedConversationSession({
-  identity,
-  operationName,
-  inputPrompt,
-  model,
-  poolKey,
-  sessionOptions,
-  conversationId,
-}: LoggedConversationSessionOptions): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const { session, metrics } = await getConversationSession(
-    identity.userId,
-    conversationId,
-    poolKey,
-    sessionOptions,
-  );
-  return wrapSessionWithLogging(
-    identity.userId,
-    session,
-    operationName,
-    inputPrompt,
-    model,
-    undefined,
-    metrics,
-    !conversationId,
   );
 }
 
@@ -116,56 +74,6 @@ export async function createLoggedLightweightCoachSession(
       includeMcpTools: false,
       model: MODEL_TIERS.fastChat,
       systemMessage: COACH_LIGHTWEIGHT_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
-  });
-}
-
-/** Create a lightweight logged chat session for multi-turn conversations. */
-export async function createLoggedChatSession(
-  identity: SessionIdentity,
-  operationName = 'Chat Session',
-  inputPrompt = '',
-  conversationId?: string
-): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  return createLoggedConversationSession({
-    identity,
-    operationName,
-    inputPrompt,
-    model: CHAT_MODEL,
-    poolKey: 'chat:lightweight',
-    conversationId,
-    sessionOptions: {
-      includeMcpTools: false,
-      model: CHAT_MODEL,
-      systemMessage: CHAT_SYSTEM_PROMPT,
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-    },
-  });
-}
-
-/** Create a logged chat session with GitHub MCP tools enabled. */
-export async function createLoggedGitHubChatSession(
-  identity: SessionIdentity,
-  operationName = 'GitHub Chat Session',
-  inputPrompt = '',
-  conversationId?: string
-): Promise<ReturnType<typeof wrapSessionWithLogging>> {
-  const chatTools = getCopilotGithubMcpTools();
-  return createLoggedConversationSession({
-    identity,
-    operationName,
-    inputPrompt,
-    model: CHAT_MODEL,
-    poolKey: 'chat:mcp',
-    conversationId,
-    sessionOptions: {
-      includeMcpTools: true,
-      model: CHAT_MODEL,
-      ...(chatTools && chatTools.length > 0 && { tools: chatTools }),
-      systemMessage: GITHUB_CHAT_SYSTEM_PROMPT,
       userId: identity.userId,
       gitHubToken: identity.gitHubToken,
     },

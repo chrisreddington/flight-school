@@ -22,8 +22,6 @@ const ALLOWED_EXPORTS: Record<string, string[]> = {
   ],
   'src/lib/copilot/server.ts': [
     'createLoggedCoachSession',
-    'createLoggedChatSession',
-    'createLoggedGitHubChatSession',
     'createLoggedLightweightCoachSession',
     'createSessionIdentity',
     'SessionIdentity',

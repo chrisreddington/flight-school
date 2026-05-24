@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createSessionWithMetricsMock = vi.fn();
-const getConversationSessionMock = vi.fn();
 
 vi.mock('./sessions', async () => {
   const actual = await vi.importActual<typeof import('./sessions')>('./sessions');
   return {
     ...actual,
     createSessionWithMetrics: createSessionWithMetricsMock,
-    getConversationSession: getConversationSessionMock,
   };
 });
 
@@ -26,9 +24,7 @@ vi.mock('@/lib/observability/telemetry', () => ({
 }));
 
 const {
-  createLoggedChatSession,
   createLoggedCoachSession,
-  createLoggedGitHubChatSession,
   createLoggedLightweightCoachSession,
 } = await import('./server');
 
@@ -52,17 +48,6 @@ describe('logged Copilot session factories', () => {
         reusedConversation: false,
       },
     });
-    getConversationSessionMock.mockResolvedValue({
-      session: fakeSession,
-      metrics: {
-        poolKey: 'pool',
-        createdNew: true,
-        sessionCreateMs: 1,
-        mcpEnabled: false,
-        model: 'model',
-        reusedConversation: false,
-      },
-    });
   });
 
   it.each([
@@ -74,20 +59,6 @@ describe('logged Copilot session factories', () => {
     expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1', gitHubToken: 'ghu_1' }),
       expect.any(String),
-    );
-  });
-
-  it.each([
-    ['chat', () => createLoggedChatSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Chat', 'prompt', 'conv-1')],
-    ['GitHub chat', () => createLoggedGitHubChatSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Chat', 'prompt', 'conv-1')],
-  ])('should pass per-request GitHub token for %s sessions', async (_name, createSession) => {
-    await createSession();
-
-    expect(getConversationSessionMock).toHaveBeenCalledWith(
-      'u1',
-      'conv-1',
-      expect.any(String),
-      expect.objectContaining({ userId: 'u1', gitHubToken: 'ghu_1' }),
     );
   });
 
@@ -117,48 +88,5 @@ describe('logged Copilot session factories', () => {
       }),
       'coach:lightweight',
     );
-  });
-
-  it('keeps single-turn chat sessions on the conversation-session path and destroys them on cleanup', async () => {
-    const loggedSession = await createLoggedChatSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Chat', 'prompt');
-
-    expect(getConversationSessionMock).toHaveBeenCalledWith(
-      'u1',
-      undefined,
-      'chat:lightweight',
-      expect.objectContaining({
-        includeMcpTools: false,
-        userId: 'u1',
-        gitHubToken: 'ghu_1',
-      }),
-    );
-
-    await loggedSession.destroy();
-
-    expect(fakeSession.destroy).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps conversation chat sessions alive on wrapper cleanup', async () => {
-    const loggedSession = await createLoggedGitHubChatSession(
-      { userId: 'u1', gitHubToken: 'ghu_1' },
-      'GitHub Chat',
-      'prompt',
-      'conv-1',
-    );
-
-    expect(getConversationSessionMock).toHaveBeenCalledWith(
-      'u1',
-      'conv-1',
-      'chat:mcp',
-      expect.objectContaining({
-        includeMcpTools: true,
-        userId: 'u1',
-        gitHubToken: 'ghu_1',
-      }),
-    );
-
-    await loggedSession.destroy();
-
-    expect(fakeSession.destroy).not.toHaveBeenCalled();
   });
 });
