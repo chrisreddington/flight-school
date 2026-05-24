@@ -22,7 +22,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readStorage, writeStorage, deleteStorage, ensureDir } from '@/lib/storage/utils';
 import { userScopedFilename } from '@/lib/storage/user-scope';
 import { apiSuccess, validationErrorResponse } from './response-utils';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { authErrorResponse } from './auth-errors';
+import { requireUserContext } from '@/lib/auth/context';
 import type { logger } from '@/lib/logger';
 
 /**
@@ -91,12 +92,8 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
     try {
       ({ userId } = await requireUserContext());
     } catch (error) {
-      if (error instanceof UnauthorizedError) {
-        return {
-          ok: false,
-          response: NextResponse.json({ error: 'Authentication required' }, { status: 401 }),
-        };
-      }
+      const authResponse = authErrorResponse(error);
+      if (authResponse) return { ok: false, response: authResponse };
       throw error;
     }
 
