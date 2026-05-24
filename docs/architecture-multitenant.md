@@ -119,10 +119,25 @@ combined with `gitHubToken` / `useLoggedInUser`.
   signs in via the OAuth flow just like production.
 - **User-keyed chat session cache.** The Copilot conversation cache key is
   `${userId}:${poolKey}:${conversationId}` (see `chatSessionCache` in
-  `src/lib/copilot/sessions.ts`). Two users sharing a conversation ID never
-  collide.
+  `src/lib/copilot/sessions.ts`), where `poolKey` is the capability
+  fingerprint produced by `composeCapabilityFingerprint(capabilities,
+  systemMessage)` in `src/lib/copilot/fingerprint.ts`. The fingerprint
+  hashes the resolved capability surface AND the composed system
+  message, so two sessions with the same caps but different prompts
+  never share a pooled CLI process. Two users sharing a conversation
+  ID never collide.
+- **Capability surface is monotonic-add per conversation.** Resolved
+  capabilities are persisted to the per-user/per-conversation memory in
+  `src/lib/copilot/conversation-capabilities.ts` BEFORE `sendAndWait`,
+  in both the streaming chat factory and the direct worker path
+  (`runtime/session-executor.ts`). A mid-turn failure does not shrink
+  the next turn's surface. Memory is bounded (TTL + LRU) per user.
 - **MCP config rebuilt per call.** `getMcpServerConfig` throws if no token is
   supplied and never caches a config across users.
+  `buildMcpServersForCapabilities(selections, credentials)` in
+  `src/lib/copilot/capabilities.ts` strict-throws when a selected MCP
+  capability has no credential — preserves the
+  fingerprint-equals-installed-surface invariant.
 - **Audit log on every guarded operation.** `withUserGuards` in
   `src/lib/security/guard.ts` emits an audit event (with `hashUserId` of the
   caller) for each rate-limited, capped session creation.
@@ -141,6 +156,9 @@ combined with `gitHubToken` / `useLoggedInUser`.
 | Copilot session factory (worker-only) | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
 | Logged session helpers (worker-only) | `src/lib/copilot/server.ts` | `createLoggedCoachSession`, `createLoggedLightweightCoachSession`, `wrapSessionWithLogging` |
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
+| Capability + profile composition | `src/lib/copilot/profiles.ts`, `src/lib/copilot/capabilities.ts` | `resolveProfile`, `buildMcpServersForCapabilities`, `CapabilityCredentialResolver` |
+| Session-cache fingerprint contract | `src/lib/copilot/fingerprint.ts` | `composeCapabilityFingerprint`, `capabilityFingerprintOf` |
+| Per-conversation capability memory | `src/lib/copilot/conversation-capabilities.ts` | `getConversationCapabilities`, `rememberConversationCapabilities` |
 | Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution` (web -> worker HTTP dispatch) |
 | Prototype runtime-pool contracts | `src/lib/copilot/runtime/` | `createPerUserRuntimePool`, `CopilotRuntimePool` |
 | Route guard composition | `src/lib/security/guard.ts` | `requireGuardedUserContext`, `withUserGuards`, `withGuardedRoute` |
