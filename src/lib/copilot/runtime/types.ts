@@ -1,4 +1,9 @@
-import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from '@/lib/copilot/execution/types';
+import type {
+  CopilotChatExecutionRequest,
+  CopilotChatExecutionResult,
+  CopilotCoachJobRequest,
+  CopilotCoachJobResult,
+} from '@/lib/copilot/execution/types';
 
 interface CopilotRuntimeCreationContext {
   gitHubToken: string;
@@ -8,6 +13,7 @@ export interface CopilotRuntime {
   userId: string;
   copilotHome: string;
   executeChat: (request: CopilotChatExecutionRequest) => Promise<CopilotChatExecutionResult>;
+  executeCoachJob: (request: CopilotCoachJobRequest) => Promise<CopilotCoachJobResult>;
   disconnect: () => Promise<void> | void;
 }
 

@@ -3,7 +3,7 @@
  */
 
 import type { DailyChallenge } from '@/lib/focus/types';
-import type { SessionIdentity } from '@/lib/copilot/server';
+import type { SessionIdentity } from '@/lib/copilot/session-identity';
 
 /**
  * Context provided by the user during challenge authoring.

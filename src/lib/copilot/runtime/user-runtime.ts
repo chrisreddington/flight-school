@@ -11,6 +11,7 @@ import { wrapSessionWithLogging } from '@/lib/copilot/logged-session';
 import type { SessionCreationMetrics } from '@/lib/copilot/types';
 import type { CopilotChatExecutionRequest } from '@/lib/copilot/execution/types';
 import { executeChatWithSessionFactory } from './session-executor';
+import { executeCoachJobInRuntime } from './coach-executor';
 import type { CopilotRuntime } from './types';
 
 const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
@@ -45,6 +46,7 @@ export async function createCopilotUserRuntime({
       (chatRequest, operationName) => createRuntimeLoggedSession(client, chatRequest, operationName, false),
       (chatRequest, operationName) => createRuntimeLoggedSession(client, chatRequest, operationName, true),
     ),
+    executeCoachJob: (request) => executeCoachJobInRuntime(request),
     async disconnect() {
       const errors = await client.stop();
       if (errors.length > 0) {

@@ -28,7 +28,8 @@ import {
     buildSolutionPrompt,
     SOLUTION_GENERATION_PROMPT,
 } from '@/lib/challenge/solution-generation';
-import { createLoggedCoachSession, createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
@@ -76,76 +77,69 @@ export async function POST(request: NextRequest) {
     // Build the solution prompt with system prompt injected
     const systemPromptedPrompt = `${SOLUTION_GENERATION_PROMPT}\n\n---\n\n${buildSolutionPrompt(challenge, files)}`;
 
-    // Create a logged session and send the prompt
-    const session = await createLoggedCoachSession(
+    const result = await executeCopilotCoachJob({
       identity,
-      'Challenge Solution Generation',
-      systemPromptedPrompt.slice(0, 100)
-    );
+      variant: 'coach',
+      operationName: 'Challenge Solution Generation',
+      prompt: systemPromptedPrompt,
+      inputSummary: systemPromptedPrompt.slice(0, 100),
+    });
 
-    try {
-      const result = await session.sendAndWait(systemPromptedPrompt);
+    const totalTime = nowMs() - startTime;
+    log.info(`Solution generated in ${totalTime}ms`);
 
-      const totalTime = nowMs() - startTime;
-      log.info(`Solution generated in ${totalTime}ms`);
+    const parsedResponse = extractJSON<{
+      files?: Array<{ name: string; content: string }>;
+      explanation?: string;
+    }>(result.response, 'Solution Generation');
 
-      // Parse the JSON response using centralized extraction utility
-      const parsedResponse = extractJSON<{ 
-        files?: Array<{ name: string; content: string }>; 
-        explanation?: string; 
-      }>(result.responseText, 'Solution Generation');
-      
-      if (!parsedResponse) {
-        log.error('Failed to parse solution response');
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Failed to parse AI response',
-            rawResponse: result.responseText,
-          }),
-          {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
-      if (!parsedResponse.files || !Array.isArray(parsedResponse.files) || parsedResponse.files.length === 0) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'No files in AI response',
-            rawResponse: result.responseText,
-          }),
-          {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
-      }
-
+    if (!parsedResponse) {
+      log.error('Failed to parse solution response');
       return new Response(
         JSON.stringify({
-          success: true,
-          files: parsedResponse.files,
-          explanation: parsedResponse.explanation ?? 'Solution generated successfully',
-          meta: {
-            totalMs: totalTime,
-            model: session.model,
-            challengeTitle: challenge.title,
-            challengeDifficulty: challenge.difficulty,
-            filesGenerated: parsedResponse.files.length,
-          },
+          success: false,
+          error: 'Failed to parse AI response',
+          rawResponse: result.response,
         }),
         {
-          status: 200,
+          status: 500,
           headers: { 'Content-Type': 'application/json' },
         }
       );
-    } finally {
-      // Clean up the session
-      session.destroy();
     }
+
+    if (!parsedResponse.files || !Array.isArray(parsedResponse.files) || parsedResponse.files.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'No files in AI response',
+          rawResponse: result.response,
+        }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        files: parsedResponse.files,
+        explanation: parsedResponse.explanation ?? 'Solution generated successfully',
+        meta: {
+          totalMs: totalTime,
+          model: result.meta.model,
+          challengeTitle: challenge.title,
+          challengeDifficulty: challenge.difficulty,
+          filesGenerated: parsedResponse.files.length,
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
   } catch (error) {
     const knownResponse = knownApiErrorResponse(error);
     if (knownResponse) return knownResponse;

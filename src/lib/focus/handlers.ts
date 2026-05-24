@@ -16,9 +16,9 @@ import {
   buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
 import {
-  createLoggedLightweightCoachSession,
   type SessionIdentity,
-} from '@/lib/copilot/server';
+} from '@/lib/copilot/session-identity';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import {
   addMissingIds,
@@ -103,19 +103,18 @@ async function generateSingleComponent(
 
   const prompt = buildPrompt();
 
-  const loggedSession = await createLoggedLightweightCoachSession(
-    identity,
-    `Focus: ${component}`,
-    prompt.slice(0, 50)
-  );
-
   log.info(`[${component}] Sending prompt (${prompt.length} chars)...`);
-  const result = await loggedSession.sendAndWait(prompt);
-  loggedSession.destroy();
+  const result = await executeCopilotCoachJob({
+    identity,
+    variant: 'lightweight',
+    operationName: `Focus: ${component}`,
+    prompt,
+    inputSummary: prompt.slice(0, 50),
+  });
 
-  log.info(`[${component}] Complete: ${result.totalTimeMs}ms`);
+  log.info(`[${component}] Complete: ${result.meta.totalTimeMs}ms`);
 
-  const parsed = extractJSON<Partial<FocusResponse>>(result.responseText);
+  const parsed = extractJSON<Partial<FocusResponse>>(result.response);
   if (!parsed) {
     throw new Error(`Failed to parse ${component} response`);
   }
@@ -124,9 +123,9 @@ async function generateSingleComponent(
   withIds.meta = {
     generatedAt: now(),
     aiEnabled: true,
-    model: loggedSession.model,
+    model: result.meta.model,
     toolsUsed: [],
-    totalTimeMs: result.totalTimeMs,
+    totalTimeMs: result.meta.totalTimeMs,
     usedCachedProfile: true,
   };
 
@@ -141,19 +140,18 @@ async function generateSingleTopic(
 ): Promise<{ learningTopic: LearningTopic }> {
   const prompt = buildSingleTopicPrompt(serializedContext, existingTopicTitles, skillProfile);
 
-  const loggedSession = await createLoggedLightweightCoachSession(
-    identity,
-    'Focus: singleTopic',
-    prompt.slice(0, 50)
-  );
-
   log.info(`[singleTopic] Sending prompt (${prompt.length} chars), excluding: ${existingTopicTitles.join(', ')}`);
-  const result = await loggedSession.sendAndWait(prompt);
-  loggedSession.destroy();
+  const result = await executeCopilotCoachJob({
+    identity,
+    variant: 'lightweight',
+    operationName: 'Focus: singleTopic',
+    prompt,
+    inputSummary: prompt.slice(0, 50),
+  });
 
-  log.info(`[singleTopic] Complete: ${result.totalTimeMs}ms`);
+  log.info(`[singleTopic] Complete: ${result.meta.totalTimeMs}ms`);
 
-  const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.responseText);
+  const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.response);
   if (!parsed?.learningTopic) {
     throw new Error('Failed to parse single topic response');
   }

@@ -1,5 +1,5 @@
 import { parseJsonBodyWithFallback } from '@/lib/api';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { generateWhatsNext, getWhatsNextFallback, type WhatsNextResult } from '@/lib/copilot/suggestions';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { buildProfileContext } from '@/lib/github/profile-context';

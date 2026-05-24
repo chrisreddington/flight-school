@@ -1,4 +1,5 @@
-import { createLoggedLightweightCoachSession, type SessionIdentity } from './server';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import type { SessionIdentity } from './session-identity';
 import { extractJSON } from '@/lib/utils/json-utils';
 
 export interface RelatedSuggestion {
@@ -122,21 +123,19 @@ Each should be slightly harder OR explore an adjacent concept (ZPD-appropriate).
 JSON only:
 {"suggestions":[{"id":"","title":"","reason":"Building on your ${completedChallenge.difficulty} ${completedChallenge.language} work, this next step will...","difficulty":"","language":""}]}`;
 
-  const loggedSession = await createLoggedLightweightCoachSession(
-    identity,
-    'What Next Suggestions',
-    completedChallenge.title
-  );
-
   try {
-    const result = await loggedSession.sendAndWait(prompt);
-    const parsed = extractJSON<RawWhatsNextResult>(result.responseText, 'What Next Suggestions');
+    const result = await executeCopilotCoachJob({
+      identity,
+      variant: 'lightweight',
+      operationName: 'What Next Suggestions',
+      prompt,
+      inputSummary: completedChallenge.title,
+    });
+    const parsed = extractJSON<RawWhatsNextResult>(result.response, 'What Next Suggestions');
     return {
       suggestions: normalizeSuggestions(parsed, completedChallenge),
     };
   } catch {
     return getWhatsNextFallback(completedChallenge);
-  } finally {
-    loggedSession.destroy();
   }
 }

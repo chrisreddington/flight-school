@@ -22,7 +22,7 @@
  */
 
 import { createSSEResponse, parseJsonBody } from '@/lib/api';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { nowMs } from '@/lib/utils/date-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
 import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-parser';

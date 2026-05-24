@@ -1,4 +1,5 @@
-import { createLoggedLightweightCoachSession, type SessionIdentity } from '@/lib/copilot/server';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import type { SessionIdentity } from '@/lib/copilot/session-identity';
 import { extractJSON } from '@/lib/utils/json-utils';
 
 export interface QuizQuestion {
@@ -148,18 +149,18 @@ Return JSON only:
   ]
 }`;
 
-  const loggedSession = await createLoggedLightweightCoachSession(identity, 'Topic Practice Quiz', topicTitle);
-
-  try {
-    const result = await loggedSession.sendAndWait(prompt);
-    const parsed = extractJSON<RawQuizResponse>(result.responseText, 'Topic Practice Quiz');
-    const questions = normalizeQuestions(parsed, topicTitle, topicDescription);
-    return {
-      topicTitle,
-      questions,
-    };
-  } finally {
-    loggedSession.destroy();
-  }
+  const result = await executeCopilotCoachJob({
+    identity,
+    variant: 'lightweight',
+    operationName: 'Topic Practice Quiz',
+    prompt,
+    inputSummary: topicTitle,
+  });
+  const parsed = extractJSON<RawQuizResponse>(result.response, 'Topic Practice Quiz');
+  const questions = normalizeQuestions(parsed, topicTitle, topicDescription);
+  return {
+    topicTitle,
+    questions,
+  };
 }
 

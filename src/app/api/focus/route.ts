@@ -9,7 +9,7 @@
  */
 
 import { parseJsonBodyWithFallback } from '@/lib/api';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import type { InterleavingHint } from '@/lib/focus/interleaving';
 import { generateFocus, type FocusComponent } from '@/lib/focus/handlers';
 import { withGuardedRoute } from '@/lib/security/guard';

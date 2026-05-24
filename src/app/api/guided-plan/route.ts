@@ -1,6 +1,6 @@
 import { knownApiErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateGuidedPlan, getGuidedPlanFallback } from '@/lib/copilot/guided-mode';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
 import { withGuardedRoute } from '@/lib/security/guard';

@@ -41,6 +41,18 @@ const SDK_ALLOWED_PREFIXES = [
   'src/lib/copilot/runtime/',
 ];
 
+// SDK adapter modules that legitimately wrap `@github/copilot-sdk` for
+// worker-internal use. These are imported only by the runtime and the
+// server-side factories (server.ts), both of which are themselves
+// gated by the factory-import allowlist below. Web/API code must NEVER
+// import from these files directly — use `executeCopilotChat` /
+// `executeCopilotCoachJob` from `src/lib/copilot/execution/` instead.
+const SDK_ALLOWED_FILES = new Set([
+  'src/lib/copilot/sessions.ts',
+  'src/lib/copilot/logged-session.ts',
+  'src/lib/copilot/mcp.ts',
+]);
+
 const WORKER_INTERNAL_PREFIXES = [
   'src/worker/',
   'src/lib/copilot/runtime/',
@@ -51,13 +63,6 @@ const WORKER_INTERNAL_FILES = new Set([
   'src/lib/copilot/server.ts',
   'src/lib/copilot/sessions.ts',
   'src/lib/copilot/logged-session.ts',
-  'src/lib/copilot/quiz.ts',
-  'src/lib/copilot/hints.ts',
-  'src/lib/copilot/suggestions.ts',
-  'src/lib/copilot/guided-mode.ts',
-  'src/lib/focus/handlers.ts',
-  'src/lib/github/readme/learning-readme.ts',
-  'src/app/api/challenge/solve/route.ts',
 ]);
 
 // The set above is the CURRENT baseline of in-process callers. Items
@@ -97,8 +102,12 @@ for (const root of SCAN_ROOTS) {
     const relativePath = relativeFromRoot(file);
     const source = readFileSync(file, 'utf8');
 
-    if (SDK_IMPORT_PATTERN.test(source) && !isUnderPrefix(relativePath, SDK_ALLOWED_PREFIXES)) {
-      violations.push(`${relativePath}: imports @github/copilot-sdk directly. Only ${SDK_ALLOWED_PREFIXES.join(' or ')} may.`);
+    if (
+      SDK_IMPORT_PATTERN.test(source) &&
+      !isUnderPrefix(relativePath, SDK_ALLOWED_PREFIXES) &&
+      !SDK_ALLOWED_FILES.has(relativePath)
+    ) {
+      violations.push(`${relativePath}: imports @github/copilot-sdk directly. Only ${SDK_ALLOWED_PREFIXES.join(' or ')} (or SDK_ALLOWED_FILES) may.`);
     }
 
     let match;

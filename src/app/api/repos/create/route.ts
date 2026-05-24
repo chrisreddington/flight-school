@@ -18,7 +18,7 @@ import {
 import { getOctokitForRequest } from '@/lib/github/client';
 import { generateLearningReadme } from '@/lib/github/readme';
 import { createRepository, getFileShaWithRetry, updateRepoFile } from '@/lib/github/repos';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';

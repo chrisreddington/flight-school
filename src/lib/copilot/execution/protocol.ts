@@ -1,4 +1,11 @@
-import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from './types';
+import type {
+  CopilotChatExecutionRequest,
+  CopilotChatExecutionResult,
+  CopilotCoachJobRequest,
+  CopilotCoachJobResult,
+  CopilotCoachVariant,
+  CopilotToolCallRecord,
+} from './types';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -36,6 +43,46 @@ export function parseCopilotWorkerChatResult(value: unknown): CopilotChatExecuti
       sessionReused: nullableBoolean(meta.sessionReused, 'meta.sessionReused'),
     },
   };
+}
+
+export function parseCopilotWorkerCoachRequest(value: unknown): CopilotCoachJobRequest {
+  const record = requireRecord(value, 'request');
+  const identity = requireRecord(record.identity, 'identity');
+
+  return {
+    identity: {
+      userId: requireString(identity.userId, 'identity.userId'),
+      gitHubToken: requireString(identity.gitHubToken, 'identity.gitHubToken'),
+    },
+    variant: requireVariant(record.variant),
+    operationName: requireString(record.operationName, 'operationName'),
+    prompt: requireString(record.prompt, 'prompt'),
+    inputSummary: optionalString(record.inputSummary, 'inputSummary'),
+  };
+}
+
+export function parseCopilotWorkerCoachResult(value: unknown): CopilotCoachJobResult {
+  const record = requireRecord(value, 'result');
+  const meta = requireRecord(record.meta, 'meta');
+
+  return {
+    response: requireString(record.response, 'response'),
+    toolCalls: requireToolCalls(record.toolCalls),
+    meta: {
+      generatedAt: requireString(meta.generatedAt, 'meta.generatedAt'),
+      model: requireString(meta.model, 'meta.model'),
+      operationName: requireString(meta.operationName, 'meta.operationName'),
+      variant: requireVariant(meta.variant),
+      totalTimeMs: requireNumber(meta.totalTimeMs, 'meta.totalTimeMs'),
+      sessionCreateMs: nullableNumber(meta.sessionCreateMs, 'meta.sessionCreateMs'),
+      mcpEnabled: requireBoolean(meta.mcpEnabled, 'meta.mcpEnabled'),
+    },
+  };
+}
+
+function requireVariant(value: unknown): CopilotCoachVariant {
+  if (value === 'lightweight' || value === 'coach') return value;
+  throw new Error(`variant must be 'lightweight' or 'coach'`);
 }
 
 function requireRecord(value: unknown, name: string): UnknownRecord {
@@ -96,7 +143,7 @@ function requireStringArray(value: unknown, name: string): string[] {
   return value;
 }
 
-function requireToolCalls(value: unknown): CopilotChatExecutionResult['toolCalls'] {
+function requireToolCalls(value: unknown): CopilotToolCallRecord[] {
   if (!Array.isArray(value)) {
     throw new Error('toolCalls must be an array');
   }

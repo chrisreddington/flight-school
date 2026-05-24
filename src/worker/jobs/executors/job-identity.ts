@@ -1,5 +1,5 @@
 import { resolveFreshGitHubToken } from '@/lib/auth/token-resolver';
-import type { SessionIdentity } from '@/lib/copilot/server';
+import type { SessionIdentity } from '@/lib/copilot/session-identity';
 import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
 import { auditLog, hashUserId } from '@/lib/security/audit';

@@ -24,7 +24,7 @@ import { parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
 import { validateHintRequest } from '@/lib/challenge/request-validators';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { getHint } from '@/lib/copilot/hints';
 import type { ChallengeDef, HintResult } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';

@@ -31,7 +31,7 @@ import {
     parsePartialEvaluation,
     type WorkspaceFileInput,
 } from '@/lib/copilot/evaluation';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { createEvaluationStreamingSession } from '@/lib/copilot/streaming';
 import type { ChallengeDef } from '@/lib/copilot/types';
 import { logger } from '@/lib/logger';

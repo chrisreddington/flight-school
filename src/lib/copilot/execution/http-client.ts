@@ -1,8 +1,17 @@
-import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from './types';
+import type {
+  CopilotChatExecutionRequest,
+  CopilotChatExecutionResult,
+  CopilotCoachJobRequest,
+  CopilotCoachJobResult,
+} from './types';
 import type { CopilotWorkerConfig } from './config';
-import { parseCopilotWorkerChatResult } from './protocol';
+import {
+  parseCopilotWorkerChatResult,
+  parseCopilotWorkerCoachResult,
+} from './protocol';
 
 const WORKER_CHAT_PATH = '/api/internal/copilot/execute';
+const WORKER_COACH_PATH = '/api/internal/copilot/coach';
 
 interface ExecuteViaWorkerOptions {
   signal?: AbortSignal;
@@ -13,16 +22,34 @@ export async function executeCopilotChatViaWorker(
   request: CopilotChatExecutionRequest,
   options: ExecuteViaWorkerOptions = {},
 ): Promise<CopilotChatExecutionResult> {
+  return postToWorker(config, WORKER_CHAT_PATH, request, parseCopilotWorkerChatResult, options);
+}
+
+export async function executeCopilotCoachJobViaWorker(
+  config: CopilotWorkerConfig,
+  request: CopilotCoachJobRequest,
+  options: ExecuteViaWorkerOptions = {},
+): Promise<CopilotCoachJobResult> {
+  return postToWorker(config, WORKER_COACH_PATH, request, parseCopilotWorkerCoachResult, options);
+}
+
+async function postToWorker<TResult>(
+  config: CopilotWorkerConfig,
+  path: string,
+  body: unknown,
+  parseResult: (value: unknown) => TResult,
+  options: ExecuteViaWorkerOptions,
+): Promise<TResult> {
   const abort = createWorkerAbortController(config.timeoutMs, options.signal);
 
   try {
-    const response = await fetch(`${config.baseUrl}${WORKER_CHAT_PATH}`, {
+    const response = await fetch(`${config.baseUrl}${path}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${config.secret}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
       signal: abort.signal,
     });
 
@@ -30,7 +57,7 @@ export async function executeCopilotChatViaWorker(
       throw new Error(`Copilot worker returned HTTP ${response.status}: ${await readWorkerError(response)}`);
     }
 
-    return parseCopilotWorkerChatResult(await response.json());
+    return parseResult(await response.json());
   } catch (error) {
     if (abort.timedOut() && isAbortError(error)) {
       throw new Error(`Copilot worker request timed out after ${config.timeoutMs}ms`);

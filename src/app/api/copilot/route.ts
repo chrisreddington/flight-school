@@ -14,7 +14,7 @@ import {
     validateCopilotChatRequest,
 } from '@/lib/copilot/api-requests';
 import { executeCopilotChat } from '@/lib/copilot/execution';
-import { createSessionIdentity } from '@/lib/copilot/server';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { logger } from '@/lib/logger';
 import { withGuardedRoute } from '@/lib/security/guard';
 import { CHAT_GUARD } from '@/lib/security/route-defaults';
