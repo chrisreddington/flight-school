@@ -382,3 +382,13 @@ Use `/analyze-tech-debt` prompt for comprehensive analysis. Available commands:
 
 **Integration**: Use `review-code` prompt with `mode=debt` for guided analysis.
 
+## Code quality contract
+
+Two skills enforce non-negotiable standards on every change. Invoke them
+proactively — they are not optional:
+
+- **[`readable-code`](.github/skills/readable-code/SKILL.md)** — *Apply when writing or refactoring TS/TSX.* The bar: a reader who has never seen this codebase before should understand any file from names alone. Rules cover descriptive naming (no `data`/`result`/`x`), plain control flow (no nested ternaries or bitwise tricks), and comments that explain **why** not **what**. Hard rule: TSDoc lines ≤ function body lines. The authoritative rules sit in [`typescript.instructions.md`](.github/instructions/typescript.instructions.md) and [`documentation.instructions.md`](.github/instructions/documentation.instructions.md); the skill is the practical companion.
+
+- **[`doc-currency`](.github/skills/doc-currency/SKILL.md)** — *Mandatory before `task_complete` for any non-trivial change.* Maps the area you touched to its authoritative docs (OTel skill, multi-tenant arch doc, copilot-instructions, README, …) and updates the specifics that drifted. Doc updates ship in the same commit as the code, never as a follow-up PR.
+
+

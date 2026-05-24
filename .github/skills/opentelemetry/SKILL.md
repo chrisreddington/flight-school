@@ -216,6 +216,67 @@ acceptable. **Never** point the browser exporter at the Aspire OTLP
 endpoint directly — CORS will fail and exposing collector credentials
 to the browser is unacceptable.
 
+The exporter is configured with `fetchOptions: { keepalive: true }` so
+the final batch survives `pagehide` / `beforeunload`. Without this the
+last `page.view` span and any pending children are silently dropped
+when the user navigates away or closes the tab.
+
+### 9a. Browser traces have one root per route: the `page.view` span
+
+The browser SDK runs a long-lived `page.view` span that acts as the
+**parent for every fetch and component-mount span emitted while that
+route is active**. Without it, each mount-time `useEffect` fetch becomes
+its own root span and the dashboard shows ~10 unrelated traces for a
+single page load.
+
+How the lifecycle works (see
+[`src/lib/observability/route-tracking.ts`](../../../src/lib/observability/route-tracking.ts)
+and [`src/lib/observability/browser-otel.ts`](../../../src/lib/observability/browser-otel.ts)):
+
+1. **Module-eval bootstrap.** `BrowserOtelBootstrap.tsx` calls
+   `initBrowserOtel()` at module-evaluation time (not inside a `useEffect`).
+   This runs **before any component renders**, beating React's
+   parent-effects-fire-after-child-effects ordering invariant. A child
+   `useEffect` fetch would otherwise mis-parent to whatever span happened
+   to be active.
+2. **History patching.** `installRouteTracking()` monkey-patches
+   `history.pushState`, `history.replaceState`, and listens to `popstate`.
+   App Router's `router.push` calls `pushState`, so route transitions are
+   driven **synchronously, outside React**. Patched functions are tagged
+   with `Symbol.for('flight-school.route-tracking.patched')` for HMR
+   idempotency.
+3. **Span lifecycle.** A `page.view` span starts on route enter and ends
+   on the next route change or on `pagehide`. While it's active, our
+   `window.fetch` wrapper sets it as the active OTel context before
+   delegating to the original fetch, so `FetchInstrumentation` reads it
+   as the parent.
+4. **Visibility vs unload.** `visibilitychange === 'hidden'` calls
+   `forceFlush()` but does **not** end the span (the user may return).
+   `pagehide` ends the span. Mobile browsers don't fire `beforeunload`
+   reliably — we use `pagehide` instead.
+
+**Don't** add a parallel "navigation span" or use `useEffect(usePathname)`
+to start a span — both have been tried and both lose the race against
+child effects.
+
+**Don't** wrap `window.fetch` from anywhere except `initBrowserOtel`. The
+wrap is idempotent via a `Symbol.for` marker; a second wrap from another
+module would either no-op (best case) or stack and double-count
+(worst case).
+
+**Fetch span names use the URL pathname** (`GET /api/focus` not
+`HTTP GET`) — set by an `applyCustomAttributesOnSpan` hook that calls
+`span.updateName(...)` after sanitising the URL via
+`extractPathname()`. If you add a new browser instrumentation, mirror
+this pattern.
+
+**Live trace-list ergonomics caveat.** `BatchSpanProcessor` only exports
+ended spans, and `page.view` deliberately lives for the whole route.
+Child fetches export first; the parent exports later. The Aspire OTLP
+collector links them retroactively by `traceId`, but in the dashboard's
+live list you'll briefly see children before their parent. This is not
+a bug — refresh after the route ends and the tree is complete.
+
 ### 10. Always propagate trace context across boundaries
 
 Every outbound fetch from server code that crosses a service boundary
@@ -305,6 +366,49 @@ ensure these on the server resource:
 The browser resource sets `service.name=flight-school-browser` and
 `service.version` so the dashboard groups browser telemetry as its own
 resource alongside the server.
+
+### 14a. Service-tier naming — how to tell who emitted a span
+
+A trace can originate in three logical tiers, but only two of those
+tiers map cleanly to a process. The Next.js process serves **both**
+page renders and API route handlers — same Node runtime, same OTel SDK,
+same `service.name`. That's a fact of Next.js, not a deficiency.
+
+| Logical tier | What it does | How to identify it in a trace |
+| --- | --- | --- |
+| **Browser** | All client JS — fetches, navigations, document load | `service.name=flight-school-browser` (resource attribute) |
+| **API layer** | App Router route handlers under `app/api/**/route.ts` | `service.name=flight-school-web` **AND** `http.route` starts with `/api/` |
+| **Page render** | App Router pages, RSC, server components | `service.name=flight-school-web` **AND** `http.route` does **not** start with `/api/` |
+| **Worker** | Background queue consumer | `service.name=flight-school-worker` |
+
+**Recommended dashboard filters:**
+
+- "All browser activity" → filter `service.name = flight-school-browser`.
+- "All API calls" → filter `service.name = flight-school-web` **and** `http.route =~ ^/api/`.
+- "All page renders" → filter `service.name = flight-school-web` **and** `http.route !~ ^/api/`.
+- "All worker activity" → filter `service.name = flight-school-worker`.
+
+**Why we don't split `flight-school-web` into two services.** It's
+genuinely one Node process. The OTel HTTP semconv puts `http.route` on
+every server span specifically so dashboards can slice the same service
+along route patterns without inventing fake services. Splitting would
+require either a second Next.js process (doubles cold-start cost) or
+lying about reality (one process, two `service.name`s — confuses
+exemplar linking and resource queries). `http.route` is the paved path.
+
+**Why we don't (currently) add a `flight_school.tier` span attribute.**
+Tempting, but it would duplicate `http.route` — the dashboard can
+already filter on the prefix. The day we want tier in **metric** labels
+(low-cardinality counters of API vs page work), that's the point to add
+a `Views` mapping that derives `flight_school.tier ∈ {api, page}` from
+`http.route` and drops the raw route, since the raw route is unbounded
+cardinality for metrics. Don't add it speculatively.
+
+**Naming nit.** `flight-school-web` is slightly ambiguous — it's the
+Next.js process, not "the website". If a future rename makes things
+clearer, `flight-school-nextjs` is the better service name. Until then,
+remember: `web` = "the Next.js process that does both pages and API",
+filtered apart by `http.route`.
 
 ### 15. Browser telemetry: traces only, by design
 
