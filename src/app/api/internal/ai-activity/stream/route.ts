@@ -84,13 +84,14 @@ async function handleStream(request: NextRequest): Promise<Response> {
         }
       }
 
+      const HEARTBEAT_INTERVAL_MS = 30_000;
       const heartbeat = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(`: heartbeat\n\n`));
         } catch {
           clearInterval(heartbeat);
         }
-      }, 30000);
+      }, HEARTBEAT_INTERVAL_MS);
 
       const abort = () => {
         clearInterval(heartbeat);

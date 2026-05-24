@@ -261,11 +261,12 @@ export async function createGenericStreamingSession(
         }
 
         // Check if we're done
+        const STREAM_POLL_INTERVAL_MS = 20;
         const raceResult = await Promise.race([
           idlePromise.then(() => 'idle' as const),
           new Promise<'more'>((resolve) => {
             queueResolver = () => resolve('more');
-            setTimeout(() => resolve('more'), 20);
+            setTimeout(() => resolve('more'), STREAM_POLL_INTERVAL_MS);
           }),
         ]);
 

@@ -116,12 +116,9 @@ function startSpan(name: string, attributes?: Attributes): Span {
 }
 
 export function setSpanError(span: Span, error: unknown): void {
-  const errorType =
-    error instanceof Error
-      ? error.constructor.name
-      : typeof error === 'string'
-        ? 'string'
-        : 'unknown';
+  let errorType = 'unknown';
+  if (error instanceof Error) errorType = error.constructor.name;
+  else if (typeof error === 'string') errorType = 'string';
   span.setAttribute('error.type', errorType);
 
   if (error instanceof Error) {

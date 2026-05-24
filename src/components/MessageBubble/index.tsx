@@ -143,14 +143,14 @@ export const MessageBubble = memo(function MessageBubble({
 
   const displayContent = message.content;
 
-  // Prefer the rich timeline; fall back to synthesising complete events from
-  // the legacy `toolCalls: string[]` for messages persisted before F6.
-  const resolvedToolEvents: ToolCallEvent[] =
-    message.toolEvents && message.toolEvents.length > 0
-      ? message.toolEvents
-      : message.toolCalls && message.toolCalls.length > 0
-        ? legacyEventsFromNames(message.toolCalls)
-        : [];
+  // Prefer the rich timeline; synthesise complete events from the
+  // name-only `toolCalls: string[]` for older messages that only
+  // carry the legacy shape.
+  const resolvedToolEvents: ToolCallEvent[] = (() => {
+    if (message.toolEvents?.length) return message.toolEvents;
+    if (message.toolCalls?.length) return legacyEventsFromNames(message.toolCalls);
+    return [];
+  })();
 
   const runningCount = resolvedToolEvents.filter((e) => e.status === 'running').length;
   const completeCount = resolvedToolEvents.length - runningCount;

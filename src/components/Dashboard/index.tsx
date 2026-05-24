@@ -96,7 +96,6 @@ export function Dashboard() {
     stopGoalSkip(goalId);
   }, [stopGoalSkip]);
   
-  // Use the new learning chat hook for multi-thread chat
   const {
     threads,
     activeThreadId,

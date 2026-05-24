@@ -10,6 +10,10 @@ export interface OperationState {
   };
 }
 
+/**
+ * Partition active operations into per-domain snapshots and a target-id index
+ * used by hooks to gate UI affordances ("topic X has an in-flight regenerate").
+ */
 export function buildOperationState(
   operations: Iterable<[string, ActiveOperation]>,
   hydrated = false,

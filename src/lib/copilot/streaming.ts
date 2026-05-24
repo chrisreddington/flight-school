@@ -197,8 +197,8 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       const eventType = event.type;
 
       if (eventType === 'assistant.message_delta') {
-        const data = event.data as { deltaContent?: string };
-        if (data.deltaContent) {
+        const deltaPayload = event.data as { deltaContent?: string };
+        if (deltaPayload.deltaContent) {
           if (streamingMetrics.firstDeltaMs === null) {
             streamingMetrics.firstDeltaMs = Date.now() - startTime;
             streamSpan.addEvent('first_token', {
@@ -206,48 +206,48 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
             });
           }
           deltaCount += 1;
-          deltaBytes += Buffer.byteLength(data.deltaContent);
-          totalContent += data.deltaContent;
-          eventQueue.push({ type: 'delta', content: data.deltaContent });
+          deltaBytes += Buffer.byteLength(deltaPayload.deltaContent);
+          totalContent += deltaPayload.deltaContent;
+          eventQueue.push({ type: 'delta', content: deltaPayload.deltaContent });
           queueResolver?.();
         }
       } else if (eventType === 'assistant.usage') {
         // Accumulate token counts; recorded once on stream completion so the
         // histogram sample reflects the whole turn rather than per-chunk noise.
-        const data = event.data as {
+        const usagePayload = event.data as {
           inputTokens?: number;
           outputTokens?: number;
           cacheReadTokens?: number;
           cacheWriteTokens?: number;
         };
-        usageTotals.inputTokens += data.inputTokens ?? 0;
-        usageTotals.outputTokens += data.outputTokens ?? 0;
-        usageTotals.cacheReadTokens += data.cacheReadTokens ?? 0;
-        usageTotals.cacheWriteTokens += data.cacheWriteTokens ?? 0;
+        usageTotals.inputTokens += usagePayload.inputTokens ?? 0;
+        usageTotals.outputTokens += usagePayload.outputTokens ?? 0;
+        usageTotals.cacheReadTokens += usagePayload.cacheReadTokens ?? 0;
+        usageTotals.cacheWriteTokens += usagePayload.cacheWriteTokens ?? 0;
       } else if (eventType === 'tool.execution_start') {
-        const data = event.data as { toolName: string; arguments: unknown };
-        log.debug(`Tool start: ${data.toolName}`);
+        const toolStart = event.data as { toolName: string; arguments: unknown };
+        log.debug(`Tool start: ${toolStart.toolName}`);
         streamSpan.addEvent('tool.start', {
-          'tool.name': data.toolName,
+          'tool.name': toolStart.toolName,
         });
         toolCalls.push({
-          name: data.toolName,
-          args: data.arguments,
+          name: toolStart.toolName,
+          args: toolStart.arguments,
           result: '',
           startTime: Date.now(),
         });
-        eventQueue.push({ type: 'tool_start', name: data.toolName, args: data.arguments });
+        eventQueue.push({ type: 'tool_start', name: toolStart.toolName, args: toolStart.arguments });
         queueResolver?.();
 
         // Log to activity logger
-        activityLogger.logEvent(userId, 'tool', `mcp.${data.toolName}`, {
-          metadata: { args: data.arguments },
+        activityLogger.logEvent(userId, 'tool', `mcp.${toolStart.toolName}`, {
+          metadata: { args: toolStart.arguments },
         });
       } else if (eventType === 'tool.execution_complete') {
         const lastCall = toolCalls[toolCalls.length - 1];
-        const data = event.data as { result?: unknown };
+        const toolComplete = event.data as { result?: unknown };
         if (lastCall) {
-          lastCall.result = String(data.result || '').slice(0, 500);
+          lastCall.result = String(toolComplete.result || '').slice(0, 500);
           lastCall.endTime = Date.now();
           const duration = lastCall.endTime - lastCall.startTime;
           log.debug(`Tool complete: ${lastCall.name} (${duration}ms)`);
@@ -266,8 +266,8 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
       } else if (eventType === 'session.idle') {
         resolveIdle?.();
       } else if (eventType === 'session.error') {
-        const data = event.data as { message?: string };
-        rejectWithError?.(new Error(data.message || 'Session error'));
+        const errorPayload = event.data as { message?: string };
+        rejectWithError?.(new Error(errorPayload.message || 'Session error'));
       }
     });
 

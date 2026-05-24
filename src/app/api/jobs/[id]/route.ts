@@ -28,9 +28,9 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-function captureCtx() {
-  const tc = captureTracePropagationHeaders();
-  return Object.keys(tc).length > 0 ? tc : undefined;
+function captureTraceContext() {
+  const traceHeaders = captureTracePropagationHeaders();
+  return Object.keys(traceHeaders).length > 0 ? traceHeaders : undefined;
 }
 
 export async function GET(
@@ -47,7 +47,7 @@ export async function GET(
   }
 
   try {
-    const job = await getWorkerJob(id, userId, captureCtx());
+    const job = await getWorkerJob(id, userId, captureTraceContext());
     if (!job) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
@@ -78,7 +78,7 @@ export async function DELETE(
 
   let result;
   try {
-    result = await cancelWorkerJobRecord(id, userId, captureCtx());
+    result = await cancelWorkerJobRecord(id, userId, captureTraceContext());
   } catch (err) {
     log.error(`[Job ${id}] Failed to cancel on worker`, { err });
     return NextResponse.json(

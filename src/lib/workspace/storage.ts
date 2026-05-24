@@ -258,8 +258,8 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
     }
 
     try {
-      const data = await apiGet<{ challengeIds: string[] }>('/api/workspace/storage/list', { throwOnError: false });
-      return data?.challengeIds ?? [];
+      const listResponse = await apiGet<{ challengeIds: string[] }>('/api/workspace/storage/list', { throwOnError: false });
+      return listResponse?.challengeIds ?? [];
     } catch (error) {
       log.error('Failed to list workspaces', { error });
       return [];

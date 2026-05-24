@@ -36,9 +36,9 @@ export const { GET, POST, DELETE } = createStorageRoute({
   defaultSchema: DEFAULT_SCHEMA,
   logger: logger.withTag('Threads Storage API'),
   validateSchema,
-  // Phase 5: scrub the legacy `▊` cursor glyph from any thread that
-  // was last persisted by a pre-Phase-5 worker so cold reloads never
-  // surface the stale stream artefact.
+  // Strip stale streaming cursor glyphs from any thread written by a
+  // worker that predates cursor cleanup, so cold reloads never surface
+  // the stale stream artefact.
   transformRead: (_userId, data) => ({
     ...data,
     threads: data.threads.map((t) => stripLegacyCursorFromThread(t)),

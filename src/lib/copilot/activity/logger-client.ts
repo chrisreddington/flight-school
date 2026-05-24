@@ -79,8 +79,8 @@ async function postEvent(userId: string, body: PostEventBody): Promise<string | 
       log.warn('Activity POST failed', { status: response.status });
       return null;
     }
-    const data = (await response.json()) as { id?: string };
-    return typeof data.id === 'string' ? data.id : null;
+    const parsedResponse = (await response.json()) as { id?: string };
+    return typeof parsedResponse.id === 'string' ? parsedResponse.id : null;
   } catch (err) {
     log.warn('Activity POST threw', { err });
     return null;

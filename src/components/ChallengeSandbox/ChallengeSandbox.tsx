@@ -124,14 +124,16 @@ export function ChallengeSandbox({
   // triggers synchronous layout that blocks render if mounted immediately.
   const [isEditorReady, setIsEditorReady] = useState(false);
   useEffect(() => {
-    // Use requestIdleCallback if available, otherwise requestAnimationFrame + setTimeout
-    // This ensures editor mounts after browser has completed initial paint
+    // requestIdleCallback gives the browser a budget to commit first paint
+    // before we mount Monaco; fall back to rAF + a one-frame delay otherwise.
+    const EDITOR_IDLE_TIMEOUT_MS = 100;
+    const NEXT_FRAME_DELAY_MS = 16;
     if (typeof requestIdleCallback !== 'undefined') {
-      const id = requestIdleCallback(() => setIsEditorReady(true), { timeout: 100 });
+      const id = requestIdleCallback(() => setIsEditorReady(true), { timeout: EDITOR_IDLE_TIMEOUT_MS });
       return () => cancelIdleCallback(id);
     } else {
       const rafId = requestAnimationFrame(() => {
-        const timeoutId = setTimeout(() => setIsEditorReady(true), 16);
+        const timeoutId = setTimeout(() => setIsEditorReady(true), NEXT_FRAME_DELAY_MS);
         return () => clearTimeout(timeoutId);
       });
       return () => cancelAnimationFrame(rafId);

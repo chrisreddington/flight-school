@@ -1,12 +1,10 @@
 /**
- * Chat-response job executor (Phase 5 rewrite).
+ * Chat-response job executor.
  *
- * Phase 5 of the streaming-architecture refactor makes the worker the
- * **sole writer** of both `background-jobs` and `threads.json`. The
- * mid-stream durable-consolidation passes (formerly every 500 ms /
- * tool_event) are gone — clients consume live state via SSE through
- * the {@link chatStreamStore} on the browser. The thread file is now
- * written exactly twice per chat job:
+ * The worker is the **sole writer** of both `background-jobs` and
+ * `threads.json` for chat. Clients consume live state via SSE through
+ * the {@link chatStreamStore}; the durable thread file is written
+ * exactly twice per chat job:
  *
  *   1. Before terminal: a single `consolidateFinalToThread()` call
  *      that materialises the final assistant message and clears
@@ -16,7 +14,7 @@
  *   2. (Implicit) any later sweep that promotes a cancelled-but-not-
  *      annotated message — see `src/app/api/internal/jobs/sweep/route.ts`.
  *
- * The terminal sequence uses the new jobStorage CAS helpers
+ * The terminal sequence uses the jobStorage CAS helpers
  * (`markCompletedIdempotent`, `markFailedIfNonTerminal`,
  * `markCancelledIfNonTerminal`) together with
  * `jobEventBus.appendTerminalIfNotTerminated` so a DELETE-initiated

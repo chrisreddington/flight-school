@@ -89,8 +89,8 @@ export async function listWorkerJobs(opts: ListWorkerJobsOptions): Promise<JobLi
   if (!response.ok) {
     throw new Error(`Copilot worker job list failed with HTTP ${response.status}`);
   }
-  const data = (await response.json()) as { jobs: JobListDTO[] };
-  return data.jobs ?? [];
+  const jobsPayload = (await response.json()) as { jobs: JobListDTO[] };
+  return jobsPayload.jobs ?? [];
 }
 
 export async function getWorkerJob(
@@ -186,8 +186,8 @@ export async function exportWorkerJobsForUser(
   if (!response.ok) {
     throw new Error(`Copilot worker job export failed with HTTP ${response.status}`);
   }
-  const data = (await response.json()) as { jobs: BackgroundJob[] };
-  return data.jobs ?? [];
+  const jobsPayload = (await response.json()) as { jobs: BackgroundJob[] };
+  return jobsPayload.jobs ?? [];
 }
 
 export async function deleteWorkerJobsForUser(

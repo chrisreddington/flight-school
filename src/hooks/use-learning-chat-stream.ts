@@ -409,7 +409,7 @@ export function useLearningChatStream({
 
     const stillPending = new Map<string, string>();
     for (const [threadId, userMessageId] of pendingStreamMessages) {
-      const thread = threads.find(item => item.id === threadId);
+      const thread = threads.find(threadCandidate => threadCandidate.id === threadId);
       if (!thread) {
         stillPending.set(threadId, userMessageId);
         continue;

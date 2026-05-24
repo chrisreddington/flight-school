@@ -22,18 +22,19 @@
  *     `http.route`, `next.route`, and (by `@vercel/otel`'s composite
  *     processor on `onEnd`) `operation.name = "web.request"`.
  *
- * A previous attempt to filter the bubble at sampler-time (`shouldSample()`)
- * failed catastrophically because at `startSpan()` time **both spans are
- * structurally identical** — none of the discriminating attributes
- * (`next.bubble`, `http.route`, `next.route`, `operation.name`) exist yet.
- * Any sampler-level discriminator either drops the keeper too (killing the
- * entire downstream tree via `ParentBasedSampler` propagation) or no-ops.
+ * Bubble filtering MUST run at the exporter, not the sampler. At
+ * `startSpan()` time the bubble and the keeper are structurally
+ * identical — none of the discriminating attributes (`next.bubble`,
+ * `http.route`, `next.route`, `operation.name`) exist yet. Any
+ * sampler-level discriminator either drops the keeper too (which
+ * kills the entire downstream tree via `ParentBasedSampler`
+ * propagation) or is a silent no-op.
  *
- * By the time spans reach `SpanExporter.export()`, every span has ended,
- * `closeSpanWithError` has set `next.bubble` on the bubble (and only on
- * the bubble), and all attributes are fully visible. A mistaken filter
- * here would drop only the misidentified span — never its children —
- * eliminating the tree-kill failure mode.
+ * By the time spans reach `SpanExporter.export()`, every span has
+ * ended, `closeSpanWithError` has set `next.bubble` on the bubble
+ * (and only on the bubble), and all attributes are fully visible. A
+ * mistaken filter here would drop only the misidentified span —
+ * never its children — eliminating the tree-kill failure mode.
  *
  * ## Discriminator
  *

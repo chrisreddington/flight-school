@@ -38,13 +38,11 @@
  * name via `span.updateName()` in the route-match hook; `operation.name`
  * by `@vercel/otel`'s `CompositeSpanProcessor.onEnd`.
  *
- * A previous attempt to filter the bubble here using `next.bubble === true`
- * was a silent no-op (attribute not yet set). An earlier attempt using a
- * `bareMethodName && !http.route` heuristic catastrophically dropped the
- * keeper too — because at `startSpan()` time the keeper also has a bare
- * method name and no `http.route`. The dropped keeper became the parent
- * of every route-handler, GitHub-request, and worker-side span, and the
- * entire downstream tree vanished via `ParentBasedSampler` propagation.
+ * Any sampler-level discriminator either no-ops (the discriminating
+ * attribute is not yet set) or drops the real route span too — which
+ * cascades through `ParentBasedSampler` and kills every child span in
+ * the trace (route handler, GitHub calls, worker side). Bubble
+ * filtering therefore lives at the export boundary instead.
  *
  * **Bubble filtering now lives at the export boundary.** See
  * `src/lib/observability/bubble-filter-exporter.ts` (`BubbleFilteringSpanExporter`),

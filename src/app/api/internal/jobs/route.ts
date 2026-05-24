@@ -77,11 +77,11 @@ interface CreateJobBody {
   credentials?: WorkerDispatchCredentials;
 }
 
-function parseCreateBody(data: unknown):
+function parseCreateBody(requestBody: unknown):
   | { ok: true; body: CreateJobBody }
   | { ok: false } {
-  if (typeof data !== 'object' || data === null) return { ok: false };
-  const raw = data as Partial<CreateJobBody> & { credentials?: unknown };
+  if (typeof requestBody !== 'object' || requestBody === null) return { ok: false };
+  const raw = requestBody as Partial<CreateJobBody> & { credentials?: unknown };
   if (typeof raw.id !== 'string' || !UUID_V4_RE.test(raw.id)) return { ok: false };
   if (!isDispatchableJobType(raw.type)) return { ok: false };
   if (typeof raw.userId !== 'string' || raw.userId.length === 0) return { ok: false };

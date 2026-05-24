@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   await flightSchool.withCommand(
     'sweep-retention',
     'Run retention sweep',
-    async (ctx) => {
+    async (commandContext) => {
       const endpoint = await flightSchool.getEndpoint('http');
       const url = await endpoint.url();
       try {
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
         if (!res.ok) {
           return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
         }
-        const commandLogger = await ctx.logger.get();
+        const commandLogger = await commandContext.logger.get();
         await commandLogger.logInformation(`Retention sweep complete: ${body}`);
         return { success: true };
       } catch (err) {

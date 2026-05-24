@@ -20,8 +20,16 @@ import type {
 
 const log = logger.withTag('Copilot SDK');
 
+/**
+ * Default upper bound on a single `sendAndWait` round-trip. The Copilot
+ * SDK can in principle stall on a long tool chain or a slow upstream;
+ * 2 minutes is generous enough to cover realistic chat turns but tight
+ * enough that a stuck call doesn't hold the worker indefinitely.
+ */
+const DEFAULT_SEND_TIMEOUT_MS = 120_000;
+
 export interface LoggedCopilotSession {
-  sendAndWait: (prompt: string, timeout?: number) => Promise<LoggedSessionResult>;
+  sendAndWait: (prompt: string, timeoutMs?: number) => Promise<LoggedSessionResult>;
   destroy: () => Promise<void>;
   /** The model used for this session */
   model: string;
@@ -55,25 +63,25 @@ export function wrapSessionWithLogging(
     const eventType = event.type;
 
     if (eventType === 'tool.execution_start') {
-      const data = event.data;
-      log.debug(`Tool start: ${data.toolName}`);
+      const toolStart = event.data;
+      log.debug(`Tool start: ${toolStart.toolName}`);
       toolCalls.push({
-        name: data.toolName,
-        args: data.arguments,
+        name: toolStart.toolName,
+        args: toolStart.arguments,
         result: '',
         startTime: nowMs(),
       });
 
-      activityLogger.logEvent(userId, 'tool', `mcp.${data.toolName}`, {
-        metadata: { args: data.arguments },
+      activityLogger.logEvent(userId, 'tool', `mcp.${toolStart.toolName}`, {
+        metadata: { args: toolStart.arguments },
       });
     }
 
     if (eventType === 'tool.execution_complete') {
       const lastCall = toolCalls[toolCalls.length - 1];
-      const data = event.data;
+      const toolComplete = event.data;
       if (lastCall) {
-        lastCall.result = String(data.result || '').slice(0, 500);
+        lastCall.result = String(toolComplete.result || '').slice(0, 500);
         lastCall.endTime = nowMs();
         log.debug(
           `Tool complete: ${lastCall.name} (${lastCall.endTime - lastCall.startTime}ms)`,
@@ -85,16 +93,16 @@ export function wrapSessionWithLogging(
       // The SDK emits one or more `assistant.usage` events per turn (e.g.
       // multiple inferences across tool hops). Accumulate so the histogram
       // is recorded once per `sendAndWait` rather than per delta event.
-      const data = event.data;
-      usageTotals.inputTokens += data.inputTokens ?? 0;
-      usageTotals.outputTokens += data.outputTokens ?? 0;
-      usageTotals.cacheReadTokens += data.cacheReadTokens ?? 0;
-      usageTotals.cacheWriteTokens += data.cacheWriteTokens ?? 0;
+      const usage = event.data;
+      usageTotals.inputTokens += usage.inputTokens ?? 0;
+      usageTotals.outputTokens += usage.outputTokens ?? 0;
+      usageTotals.cacheReadTokens += usage.cacheReadTokens ?? 0;
+      usageTotals.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
     }
   });
 
   return {
-    async sendAndWait(prompt: string, timeout = 120000): Promise<LoggedSessionResult> {
+    async sendAndWait(prompt: string, timeoutMs = DEFAULT_SEND_TIMEOUT_MS): Promise<LoggedSessionResult> {
       const startTime = nowMs();
       const metadata = sessionMetrics
         ? ({ ...sessionMetrics } as Record<string, unknown>)
@@ -125,7 +133,7 @@ export function wrapSessionWithLogging(
           },
           async (span) => {
             try {
-              return await session.sendAndWait({ prompt }, timeout);
+              return await session.sendAndWait({ prompt }, timeoutMs);
             } catch (error) {
               setSpanError(span, error);
               throw error;

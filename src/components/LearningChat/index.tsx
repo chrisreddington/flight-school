@@ -206,6 +206,11 @@ export const LearningChat = memo(function LearningChat({
     streamingAssistantMessageId,
   );
 
+  // Synthesise the in-flight assistant message at the tail of
+  // `displayMessages` whenever the chat-stream store has live content
+  // for this thread. The durable thread no longer contains a partial
+  // message during streaming, so the UI is wholly responsible for
+  // blending the live buffer into the visible message list.
   const displayMessages = useMemo(() => {
     if (!isStreamingInActiveThread) return messages;
     if (!streamingAssistantMessageId) return messages;

@@ -113,7 +113,7 @@ export async function appendActivityEvent(event: AIActivityEvent): Promise<void>
     const serialized = serializeEvent(event);
 
     const nextEvents = [...current.events];
-    const existingIndex = nextEvents.findIndex((item) => item.id === event.id);
+    const existingIndex = nextEvents.findIndex((storedEvent) => storedEvent.id === event.id);
     if (existingIndex >= 0) {
       nextEvents[existingIndex] = serialized;
     } else {
