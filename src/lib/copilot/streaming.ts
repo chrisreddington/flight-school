@@ -24,7 +24,7 @@ import {
   INSTRUMENTATION_SCOPE_SERVER,
   INSTRUMENTATION_SCOPE_VERSION,
 } from '@/lib/observability/semconv';
-import { context, SpanStatusCode, trace } from '@opentelemetry/api';
+import { context, type Span, SpanStatusCode, trace } from '@opentelemetry/api';
 import { activityLogger } from './activity/logger';
 import {
   CHAT_MODEL,
@@ -87,6 +87,156 @@ interface StreamingSessionConfig {
 // =============================================================================
 // Internal Implementation
 // =============================================================================
+
+/**
+ * Shared mutable state for a single stream invocation. The SDK event handler,
+ * the yield loop, and the terminal recorders all read/write into one of these.
+ */
+interface StreamContext {
+  readonly model: string;
+  readonly useGitHubTools: boolean;
+  readonly metrics: { createdNew: boolean } | undefined;
+  readonly startTime: number;
+  readonly streamingMetrics: { firstDeltaMs: number | null };
+  readonly toolCalls: StreamingToolCall[];
+  readonly usageTotals: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  };
+  totalContent: string;
+  deltaCount: number;
+  deltaBytes: number;
+}
+
+/**
+ * Drains the event queue (yielding any pending items) and waits up to
+ * `STREAM_POLL_INTERVAL_MS` for the next event or session idle. Returns
+ * `'idle'` once the SDK signals end-of-turn; the caller breaks the loop.
+ */
+const STREAM_POLL_INTERVAL_MS = 20;
+
+async function* pumpEventQueue(
+  eventQueue: StreamEvent[],
+  idlePromise: Promise<void>,
+  setQueueResolver: (resolver: () => void) => void,
+): AsyncGenerator<StreamEvent, void, unknown> {
+  while (true) {
+    while (eventQueue.length > 0) {
+      yield eventQueue.shift()!;
+    }
+    const raceResult = await Promise.race([
+      idlePromise.then(() => 'idle' as const),
+      new Promise<'more'>((resolve) => {
+        setQueueResolver(() => resolve('more'));
+        setTimeout(() => resolve('more'), STREAM_POLL_INTERVAL_MS);
+      }),
+    ]);
+    if (raceResult === 'idle') {
+      while (eventQueue.length > 0) {
+        yield eventQueue.shift()!;
+      }
+      return;
+    }
+  }
+}
+
+/**
+ * Emit terminal-success telemetry: activity-logger completion, stream
+ * histogram sample, operation count, token-usage histogram, and span status.
+ */
+function recordTerminalSuccess(
+  ctx: StreamContext,
+  streamSpan: Span,
+  complete: (
+    response: { text: string; fullResponse: string; toolsUsed: string[]; metadata: Record<string, unknown> },
+    errorMessage: string | undefined,
+    serverMetrics: { firstTokenMs: number | null; totalMs: number },
+  ) => void,
+): number {
+  const durationMs = Date.now() - ctx.startTime;
+  const toolsUsed = ctx.toolCalls.map((toolCall) => toolCall.name);
+
+  complete(
+    {
+      text: ctx.totalContent.slice(0, 100),
+      fullResponse: ctx.totalContent,
+      toolsUsed,
+      metadata: {
+        toolsUsed,
+        firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
+      },
+    },
+    undefined,
+    {
+      firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
+      totalMs: durationMs,
+    },
+  );
+
+  recordAiStreamMetrics({
+    model: ctx.model,
+    mcpEnabled: ctx.useGitHubTools,
+    poolHit: ctx.metrics ? !ctx.metrics.createdNew : null,
+    firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
+    durationMs,
+    deltaCount: ctx.deltaCount,
+    deltaBytes: ctx.deltaBytes,
+    toolCalls: ctx.toolCalls.length,
+    terminalState: 'completed',
+  });
+  recordAiOperation('streamSession', durationMs, ctx.model, 'ok');
+  recordAiTokenUsage({
+    operation: GEN_AI_OPERATION.CHAT,
+    model: ctx.model,
+    inputTokens: ctx.usageTotals.inputTokens,
+    outputTokens: ctx.usageTotals.outputTokens,
+    cacheReadTokens: ctx.usageTotals.cacheReadTokens,
+    cacheWriteTokens: ctx.usageTotals.cacheWriteTokens,
+  });
+  streamSpan.addEvent('stream.completed', {
+    'ai.stream.delta_count': ctx.deltaCount,
+    'ai.stream.delta_bytes': ctx.deltaBytes,
+    'ai.stream.tool_calls': ctx.toolCalls.length,
+  });
+  streamSpan.setStatus({ code: SpanStatusCode.OK });
+  return durationMs;
+}
+
+/**
+ * Emit terminal-error telemetry: stream histogram sample with `'error'`
+ * terminal state, operation count, span exception/status, and activity-
+ * logger error completion.
+ */
+function recordTerminalError(
+  ctx: StreamContext,
+  streamSpan: Span,
+  complete: (response: undefined, errorMessage: string) => void,
+  error: unknown,
+): string {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  const durationMs = Date.now() - ctx.startTime;
+  recordAiOperation('streamSession', durationMs, ctx.model, 'error');
+  recordAiStreamMetrics({
+    model: ctx.model,
+    mcpEnabled: ctx.useGitHubTools,
+    poolHit: ctx.metrics ? !ctx.metrics.createdNew : null,
+    firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
+    durationMs,
+    deltaCount: ctx.deltaCount,
+    deltaBytes: ctx.deltaBytes,
+    toolCalls: ctx.toolCalls.length,
+    terminalState: 'error',
+  });
+  streamSpan.addEvent('stream.failed', { message: errorMessage });
+  if (error instanceof Error) {
+    streamSpan.recordException(error);
+  }
+  streamSpan.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
+  complete(undefined, errorMessage);
+  return errorMessage;
+}
 
 /**
  * Generic streaming session factory.
@@ -278,83 +428,27 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         await session.send({ prompt });
       });
 
-      // Yield events as they arrive
-      while (true) {
-        // Wait for events or idle
-        const hasEvents = eventQueue.length > 0;
-
-        if (hasEvents) {
-          while (eventQueue.length > 0) {
-            yield eventQueue.shift()!;
-          }
-        }
-
-        // Check if we're done
-        const raceResult = await Promise.race([
-          idlePromise.then(() => 'idle' as const),
-          new Promise<'more'>((resolve) => {
-            queueResolver = () => resolve('more');
-            // Timeout to check periodically
-            setTimeout(() => resolve('more'), 20);
-          }),
-        ]);
-
-        if (raceResult === 'idle') {
-          // Yield any remaining events
-          while (eventQueue.length > 0) {
-            yield eventQueue.shift()!;
-          }
-          break;
-        }
-      }
-
-      // Success - complete logging with server-side metrics
-      const durationMs = Date.now() - startTime;
-      complete(
-        {
-          text: totalContent.slice(0, 100),
-          fullResponse: totalContent,
-          toolsUsed: toolCalls.map((t) => t.name),
-          metadata: {
-            toolsUsed: toolCalls.map((t) => t.name),
-            firstTokenMs: streamingMetrics.firstDeltaMs,
-          },
-        },
-        undefined,
-        {
-          firstTokenMs: streamingMetrics.firstDeltaMs,
-          totalMs: durationMs,
-        },
+      // Yield SDK events until the session signals idle
+      yield* pumpEventQueue(
+        eventQueue,
+        idlePromise,
+        (resolver) => { queueResolver = resolver; },
       );
 
-      recordAiStreamMetrics({
+      const ctx: StreamContext = {
         model,
-        mcpEnabled: useGitHubTools,
-        poolHit: metrics ? !metrics.createdNew : null,
-        firstTokenMs: streamingMetrics.firstDeltaMs,
-        durationMs,
+        useGitHubTools,
+        metrics,
+        startTime,
+        streamingMetrics,
+        toolCalls,
+        usageTotals,
+        totalContent,
         deltaCount,
         deltaBytes,
-        toolCalls: toolCalls.length,
-        terminalState: 'completed',
-      });
-      recordAiOperation('streamSession', durationMs, model, 'ok');
-      recordAiTokenUsage({
-        operation: GEN_AI_OPERATION.CHAT,
-        model,
-        inputTokens: usageTotals.inputTokens,
-        outputTokens: usageTotals.outputTokens,
-        cacheReadTokens: usageTotals.cacheReadTokens,
-        cacheWriteTokens: usageTotals.cacheWriteTokens,
-      });
-      streamSpan.addEvent('stream.completed', {
-        'ai.stream.delta_count': deltaCount,
-        'ai.stream.delta_bytes': deltaBytes,
-        'ai.stream.tool_calls': toolCalls.length,
-      });
-      streamSpan.setStatus({ code: SpanStatusCode.OK });
+      };
+      const durationMs = recordTerminalSuccess(ctx, streamSpan, complete);
 
-      // Yield final done event
       yield {
         type: 'done',
         totalContent,
@@ -362,28 +456,19 @@ async function createGenericStreamingSession(config: StreamingSessionConfig): Pr
         durationMs,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const durationMs = Date.now() - startTime;
-      recordAiOperation('streamSession', durationMs, model, 'error');
-      recordAiStreamMetrics({
+      const ctx: StreamContext = {
         model,
-        mcpEnabled: useGitHubTools,
-        poolHit: metrics ? !metrics.createdNew : null,
-        firstTokenMs: streamingMetrics.firstDeltaMs,
-        durationMs,
+        useGitHubTools,
+        metrics,
+        startTime,
+        streamingMetrics,
+        toolCalls,
+        usageTotals,
+        totalContent,
         deltaCount,
         deltaBytes,
-        toolCalls: toolCalls.length,
-        terminalState: 'error',
-      });
-      streamSpan.addEvent('stream.failed', {
-        message: errorMessage,
-      });
-      if (error instanceof Error) {
-        streamSpan.recordException(error);
-      }
-      streamSpan.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-      complete(undefined, errorMessage);
+      };
+      const errorMessage = recordTerminalError(ctx, streamSpan, complete, error);
       yield { type: 'error', message: errorMessage };
     } finally {
       unsubscribe();
