@@ -22,6 +22,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Copilot API');
 
+// Long-running AI chat: extend timeout beyond Vercel/Node default.
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   const startTime = nowMs();
 

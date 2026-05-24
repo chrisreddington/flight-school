@@ -21,6 +21,8 @@ import { authorizeInternalActivity } from '../auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Streaming SSE connection: hold the route open for the stream lifetime.
+export const maxDuration = 300;
 
 const SSE_HEADERS: HeadersInit = {
   'Content-Type': 'text/event-stream',

@@ -1,5 +1,5 @@
 /**
- * Next.js middleware: gates the app behind Auth.js.
+ * Next.js 16 proxy (formerly `middleware`): gates the app behind Auth.js.
  *
  * - Public paths (auth endpoints, health, sign-in, Next internals, static
  *   assets) are always allowed.
@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server';
 import { edgeAuthConfig } from '@/lib/auth/edge-config';
 
 if (!process.env.AUTH_SECRET) {
-  // Without AUTH_SECRET, NextAuth's edge middleware silently no-ops: every
+  // Without AUTH_SECRET, NextAuth's edge proxy silently no-ops: every
   // request bypasses the gate and unauthenticated UI/API traffic reaches the
   // app. Fail loudly at boot so this footgun never makes it to a running
   // server, in any environment.
@@ -57,7 +57,7 @@ function isWorkerAllowedPath(pathname: string): boolean {
   return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
 }
 
-const authMiddleware = auth((req) => {
+const authProxy = auth((req) => {
   const { nextUrl } = req;
   const pathname = nextUrl.pathname;
 
@@ -84,7 +84,7 @@ const authMiddleware = auth((req) => {
   return NextResponse.redirect(signInUrl);
 });
 
-export default function middleware(...args: Parameters<typeof authMiddleware>) {
+export default function proxy(...args: Parameters<typeof authProxy>) {
   const [req] = args;
   const pathname = req.nextUrl.pathname;
   if (process.env.COPILOT_WORKER_MODE === '1') {
@@ -93,7 +93,7 @@ export default function middleware(...args: Parameters<typeof authMiddleware>) {
       : NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  return authMiddleware(...args);
+  return authProxy(...args);
 }
 
 export const config = {

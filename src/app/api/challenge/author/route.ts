@@ -37,6 +37,8 @@ const log = logger.withTag('Author API');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Long-running AI streaming: extend timeout beyond Vercel/Node default.
+export const maxDuration = 300;
 
 /** Request body structure */
 interface AuthorRequest {
