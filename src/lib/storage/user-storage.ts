@@ -6,7 +6,7 @@
  * resolve the authenticated user via {@link requireUserContext}, validate the
  * user id against {@link userScopedFilename}, and ensure the per-user dir
  * exists before delegating to the low-level {@link readStorage}/{@link
- * writeStorage}/{@link deleteStorage} primitives.
+ * writeStorage} primitives.
  *
  * Multi-tenant invariant: every call partitions the underlying file path by
  * `userId`. There is no shared cross-user view of any data file.
@@ -14,7 +14,7 @@
 
 import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
-import { ensureDir, readStorage, writeStorage, deleteStorage } from './utils';
+import { ensureDir, readStorage, writeStorage } from './utils';
 import { userScopedFilename } from './user-scope';
 
 const log = logger.withTag('User Storage');
@@ -70,13 +70,4 @@ export async function writeUserStorage<T>(
   }
   const { path } = await resolveUserScopedPath(filename);
   await writeStorage(path, data);
-}
-
-/**
- * Deletes `filename` for the authenticated user. Idempotent: missing files
- * are not an error.
- */
-export async function deleteUserStorage(filename: string): Promise<void> {
-  const { path } = await resolveUserScopedPath(filename);
-  await deleteStorage(path);
 }

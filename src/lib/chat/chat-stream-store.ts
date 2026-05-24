@@ -50,7 +50,7 @@ export interface ChatStreamState {
   lastSeq: number;
 }
 
-export type ChatStreamListener = () => void;
+type ChatStreamListener = () => void;
 
 interface ToolStartPayload {
   toolCallId: string;
@@ -212,4 +212,3 @@ class ChatStreamStore {
 }
 
 export const chatStreamStore = new ChatStreamStore();
-export type { ChatStreamStore };

@@ -50,7 +50,7 @@ import { upsertMessageById } from './thread-consolidation';
 const log = logger.withTag('JobChatExecutor');
 
 /** Annotation appended when the user (DELETE) stopped the stream. */
-export const RESPONSE_STOPPED_ANNOTATION = '\n\n*(Response stopped)*';
+const RESPONSE_STOPPED_ANNOTATION = '\n\n*(Response stopped)*';
 /** Annotation appended when the worker or sweeper interrupted the stream. */
 export const RESPONSE_INTERRUPTED_ANNOTATION = '\n\n*(Response interrupted)*';
 

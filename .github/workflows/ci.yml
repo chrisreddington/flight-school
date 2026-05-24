@@ -29,15 +29,11 @@ jobs:
       - name: Lint code
         run: npm run lint
 
-      - name: Run guardrails (file sizes, test boundaries)
-        run: npm run check:sizes && npm run check:test-boundaries && npm run check:cache-key-scope && npm run check:server-fetch-tenancy && npm run check:server-action-guards
+      - name: Run guardrails (sizes, test boundaries, cache, SDK boundary)
+        run: npm run check:guardrails
 
       - name: Run tests
         run: npm test
 
       - name: Build project
         run: npm run build
-
-      - name: Dead-code report (informational until Phase 8 closes baseline)
-        run: npm run debt:unused
-        continue-on-error: true

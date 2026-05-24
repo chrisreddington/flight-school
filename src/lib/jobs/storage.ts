@@ -329,6 +329,3 @@ export const jobStorage = {
   },
 };
 
-// Re-export the schema type for tests/internal consumers that need to mock
-// or inspect on-disk shape directly.
-export type { JobsStorageSchema };

@@ -101,7 +101,7 @@ export interface AIActivityEvent {
 }
 
 /** Listener function for activity events */
-export type ActivityListener = (event: AIActivityEvent) => void;
+type ActivityListener = (event: AIActivityEvent) => void;
 
 /** Statistics about activity events */
 export interface AIActivityStats {

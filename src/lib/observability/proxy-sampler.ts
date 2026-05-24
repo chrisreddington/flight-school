@@ -157,7 +157,7 @@ export function isProxyRouteSpan(
  * Returns `true` if the given span is a Next.js framework stub INTERNAL
  * span on the allowlist. Exposed for unit testing.
  */
-export function isNextjsFrameworkStubSpan(
+function isNextjsFrameworkStubSpan(
   spanKind: SpanKind | undefined,
   attrs: Attributes | undefined,
 ): boolean {

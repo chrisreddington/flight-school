@@ -22,7 +22,7 @@ import type {
 
 const log = logger.withTag('ActivityLoggerClient');
 
-export type CompleteOperation = (
+type CompleteOperation = (
   output?: AIActivityOutput,
   error?: string,
   serverMetrics?: {

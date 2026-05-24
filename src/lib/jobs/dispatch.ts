@@ -34,7 +34,7 @@ export interface WorkerDispatchCredentials {
   expiresAt: number;
 }
 
-export interface DispatchJobExecutionToWorkerRequest extends DispatchJobExecutionRequest {
+interface DispatchJobExecutionToWorkerRequest extends DispatchJobExecutionRequest {
   credentials?: WorkerDispatchCredentials;
   traceContext?: TracePropagationHeaders;
 }

@@ -34,7 +34,6 @@ export const INSTRUMENTATION_SCOPE_VERSION = '1.0.0';
 
 export const GEN_AI_OPERATION_NAME = 'gen_ai.operation.name';
 export const GEN_AI_REQUEST_MODEL = 'gen_ai.request.model';
-export const GEN_AI_RESPONSE_MODEL = 'gen_ai.response.model';
 export const GEN_AI_PROVIDER_NAME = 'gen_ai.provider.name';
 export const GEN_AI_TOKEN_TYPE = 'gen_ai.token.type';
 

@@ -4,7 +4,6 @@ import { wrapSessionWithLogging } from './logged-session';
 import type { SessionIdentity } from './session-identity';
 import type { SessionOptions } from './types';
 
-export { createSessionIdentity, type SessionIdentity } from './session-identity';
 export { wrapSessionWithLogging } from './logged-session';
 
 type LoggedSingleTurnSessionOptions = {

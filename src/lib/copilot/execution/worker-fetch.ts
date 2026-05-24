@@ -34,7 +34,7 @@ export interface WorkerFetchOptions {
  * Worker configuration accessor. Throws when the worker is not configured;
  * the application is mandatory-worker for any server-to-worker control call.
  */
-export function getRequiredWorkerConfig(context = 'this operation'): CopilotWorkerConfig {
+function getRequiredWorkerConfig(context = 'this operation'): CopilotWorkerConfig {
   const config = getCopilotWorkerConfig();
   if (!config) {
     throw new Error(`Copilot worker is required for ${context}`);

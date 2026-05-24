@@ -26,6 +26,9 @@ const FETCH_CALL_PATTERN = /\bfetch\s*\(/g;
 const NEXT_TAGS_PATTERN = /next\s*:\s*\{[^}]*tags\s*:/;
 const NO_STORE_PATTERN = /cache\s*:\s*['"`]no-store['"`]/;
 const FORCE_CACHE_PATTERN = /cache\s*:\s*['"`]force-cache['"`]/;
+// Retained for future reference / documentation; we DO scan force-cache
+// callers now, no exemption.
+void FORCE_CACHE_PATTERN;
 const NON_GET_METHOD_PATTERN = /method\s*:\s*['"`](?:POST|PUT|PATCH|DELETE|HEAD|OPTIONS)['"`]/i;
 const PUBLIC_CACHE_COMMENT = /\/\/\s*public-cache:/;
 
@@ -99,7 +102,8 @@ function checkFile(absolutePath) {
     const callContext = findFetchCallContext(source, match.index);
     if (NO_STORE_PATTERN.test(callContext)) continue;
     if (NEXT_TAGS_PATTERN.test(callContext)) continue;
-    if (FORCE_CACHE_PATTERN.test(callContext)) continue;
+    // FORCE_CACHE_PATTERN is intentionally NOT an exemption — force-cache
+    // without a tenant tag is a tenancy leak.
     // Next only caches GET requests; non-GET methods are never cached
     // by the runtime so they cannot leak between tenants via the cache.
     if (NON_GET_METHOD_PATTERN.test(callContext)) continue;

@@ -17,6 +17,7 @@ const ROOT = process.cwd();
 const SCAN_ROOTS = ['src/app', 'src/lib'];
 
 const TOP_USE_SERVER = /^\s*['"]use server['"];?/;
+const FUNCTION_USE_SERVER_PATTERN = /['"]use server['"]\s*;?/;
 const PUBLIC_ACTION_COMMENT = /\/\/\s*public-action:/;
 const EXPORTED_ASYNC_PATTERN =
   /export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async\s*\()/g;
@@ -70,9 +71,6 @@ function checkFile(absolutePath) {
   const source = readFileSync(absolutePath, 'utf8');
   const firstNonEmptyLine = source.split('\n').find((line) => line.trim().length > 0) ?? '';
   const fileIsServerAction = TOP_USE_SERVER.test(firstNonEmptyLine.trim());
-  // Per-function 'use server' is rare; checking file-level is sufficient
-  // for the current codebase. Extend here when per-function adoption lands.
-  if (!fileIsServerAction) return [];
 
   const offenders = [];
   EXPORTED_ASYNC_PATTERN.lastIndex = 0;
@@ -80,6 +78,17 @@ function checkFile(absolutePath) {
   while ((match = EXPORTED_ASYNC_PATTERN.exec(source)) !== null) {
     const name = match[1] ?? match[2];
     const body = findFunctionBody(source, match.index);
+
+    // An exported async function is a server action when either:
+    //   - the whole file has a top-level `'use server'` directive, OR
+    //   - the function body opens with its own `'use server'` directive.
+    const firstBodyLine = body
+      .slice(1)
+      .split('\n')
+      .find((line) => line.trim().length > 0) ?? '';
+    const functionLevelDirective = FUNCTION_USE_SERVER_PATTERN.test(firstBodyLine.trim());
+    if (!fileIsServerAction && !functionLevelDirective) continue;
+
     if (GUARD_CALL_PATTERN.test(body)) continue;
     const neighborhood = findNeighborhood(source, match.index);
     if (PUBLIC_ACTION_COMMENT.test(neighborhood)) continue;

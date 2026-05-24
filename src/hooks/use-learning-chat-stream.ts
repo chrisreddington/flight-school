@@ -61,7 +61,7 @@ export function isThreadStreaming(
  * is the canonical source for any partial assistant message that is
  * still streaming.
  */
-export function getStreamingContentForThread(
+function getStreamingContentForThread(
   streamRecords: ReadonlyMap<string, ChatStreamState>,
   threadId: string | null,
 ): { content: string; assistantMessageId: string | null; toolEvents: ToolCallEvent[] } {

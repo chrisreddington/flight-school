@@ -24,6 +24,8 @@ const SCAN_ROOTS = ['src'];
 const TAG_API_PATTERN =
   /\b(?:cacheTag|revalidateTag|updateTag)\s*\(\s*(['"`])([^'"`\n]+)\1/g;
 
+const USE_CACHE_DIRECTIVE_PATTERN = /(^|\n)\s*['"`]use cache['"`]\s*;?/g;
+
 const PUBLIC_PREFIX = 'public:';
 const TENANT_SCOPE_PATTERN = /\$\{[^}]*\b(userId|sessionId|installationId|owner)\b[^}]*\}/;
 
@@ -53,12 +55,28 @@ function checkFile(absolutePath) {
   while ((match = TAG_API_PATTERN.exec(source)) !== null) {
     const tag = match[2];
     if (!isTenantScoped(tag)) {
+      offenders.push({ tag, index: match.index, kind: 'tag' });
+    }
+  }
+
+  // A `'use cache'` directive caches the enclosing scope's return value.
+  // It MUST be accompanied by at least one tenant-scoped cacheTag() in the
+  // same file (or a `public:` tag) so the cache entry is keyed per tenant.
+  USE_CACHE_DIRECTIVE_PATTERN.lastIndex = 0;
+  let directiveMatch;
+  while ((directiveMatch = USE_CACHE_DIRECTIVE_PATTERN.exec(source)) !== null) {
+    const hasScopedTag = /cacheTag\s*\(\s*['"`](?:public:|[^'"`\n]*\$\{[^}]*\b(?:userId|sessionId|installationId|owner)\b[^}]*\})/.test(
+      source,
+    );
+    if (!hasScopedTag) {
       offenders.push({
-        tag,
-        index: match.index,
+        tag: "'use cache' directive without a tenant-scoped cacheTag()",
+        index: directiveMatch.index,
+        kind: 'directive',
       });
     }
   }
+
   return offenders;
 }
 

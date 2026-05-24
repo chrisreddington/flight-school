@@ -27,7 +27,7 @@ export type JobErrorCode =
   | 'credentials_refresh_failed'
   | 'unknown';
 
-export interface JobCausalityContext extends TracePropagationHeaders {
+interface JobCausalityContext extends TracePropagationHeaders {
   capturedAt: string;
   trigger?: ClientTriggerMetadata;
 }

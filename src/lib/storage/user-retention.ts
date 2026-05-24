@@ -27,7 +27,7 @@ import { logger } from '@/lib/logger';
 const log = logger.withTag('RetentionUser');
 
 /** Retention TTLs in milliseconds. Exported so tests can assert defaults. */
-export const RETENTION_TTL = {
+const RETENTION_TTL = {
   /** 7 days of inactivity before a thread is swept. */
   threadMs: 7 * 24 * 60 * 60 * 1000,
   /** 24 hours after terminal state before an evaluation entry is swept. */
@@ -59,22 +59,22 @@ interface EvaluationShape {
 
 export type UserSweepKey = 'threads' | 'evaluations';
 
-export function parseTimestamp(input: unknown): number | null {
+function parseTimestamp(input: unknown): number | null {
   if (typeof input !== 'string' || input.length === 0) return null;
   const ms = Date.parse(input);
   return Number.isFinite(ms) ? ms : null;
 }
 
-export function isOlderThanTtl(timestamp: unknown, nowMs: number, ttlMs: number): boolean {
+function isOlderThanTtl(timestamp: unknown, nowMs: number, ttlMs: number): boolean {
   const ts = parseTimestamp(timestamp);
   return ts !== null && nowMs - ts > ttlMs;
 }
 
-export function isTerminalStatus(status: string | undefined): boolean {
+function isTerminalStatus(status: string | undefined): boolean {
   return status === 'completed' || status === 'failed';
 }
 
-export function addSweepResult(target: SweepResult, source: SweepResult): void {
+function addSweepResult(target: SweepResult, source: SweepResult): void {
   target.deleted += source.deleted;
   target.inspected += source.inspected;
 }
@@ -87,7 +87,7 @@ export function addSweepResult(target: SweepResult, source: SweepResult): void {
  * Reads use {@link readFile} (returns null on ENOENT) — running this
  * over a `users/{userId}/` that has never held threads is a no-op.
  */
-export async function sweepThreadsForUser(
+async function sweepThreadsForUser(
   userId: string,
   nowMs: number,
   ttlMs: number = RETENTION_TTL.threadMs,
@@ -136,7 +136,7 @@ export async function sweepThreadsForUser(
  * Sweep evaluation entries whose terminal state is older than the
  * evaluation TTL. `pending` / `streaming` entries are never swept here.
  */
-export async function sweepEvaluationsForUser(
+async function sweepEvaluationsForUser(
   userId: string,
   nowMs: number,
   ttlMs: number = RETENTION_TTL.evaluationMs,

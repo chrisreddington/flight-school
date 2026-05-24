@@ -57,5 +57,4 @@ export async function openCopilotAuthoringStreamViaWorker(
 export type {
   CopilotCoachJobRequest,
   CopilotCoachJobResult,
-  CopilotCoachVariant,
 } from './types';

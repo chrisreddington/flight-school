@@ -10,20 +10,20 @@
 
 import type { ToolCallEvent } from '@/lib/threads';
 
-export interface JobStreamDeltaEvent {
+interface JobStreamDeltaEvent {
   type: 'delta';
   /** Content chunk to append to the assistant message. */
   content: string;
 }
 
-export interface JobStreamToolStartEvent {
+interface JobStreamToolStartEvent {
   type: 'tool_start';
   toolCallId: string;
   name: string;
   args: unknown;
 }
 
-export interface JobStreamToolCompleteEvent {
+interface JobStreamToolCompleteEvent {
   type: 'tool_complete';
   toolCallId: string;
   name: string;
@@ -38,20 +38,20 @@ export interface JobStreamStateSnapshotEvent {
   hasActionableItem: boolean;
 }
 
-export interface JobStreamDoneEvent {
+interface JobStreamDoneEvent {
   type: 'done';
   content: string;
   toolEvents: ToolCallEvent[];
   hasActionableItem: boolean;
 }
 
-export interface JobStreamCancelledEvent {
+interface JobStreamCancelledEvent {
   type: 'cancelled';
   content: string;
   toolEvents: ToolCallEvent[];
 }
 
-export interface JobStreamFailedEvent {
+interface JobStreamFailedEvent {
   type: 'failed';
   message: string;
 }
@@ -65,9 +65,9 @@ export type JobStreamEvent =
   | JobStreamCancelledEvent
   | JobStreamFailedEvent;
 
-export type TerminalEventType = 'done' | 'cancelled' | 'failed';
+type TerminalEventType = 'done' | 'cancelled' | 'failed';
 
-export const TERMINAL_EVENT_TYPES: ReadonlySet<TerminalEventType> = new Set<TerminalEventType>([
+const TERMINAL_EVENT_TYPES: ReadonlySet<TerminalEventType> = new Set<TerminalEventType>([
   'done',
   'cancelled',
   'failed',
