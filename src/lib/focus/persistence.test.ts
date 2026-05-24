@@ -84,4 +84,47 @@ describe('focus persistence adapter', () => {
 
     expect(apiDelete).toHaveBeenCalledWith('/api/focus/storage');
   });
+
+  it('should coalesce concurrent reads into a single network call', async () => {
+    vi.mocked(apiGet).mockResolvedValue(schema);
+
+    const [a, b, c] = await Promise.all([
+      readFocusStorage(),
+      readFocusStorage(),
+      readFocusStorage(),
+    ]);
+
+    expect(apiGet).toHaveBeenCalledTimes(1);
+    expect(a).toBe(schema);
+    expect(b).toBe(schema);
+    expect(c).toBe(schema);
+  });
+
+  it('should allow a fresh read after the previous one settles', async () => {
+    vi.mocked(apiGet).mockResolvedValue(schema);
+
+    await readFocusStorage();
+    await readFocusStorage();
+
+    expect(apiGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('should coalesce concurrent clears into a single network call', async () => {
+    vi.mocked(apiDelete).mockResolvedValue(undefined);
+
+    await Promise.all([clearFocusStorage(), clearFocusStorage(), clearFocusStorage()]);
+
+    expect(apiDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('should NOT coalesce writes (different payloads must each round-trip)', async () => {
+    vi.mocked(apiPost).mockResolvedValue(undefined);
+
+    await Promise.all([
+      writeFocusStorage(schema),
+      writeFocusStorage({ history: { '2024-01-01': [] } }),
+    ]);
+
+    expect(apiPost).toHaveBeenCalledTimes(2);
+  });
 });
