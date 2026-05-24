@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
+import { apiDelete, apiGet } from '@/lib/api-client';
 import { chatStreamStore, type ChatStreamState } from '@/lib/chat/chat-stream-store';
 import { logger } from '@/lib/logger';
 import { operationsManager } from '@/lib/operations';
@@ -250,18 +251,17 @@ export function useLearningChatStream({
     // `*(Response stopped)*` annotation into the durable thread as part of
     // its terminal sequence. Writing here would double-tag.
     try {
-      const jobsRes = await fetch('/api/jobs');
-      if (jobsRes.ok) {
-        const { jobs } = await jobsRes.json();
-        const runningJobs = jobs.filter(
-          (job: { status: string; type?: string; targetId?: string }) =>
-            job.status === 'running' && job.type === 'chat-response' && job.targetId === threadId,
-        );
+      const { jobs } = await apiGet<{ jobs: Array<{ id: string; status: string; type?: string; targetId?: string }> }>(
+        '/api/jobs',
+      );
+      const runningJobs = jobs.filter(
+        (job) =>
+          job.status === 'running' && job.type === 'chat-response' && job.targetId === threadId,
+      );
 
-        for (const job of runningJobs) {
-          log.debug('Cancelling job:', job.id);
-          await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
-        }
+      for (const job of runningJobs) {
+        log.debug('Cancelling job:', job.id);
+        await apiDelete(`/api/jobs/${job.id}`);
       }
     } catch (err) {
       log.error('Failed to stop streaming:', err);

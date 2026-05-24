@@ -128,7 +128,6 @@ describe('DailyFocusSection', () => {
         isAIEnabled={true}
         toolsUsed={[]}
         loadingComponents={[]}
-        componentTimestamps={{ challenge: null, goal: null, learningTopics: null }}
         onRefresh={vi.fn()}
       />
     );
@@ -196,7 +195,6 @@ describe('DailyFocusSection', () => {
         isAIEnabled={true}
         toolsUsed={[]}
         loadingComponents={[]}
-        componentTimestamps={{ challenge: null, goal: null, learningTopics: null }}
         onRefresh={vi.fn()}
         onSkipChallenge={onSkipChallenge}
       />

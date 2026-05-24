@@ -54,7 +54,6 @@ interface UseAIFocusResult {
   skippingGoalIds: Set<string>;
   generatedAt: string | null;
   generatedAtFormatted: string | null;
-  componentTimestamps: Record<FocusComponent, string | null>;
   isNewDay: boolean;
   stopComponent: (component: FocusComponent | 'singleTopic') => void;
   stopTopicSkip: (topicId: string) => void;
@@ -256,11 +255,6 @@ export function useAIFocus(): UseAIFocusResult {
     skippingGoalIds,
     generatedAt,
     generatedAtFormatted: generatedAt ? formatTimestamp(generatedAt) : null,
-    componentTimestamps: {
-      challenge: null,
-      goal: null,
-      learningTopics: null,
-    },
     isNewDay,
     stopComponent,
     stopTopicSkip: skip.stopTopicSkip,

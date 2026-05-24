@@ -46,7 +46,6 @@ export function Dashboard() {
     toolsUsed, 
     refetch: refetchFocus, 
     loadingComponents, 
-    componentTimestamps, 
     skipAndReplaceTopic, 
     skipAndReplaceChallenge,
     requestDebugChallenge,
@@ -179,7 +178,6 @@ export function Dashboard() {
               isAIEnabled={isAIEnabled}
               toolsUsed={toolsUsed}
               loadingComponents={loadingComponents}
-              componentTimestamps={componentTimestamps}
               onRefresh={handleRefresh}
               onSkipTopic={handleSkipTopic}
               onStopSkipTopic={handleStopSkipTopic}

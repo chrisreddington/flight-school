@@ -47,8 +47,6 @@ interface ChallengeCardProps {
   isSkipping?: boolean;
   /** Whether refresh is disabled */
   refreshDisabled?: boolean;
-  /** Optional timestamp for last update */
-  timestamp?: string | null;
   /** Queue count indicator */
   queueCount?: number;
   /** Shows the issue-inspired badge when challenge context source is issue */
@@ -71,7 +69,6 @@ export function ChallengeCard({
   onStopSkip,
   isSkipping = false,
   refreshDisabled = false,
-  timestamp,
   queueCount,
   showIssueContextBadge = false,
   onAdvanceQueue,
@@ -183,11 +180,6 @@ export function ChallengeCard({
 
   return (
     <div className={styles.card}>
-      {timestamp && !isCustom && (
-        <span className={styles.timestamp}>
-          <ClockIcon size={12} /> Updated {timestamp}
-        </span>
-      )}
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Stack direction="horizontal" gap="condensed" align="center">

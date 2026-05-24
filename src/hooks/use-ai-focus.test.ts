@@ -223,7 +223,6 @@ describe('useAIFocus interface contract', () => {
       skippingGoalIds: Set<string>;
       generatedAt: string | null;
       generatedAtFormatted: string | null;
-      componentTimestamps: Record<FocusComponent, string | null>;
       isNewDay: boolean;
       stopComponent: (component: FocusComponent | 'singleTopic') => void;
       stopTopicSkip: () => void;
@@ -247,7 +246,6 @@ describe('useAIFocus interface contract', () => {
       skippingGoalIds: new Set(),
       generatedAt: null,
       generatedAtFormatted: null,
-      componentTimestamps: { challenge: null, goal: null, learningTopics: null },
       isNewDay: false,
       stopComponent: () => {},
       stopTopicSkip: () => {},

@@ -47,11 +47,6 @@ interface DailyFocusSectionProps {
   isAIEnabled: boolean;
   toolsUsed: string[];
   loadingComponents: string[];
-  componentTimestamps: {
-    challenge: string | null;
-    goal: string | null;
-    learningTopics: string | null;
-  };
   onRefresh: (components?: string[]) => void;
   /** Callback to skip a single topic and get a replacement */
   onSkipTopic?: (skippedTopic: LearningTopic, existingTopicTitles: string[]) => void;
@@ -86,7 +81,6 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   isAIEnabled,
   toolsUsed,
   loadingComponents,
-  componentTimestamps,
   onRefresh,
   onSkipTopic,
   onStopSkipTopic,
@@ -262,7 +256,6 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                   onStopSkip={onStopSkipChallenge}
                   isSkipping={skippingChallengeIds.has(challenge.id)}
                   refreshDisabled={isChallengeRefreshDisabled}
-                  timestamp={componentTimestamps.challenge}
                   queueCount={queueRemaining}
                   showIssueContextBadge={challenge.contextSource === 'issue'}
                   onAdvanceQueue={isCustomChallenge ? handleAdvanceQueue : undefined}

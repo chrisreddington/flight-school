@@ -36,6 +36,36 @@ export interface UpdateChallengeState {
   error?: string;
 }
 
+/** Fields the edit form is allowed to mutate via the server action. */
+export interface ChallengeEditableFields {
+  title?: string;
+  description?: string;
+  difficulty?: DailyChallenge['difficulty'];
+  language?: DailyChallenge['language'];
+  estimatedTime?: DailyChallenge['estimatedTime'];
+  whyThisChallenge?: DailyChallenge['whyThisChallenge'];
+}
+
+const EDITABLE_KEYS: ReadonlyArray<keyof ChallengeEditableFields> = [
+  'title',
+  'description',
+  'difficulty',
+  'language',
+  'estimatedTime',
+  'whyThisChallenge',
+];
+
+function pickEditable(input: ChallengeEditableFields): ChallengeEditableFields {
+  const picked: ChallengeEditableFields = {};
+  for (const key of EDITABLE_KEYS) {
+    if (input[key] !== undefined) {
+      // Index assignment is type-safe because we iterate the known keys.
+      (picked as Record<string, unknown>)[key] = input[key];
+    }
+  }
+  return picked;
+}
+
 /**
  * Persists edits to a single custom challenge. Validates the required
  * text fields server-side and 404s when the queue no longer contains the
@@ -43,17 +73,18 @@ export interface UpdateChallengeState {
  */
 export async function updateChallengeAction(
   challengeId: string,
-  updates: Partial<DailyChallenge>,
+  updates: ChallengeEditableFields,
 ): Promise<UpdateChallengeState> {
   const { release } = await requireGuardedUserContext({
     ...CHALLENGE_ACTION_GUARD,
     auditMetadata: { ...CHALLENGE_ACTION_GUARD.auditMetadata, action: 'updateChallenge' },
   });
   try {
-    if (updates.title !== undefined && !updates.title.trim()) {
+    const safeUpdates = pickEditable(updates);
+    if (safeUpdates.title !== undefined && !safeUpdates.title.trim()) {
       return { ok: false, error: 'Title is required' };
     }
-    if (updates.description !== undefined && !updates.description.trim()) {
+    if (safeUpdates.description !== undefined && !safeUpdates.description.trim()) {
       return { ok: false, error: 'Description is required' };
     }
 
@@ -66,7 +97,7 @@ export async function updateChallengeAction(
     if (index === -1) {
       return { ok: false, error: 'Failed to save changes. The challenge may no longer exist.' };
     }
-    const updatedChallenge: DailyChallenge = { ...queue.challenges[index], ...updates };
+    const updatedChallenge: DailyChallenge = { ...queue.challenges[index], ...safeUpdates };
     const updatedQueue: CustomChallengeQueue = {
       ...queue,
       challenges: queue.challenges.map((c, i) => (i === index ? updatedChallenge : c)),
