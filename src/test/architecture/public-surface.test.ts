@@ -63,6 +63,7 @@ const ALLOWED_EXPORTS: Record<string, string[]> = {
   'src/lib/workspace/index.ts': [
     'workspaceStore',
     'createEmptyFile',
+    'createWorkspaceFromTemplate',
     'getWorkspaceTemplate',
     'ChallengeWorkspace',
     'WorkspaceFile',

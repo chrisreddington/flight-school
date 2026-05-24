@@ -79,28 +79,29 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
   });
 
   describe('setTokenIfNewer (optimistic concurrency)', () => {
-    interface CasCase {
-      readonly name: string;
-      readonly arrange: () => void;
-      readonly incoming: { accessToken: string; expiresAt: number };
-      readonly expectedReturn: boolean | 'throws';
-      readonly assertions: () => void;
-    }
-
+    const err = (msg: string, code: number) => Object.assign(new Error(msg), { code });
     const existingDoc = (expiresAt: number) => ({
       resource: { id: 'user-42', userId: 'user-42', expiresAt },
       etag: 'etag-x',
     });
 
+    interface CasCase {
+      readonly name: string;
+      readonly arrange: () => void;
+      readonly incoming: { accessToken: string; expiresAt: number };
+      readonly expected: boolean | 'throws';
+      readonly assertions?: () => void;
+    }
+
     const cases: readonly CasCase[] = [
       {
         name: 'create-path: 404 on read → items.create',
         arrange: () => {
-          mocks.itemRead.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
+          mocks.itemRead.mockRejectedValue(err('not found', 404));
           mocks.itemsCreate.mockResolvedValue({ resource: {} });
         },
         incoming: { accessToken: 'ghu_first', expiresAt: 9999999999 },
-        expectedReturn: true,
+        expected: true,
         assertions: () => {
           expect(mocks.itemsCreate).toHaveBeenCalledTimes(1);
           expect(mocks.itemReplace).not.toHaveBeenCalled();
@@ -114,7 +115,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
           mocks.itemReplace.mockResolvedValue({ resource: {} });
         },
         incoming: { accessToken: 'ghu_new', expiresAt: 200 },
-        expectedReturn: true,
+        expected: true,
         assertions: () => {
           expect(mocks.itemReplace).toHaveBeenCalledTimes(1);
           const [, opts] = mocks.itemReplace.mock.calls[0];
@@ -125,7 +126,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
         name: 'skip-path: existing newer → no encrypt, no write',
         arrange: () => mocks.itemRead.mockResolvedValue(existingDoc(200)),
         incoming: { accessToken: 'ghu_older', expiresAt: 100 },
-        expectedReturn: false,
+        expected: false,
         assertions: () => {
           // Critical: skip BEFORE paying KV wrapKey cost for a doomed write.
           expect(mocks.wrapKey).not.toHaveBeenCalled();
@@ -137,54 +138,43 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
         name: 'skip-path: existing same-age → no clobber on tie',
         arrange: () => mocks.itemRead.mockResolvedValue(existingDoc(100)),
         incoming: { accessToken: 'ghu_same', expiresAt: 100 },
-        expectedReturn: false,
-        assertions: () => {
-          expect(mocks.itemReplace).not.toHaveBeenCalled();
-        },
+        expected: false,
+        assertions: () => expect(mocks.itemReplace).not.toHaveBeenCalled(),
       },
       {
         name: 'race: 412 PreconditionFailed on replace → false',
         arrange: () => {
           mocks.itemRead.mockResolvedValue(existingDoc(100));
-          mocks.itemReplace.mockRejectedValue(
-            Object.assign(new Error('precondition failed'), { code: 412 }),
-          );
+          mocks.itemReplace.mockRejectedValue(err('precondition failed', 412));
         },
         incoming: { accessToken: 'ghu_new', expiresAt: 200 },
-        expectedReturn: false,
-        assertions: () => undefined,
+        expected: false,
       },
       {
         name: 'race: 409 Conflict on create → false',
         arrange: () => {
-          mocks.itemRead.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
-          mocks.itemsCreate.mockRejectedValue(Object.assign(new Error('conflict'), { code: 409 }));
+          mocks.itemRead.mockRejectedValue(err('not found', 404));
+          mocks.itemsCreate.mockRejectedValue(err('conflict', 409));
         },
         incoming: { accessToken: 'ghu_x', expiresAt: 100 },
-        expectedReturn: false,
-        assertions: () => undefined,
+        expected: false,
       },
       {
         name: 'propagates non-precondition Cosmos errors',
-        arrange: () =>
-          mocks.itemRead.mockRejectedValue(Object.assign(new Error('boom'), { code: 500 })),
+        arrange: () => mocks.itemRead.mockRejectedValue(err('boom', 500)),
         incoming: { accessToken: 'ghu_x', expiresAt: 100 },
-        expectedReturn: 'throws',
-        assertions: () => undefined,
+        expected: 'throws',
       },
     ];
 
-    it.each(cases)('$name', async ({ arrange, incoming, expectedReturn, assertions }) => {
+    it.each(cases)('$name', async ({ arrange, incoming, expected, assertions }) => {
       arrange();
-      const store = new CosmosTokenStore(baseCosmosConfig);
-      const call = store.setTokenIfNewer('user-42', incoming);
+      const call = new CosmosTokenStore(baseCosmosConfig).setTokenIfNewer('user-42', incoming);
 
-      if (expectedReturn === 'throws') {
-        await expect(call).rejects.toThrow('boom');
-      } else {
-        await expect(call).resolves.toBe(expectedReturn);
-      }
-      assertions();
+      if (expected === 'throws') await expect(call).rejects.toThrow('boom');
+      else await expect(call).resolves.toBe(expected);
+
+      assertions?.();
     });
   });
 
