@@ -266,9 +266,9 @@ describe('useLearningChat.sendMessage — job payload composition', () => {
   const repo = (n: string) => ({ fullName: `octo/${n}`, owner: 'octo', name: n });
 
   it.each([
-    ['forwards explicit repos and profile',
-      { profile: 'learning-github' as const, repos: [repo('one'), repo('two')] },
-      { profile: 'learning-github', repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
+    ['forwards explicit repos, profile and capabilities',
+      { profile: 'learning' as const, capabilities: ['github'] as const, repos: [repo('one'), repo('two')] },
+      { profile: 'learning', capabilities: ['github'], repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
     ['falls back to thread.context.repos when none supplied',
       undefined, { profile: 'learning', repos: ['octo/ctx'] }, [repo('ctx')]],
     ['defaults to no repos when neither option nor context provides any',

@@ -3,9 +3,11 @@
  * POST /api/copilot
  *
  * Uses Copilot SDK (standard model) for conversational chat.
- * The caller selects the chat profile (e.g. `'chat'`, `'chat-github'`,
- * `'learning'`, `'learning-github'`) which controls model, system prompt,
- * and which MCP capabilities are attached.
+ * The caller selects a base chat profile (`'chat'`, `'learning'`,
+ * `'coach'`, …) and optionally a `capabilities` selection (`'auto'` to
+ * let the server elevate, or an explicit `CapabilityId[]`). Capability
+ * selection is validated against the profile's allowlist before
+ * dispatch.
  */
 
 import { parseJsonBody } from '@/lib/api';
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const { prompt, profile, conversationId } = parseResult.data;
+    const { prompt, profile, capabilities, conversationId } = parseResult.data;
 
     return await withGuardedRoute(
       { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
@@ -50,6 +52,7 @@ export async function POST(request: NextRequest) {
           identity,
           prompt,
           profile,
+          capabilities,
           conversationId,
         });
 

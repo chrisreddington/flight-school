@@ -19,10 +19,10 @@ describe('executeChatWithSessionFactory', () => {
     mocks.createChatSession.mockImplementation(async (_request: unknown, resolved: ResolvedProfile) => ({
       model: resolved.model,
       sessionMetrics: {
-        createdNew: resolved.profileId !== 'chat-github',
+        createdNew: resolved.capabilities.length === 0,
         sessionCreateMs: 7,
         mcpEnabled: resolved.capabilities.length > 0,
-        reusedConversation: resolved.profileId === 'chat-github',
+        reusedConversation: resolved.capabilities.length > 0,
         poolKey: `chat:${resolved.capabilityFingerprint}`,
         model: resolved.model,
       },
@@ -52,20 +52,21 @@ describe('executeChatWithSessionFactory', () => {
     expect(mocks.destroy).toHaveBeenCalledOnce();
   });
 
-  it('resolves the chat-github profile when GitHub capability is requested', async () => {
+  it('resolves the chat profile with explicit github capability', async () => {
     const request = {
       identity: { userId: '123', gitHubToken: 'ghu_user' },
       prompt: 'Search my repos',
-      profile: 'chat-github' as const,
+      profile: 'chat' as const,
+      capabilities: ['github'] as const,
       conversationId: 'thread-1',
     };
 
     const result = await executeChatWithSessionFactory(request, mocks.createChatSession);
 
     const resolved = mocks.createChatSession.mock.calls[0][1] as ResolvedProfile;
-    expect(resolved.profileId).toBe('chat-github');
-    expect(resolved.capabilities.length).toBeGreaterThan(0);
-    expect(result.meta.profile).toBe('chat-github');
+    expect(resolved.profileId).toBe('chat');
+    expect(resolved.capabilities.map((c) => c.id)).toEqual(['github']);
+    expect(result.meta.profile).toBe('chat');
     expect(result.meta.mcpEnabled).toBe(true);
     expect(result.toolCalls).toEqual([{ name: 'get_me', args: {}, result: 'ok', duration: 5 }]);
   });

@@ -19,7 +19,7 @@ import { context, trace } from '@opentelemetry/api';
 
 import { activityLogger } from './activity/logger';
 import type { CapabilitySelection } from './capabilities';
-import type { ChatProfileId } from './profiles';
+import type { BaseProfileId, CapabilitiesArg } from './profile-types';
 import { getConversationSession } from './sessions';
 import {
   type StreamContext,
@@ -32,8 +32,14 @@ import type { StreamEvent, StreamingSession, StreamingToolCall } from './types';
 /** Configuration for creating a streaming session. */
 export interface StreamingSessionConfig {
   prompt: string;
-  profile: ChatProfileId;
+  profile: BaseProfileId;
   capabilities: readonly CapabilitySelection[];
+  /** Precomputed capability fingerprint from `resolveProfile`. */
+  capabilityFingerprint: string;
+  /** Caller-supplied selection (mirrors `resolved.requestedCapabilities`). */
+  requestedCapabilities: CapabilitiesArg | 'default';
+  /** Whether auto-elevation added a capability (telemetry only). */
+  wasAutoElevated: boolean;
   operationName: string;
   conversationId?: string;
   systemMessage: string;
@@ -59,6 +65,9 @@ export async function createGenericStreamingSession(
     prompt,
     profile,
     capabilities,
+    capabilityFingerprint,
+    requestedCapabilities,
+    wasAutoElevated,
     operationName,
     conversationId,
     systemMessage,
@@ -70,12 +79,20 @@ export async function createGenericStreamingSession(
   const startTime = Date.now();
   const log = logger.withTag(logPrefix);
   const mcpServerCount = capabilities.length;
+  const sortedCapabilityIds = [...capabilities]
+    .map((selection) => selection.id)
+    .sort()
+    .join(',');
+  const requestedCapabilitiesAttr = formatRequestedCapabilities(requestedCapabilities);
 
   const { session, metrics } = await getConversationSession(conversationId, {
     userId,
     gitHubToken,
     profile,
     capabilities,
+    capabilityFingerprint,
+    requestedCapabilities,
+    wasAutoElevated,
     systemMessage,
     model,
   });
@@ -117,7 +134,10 @@ export async function createGenericStreamingSession(
         [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
         'app.operation': operationName,
         'copilot.profile': profile,
+        'copilot.profile.elevated': wasAutoElevated,
+        'copilot.profile.requested_capabilities': requestedCapabilitiesAttr,
         'copilot.mcp.server_count': mcpServerCount,
+        'copilot.mcp.servers': sortedCapabilityIds,
       },
     });
     streamSpan.addEvent('stream.started');
@@ -222,6 +242,7 @@ export async function createGenericStreamingSession(
     const buildContext = (): StreamContext => ({
       model,
       profile,
+      wasAutoElevated,
       mcpServerCount,
       metrics,
       startTime,
@@ -267,4 +288,16 @@ export async function createGenericStreamingSession(
     sessionMetrics: metrics,
     streamingMetrics,
   };
+}
+
+/**
+ * Format `requestedCapabilities` for the
+ * `copilot.profile.requested_capabilities` span attribute. `'auto'` and
+ * `'default'` pass through; arrays are sorted + comma-joined so
+ * identical sets produce identical telemetry regardless of input order.
+ */
+function formatRequestedCapabilities(value: CapabilitiesArg | 'default'): string {
+  if (value === 'default') return 'default';
+  if (value === 'auto') return 'auto';
+  return [...value].sort().join(',') || 'none';
 }

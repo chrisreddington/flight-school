@@ -82,6 +82,7 @@ vi.mock('@/lib/logger', () => ({
 vi.mock('./sessions', () => ({
   CHAT_MODEL: 'claude-haiku-4.5',
   getConversationSession: mocks.getConversationSession,
+  getConversationCapabilities: vi.fn(() => undefined),
   getCopilotGithubMcpTools: vi.fn(() => []),
 }));
 
@@ -118,20 +119,18 @@ vi.mock('@opentelemetry/api', () => ({
   },
 }));
 
-import { createStreamingChatSession } from './streaming';
+import { createChatStreamingSession } from './streaming';
 
-describe('createStreamingChatSession telemetry', () => {
+describe('createChatStreamingSession telemetry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('records stream metrics and emits lifecycle span events', async () => {
-    const streaming = await createStreamingChatSession(
+    const streaming = await createChatStreamingSession(
       { userId: 'user-1', gitHubToken: 'ghu_token' },
       'hello',
-      'chat-github',
-      'Chat',
-      'conv-1',
+      { profile: 'chat', capabilities: ['github'], operationName: 'Chat', conversationId: 'conv-1' },
     );
 
     const events = [];

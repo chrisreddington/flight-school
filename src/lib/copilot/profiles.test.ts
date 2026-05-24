@@ -1,21 +1,26 @@
 /**
  * Tests for the chat profile registry, resolution, composition, and
  * fingerprinting. Table-driven where the shape of the assertion repeats.
+ *
+ * Post-collapse: `chat-github` / `learning-github` no longer exist; the
+ * caller supplies a base profile plus an explicit or `'auto'`
+ * capabilities argument.
  */
 
 import { describe, expect, it } from 'vitest';
 
 import { CAPABILITIES, type CapabilitySelection } from './capabilities';
 import {
+  InvalidCapabilityError,
   PROFILES,
   capabilityFingerprintOf,
   composeSystemMessage,
   resolveProfile,
-  type ChatProfileId,
+  type BaseProfileId,
 } from './profiles';
 
 describe('PROFILES registry', () => {
-  it.each(Object.keys(PROFILES) as ChatProfileId[])(
+  it.each(Object.keys(PROFILES) as BaseProfileId[])(
     'profile %s declares an id matching its key and a model',
     (id) => {
       const profile = PROFILES[id];
@@ -24,69 +29,95 @@ describe('PROFILES registry', () => {
     },
   );
 
-  it('only profiles flagged for elevation can auto-attach capabilities', () => {
-    expect(PROFILES.chat.allowElevation).toBe(true);
-    expect(PROFILES.learning.allowElevation).toBe(true);
-    for (const id of ['chat-github', 'learning-github', 'evaluation', 'coach', 'coach-lightweight', 'authoring'] as ChatProfileId[]) {
-      expect(PROFILES[id].allowElevation).toBe(false);
+  it('declares non-empty autoCapabilities only for chat and learning', () => {
+    expect(PROFILES.chat.autoCapabilities).toEqual(['github']);
+    expect(PROFILES.learning.autoCapabilities).toEqual(['github']);
+    for (const id of ['coach', 'evaluation', 'authoring'] as BaseProfileId[]) {
+      expect(PROFILES[id].autoCapabilities).toEqual([]);
     }
   });
 });
 
 describe('resolveProfile', () => {
   it.each<{
-    profile: ChatProfileId;
+    profile: BaseProfileId;
     prompt?: string;
+    auto?: boolean;
     expectedCapabilityIds: string[];
     expectedElevated: boolean;
   }>([
     { profile: 'chat', prompt: 'hello', expectedCapabilityIds: [], expectedElevated: false },
-    { profile: 'chat', prompt: 'list my repos', expectedCapabilityIds: ['github'], expectedElevated: true },
-    { profile: 'chat-github', expectedCapabilityIds: ['github'], expectedElevated: false },
-    { profile: 'chat-github', prompt: 'list my repos', expectedCapabilityIds: ['github'], expectedElevated: false },
+    { profile: 'chat', prompt: 'list my repos', auto: true, expectedCapabilityIds: ['github'], expectedElevated: true },
     { profile: 'learning', prompt: 'explain closures', expectedCapabilityIds: [], expectedElevated: false },
-    { profile: 'learning', prompt: 'what is in my repo', expectedCapabilityIds: ['github'], expectedElevated: true },
-    { profile: 'learning-github', expectedCapabilityIds: ['github'], expectedElevated: false },
-    { profile: 'coach', expectedCapabilityIds: ['github'], expectedElevated: false },
-    { profile: 'coach-lightweight', expectedCapabilityIds: [], expectedElevated: false },
+    { profile: 'learning', prompt: 'what is in my repo', auto: true, expectedCapabilityIds: ['github'], expectedElevated: true },
+    // Coach is lightweight by default — capability selection is orthogonal,
+    // callers opt in to MCP grounding with capabilities: ['github'].
+    { profile: 'coach', expectedCapabilityIds: [], expectedElevated: false },
     { profile: 'evaluation', expectedCapabilityIds: [], expectedElevated: false },
     { profile: 'authoring', expectedCapabilityIds: [], expectedElevated: false },
   ])(
-    'profile=$profile prompt=$prompt → capabilities=$expectedCapabilityIds elevated=$expectedElevated',
-    ({ profile, prompt, expectedCapabilityIds, expectedElevated }) => {
-      const resolved = resolveProfile(profile, prompt === undefined ? undefined : { prompt });
+    "profile=$profile prompt=$prompt → capabilities=$expectedCapabilityIds wasAutoElevated=$expectedElevated",
+    ({ profile, prompt, auto, expectedCapabilityIds, expectedElevated }) => {
+      const ctx = prompt === undefined && !auto
+        ? undefined
+        : { ...(prompt !== undefined ? { prompt } : {}), ...(auto ? { capabilities: 'auto' as const } : {}) };
+      const resolved = resolveProfile(profile, ctx);
       expect(resolved.capabilities.map((cap) => cap.id)).toEqual(expectedCapabilityIds);
-      expect(resolved.elevated).toBe(expectedElevated);
+      expect(resolved.wasAutoElevated).toBe(expectedElevated);
     },
   );
 
-  it('elevation never removes a base capability', () => {
-    // chat-github already has github; an elevation pass must not strip it
-    // regardless of prompt content.
-    const resolved = resolveProfile('chat-github', { prompt: 'something unrelated' });
-    expect(resolved.capabilities.map((cap) => cap.id)).toEqual(['github']);
+  it("honours explicit capabilities=['github'] on chat", () => {
+    const resolved = resolveProfile('chat', { capabilities: ['github'] });
+    expect(resolved.capabilities.map((c) => c.id)).toEqual(['github']);
+    expect(resolved.wasAutoElevated).toBe(false);
   });
 
-  it('preserves per-profile tool overrides (coach uses a github tool subset)', () => {
-    const resolved = resolveProfile('coach');
+  it('throws InvalidCapabilityError when an explicit capability is not in the profile allowlist', () => {
+    expect(() => resolveProfile('evaluation', { capabilities: ['github'] })).toThrow(
+      InvalidCapabilityError,
+    );
+  });
+
+  it("rejects 'auto' that would elevate beyond allowedCapabilities by simply not elevating", () => {
+    // evaluation has no autoCapabilities, so 'auto' is a no-op.
+    const resolved = resolveProfile('evaluation', { capabilities: 'auto', prompt: 'list my repos' });
+    expect(resolved.capabilities).toEqual([]);
+  });
+
+  it('unions conversationCapabilities monotonically across turns', () => {
+    // Turn 1: explicit ['github']
+    // Turn 2: no caps, but caller carries the conversation's caps
+    const turn2 = resolveProfile('chat', {
+      prompt: 'hello',
+      conversationCapabilities: ['github'],
+    });
+    expect(turn2.capabilities.map((c) => c.id)).toEqual(['github']);
+    // Carried-in capabilities never count as auto-elevated.
+    expect(turn2.wasAutoElevated).toBe(false);
+  });
+
+  it('coach capabilityDefaults override github tools and addendum when github is selected', () => {
+    const resolved = resolveProfile('coach', { capabilities: ['github'] });
     const github = resolved.capabilities.find((cap) => cap.id === 'github');
     expect(github?.tools).toEqual(['get_me', 'list_user_repositories']);
+    expect(github?.promptAddendumOverride).toBeDefined();
   });
 
-  it('produces a stable, sorted capability fingerprint', () => {
-    const resolved = resolveProfile('chat-github');
+  it('coach with capabilities=["github"] and chat+github do not collide on fingerprint', () => {
+    const coachWithGithub = resolveProfile('coach', { capabilities: ['github'] }).capabilityFingerprint;
+    const chatGithub = resolveProfile('chat', { capabilities: ['github'] }).capabilityFingerprint;
+    expect(coachWithGithub).not.toBe(chatGithub);
+  });
+
+  it('produces a stable capability fingerprint for chat+github', () => {
+    const resolved = resolveProfile('chat', { capabilities: ['github'] });
     expect(resolved.capabilityFingerprint).toBe('caps=github');
   });
 
-  it('reflects tool overrides in the fingerprint so coach and chat-github do not share a cache entry', () => {
-    const coach = resolveProfile('coach').capabilityFingerprint;
-    const chatGithub = resolveProfile('chat-github').capabilityFingerprint;
-    expect(coach).not.toBe(chatGithub);
-  });
-
   it('composes the system message from base prompt + capability addenda', () => {
-    const resolved = resolveProfile('chat-github');
-    expect(resolved.systemMessage.startsWith(PROFILES['chat-github'].basePrompt)).toBe(true);
+    const resolved = resolveProfile('chat', { capabilities: ['github'] });
+    expect(resolved.systemMessage.startsWith(PROFILES.chat.basePrompt)).toBe(true);
     expect(resolved.systemMessage).toContain(CAPABILITIES.github.promptAddendum);
   });
 
@@ -95,8 +126,7 @@ describe('resolveProfile', () => {
     expect(resolved.systemMessage).toBe(PROFILES.chat.basePrompt);
   });
 
-  it('returns just the addendum when the base prompt is empty', () => {
-    // evaluation has empty base prompt and no caps, so the result is ''
+  it('returns an empty string when both base prompt and capabilities are empty', () => {
     expect(resolveProfile('evaluation').systemMessage).toBe('');
   });
 });
@@ -127,10 +157,7 @@ describe('capabilityFingerprintOf', () => {
     expect(capabilityFingerprintOf([])).toBe('caps=none');
   });
 
-  it('is order-independent', () => {
-    // Single-capability registry today, so use synthetic tool overrides to
-    // prove the sort. (Adding more capabilities later will exercise the
-    // multi-id sort automatically.)
+  it('is order-independent for tool overrides', () => {
     const left = capabilityFingerprintOf([{ id: 'github', tools: ['b', 'a'] }]);
     const right = capabilityFingerprintOf([{ id: 'github', tools: ['a', 'b'] }]);
     expect(left).toBe(right);
@@ -138,6 +165,15 @@ describe('capabilityFingerprintOf', () => {
 
   it('encodes tool overrides so different surfaces do not collide', () => {
     expect(capabilityFingerprintOf([{ id: 'github' }])).toBe('caps=github');
-    expect(capabilityFingerprintOf([{ id: 'github', tools: ['get_me'] }])).toBe('caps=github@get_me');
+    expect(capabilityFingerprintOf([{ id: 'github', tools: ['get_me'] }])).toBe(
+      'caps=github@tools=get_me',
+    );
+  });
+
+  it('encodes prompt addendum overrides via a short hash', () => {
+    const fp = capabilityFingerprintOf([
+      { id: 'github', promptAddendumOverride: 'custom coach addendum' },
+    ]);
+    expect(fp.startsWith('caps=github@addH=')).toBe(true);
   });
 });

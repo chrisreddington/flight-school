@@ -16,6 +16,7 @@ import { context, propagation } from '@opentelemetry/api';
 
 import { buildMcpServersForCapabilities } from './capabilities';
 import { capabilityFingerprintOf } from './profiles';
+import { rememberConversationCapabilities } from './conversation-capabilities';
 import {
   CopilotEntitlementRequiredError,
   hasNegativeEntitlement,
@@ -49,9 +50,7 @@ export interface SessionWithMetrics {
 
 const log = logger.withTag('Copilot SDK');
 
-// =============================================================================
 // Model Configuration
-// =============================================================================
 
 /** Model tiers for different use cases */
 export const MODEL_TIERS = {
@@ -72,10 +71,6 @@ const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
   }
   return { kind: 'reject', feedback: 'MCP tools only for this session.' };
 };
-
-// =============================================================================
-// Singleton Client
-// =============================================================================
 
 let client: CopilotClient | null = null;
 
@@ -107,10 +102,6 @@ async function getCopilotClient(): Promise<CopilotClient> {
   return client;
 }
 
-// =============================================================================
-// Client Warmup
-// =============================================================================
-
 // Track shutdown state in global to survive HMR
 const globalForShutdown = globalThis as typeof globalThis & {
   __isShuttingDown?: boolean;
@@ -118,12 +109,13 @@ const globalForShutdown = globalThis as typeof globalThis & {
 
 let isShuttingDown = globalForShutdown.__isShuttingDown ?? false;
 
-// =============================================================================
-// Conversation Session Caching
-// =============================================================================
-
 const CHAT_SESSION_TTL_MS = 10 * 60 * 1000;
-const CHAT_SESSION_MAX = 20;
+/**
+ * Cache size bumped from 20 → 50 to absorb realistic concurrent-user load
+ * (panel feedback: most smoke-test thread-1 invocations were cold MISSes).
+ * Each entry holds a single SDK session; eviction is LRU.
+ */
+const CHAT_SESSION_MAX = 50;
 
 interface CachedChatSession {
   session: CopilotSession;
@@ -142,6 +134,12 @@ const chatSessionCache = globalForConversationCache.__chatSessionCache ?? new Ma
 if (!globalForConversationCache.__chatSessionCache) {
   globalForConversationCache.__chatSessionCache = chatSessionCache;
 }
+
+// Conversation-→-capability memory lives in `./conversation-capabilities`
+// so the monotonic-across-turns guarantee can be unit-tested without
+// pulling in the SDK-bound session pool. Re-exported from this module
+// so existing call sites keep their import path.
+export { getConversationCapabilities } from './conversation-capabilities';
 
 function pruneChatSessions(): void {
   const now = Date.now();
@@ -170,9 +168,19 @@ function pruneChatSessions(): void {
   }
 }
 
-// =============================================================================
-// Session Factory
-// =============================================================================
+/**
+ * Format `requestedCapabilities` for the `copilot.profile.requested_capabilities`
+ * span attribute. `'auto'` and `'default'` pass through; arrays are
+ * sorted + comma-joined so identical sets produce identical telemetry
+ * regardless of input order.
+ */
+function formatRequestedCapabilities(
+  value: SessionOptions['requestedCapabilities'],
+): string {
+  if (value === undefined || value === 'default') return 'default';
+  if (value === 'auto') return 'auto';
+  return [...value].sort().join(',') || 'none';
+}
 
 /**
  * Create a Copilot session with metrics tracking.
@@ -203,12 +211,14 @@ export async function createSessionWithMetrics(
   }
   const model = options.model ?? MODEL_TIERS.standard;
   const capabilities = options.capabilities;
-  const capabilityFingerprint = capabilityFingerprintOf(capabilities);
+  const capabilityFingerprint =
+    options.capabilityFingerprint ?? capabilityFingerprintOf(capabilities);
   const poolKey = `${options.profile}:${capabilityFingerprint}`;
   const sortedCapabilityIds = [...capabilities]
     .map((selection) => selection.id)
     .sort()
     .join(',');
+  const requestedCapabilitiesAttr = formatRequestedCapabilities(options.requestedCapabilities);
   const startTime = Date.now();
 
   return withSpan(
@@ -219,6 +229,8 @@ export async function createSessionWithMetrics(
       [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
       'copilot.pool_key': poolKey,
       'copilot.profile': options.profile,
+      'copilot.profile.elevated': options.wasAutoElevated === true,
+      'copilot.profile.requested_capabilities': requestedCapabilitiesAttr,
       'copilot.mcp.server_count': capabilities.length,
       'copilot.mcp.servers': sortedCapabilityIds,
     },
@@ -337,11 +349,13 @@ export async function getConversationSession(
     throw new Error('gitHubToken is required — multi-tenant invariant (no ambient auth)');
   }
   const { userId, profile } = options;
-  const capabilityFingerprint = capabilityFingerprintOf(options.capabilities);
+  const capabilityFingerprint =
+    options.capabilityFingerprint ?? capabilityFingerprintOf(options.capabilities);
+  const capabilityIds = options.capabilities.map((selection) => selection.id);
 
   if (!conversationId) {
     log.debug('No conversation ID - creating fresh session', { profile, userId });
-    return createSessionWithMetrics(options);
+    return createSessionWithMetrics({ ...options, capabilityFingerprint });
   }
 
   pruneChatSessions();
@@ -351,6 +365,7 @@ export async function getConversationSession(
   if (cached) {
     log.debug('Conversation HIT', { conversationId, profile, userId });
     cached.lastUsed = Date.now();
+    rememberConversationCapabilities(userId, conversationId, capabilityIds);
     return {
       session: cached.session,
       metrics: createReusedSessionMetrics(cached.metrics),
@@ -358,7 +373,10 @@ export async function getConversationSession(
   }
 
   log.debug('Conversation MISS - creating session', { conversationId, profile, userId });
-  const { session, metrics } = await createSessionWithMetrics(options);
+  const { session, metrics } = await createSessionWithMetrics({
+    ...options,
+    capabilityFingerprint,
+  });
   const cachedMetrics = {
     ...metrics,
     reusedConversation: false,
@@ -370,6 +388,7 @@ export async function getConversationSession(
     metrics: cachedMetrics,
     userId,
   });
+  rememberConversationCapabilities(userId, conversationId, capabilityIds);
 
   return { session, metrics: cachedMetrics };
 }

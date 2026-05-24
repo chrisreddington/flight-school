@@ -61,7 +61,7 @@ function defaultBody(overrides: Record<string, unknown> = {}) {
     id: VALID_ID,
     type: 'chat-response',
     userId: 'user-1',
-    input: { threadId: 'thread-1', prompt: 'hello' },
+    input: { threadId: 'thread-1', prompt: 'hello', profile: 'chat' },
     ...overrides,
   };
 }
@@ -225,7 +225,7 @@ describe('POST /api/internal/jobs', () => {
       userId: 'user-1',
       type: 'chat-response',
       status: 'running',
-      input: { threadId: 'thread-1', assistantMessageId: 'a-1' },
+      input: { threadId: 'thread-1', assistantMessageId: 'a-1', profile: 'chat' },
       createdAt: 'x',
     };
     mocks.jobStorageCreateIfAbsent.mockImplementationOnce(
@@ -238,7 +238,7 @@ describe('POST /api/internal/jobs', () => {
       },
     );
     const res = await POST(makeRequest('POST', {
-      body: defaultBody({ input: { threadId: 'thread-1', assistantMessageId: 'a-1', prompt: 'hi' } }),
+      body: defaultBody({ input: { threadId: 'thread-1', assistantMessageId: 'a-1', prompt: 'hi', profile: 'chat' } }),
     }));
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -259,7 +259,7 @@ describe('POST /api/internal/jobs', () => {
       },
     );
     await POST(makeRequest('POST', {
-      body: defaultBody({ input: { threadId: 'thread-1', assistantMessageId: 'a-1', prompt: 'hi' } }),
+      body: defaultBody({ input: { threadId: 'thread-1', assistantMessageId: 'a-1', prompt: 'hi', profile: 'chat' } }),
     }));
     expect(capturedPredicate).toBeTypeOf('function');
     const matching = {
@@ -267,7 +267,7 @@ describe('POST /api/internal/jobs', () => {
       userId: 'user-1',
       type: 'chat-response',
       status: 'running',
-      input: { threadId: 'thread-1', assistantMessageId: 'a-1' },
+      input: { threadId: 'thread-1', assistantMessageId: 'a-1', profile: 'chat' },
     };
     expect(capturedPredicate!({ other: matching })).toBe(matching);
     expect(capturedPredicate!({

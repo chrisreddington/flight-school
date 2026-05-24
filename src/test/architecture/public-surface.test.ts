@@ -22,12 +22,12 @@ const ALLOWED_EXPORTS: Record<string, string[]> = {
   ],
   'src/lib/copilot/server.ts': [
     'createLoggedCoachSession',
-    'createLoggedLightweightCoachSession',
     'wrapSessionWithLogging',
   ],
   'src/lib/copilot/sessions.ts': [
     'CHAT_MODEL',
     'createSessionWithMetrics',
+    'getConversationCapabilities',
     'getCopilotGithubMcpTools',
     'getConversationSession',
     'MODEL_TIERS',

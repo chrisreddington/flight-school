@@ -132,7 +132,7 @@ describe('POST /api/jobs (proxy)', () => {
     const res = await POST(
       makeRequest({
         type: 'chat-response',
-        input: { threadId: 't1', prompt: 'hi' },
+        input: { threadId: 't1', prompt: 'hi', profile: 'chat' },
       }),
     );
 
@@ -159,7 +159,7 @@ describe('POST /api/jobs (proxy)', () => {
     const res = await POST(
       makeRequest({
         type: 'chat-response',
-        input: { threadId: 't1', prompt: 'hi', assistantMessageId: 'not-a-uuid' },
+        input: { threadId: 't1', prompt: 'hi', profile: 'chat', assistantMessageId: 'not-a-uuid' },
       }),
     );
     expect(res.status).toBe(400);

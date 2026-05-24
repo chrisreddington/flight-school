@@ -3,7 +3,7 @@ import {
   buildSingleGoalPrompt,
   buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
-import { createLoggedLightweightCoachSession } from '@/lib/copilot/server';
+import { createLoggedCoachSession } from '@/lib/copilot/server';
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
 import { getOctokitForToken } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
@@ -60,10 +60,11 @@ export async function executeTopicRegeneration(
       input.skillProfile,
     );
 
-    const loggedSession = await createLoggedLightweightCoachSession(
+    const loggedSession = await createLoggedCoachSession(
       identity,
       'Job: topic-regeneration',
       prompt.slice(0, 50),
+      [],
     );
 
     registerSession(jobId, loggedSession);
@@ -129,10 +130,11 @@ export async function executeChallengeRegeneration(
       input.skillProfile,
     );
 
-    const loggedSession = await createLoggedLightweightCoachSession(
+    const loggedSession = await createLoggedCoachSession(
       identity,
       'Job: challenge-regeneration',
       prompt.slice(0, 50),
+      [],
     );
 
     registerSession(jobId, loggedSession);
@@ -198,10 +200,11 @@ export async function executeGoalRegeneration(
       input.skillProfile,
     );
 
-    const loggedSession = await createLoggedLightweightCoachSession(
+    const loggedSession = await createLoggedCoachSession(
       identity,
       'Job: goal-regeneration',
       prompt.slice(0, 50),
+      [],
     );
 
     registerSession(jobId, loggedSession);

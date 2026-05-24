@@ -34,6 +34,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { createWorkerJob, listWorkerJobs, type CreateWorkerJobInput } from './worker-client';
 import type { DispatchableJobInput, DispatchableJobType } from '@/lib/jobs/dispatch';
+import {
+  areCapabilitiesAllowedForProfile,
+  isBaseProfileId,
+  isCapabilitiesArg,
+  type CapabilitiesArg,
+} from '@/lib/copilot/profile-types';
 
 const log = logger.withTag('Jobs API');
 
@@ -109,6 +115,52 @@ async function ensureTokenStoreSeeded(
 }
 
 /**
+ * Validate the chat-response wire shape: `input.profile` must be a known
+ * base profile, and `input.capabilities` (if present) must be `'auto'`
+ * or an array of valid capability ids that all sit within the profile's
+ * allowlist. Rejecting here keeps doomed requests off the worker.
+ */
+function validateChatResponseProfile(
+  body: CreateJobRequest,
+): { ok: true } | { ok: false; response: NextResponse } {
+  if (body.type !== 'chat-response') return { ok: true };
+  const chatInput = body.input as ChatResponseInput | undefined;
+  if (!chatInput || !isBaseProfileId(chatInput.profile)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Invalid 'profile': must be a known base chat profile." },
+        { status: 400 },
+      ),
+    };
+  }
+  if (chatInput.capabilities !== undefined && !isCapabilitiesArg(chatInput.capabilities)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Invalid 'capabilities': must be 'auto' or an array of capability ids." },
+        { status: 400 },
+      ),
+    };
+  }
+  if (
+    !areCapabilitiesAllowedForProfile(
+      chatInput.profile,
+      chatInput.capabilities as CapabilitiesArg | undefined,
+    )
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: `One or more capabilities are not allowed by profile '${chatInput.profile}'.` },
+        { status: 400 },
+      ),
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Server-validated `assistantMessageId` for chat jobs. The id is the
  * stable handle the worker uses to upsert deltas into a single assistant
  * message on `threads.json`. The worker enforces the
@@ -164,6 +216,8 @@ async function handleCreateJob(request: NextRequest, userId: string) {
 
   const normalized = normalizeChatAssistantMessageId(body);
   if (!normalized.ok) return normalized.response;
+  const profileCheck = validateChatResponseProfile(normalized.body);
+  if (!profileCheck.ok) return profileCheck.response;
   const finalBody = normalized.body;
 
   const jobId = crypto.randomUUID();

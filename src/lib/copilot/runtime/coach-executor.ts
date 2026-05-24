@@ -1,7 +1,4 @@
-import {
-  createLoggedCoachSession,
-  createLoggedLightweightCoachSession,
-} from '@/lib/copilot/server';
+import { createLoggedCoachSession } from '@/lib/copilot/server';
 import type {
   CopilotCoachJobRequest,
   CopilotCoachJobResult,
@@ -12,18 +9,22 @@ import { now } from '@/lib/utils/date-utils';
 /**
  * Run a one-shot coach generation inside the worker runtime.
  *
- * The two variants map directly onto the existing factories: `coach`
- * uses the standard model + GitHub MCP tools, `lightweight` skips MCP
- * and uses the fast model. Sessions are always destroyed in `finally`
- * so an SDK error never leaks a live session into the runtime pool.
+ * Capability selection is orthogonal to the profile: `variant: 'coach'`
+ * grounds the model in MCP tools, `variant: 'lightweight'` skips MCP
+ * for the fast path. Sessions are always destroyed in `finally` so an
+ * SDK error never leaks a live session into the runtime pool.
  */
 export async function executeCoachJobInRuntime(
   request: CopilotCoachJobRequest,
 ): Promise<CopilotCoachJobResult> {
   const inputPrompt = request.inputSummary ?? request.prompt;
-  const loggedSession = request.variant === 'coach'
-    ? await createLoggedCoachSession(request.identity, request.operationName, inputPrompt)
-    : await createLoggedLightweightCoachSession(request.identity, request.operationName, inputPrompt);
+  const capabilities = request.variant === 'coach' ? (['github'] as const) : ([] as const);
+  const loggedSession = await createLoggedCoachSession(
+    request.identity,
+    request.operationName,
+    inputPrompt,
+    capabilities,
+  );
 
   try {
     const result = await loggedSession.sendAndWait(request.prompt);

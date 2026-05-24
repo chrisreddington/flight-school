@@ -12,7 +12,10 @@ export async function executeChatWithSessionFactory(
   request: CopilotChatExecutionRequest,
   createChatSession: RuntimeSessionFactory,
 ): Promise<CopilotChatExecutionResult> {
-  const resolved = resolveProfile(request.profile, { prompt: request.prompt });
+  const resolved = resolveProfile(request.profile, {
+    prompt: request.prompt,
+    capabilities: request.capabilities,
+  });
   const loggedSession = await createChatSession(request, resolved);
 
   try {

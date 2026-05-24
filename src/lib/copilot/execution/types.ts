@@ -1,10 +1,17 @@
-import type { ChatProfileId } from '@/lib/copilot/profiles';
+import type { BaseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
 import type { SessionIdentity } from '@/lib/copilot/session-identity';
 
 export interface CopilotChatExecutionRequest {
   identity: SessionIdentity;
   prompt: string;
-  profile: ChatProfileId;
+  profile: BaseProfileId;
+  /**
+   * Caller-supplied capability selection from the wire. The worker
+   * resolves this against the profile's allowed list and defaults; the
+   * caller never gets authority to bypass profile policy. Omitted =
+   * profile defaults.
+   */
+  capabilities?: CapabilitiesArg;
   conversationId?: string;
 }
 
@@ -23,7 +30,7 @@ export interface CopilotChatExecutionResult {
     model: string;
     toolsUsed: string[];
     totalTimeMs: number;
-    profile: ChatProfileId;
+    profile: BaseProfileId;
     sessionCreateMs: number | null;
     sessionPoolHit: boolean | null;
     mcpEnabled: boolean | null;

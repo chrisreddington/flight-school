@@ -118,7 +118,7 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
       const exploreMessage = `I'd like to learn about "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
       
       // Start the chat (this will stream in the background)
-      await sendMessage(exploreMessage, { threadId: thread.id, profile: 'learning-github' });
+      await sendMessage(exploreMessage, { threadId: thread.id, profile: 'learning', capabilities: ['github'] });
       
       // Show toast notification
       setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);

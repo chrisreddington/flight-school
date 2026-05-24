@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_CAPABILITY_IDS,
   CAPABILITIES,
+  buildCapabilityContextPrompt,
   buildMcpServersForCapabilities,
   type CapabilitySelection,
 } from './capabilities';
@@ -65,5 +66,53 @@ describe('buildMcpServersForCapabilities', () => {
 
   it('throws via the MCP factory when the token is empty', () => {
     expect(() => buildMcpServersForCapabilities([{ id: 'github' }], '')).toThrow();
+  });
+});
+
+describe('github capability buildContextPrompt', () => {
+  const buildContextPrompt = CAPABILITIES.github.buildContextPrompt!;
+
+  it('returns null when no repositories are supplied', () => {
+    expect(buildContextPrompt({})).toBeNull();
+    expect(buildContextPrompt({ repositories: [] })).toBeNull();
+  });
+
+  it.each<{ name: string; repositories: string[]; expectedLines: string[] }>([
+    {
+      name: 'single repo',
+      repositories: ['chrisreddington/flight-school'],
+      expectedLines: ['- chrisreddington/flight-school'],
+    },
+    {
+      name: 'multiple repos preserve order',
+      repositories: ['owner1/repo1', 'owner2/repo2', 'owner3/repo3'],
+      expectedLines: ['- owner1/repo1', '- owner2/repo2', '- owner3/repo3'],
+    },
+  ])('formats repository scope: $name', ({ repositories, expectedLines }) => {
+    const result = buildContextPrompt({ repositories })!;
+    for (const line of expectedLines) {
+      expect(result).toContain(line);
+    }
+    expect(result).toContain('You MUST use GitHub MCP tools');
+    expect(result).toContain('Do NOT use local shell/filesystem tools');
+  });
+});
+
+describe('buildCapabilityContextPrompt', () => {
+  it('returns empty string when no capabilities are active', () => {
+    expect(buildCapabilityContextPrompt([], { repositories: ['x/y'] })).toBe('');
+  });
+
+  it('returns empty string when active capabilities contribute nothing', () => {
+    // github contributes nothing without repositories
+    expect(buildCapabilityContextPrompt([{ id: 'github' }], {})).toBe('');
+  });
+
+  it('composes the github context block when github is active and repos supplied', () => {
+    const result = buildCapabilityContextPrompt([{ id: 'github' }], {
+      repositories: ['chrisreddington/flight-school'],
+    });
+    expect(result).toContain('Selected repositories:');
+    expect(result).toContain('- chrisreddington/flight-school');
   });
 });

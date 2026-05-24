@@ -4,8 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  COACH_SYSTEM_PROMPT,
-  COACH_LIGHTWEIGHT_PROMPT,
+  COACH_BASE_PROMPT,
   buildChallengePrompt,
   buildGoalPrompt,
   buildLearningTopicsPrompt,
@@ -18,15 +17,13 @@ import type { SkillProfile } from '@/lib/skills/types';
 // =============================================================================
 
 describe('System Prompts', () => {
-  it('should have COACH_SYSTEM_PROMPT defined', () => {
-    expect(COACH_SYSTEM_PROMPT).toBeDefined();
-    expect(COACH_SYSTEM_PROMPT).toContain('developer growth coach');
-    expect(COACH_SYSTEM_PROMPT).toContain('Zone of Proximal Development');
-  });
-
-  it('should have COACH_LIGHTWEIGHT_PROMPT defined', () => {
-    expect(COACH_LIGHTWEIGHT_PROMPT).toBeDefined();
-    expect(COACH_LIGHTWEIGHT_PROMPT).toContain('developer growth coach');
+  it('COACH_BASE_PROMPT is capability-neutral (no tool guidance)', () => {
+    expect(COACH_BASE_PROMPT).toContain('developer growth coach');
+    expect(COACH_BASE_PROMPT).toContain('Zone of Proximal Development');
+    // Capability-specific guidance lives on the capability addendum,
+    // never in the base prompt — see capabilities.ts / profiles.ts.
+    expect(COACH_BASE_PROMPT).not.toMatch(/\bMCP\b/);
+    expect(COACH_BASE_PROMPT).not.toMatch(/list_user_repositories/);
   });
 });
 

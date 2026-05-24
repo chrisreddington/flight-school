@@ -41,7 +41,7 @@ import { createLearningChatSendTrigger } from '@/lib/observability/job-trigger-b
 import { operationsManager } from '@/lib/operations';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
-import type { ChatProfileId } from '@/lib/copilot/profiles';
+import type { BaseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
 import { useLearningChatStream } from './use-learning-chat-stream';
@@ -74,8 +74,15 @@ async function isStorageStreaming(threadId: string): Promise<boolean> {
 
 /** Options for sending a learning chat message */
 interface SendLearningMessageOptions {
-  /** Chat profile to use (defaults to `'learning'`). Pass `'learning-github'` to enable GitHub MCP tools. */
-  profile?: ChatProfileId;
+  /** Base chat profile to use (defaults to `'learning'`). */
+  profile?: BaseProfileId;
+  /**
+   * Capability selection for this turn. `'auto'` lets the server elevate
+   * based on prompt heuristics; an explicit array opts into specific
+   * MCP/native capabilities. Omitting the field uses the profile's
+   * defaults.
+   */
+  capabilities?: CapabilitiesArg;
   /** Override repos (defaults to active thread's repos) */
   repos?: RepoReference[];
   /** Explicit thread ID to send to (avoids race condition with async state updates) */
@@ -229,7 +236,8 @@ export function useLearningChat(): UseLearningChatReturn {
       targetThreadId: string,
       message: string,
       effectiveRepos: RepoReference[],
-      profile: ChatProfileId,
+      profile: BaseProfileId,
+      capabilities: CapabilitiesArg | undefined,
     ): Promise<void> => {
       const assistantMessageId = crypto.randomUUID();
       const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
@@ -240,6 +248,7 @@ export function useLearningChat(): UseLearningChatReturn {
           prompt: message,
           assistantMessageId,
           profile,
+          ...(capabilities !== undefined ? { capabilities } : {}),
           repos: effectiveRepos.map((r) => r.fullName),
         },
       }, {
@@ -265,7 +274,7 @@ export function useLearningChat(): UseLearningChatReturn {
       const message = content.trim();
       if (!message) return;
 
-      const { profile = 'learning', repos, threadId: explicitThreadId } = options;
+      const { profile = 'learning', capabilities, repos, threadId: explicitThreadId } = options;
       const thread = await resolveTargetThread(message, explicitThreadId, repos);
 
       if (await isStorageStreaming(thread.id)) {
@@ -286,7 +295,7 @@ export function useLearningChat(): UseLearningChatReturn {
       markStreamPending(thread.id, userMessage.id);
 
       try {
-        await startChatJob(thread.id, message, effectiveRepos, profile);
+        await startChatJob(thread.id, message, effectiveRepos, profile, capabilities);
       } catch (err) {
         log.error('Failed to start chat response job:', err);
         clearPendingStream(thread.id);

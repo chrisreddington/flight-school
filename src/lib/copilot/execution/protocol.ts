@@ -1,4 +1,9 @@
-import type { ChatProfileId } from '@/lib/copilot/profiles';
+import {
+  BASE_PROFILE_ID_SET,
+  isCapabilitiesArg,
+  type BaseProfileId,
+  type CapabilitiesArg,
+} from '@/lib/copilot/profile-types';
 import type {
   CopilotChatExecutionRequest,
   CopilotChatExecutionResult,
@@ -7,17 +12,6 @@ import type {
   CopilotCoachVariant,
   CopilotToolCallRecord,
 } from './types';
-
-const CHAT_PROFILE_IDS = new Set<ChatProfileId>([
-  'chat',
-  'chat-github',
-  'learning',
-  'learning-github',
-  'evaluation',
-  'coach',
-  'coach-lightweight',
-  'authoring',
-]);
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -32,6 +26,7 @@ export function parseCopilotWorkerChatRequest(value: unknown): CopilotChatExecut
     },
     prompt: requireString(record.prompt, 'prompt'),
     profile: requireProfile(record.profile, 'profile'),
+    capabilities: requireCapabilities(record.capabilities, 'capabilities'),
     conversationId: optionalString(record.conversationId, 'conversationId'),
   };
 }
@@ -92,11 +87,19 @@ export function parseCopilotWorkerCoachResult(value: unknown): CopilotCoachJobRe
   };
 }
 
-function requireProfile(value: unknown, name: string): ChatProfileId {
-  if (typeof value !== 'string' || !CHAT_PROFILE_IDS.has(value as ChatProfileId)) {
-    throw new Error(`${name} must be a valid ChatProfileId`);
+function requireProfile(value: unknown, name: string): BaseProfileId {
+  if (typeof value !== 'string' || !BASE_PROFILE_ID_SET.has(value as BaseProfileId)) {
+    throw new Error(`${name} must be a valid BaseProfileId`);
   }
-  return value as ChatProfileId;
+  return value as BaseProfileId;
+}
+
+function requireCapabilities(value: unknown, name: string): CapabilitiesArg | undefined {
+  if (value === undefined) return undefined;
+  if (!isCapabilitiesArg(value)) {
+    throw new Error(`${name} must be 'auto' or an array of valid capability ids`);
+  }
+  return value;
 }
 
 function requireVariant(value: unknown): CopilotCoachVariant {

@@ -12,7 +12,7 @@ import {
 import { GEN_AI_OPERATION } from '@/lib/observability/semconv';
 import { type Span, SpanStatusCode } from '@opentelemetry/api';
 
-import type { ChatProfileId } from './profiles';
+import type { BaseProfileId } from './profile-types';
 import type { StreamEvent, StreamingToolCall } from './types';
 
 /**
@@ -22,7 +22,9 @@ import type { StreamEvent, StreamingToolCall } from './types';
  */
 export interface StreamContext {
   readonly model: string;
-  readonly profile: ChatProfileId;
+  readonly profile: BaseProfileId;
+  /** True when `resolveProfile` auto-elevated a capability (telemetry). */
+  readonly wasAutoElevated: boolean;
   readonly mcpServerCount: number;
   readonly metrics: { createdNew: boolean } | undefined;
   readonly startTime: number;

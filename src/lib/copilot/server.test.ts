@@ -25,7 +25,6 @@ vi.mock('@/lib/observability/telemetry', () => ({
 
 const {
   createLoggedCoachSession,
-  createLoggedLightweightCoachSession,
 } = await import('./server');
 
 describe('logged Copilot session factories', () => {
@@ -50,43 +49,32 @@ describe('logged Copilot session factories', () => {
     });
   });
 
-  it.each([
-    ['coach', () => createLoggedCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' })],
-    ['lightweight coach', () => createLoggedLightweightCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' })],
-  ])('should pass per-request GitHub token for %s sessions', async (_name, createSession) => {
-    await createSession();
+  it('passes per-request GitHub token through for coach sessions', async () => {
+    await createLoggedCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' });
 
     expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1', gitHubToken: 'ghu_1' }),
     );
   });
 
-  it('creates coach sessions with the coach profile and github capability', async () => {
+  it('defaults coach sessions to the github capability (MCP-grounded)', async () => {
     await createLoggedCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Daily Focus', 'prompt');
 
-    expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        profile: 'coach',
-        userId: 'u1',
-        gitHubToken: 'ghu_1',
-      }),
-    );
     const opts = createSessionWithMetricsMock.mock.calls[0][0];
-    expect(opts.capabilities.length).toBeGreaterThan(0);
-    expect(opts.capabilities[0].id).toBe('github');
+    expect(opts.profile).toBe('coach');
+    expect(opts.capabilities.map((cap: { id: string }) => cap.id)).toEqual(['github']);
   });
 
-  it('creates lightweight coach sessions with the coach-lightweight profile and no capabilities', async () => {
-    await createLoggedLightweightCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' });
-
-    expect(createSessionWithMetricsMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        profile: 'coach-lightweight',
-        userId: 'u1',
-        gitHubToken: 'ghu_1',
-      }),
+  it('honours an empty capability list for the lightweight coach path', async () => {
+    await createLoggedCoachSession(
+      { userId: 'u1', gitHubToken: 'ghu_1' },
+      'Quick suggestion',
+      'prompt',
+      [],
     );
+
     const opts = createSessionWithMetricsMock.mock.calls[0][0];
-    expect(opts.capabilities).toHaveLength(0);
+    expect(opts.profile).toBe('coach');
+    expect(opts.capabilities).toEqual([]);
   });
 });

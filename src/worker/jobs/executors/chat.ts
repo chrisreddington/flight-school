@@ -31,10 +31,13 @@
  * @module worker/jobs/executors/chat
  */
 
-import { createLearningStreamingSession, createStreamingChatSession } from '@/lib/copilot/streaming';
+import { createChatStreamingSession } from '@/lib/copilot/streaming';
+import { buildCapabilityContextPrompt } from '@/lib/copilot/capabilities';
+import { resolveProfile, InvalidCapabilityError } from '@/lib/copilot/profiles';
+import { isBaseProfileId } from '@/lib/copilot/profile-types';
+import { getConversationCapabilities } from '@/lib/copilot/sessions';
 import { jobStorage } from '@/lib/jobs';
 import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
-import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage';
 import { logger } from '@/lib/logger';
 import type { Message, ToolCallEvent } from '@/lib/threads';
@@ -83,11 +86,35 @@ export async function executeChatResponse(
     prompt,
     assistantMessageId: providedAssistantId,
     profile,
+    capabilities,
     repos,
   } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
-  const isLearningProfile = profile === 'learning' || profile === 'learning-github';
-  const hasGitHubCapability = profile === 'chat-github' || profile === 'learning-github';
+  if (!isBaseProfileId(profile)) {
+    throw new Error(`Invalid chat profile: ${String(profile)}`);
+  }
+  if (profile !== 'chat' && profile !== 'learning') {
+    throw new Error(
+      `chat-response job only supports 'chat' or 'learning' profiles, got '${profile}'`,
+    );
+  }
+  // Resolve once here so capability-driven context prefixes (e.g. github
+  // repo scope) can be composed on top of the prompt; the streaming
+  // factory re-resolves with the same inputs and lands on the same
+  // capability set + fingerprint.
+  let preResolved;
+  try {
+    preResolved = resolveProfile(profile, {
+      prompt,
+      capabilities,
+      conversationCapabilities: getConversationCapabilities(userId, threadId),
+    });
+  } catch (err) {
+    if (err instanceof InvalidCapabilityError) {
+      throw err;
+    }
+    throw err;
+  }
 
   let fullContent = '';
   const toolCalls: string[] = [];
@@ -165,14 +192,22 @@ export async function executeChatResponse(
       throw new Error(`Thread ${threadId} not found`);
     }
 
-    const contextualPrompt = buildRepositoryContextPrompt(prompt, repos, hasGitHubCapability);
-    if (contextualPrompt !== prompt) {
-      log.debug(`[Job ${jobId}] Added repository context for ${repos?.length ?? 0} repos`);
+    const capabilityContext = buildCapabilityContextPrompt(preResolved.capabilities, {
+      repositories: repos,
+    });
+    const contextualPrompt = capabilityContext
+      ? `${capabilityContext}\n\nUser question: ${prompt}`
+      : prompt;
+    if (capabilityContext) {
+      log.debug(`[Job ${jobId}] Added capability context (${capabilityContext.length} chars)`);
     }
 
-    const session = isLearningProfile
-      ? await createLearningStreamingSession(identity, contextualPrompt, profile, `Job: ${jobId}`, threadId)
-      : await createStreamingChatSession(identity, contextualPrompt, profile, `Job: ${jobId}`, threadId);
+    const session = await createChatStreamingSession(identity, contextualPrompt, {
+      profile,
+      capabilities,
+      operationName: `Job: ${jobId}`,
+      conversationId: threadId,
+    });
 
     registerSession(jobId, {
       destroy: async () => {

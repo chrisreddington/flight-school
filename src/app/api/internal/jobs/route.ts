@@ -27,6 +27,12 @@ import { redactJobForDetail, redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { withExtractedTraceContext } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  areCapabilitiesAllowedForProfile,
+  isBaseProfileId,
+  isCapabilitiesArg,
+  type CapabilitiesArg,
+} from '@/lib/copilot/profile-types';
 
 import { scheduleWorkerJobExecution } from '@/worker/jobs/scheduler';
 
@@ -94,6 +100,27 @@ function parseCreateBody(requestBody: unknown):
   }
   const credentials = parseCredentials(raw.credentials);
   if (credentials === 'invalid') return { ok: false };
+  if (raw.type === 'chat-response') {
+    const chatInput = raw.input as {
+      profile?: unknown;
+      capabilities?: unknown;
+    };
+    if (!isBaseProfileId(chatInput.profile)) return { ok: false };
+    if (
+      chatInput.capabilities !== undefined
+      && !isCapabilitiesArg(chatInput.capabilities)
+    ) {
+      return { ok: false };
+    }
+    if (
+      !areCapabilitiesAllowedForProfile(
+        chatInput.profile,
+        chatInput.capabilities as CapabilitiesArg | undefined,
+      )
+    ) {
+      return { ok: false };
+    }
+  }
   return {
     ok: true,
     body: {

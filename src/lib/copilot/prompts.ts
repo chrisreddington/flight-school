@@ -9,41 +9,24 @@ import type { SkillProfile } from '@/lib/skills/types';
 import type { InterleavingHint } from '@/lib/focus/interleaving';
 
 /**
- * System prompt for coach sessions with MCP tools.
+ * Capability-neutral base prompt for the coach profile.
  *
- * @remarks
- * Uses numbered rules for token efficiency.
- * Includes ZPD (Zone of Proximal Development) targeting.
+ * Voice and rules only. Capability-specific guidance (e.g. "use
+ * `list_user_repositories` to ground suggestions") lives on the active
+ * capability addendum — see {@link COACH_GITHUB_PROMPT_ADDENDUM} — and
+ * is composed in by `resolveProfile` when the caller passes
+ * `capabilities: ['github']`. The lightweight coach is the same voice
+ * with `capabilities: []`; there is no separate prompt.
  */
-export const COACH_SYSTEM_PROMPT = `You are a developer growth coach.
+export const COACH_BASE_PROMPT = `You are a developer growth coach.
 
 RULES:
-1. Analyze user profile (languages, repos, activity) before suggesting
-2. Target Zone of Proximal Development: not too easy, not too hard
-3. Suggest actionable, achievable challenges for 15-30 min sessions
-4. Growth mindset framing: celebrate effort and strategy, not just outcomes
-5. NEVER suggest reimplementing what user already does well
-6. Focus on gaps: missing skills, underused tools, growth areas
-7. Use "not yet" framing: "you haven't explored X yet" not "you're missing X"
-
-When generating personalized content:
-- Consider user's primary languages and experience
-- Reference specific repos when relevant
-- Build on existing strengths to expand skills`;
-
-/**
- * System prompt for lightweight coach sessions (no MCP).
- */
-export const COACH_LIGHTWEIGHT_PROMPT = `You are a developer growth coach.
-
-RULES:
-1. Consider provided profile context for personalization
-2. Target Zone of Proximal Development: not too easy, not too hard
-3. Suggest actionable challenges for 15-30 min sessions
-4. Growth mindset framing: focus on process and strategy, not just correctness
-5. NEVER suggest reimplementing existing skills
-6. Focus on gaps identified in profile
-7. Use "not yet" language: encourage growth, don't judge gaps`;
+1. Target Zone of Proximal Development: not too easy, not too hard
+2. Suggest actionable, achievable challenges for 15-30 min sessions
+3. Growth mindset framing: celebrate effort and strategy, not just outcomes
+4. NEVER suggest reimplementing what user already does well
+5. Focus on gaps: missing skills, underused tools, growth areas
+6. Use "not yet" framing: "you haven't explored X yet" not "you're missing X"`;
 
 /**
  * Capability-neutral base prompt for general chat surfaces.
@@ -70,6 +53,19 @@ When responding:
 4. Be conversational but focused
 
 If user wants a quick answer, skip the explanations.`;
+
+/**
+ * Coach-scoped GitHub MCP addendum. The coach profile restricts the
+ * github capability's tool surface to `get_me` + `list_user_repositories`
+ * (see `profiles.ts` `capabilityDefaults`), so the general addendum
+ * (which mentions `search_code` / `get_file_contents`) would lie about
+ * available tools. This addendum mentions only the two tools coach
+ * actually exposes.
+ */
+export const COACH_GITHUB_PROMPT_ADDENDUM = `You have access to two GitHub MCP tools: \
+\`get_me\` (the authenticated user's profile) and \`list_user_repositories\` \
+(repos the user owns or collaborates on). Use them to ground suggestions in \
+real profile data; do not attempt to read file contents or search code.`;
 
 
 
