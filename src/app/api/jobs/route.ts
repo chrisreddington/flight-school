@@ -10,8 +10,8 @@
  * GET  /api/jobs - List the caller's jobs (proxy → worker)
  */
 
-import { parseJsonBodyWithFallback } from '@/lib/api';
-import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
+import { authErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
+import { requireUserContext } from '@/lib/auth/context';
 import { buildWorkerDispatchCredentials, seedTokenStoreFromJwt } from '@/lib/auth/seed';
 import type {
   ChallengeEvaluationInput,
@@ -230,9 +230,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ jobs });
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: err.message }, { status: 401 });
-    }
+    const authResponse = authErrorResponse(err);
+    if (authResponse) return authResponse;
     log.error('Failed to list jobs from worker', { err });
     return NextResponse.json(
       { error: 'Job service temporarily unavailable. Please retry.' },
