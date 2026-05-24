@@ -32,17 +32,22 @@ describe('CAPABILITIES registry', () => {
 });
 
 describe('buildMcpServersForCapabilities', () => {
+  const githubTokenResolver = (id: string) => (id === 'github' ? 'tok' : undefined);
+
   it('returns an empty map when no capabilities are selected', () => {
-    expect(buildMcpServersForCapabilities([], 'tok')).toEqual({});
+    expect(buildMcpServersForCapabilities([], githubTokenResolver)).toEqual({});
   });
 
   it('keys each entry by the capability id so SDK telemetry stays readable', () => {
-    const servers = buildMcpServersForCapabilities([{ id: 'github' }], 'tok');
+    const servers = buildMcpServersForCapabilities([{ id: 'github' }], githubTokenResolver);
     expect(Object.keys(servers)).toEqual(['github']);
   });
 
   it('binds the supplied token into the MCP server config', () => {
-    const servers = buildMcpServersForCapabilities([{ id: 'github' }], 'my-token');
+    const servers = buildMcpServersForCapabilities(
+      [{ id: 'github' }],
+      (id) => (id === 'github' ? 'my-token' : undefined),
+    );
     const github = servers.github as { headers?: Record<string, string> };
     expect(github.headers?.Authorization).toBe('Bearer my-token');
   });
@@ -59,13 +64,14 @@ describe('buildMcpServersForCapabilities', () => {
       expectedTools: ['get_me'],
     },
   ])('honours tool selection: $name', ({ selection, expectedTools }) => {
-    const servers = buildMcpServersForCapabilities([selection], 'tok');
+    const servers = buildMcpServersForCapabilities([selection], githubTokenResolver);
     const github = servers.github as { tools?: string[] };
     expect(github.tools).toEqual([...expectedTools]);
   });
 
-  it('throws via the MCP factory when the token is empty', () => {
-    expect(() => buildMcpServersForCapabilities([{ id: 'github' }], '')).toThrow();
+  it('silently skips MCP capabilities whose credential resolver returns undefined', () => {
+    const servers = buildMcpServersForCapabilities([{ id: 'github' }], () => undefined);
+    expect(servers).toEqual({});
   });
 });
 

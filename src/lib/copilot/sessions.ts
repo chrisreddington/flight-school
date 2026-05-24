@@ -15,7 +15,7 @@ import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import { context, propagation } from '@opentelemetry/api';
 
 import { buildMcpServersForCapabilities, mcpCapabilityIdsOf } from './capabilities';
-import { capabilityFingerprintOf } from './profiles';
+import { composeCapabilityFingerprint } from './profiles';
 import { rememberConversationCapabilities } from './conversation-capabilities';
 import {
   CopilotEntitlementRequiredError,
@@ -199,7 +199,8 @@ export async function createSessionWithMetrics(
   const model = options.model ?? MODEL_TIERS.standard;
   const capabilities = options.capabilities;
   const capabilityFingerprint =
-    options.capabilityFingerprint ?? capabilityFingerprintOf(capabilities);
+    options.capabilityFingerprint ??
+    composeCapabilityFingerprint(capabilities, options.systemMessage ?? '');
   const poolKey = `${options.profile}:${capabilityFingerprint}`;
   const mcpServerIds = mcpCapabilityIdsOf(capabilities);
   const sortedMcpServerIds = [...mcpServerIds].sort().join(',');
@@ -238,7 +239,10 @@ export async function createSessionWithMetrics(
 
       try {
         const copilot = await getCopilotClient();
-        const mcpServers = buildMcpServersForCapabilities(capabilities, options.gitHubToken);
+        const mcpServers = buildMcpServersForCapabilities(
+          capabilities,
+          (id) => (id === 'github' ? options.gitHubToken : undefined),
+        );
         const hasMcpServers = Object.keys(mcpServers).length > 0;
         const permissionHandler = hasMcpServers ? mcpOnlyPermissionHandler : approveAll;
 
@@ -341,7 +345,8 @@ export async function getConversationSession(
   }
   const { userId, profile } = options;
   const capabilityFingerprint =
-    options.capabilityFingerprint ?? capabilityFingerprintOf(options.capabilities);
+    options.capabilityFingerprint ??
+    composeCapabilityFingerprint(options.capabilities, options.systemMessage ?? '');
   const capabilityIds = options.capabilities.map((selection) => selection.id);
 
   if (!conversationId) {

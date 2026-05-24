@@ -35,6 +35,7 @@ import {
   type CapabilitySelection,
 } from './capabilities';
 import { type CapabilityId } from './capability-ids';
+import { composeCapabilityFingerprint } from './fingerprint';
 import {
   BASE_PROFILE_IDS,
   PROFILE_ALLOWED_CAPABILITIES,
@@ -51,6 +52,9 @@ export {
   type BaseProfileId,
   type CapabilitiesArg,
 } from './profile-types';
+// Re-export from `./fingerprint` so older callers (and tests) can keep
+// importing the fingerprint helpers from `./profiles`.
+export { capabilityFingerprintOf, composeCapabilityFingerprint } from './fingerprint';
 
 /**
  * Static profile definition. Immutable at runtime.
@@ -358,7 +362,7 @@ export function resolveProfile(
     // a profile's basePrompt (e.g. dev-time HMR or a future config-driven
     // prompt) invalidates the session pool entry. Without this, cached
     // sessions could serve a stale system prompt for the same capability set.
-    capabilityFingerprint: `${capabilityFingerprintOf(capabilities)};sys=${shortHash(systemMessage)}`,
+    capabilityFingerprint: composeCapabilityFingerprint(capabilities, systemMessage),
     wasAutoElevated,
     requestedCapabilities: requestedForTelemetry,
   };
@@ -392,37 +396,6 @@ export function composeSystemMessage(
 }
 
 /**
- * Stable, order-independent fingerprint of a capability selection set.
- * Two profiles that resolve to the same set share the same fingerprint
- * and therefore share a session cache entry.
- *
- * Tool overrides AND addendum overrides are folded in: two profiles
- * sharing the github capability but with different tool allowlists or
- * different effective addenda are NOT interchangeable for cache reuse
- * (different effective tool surface or system prompt).
- */
-export function capabilityFingerprintOf(
-  selections: readonly CapabilitySelection[],
-): string {
-  if (selections.length === 0) {
-    return 'caps=none';
-  }
-  const parts = [...selections]
-    .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-    .map((selection) => {
-      const tail: string[] = [];
-      if (selection.tools && selection.tools.length > 0) {
-        tail.push(`tools=${[...selection.tools].sort().join(',')}`);
-      }
-      if (selection.promptAddendumOverride !== undefined) {
-        tail.push(`addH=${shortHash(selection.promptAddendumOverride)}`);
-      }
-      return tail.length === 0 ? selection.id : `${selection.id}@${tail.join('|')}`;
-    });
-  return `caps=${parts.join('+')}`;
-}
-
-/**
  * Widen the `as const satisfies` registry entry back to the declared
  * `ChatProfile` shape so optional fields like `capabilityDefaults` are
  * visible at the call site without sprinkling `as ChatProfile` everywhere.
@@ -431,19 +404,6 @@ function getCapabilityDefaults(
   profile: (typeof PROFILES)[BaseProfileId],
 ): ChatProfile['capabilityDefaults'] {
   return (profile as ChatProfile).capabilityDefaults;
-}
-
-/**
- * Cheap deterministic 32-bit hash, hex-encoded. We do not need
- * cryptographic strength; the fingerprint is a cache key, and the
- * upstream `userId` partition already isolates tenants.
- */
-function shortHash(input: string): string {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(16);
 }
 
 

@@ -94,6 +94,18 @@ describe('/api/copilot', () => {
     expect(mocks.executeCopilotChat).not.toHaveBeenCalled();
   });
 
+  it.each(['coach', 'evaluation', 'authoring'])(
+    'rejects non-chat-response profile %s with 400 (does not invoke the worker)',
+    async (profile) => {
+      const request = makeRequest({ prompt: 'hello', profile });
+
+      const response = await POST(request);
+
+      // A 200 here would mean the worker accepted the disallowed profile.
+      expect(response.status).toBe(400);
+    },
+  );
+
   it('returns a safe configuration error when the worker is not configured', async () => {
     mocks.executeCopilotChat.mockRejectedValue(new CopilotWorkerRequiredError());
 

@@ -167,4 +167,28 @@ describe('createChatStreamingSession telemetry', () => {
     );
     expect(mocks.spanEnd).toHaveBeenCalled();
   });
+
+  it('rejects a mismatched pre-resolved profile as a caller bug', async () => {
+    await expect(
+      createChatStreamingSession(
+        { userId: 'user-1', gitHubToken: 'ghu_token' },
+        'hello',
+        {
+          profile: 'chat',
+          capabilities: ['github'],
+          operationName: 'Chat',
+          conversationId: 'conv-1',
+          resolved: {
+            profileId: 'learning',
+            model: 'claude-haiku-4.5',
+            systemMessage: '',
+            capabilities: [],
+            capabilityFingerprint: 'caps=none;sys=0',
+            wasAutoElevated: false,
+            requestedCapabilities: undefined,
+          },
+        },
+      ),
+    ).rejects.toThrow('does not match factory profile');
+  });
 });

@@ -14,6 +14,7 @@ import {
   InvalidCapabilityError,
   PROFILES,
   capabilityFingerprintOf,
+  composeCapabilityFingerprint,
   composeSystemMessage,
   resolveProfile,
   type BaseProfileId,
@@ -218,5 +219,33 @@ describe('capabilityFingerprintOf', () => {
       { id: 'github', promptAddendumOverride: 'custom coach addendum' },
     ]);
     expect(fp.startsWith('caps=github@addH=')).toBe(true);
+  });
+});
+
+describe('composeCapabilityFingerprint', () => {
+  // Cache invariant: callers that bypass `resolveProfile` (e.g.
+  // authoring sessions with a dynamic systemMessage) MUST hash the
+  // system message into the fingerprint, otherwise two requests with
+  // the same `{user, profile, conversationId}` but different prompts
+  // would share a cached session.
+  it('differs when the system message differs', () => {
+    const a = composeCapabilityFingerprint([], 'system A');
+    const b = composeCapabilityFingerprint([], 'system B');
+    expect(a).not.toBe(b);
+  });
+
+  it('matches the resolveProfile shape (capability fingerprint + ;sys=hex)', () => {
+    const fp = composeCapabilityFingerprint([{ id: 'github' }], 'hello');
+    expect(fp).toMatch(/^caps=github;sys=[0-9a-f]+$/);
+  });
+
+  it('is deterministic for identical inputs', () => {
+    const a = composeCapabilityFingerprint([{ id: 'github' }], 'identical');
+    const b = composeCapabilityFingerprint([{ id: 'github' }], 'identical');
+    expect(a).toBe(b);
+  });
+
+  it('treats an empty system message stably (does not throw)', () => {
+    expect(composeCapabilityFingerprint([], '')).toMatch(/^caps=none;sys=/);
   });
 });

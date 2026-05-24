@@ -186,15 +186,32 @@ export interface CapabilitySelection {
 }
 
 /**
+ * Resolve the credential a capability needs to build its server config.
+ * Returning `undefined` means "no credential available for this id" and
+ * the capability is silently skipped (the surface stays valid; the
+ * tool just isn't installed for this request).
+ *
+ * One resolver per request keeps the seam between capability code and
+ * credential sourcing thin: when a future capability needs a different
+ * token (e.g. a `web-search` API key) the call site extends its
+ * resolver instead of growing this function's parameter list.
+ */
+export type CapabilityCredentialResolver = (
+  capabilityId: CapabilityId,
+) => string | undefined;
+
+/**
  * Build the `mcpServers` map accepted by `client.createSession`.
  *
  * Stable keys are derived from the capability id, so SDK telemetry and
  * tool attribution remain readable (`github`, `web-search`, …). Native
  * capabilities are skipped here — by definition they have no MCP server.
+ * MCP capabilities whose credential resolver returns `undefined` are
+ * skipped too, mirroring the "not installed for this request" contract.
  */
 export function buildMcpServersForCapabilities(
   selections: readonly CapabilitySelection[],
-  token: string,
+  credentials: CapabilityCredentialResolver,
 ): Record<string, MCPServerConfig> {
   if (selections.length === 0) {
     return {};
@@ -203,6 +220,8 @@ export function buildMcpServersForCapabilities(
   for (const selection of selections) {
     const spec = CAPABILITIES[selection.id];
     if (spec.kind !== 'mcp') continue;
+    const token = credentials(selection.id);
+    if (!token) continue;
     servers[selection.id] = spec.buildMcpServer({
       token,
       tools: selection.tools ?? spec.defaultTools,

@@ -77,7 +77,7 @@ async function createRuntimeSession(
 ): Promise<CopilotSession> {
   const mcpServers = buildMcpServersForCapabilities(
     resolved.capabilities,
-    request.identity.gitHubToken,
+    (id) => (id === 'github' ? request.identity.gitHubToken : undefined),
   );
   const hasMcp = Object.keys(mcpServers).length > 0;
 
