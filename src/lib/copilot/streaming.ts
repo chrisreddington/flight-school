@@ -1,54 +1,24 @@
 /**
  * Copilot SDK Streaming Support
  *
- * Provides streaming session factories for real-time chat responses.
- * Supports both regular chat and learning-focused sessions with
- * event-based streaming via async generators.
+ * Public factories for real-time chat/learning/evaluation responses. Each
+ * factory selects a system prompt + pool key prefix and delegates to
+ * `createGenericStreamingSession`, which owns the SDK plumbing and telemetry.
  *
  * @see createStreamingChatSession for basic chat streaming
  * @see createLearningStreamingSession for educational responses
+ * @see createEvaluationStreamingSession for challenge evaluation
  */
 
-import { logger } from '@/lib/logger';
-import {
-  recordAiOperation,
-  recordAiStreamMetrics,
-  recordAiTokenUsage,
-} from '@/lib/observability/telemetry';
-import {
-  GEN_AI_OPERATION,
-  GEN_AI_OPERATION_NAME,
-  GEN_AI_PROVIDER_GITHUB_COPILOT,
-  GEN_AI_PROVIDER_NAME,
-  GEN_AI_REQUEST_MODEL,
-  INSTRUMENTATION_SCOPE_SERVER,
-  INSTRUMENTATION_SCOPE_VERSION,
-} from '@/lib/observability/semconv';
-import { context, type Span, SpanStatusCode, trace } from '@opentelemetry/api';
-import { activityLogger } from './activity/logger';
-import {
-  CHAT_MODEL,
-  getCopilotGithubMcpTools,
-  getConversationSession,
-} from './sessions';
-import type {
-  StreamEvent,
-  StreamingSession,
-  StreamingToolCall
-} from './types';
-
-// =============================================================================
-// Internal Types
-// =============================================================================
+import { createGenericStreamingSession } from './streaming-session';
+import type { StreamingSession } from './types';
 
 /**
  * Learning lens system prompt for educational chat sessions.
  *
  * Implements the learning-focused response pattern from copilot-instructions.md:
- * - Explains reasoning step-by-step
- * - Suggests follow-up questions and experiments
- * - Connects concepts to user's repositories when relevant
- * - Builds understanding rather than just providing solutions
+ * step-by-step reasoning, follow-up suggestions, and references to the user's
+ * code when relevant.
  *
  * @see SPEC-001 AC3.1, AC3.2
  */
@@ -62,457 +32,21 @@ When responding:
 
 If user wants a quick answer, skip the explanations.`;
 
-/** Configuration for creating a streaming session */
-interface StreamingSessionConfig {
-  /** User's prompt */
-  prompt: string;
-  /** Whether to include MCP GitHub tools */
-  useGitHubTools: boolean;
-  /** Name for activity logging */
-  operationName: string;
-  /** Optional conversation ID for session reuse */
-  conversationId?: string;
-  /** System message for the session */
-  systemMessage: string;
-  /** Pool key prefix (e.g., 'chat' or 'learning') */
-  poolKeyPrefix: string;
-  /** Log prefix for console messages */
-  logPrefix: string;
-  /** GitHub user ID (partitions session cache per-identity) */
-  userId: string;
-  /** Per-session GitHub token forwarded to the SDK */
-  gitHubToken: string;
-}
-
-// =============================================================================
-// Internal Implementation
-// =============================================================================
-
-/**
- * Shared mutable state for a single stream invocation. The SDK event handler,
- * the yield loop, and the terminal recorders all read/write into one of these.
- */
-interface StreamContext {
-  readonly model: string;
-  readonly useGitHubTools: boolean;
-  readonly metrics: { createdNew: boolean } | undefined;
-  readonly startTime: number;
-  readonly streamingMetrics: { firstDeltaMs: number | null };
-  readonly toolCalls: StreamingToolCall[];
-  readonly usageTotals: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-  };
-  totalContent: string;
-  deltaCount: number;
-  deltaBytes: number;
-}
-
-/**
- * Drains the event queue (yielding any pending items) and waits up to
- * `STREAM_POLL_INTERVAL_MS` for the next event or session idle. Returns
- * `'idle'` once the SDK signals end-of-turn; the caller breaks the loop.
- */
-const STREAM_POLL_INTERVAL_MS = 20;
-
-async function* pumpEventQueue(
-  eventQueue: StreamEvent[],
-  idlePromise: Promise<void>,
-  setQueueResolver: (resolver: () => void) => void,
-): AsyncGenerator<StreamEvent, void, unknown> {
-  while (true) {
-    while (eventQueue.length > 0) {
-      yield eventQueue.shift()!;
-    }
-    const raceResult = await Promise.race([
-      idlePromise.then(() => 'idle' as const),
-      new Promise<'more'>((resolve) => {
-        setQueueResolver(() => resolve('more'));
-        setTimeout(() => resolve('more'), STREAM_POLL_INTERVAL_MS);
-      }),
-    ]);
-    if (raceResult === 'idle') {
-      while (eventQueue.length > 0) {
-        yield eventQueue.shift()!;
-      }
-      return;
-    }
-  }
-}
-
-/**
- * Emit terminal-success telemetry: activity-logger completion, stream
- * histogram sample, operation count, token-usage histogram, and span status.
- */
-function recordTerminalSuccess(
-  ctx: StreamContext,
-  streamSpan: Span,
-  complete: (
-    response: { text: string; fullResponse: string; toolsUsed: string[]; metadata: Record<string, unknown> },
-    errorMessage: string | undefined,
-    serverMetrics: { firstTokenMs: number | null; totalMs: number },
-  ) => void,
-): number {
-  const durationMs = Date.now() - ctx.startTime;
-  const toolsUsed = ctx.toolCalls.map((toolCall) => toolCall.name);
-
-  complete(
-    {
-      text: ctx.totalContent.slice(0, 100),
-      fullResponse: ctx.totalContent,
-      toolsUsed,
-      metadata: {
-        toolsUsed,
-        firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
-      },
-    },
-    undefined,
-    {
-      firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
-      totalMs: durationMs,
-    },
-  );
-
-  recordAiStreamMetrics({
-    model: ctx.model,
-    mcpEnabled: ctx.useGitHubTools,
-    poolHit: ctx.metrics ? !ctx.metrics.createdNew : null,
-    firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
-    durationMs,
-    deltaCount: ctx.deltaCount,
-    deltaBytes: ctx.deltaBytes,
-    toolCalls: ctx.toolCalls.length,
-    terminalState: 'completed',
-  });
-  recordAiOperation('streamSession', durationMs, ctx.model, 'ok');
-  recordAiTokenUsage({
-    operation: GEN_AI_OPERATION.CHAT,
-    model: ctx.model,
-    inputTokens: ctx.usageTotals.inputTokens,
-    outputTokens: ctx.usageTotals.outputTokens,
-    cacheReadTokens: ctx.usageTotals.cacheReadTokens,
-    cacheWriteTokens: ctx.usageTotals.cacheWriteTokens,
-  });
-  streamSpan.addEvent('stream.completed', {
-    'ai.stream.delta_count': ctx.deltaCount,
-    'ai.stream.delta_bytes': ctx.deltaBytes,
-    'ai.stream.tool_calls': ctx.toolCalls.length,
-  });
-  streamSpan.setStatus({ code: SpanStatusCode.OK });
-  return durationMs;
-}
-
-/**
- * Emit terminal-error telemetry: stream histogram sample with `'error'`
- * terminal state, operation count, span exception/status, and activity-
- * logger error completion.
- */
-function recordTerminalError(
-  ctx: StreamContext,
-  streamSpan: Span,
-  complete: (response: undefined, errorMessage: string) => void,
-  error: unknown,
-): string {
-  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-  const durationMs = Date.now() - ctx.startTime;
-  recordAiOperation('streamSession', durationMs, ctx.model, 'error');
-  recordAiStreamMetrics({
-    model: ctx.model,
-    mcpEnabled: ctx.useGitHubTools,
-    poolHit: ctx.metrics ? !ctx.metrics.createdNew : null,
-    firstTokenMs: ctx.streamingMetrics.firstDeltaMs,
-    durationMs,
-    deltaCount: ctx.deltaCount,
-    deltaBytes: ctx.deltaBytes,
-    toolCalls: ctx.toolCalls.length,
-    terminalState: 'error',
-  });
-  streamSpan.addEvent('stream.failed', { message: errorMessage });
-  if (error instanceof Error) {
-    streamSpan.recordException(error);
-  }
-  streamSpan.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
-  complete(undefined, errorMessage);
-  return errorMessage;
-}
-
-/**
- * Generic streaming session factory.
- *
- * Creates a streaming session with the provided configuration.
- * This is the internal implementation that powers both chat and learning sessions.
- *
- * @internal
- */
-async function createGenericStreamingSession(config: StreamingSessionConfig): Promise<StreamingSession> {
-  const { prompt, useGitHubTools, operationName, conversationId, systemMessage, poolKeyPrefix, logPrefix, userId, gitHubToken } = config;
-  const startTime = Date.now();
-  
-  const log = logger.withTag(logPrefix);
-  
-  const model = CHAT_MODEL;
-
-  // Build pool key based on MCP usage
-  const poolKey = useGitHubTools ? `${poolKeyPrefix}:mcp` : `${poolKeyPrefix}:lightweight`;
-
-  // Create session with or without MCP tools
-  const githubMcpTools = getCopilotGithubMcpTools();
-  const { session, metrics } = useGitHubTools
-    ? await getConversationSession(userId, conversationId, poolKey, {
-        includeMcpTools: true,
-        model,
-        ...(githubMcpTools.length > 0
-          ? { tools: githubMcpTools }
-          : {}),
-        systemMessage,
-        userId,
-        gitHubToken,
-      })
-    : await getConversationSession(userId, conversationId, poolKey, {
-        includeMcpTools: false,
-        model,
-        systemMessage,
-        userId,
-        gitHubToken,
-      });
-
-  // Track tool calls
-  const toolCalls: StreamingToolCall[] = [];
-  let totalContent = '';
-
-  // Start activity logging
-  const { eventId: activityEventId, complete } = await activityLogger.startOperation(
-    userId,
-    'ask',
-    operationName,
-    {
-      prompt: prompt.slice(0, 100),
-      model,
-      sessionMetrics: metrics ? {
-        poolHit: !metrics.createdNew,
-        sessionCreateMs: metrics.sessionCreateMs,
-        mcpEnabled: metrics.mcpEnabled,
-        conversationReused: metrics.reusedConversation,
-      } : undefined,
-      // Server-side metrics (will be updated when stream completes)
-      serverMetrics: {
-        firstTokenMs: null,
-        totalMs: 0,
-      },
-    },
-  );
-
-  // Create async generator for streaming events
-  const streamingMetrics = {
-    firstDeltaMs: null as number | null,
-    activityEventId: activityEventId ?? undefined,
-  };
-  const tracer = trace.getTracer(INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION);
-
-  async function* generateStream(): AsyncGenerator<StreamEvent, void, unknown> {
-    const streamSpan = tracer.startSpan(`${GEN_AI_OPERATION.CHAT} ${model}`, {
-      attributes: {
-        [GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION.CHAT,
-        [GEN_AI_REQUEST_MODEL]: model,
-        [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
-        'app.operation': operationName,
-        'ai.mcp_enabled': useGitHubTools,
-      },
-    });
-    streamSpan.addEvent('stream.started');
-
-    let resolveIdle: (() => void) | null = null;
-    let rejectWithError: ((err: Error) => void) | null = null;
-    const idlePromise = new Promise<void>((resolve, reject) => {
-      resolveIdle = resolve;
-      rejectWithError = reject;
-    });
-
-    // Queue for delta events
-    const eventQueue: StreamEvent[] = [];
-    let queueResolver: (() => void) | null = null;
-    let deltaCount = 0;
-    let deltaBytes = 0;
-    const usageTotals = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-
-    // Set up event listener
-    const unsubscribe = session.on((event) => {
-      const eventType = event.type;
-
-      if (eventType === 'assistant.message_delta') {
-        const deltaPayload = event.data as { deltaContent?: string };
-        if (deltaPayload.deltaContent) {
-          if (streamingMetrics.firstDeltaMs === null) {
-            streamingMetrics.firstDeltaMs = Date.now() - startTime;
-            streamSpan.addEvent('first_token', {
-              'ai.stream.first_delta_ms': streamingMetrics.firstDeltaMs,
-            });
-          }
-          deltaCount += 1;
-          deltaBytes += Buffer.byteLength(deltaPayload.deltaContent);
-          totalContent += deltaPayload.deltaContent;
-          eventQueue.push({ type: 'delta', content: deltaPayload.deltaContent });
-          queueResolver?.();
-        }
-      } else if (eventType === 'assistant.usage') {
-        // Accumulate token counts; recorded once on stream completion so the
-        // histogram sample reflects the whole turn rather than per-chunk noise.
-        const usagePayload = event.data as {
-          inputTokens?: number;
-          outputTokens?: number;
-          cacheReadTokens?: number;
-          cacheWriteTokens?: number;
-        };
-        usageTotals.inputTokens += usagePayload.inputTokens ?? 0;
-        usageTotals.outputTokens += usagePayload.outputTokens ?? 0;
-        usageTotals.cacheReadTokens += usagePayload.cacheReadTokens ?? 0;
-        usageTotals.cacheWriteTokens += usagePayload.cacheWriteTokens ?? 0;
-      } else if (eventType === 'tool.execution_start') {
-        const toolStart = event.data as { toolName: string; arguments: unknown };
-        log.debug(`Tool start: ${toolStart.toolName}`);
-        streamSpan.addEvent('tool.start', {
-          'tool.name': toolStart.toolName,
-        });
-        toolCalls.push({
-          name: toolStart.toolName,
-          args: toolStart.arguments,
-          result: '',
-          startTime: Date.now(),
-        });
-        eventQueue.push({ type: 'tool_start', name: toolStart.toolName, args: toolStart.arguments });
-        queueResolver?.();
-
-        // Log to activity logger
-        activityLogger.logEvent(userId, 'tool', `mcp.${toolStart.toolName}`, {
-          metadata: { args: toolStart.arguments },
-        });
-      } else if (eventType === 'tool.execution_complete') {
-        const lastCall = toolCalls[toolCalls.length - 1];
-        const toolComplete = event.data as { result?: unknown };
-        if (lastCall) {
-          lastCall.result = String(toolComplete.result || '').slice(0, 500);
-          lastCall.endTime = Date.now();
-          const duration = lastCall.endTime - lastCall.startTime;
-          log.debug(`Tool complete: ${lastCall.name} (${duration}ms)`);
-          streamSpan.addEvent('tool.complete', {
-            'tool.name': lastCall.name,
-            'tool.duration_ms': duration,
-          });
-          eventQueue.push({
-            type: 'tool_complete',
-            name: lastCall.name,
-            result: lastCall.result,
-            duration,
-          });
-          queueResolver?.();
-        }
-      } else if (eventType === 'session.idle') {
-        resolveIdle?.();
-      } else if (eventType === 'session.error') {
-        const errorPayload = event.data as { message?: string };
-        rejectWithError?.(new Error(errorPayload.message || 'Session error'));
-      }
-    });
-
-    try {
-      // Send the message (non-blocking)
-      const activeContext = trace.setSpan(context.active(), streamSpan);
-      await context.with(activeContext, async () => {
-        await session.send({ prompt });
-      });
-
-      // Yield SDK events until the session signals idle
-      yield* pumpEventQueue(
-        eventQueue,
-        idlePromise,
-        (resolver) => { queueResolver = resolver; },
-      );
-
-      const ctx: StreamContext = {
-        model,
-        useGitHubTools,
-        metrics,
-        startTime,
-        streamingMetrics,
-        toolCalls,
-        usageTotals,
-        totalContent,
-        deltaCount,
-        deltaBytes,
-      };
-      const durationMs = recordTerminalSuccess(ctx, streamSpan, complete);
-
-      yield {
-        type: 'done',
-        totalContent,
-        toolCalls,
-        durationMs,
-      };
-    } catch (error) {
-      const ctx: StreamContext = {
-        model,
-        useGitHubTools,
-        metrics,
-        startTime,
-        streamingMetrics,
-        toolCalls,
-        usageTotals,
-        totalContent,
-        deltaCount,
-        deltaBytes,
-      };
-      const errorMessage = recordTerminalError(ctx, streamSpan, complete, error);
-      yield { type: 'error', message: errorMessage };
-    } finally {
-      unsubscribe();
-      streamSpan.end();
-    }
-  }
-
-  return {
-    stream: generateStream(),
-    cleanup: () => {
-      if (!conversationId) {
-        session.destroy().catch((err) => {
-          log.warn('Session destroy warning:', err);
-        });
-      }
-    },
-    model,
-    sessionMetrics: metrics,
-    streamingMetrics,
-  };
-}
-
-// =============================================================================
-// Public Session Factories
-// =============================================================================
-
 /**
  * Create a streaming chat session that yields events as they arrive.
  *
- * This is the most performant option for chat - responses stream to the
- * client as they're generated rather than waiting for completion.
- *
+ * @param identity - per-request `{ userId, gitHubToken }` from `requireUserContext`
  * @param prompt - The user's message
  * @param useGitHubTools - Whether to include MCP GitHub tools
  * @param operationName - Name for activity logging
  * @param conversationId - Optional conversation ID for session reuse
- * @returns StreamingSession with async iterator
  *
  * @example
  * ```typescript
- * const { stream, cleanup } = await createStreamingChatSession("hello", false);
+ * const { stream, cleanup } = await createStreamingChatSession(identity, "hello", false);
  * for await (const event of stream) {
  *   if (event.type === 'delta') process.stdout.write(event.content);
- *   if (event.type === 'done') console.log('\nComplete!');
+ *   if (event.type === 'done') break;
  * }
  * cleanup();
  * ```
@@ -522,7 +56,7 @@ export async function createStreamingChatSession(
   prompt: string,
   useGitHubTools: boolean,
   operationName = 'Chat',
-  conversationId?: string
+  conversationId?: string,
 ): Promise<StreamingSession> {
   const systemMessage = useGitHubTools
     ? `You are a helpful developer assistant with access to GitHub tools.
@@ -545,20 +79,9 @@ Be conversational, helpful, and concise. Mention GitHub tools only when asked.`;
 }
 
 /**
- * Create a learning-focused streaming chat session.
- *
- * Uses the LEARNING_LENS_SYSTEM_PROMPT to provide responses that:
- * - Explain reasoning step-by-step
- * - Suggest follow-up questions and experiments
- * - Connect to user's context when relevant
- *
- * This is the streaming equivalent of createLearningChatSession.
- *
- * @param prompt - The user's message
- * @param useGitHubTools - Whether to include MCP GitHub tools
- * @param operationName - Name for activity logging
- * @param conversationId - Optional conversation ID for session reuse
- * @returns StreamingSession with async iterator
+ * Create a learning-focused streaming chat session. Uses the
+ * `LEARNING_LENS_SYSTEM_PROMPT` so responses explain reasoning, suggest
+ * follow-ups, and connect to the user's context.
  *
  * @see SPEC-001 for learning chat requirements (AC3.1, AC3.2)
  */
@@ -567,9 +90,10 @@ export async function createLearningStreamingSession(
   prompt: string,
   useGitHubTools: boolean,
   operationName = 'Learning Chat',
-  conversationId?: string
+  conversationId?: string,
 ): Promise<StreamingSession> {
-  // When GitHub tools are available, extend the system prompt to instruct the AI to use them
+  // When GitHub tools are available we extend the prompt so the AI prefers MCP
+  // over guessing or local shell/filesystem fallbacks.
   const systemMessage = useGitHubTools
     ? `${LEARNING_LENS_SYSTEM_PROMPT}
 
@@ -592,16 +116,9 @@ Always use GitHub tools to look up real information rather than guessing.`
 }
 
 /**
- * Create a streaming evaluation session for challenge solutions.
- *
- * Uses a custom system prompt for code evaluation with structured feedback.
- * This ensures proper separation between system instructions and user content
- * for accurate activity logging.
- *
- * @param prompt - The evaluation prompt (challenge + user code)
- * @param systemMessage - The evaluation system prompt
- * @param operationName - Name for activity logging (default: 'Challenge Evaluation')
- * @returns StreamingSession with async iterator
+ * Create a streaming evaluation session for challenge solutions. Each
+ * evaluation is independent (no conversation reuse) and never needs GitHub
+ * tools.
  *
  * @see SPEC-002 for challenge evaluation requirements
  */
@@ -609,13 +126,13 @@ export async function createEvaluationStreamingSession(
   identity: { userId: string; gitHubToken: string },
   prompt: string,
   systemMessage: string,
-  operationName = 'Challenge Evaluation'
+  operationName = 'Challenge Evaluation',
 ): Promise<StreamingSession> {
   return createGenericStreamingSession({
     prompt,
-    useGitHubTools: false, // Evaluation doesn't need GitHub tools
+    useGitHubTools: false,
     operationName,
-    conversationId: undefined, // Each evaluation is independent
+    conversationId: undefined,
     systemMessage,
     poolKeyPrefix: 'evaluation',
     logPrefix: 'Copilot Evaluation',
