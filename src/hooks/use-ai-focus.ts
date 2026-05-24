@@ -21,14 +21,11 @@ import { formatTimestamp, getDateKey, now } from '@/lib/utils/date-utils';
 import { skillsStore } from '@/lib/skills/storage';
 import type { SkillProfile } from '@/lib/skills/types';
 import { DEFAULT_SKILL_PROFILE } from '@/lib/skills/types';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useOperationRegenerations } from './use-operation-regenerations';
 const log = logger.withTag('useAIFocus');
 
 type FocusComponent = 'challenge' | 'goal' | 'learningTopics';
-
-// Cached empty sets for useSyncExternalStore SSR fallback
-// Must be constants to avoid infinite loop (same reference on every call)
-const EMPTY_STRING_SET = new Set<string>();
 
 async function getSkillProfileSafe(): Promise<SkillProfile> {
   if (typeof window === 'undefined') return DEFAULT_SKILL_PROFILE;
@@ -88,25 +85,11 @@ export function useAIFocus(): UseAIFocusResult {
   const currentSkippingChallengeIdRef = useRef<string | null>(null);
   const currentSkippingGoalIdRef = useRef<string | null>(null);
 
-  // Subscribe to global operations manager for cross-component visibility
-  // This allows LearningHistory to show loading states when user navigates away
-  const skippingTopicIds = useSyncExternalStore(
-    operationsManager.subscribe.bind(operationsManager),
-    () => operationsManager.getActiveIdsOfType('topic-regeneration'),
-    () => EMPTY_STRING_SET // SSR fallback - cached constant
-  );
-  
-  const skippingChallengeIds = useSyncExternalStore(
-    operationsManager.subscribe.bind(operationsManager),
-    () => operationsManager.getActiveIdsOfType('challenge-regeneration'),
-    () => EMPTY_STRING_SET // SSR fallback - cached constant
-  );
-  
-  const skippingGoalIds = useSyncExternalStore(
-    operationsManager.subscribe.bind(operationsManager),
-    () => operationsManager.getActiveIdsOfType('goal-regeneration'),
-    () => EMPTY_STRING_SET // SSR fallback - cached constant
-  );
+  // Cross-component visibility: surface in-flight regenerations even
+  // after the user navigates away and back. Owned by the shared hook so
+  // the focus page and history page see the same Sets.
+  const { skippingTopicIds, skippingChallengeIds, skippingGoalIds } =
+    useOperationRegenerations();
 
   /** Stop/cancel a specific component's fetch */
   const stopComponent = useCallback((component: FocusComponent | 'singleTopic') => {

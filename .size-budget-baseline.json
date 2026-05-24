@@ -1,7 +1,7 @@
 {
   "production": {
     "src/app/skills/page.tsx": 503,
-    "src/hooks/use-ai-focus.ts": 558,
+    "src/hooks/use-ai-focus.ts": 541,
     "src/hooks/use-challenge-sandbox.ts": 628,
     "src/hooks/use-learning-chat-stream.ts": 616,
     "src/lib/copilot/streaming.ts": 625,
