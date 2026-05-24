@@ -5,8 +5,6 @@
  * Shows challenges completed, topics explored, and goals completed.
  */
 
-'use client';
-
 import { CheckIcon, BookIcon, GoalIcon } from '@primer/octicons-react';
 import { Label } from '@primer/react';
 import type { ActivityItem } from '@/lib/focus/analytics';

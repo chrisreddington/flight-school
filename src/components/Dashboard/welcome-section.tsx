@@ -1,7 +1,4 @@
-'use client';
-
 import { Heading, SkeletonBox } from '@primer/react';
-import { memo } from 'react';
 import styles from './Dashboard.module.css';
 import { getGreeting } from './dashboard-helpers';
 
@@ -10,7 +7,7 @@ interface WelcomeSectionProps {
   isLoading?: boolean;
 }
 
-export const WelcomeSection = memo(function WelcomeSection({ displayName, isLoading = false }: WelcomeSectionProps) {
+export function WelcomeSection({ displayName, isLoading = false }: WelcomeSectionProps) {
   const showName = displayName !== 'Developer';
   
   return (
@@ -28,4 +25,4 @@ export const WelcomeSection = memo(function WelcomeSection({ displayName, isLoad
       </p>
     </div>
   );
-});
+}

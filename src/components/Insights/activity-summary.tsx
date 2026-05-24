@@ -5,10 +5,7 @@
  * Uses icons to make metrics scannable.
  */
 
-'use client';
-
 import { CheckIcon, BookIcon, GoalIcon } from '@primer/octicons-react';
-import styles from './Insights.module.css';
 
 interface ActivitySummaryProps {
   totalChallengesCompleted: number;

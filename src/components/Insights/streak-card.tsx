@@ -5,8 +5,6 @@
  * Shows consecutive days of activity (challenges completed or topics explored).
  */
 
-'use client';
-
 import { FlameIcon } from '@primer/octicons-react';
 import styles from './Insights.module.css';
 
