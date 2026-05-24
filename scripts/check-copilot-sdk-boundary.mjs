@@ -1,0 +1,130 @@
+#!/usr/bin/env node
+/**
+ * Copilot SDK worker-boundary guardrail.
+ *
+ * Enforces the rule documented in
+ * `.github/skills/copilot-sdk-worker-only/SKILL.md`:
+ *
+ *   1. `@github/copilot-sdk` may only be imported from `src/worker/**`
+ *      or `src/lib/copilot/runtime/**`.
+ *   2. The session factories that wrap the SDK — `createLoggedCoachSession`,
+ *      `createLoggedLightweightCoachSession`, `createSession`,
+ *      `createSessionWithMetrics`, `wrapSessionWithLogging` — may only be
+ *      imported by worker-internal modules (see WORKER_INTERNAL_PREFIXES).
+ *
+ * There is no name-based allowlist and no escape-hatch comment. If you
+ * need to add a new AI capability, add the worker dispatch primitive
+ * to `src/lib/copilot/execution/` and import THAT from Web/API.
+ */
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+
+const ROOT = process.cwd();
+const SCAN_ROOTS = ['src'];
+
+const SDK_IMPORT_PATTERN = /from\s+['"]@github\/copilot-sdk['"]/;
+
+const FACTORY_NAMES = [
+  'createLoggedCoachSession',
+  'createLoggedLightweightCoachSession',
+  'createSession',
+  'createSessionWithMetrics',
+  'wrapSessionWithLogging',
+];
+const FACTORY_IMPORT_PATTERN = new RegExp(
+  `import\\s*(?:type\\s*)?{[^}]*\\b(${FACTORY_NAMES.join('|')})\\b[^}]*}\\s*from\\s*['"]([^'\"]+)['"]`,
+  'g',
+);
+
+const SDK_ALLOWED_PREFIXES = [
+  'src/worker/',
+  'src/lib/copilot/runtime/',
+];
+
+const WORKER_INTERNAL_PREFIXES = [
+  'src/worker/',
+  'src/lib/copilot/runtime/',
+  'src/lib/copilot/execution/',
+];
+
+const WORKER_INTERNAL_FILES = new Set([
+  'src/lib/copilot/server.ts',
+  'src/lib/copilot/sessions.ts',
+  'src/lib/copilot/logged-session.ts',
+  'src/lib/copilot/quiz.ts',
+  'src/lib/copilot/hints.ts',
+  'src/lib/copilot/suggestions.ts',
+  'src/lib/copilot/guided-mode.ts',
+  'src/lib/focus/handlers.ts',
+  'src/lib/github/readme/learning-readme.ts',
+  'src/app/api/challenge/solve/route.ts',
+]);
+
+// The set above is the CURRENT baseline of in-process callers. Items
+// must MOVE OUT — never grow. Each line removed from
+// WORKER_INTERNAL_FILES means that file no longer imports a factory.
+// Adding a new entry is a code-review red flag and should be rejected.
+
+function walk(absoluteDir) {
+  let entries;
+  try {
+    entries = readdirSync(absoluteDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries.flatMap((entry) => {
+    if (entry.name.startsWith('.') || entry.name === 'node_modules') return [];
+    const absolutePath = path.join(absoluteDir, entry.name);
+    if (entry.isDirectory()) return walk(absolutePath);
+    if (!/\.(ts|tsx)$/.test(entry.name)) return [];
+    if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) return [];
+    return [absolutePath];
+  });
+}
+
+function relativeFromRoot(absolutePath) {
+  return path.relative(ROOT, absolutePath).split(path.sep).join('/');
+}
+
+function isUnderPrefix(relativePath, prefixes) {
+  return prefixes.some((prefix) => relativePath.startsWith(prefix));
+}
+
+const violations = [];
+
+for (const root of SCAN_ROOTS) {
+  for (const file of walk(path.join(ROOT, root))) {
+    const relativePath = relativeFromRoot(file);
+    const source = readFileSync(file, 'utf8');
+
+    if (SDK_IMPORT_PATTERN.test(source) && !isUnderPrefix(relativePath, SDK_ALLOWED_PREFIXES)) {
+      violations.push(`${relativePath}: imports @github/copilot-sdk directly. Only ${SDK_ALLOWED_PREFIXES.join(' or ')} may.`);
+    }
+
+    let match;
+    FACTORY_IMPORT_PATTERN.lastIndex = 0;
+    while ((match = FACTORY_IMPORT_PATTERN.exec(source)) !== null) {
+      const factoryName = match[1];
+      if (
+        !isUnderPrefix(relativePath, WORKER_INTERNAL_PREFIXES) &&
+        !WORKER_INTERNAL_FILES.has(relativePath)
+      ) {
+        violations.push(
+          `${relativePath}: imports '${factoryName}' from a non-worker module. Route this through @/lib/copilot/execution instead.`,
+        );
+      }
+    }
+  }
+}
+
+if (violations.length > 0) {
+  console.error('Copilot SDK worker-boundary violations:');
+  for (const violation of violations) {
+    console.error(`  - ${violation}`);
+  }
+  console.error('');
+  console.error('See .github/skills/copilot-sdk-worker-only/SKILL.md for the contract.');
+  process.exit(1);
+}
+
+console.log('check-copilot-sdk-boundary: no violations detected.');

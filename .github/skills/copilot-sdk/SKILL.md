@@ -27,7 +27,9 @@ MCP Servers (optional)
 every `createSession` call. The CopilotClient itself is constructed inside
 the per-user runtime pool (`src/lib/copilot/runtime/`) and Copilot
 execution is routed through the mandatory worker boundary at
-`src/lib/copilot/execution/`. See
+`src/lib/copilot/execution/`. **Web/API never imports the SDK directly —
+see [`copilot-sdk-worker-only`](../copilot-sdk-worker-only/SKILL.md) for
+the boundary contract.** See
 [`src/lib/copilot/sessions.ts`](../../../src/lib/copilot/sessions.ts) and
 [`docs/architecture-multitenant.md`](../../../docs/architecture-multitenant.md).
 
