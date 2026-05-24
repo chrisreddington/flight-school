@@ -18,8 +18,9 @@ import type { FocusResponse } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { skillsStore } from '@/lib/skills/storage';
 import { DEFAULT_SKILL_PROFILE, type SkillProfile } from '@/lib/skills/types';
-import { formatTimestamp, now } from '@/lib/utils/date-utils';
+import { formatTimestamp } from '@/lib/utils/date-utils';
 
+import { isFocusReadyToPersist, mergeFocusComponent } from './ai-focus-merge';
 import { useFocusSkip } from './use-focus-skip';
 import { useFocusStorageSubscriptions } from './use-focus-storage-subscriptions';
 import { useOperationRegenerations } from './use-operation-regenerations';
@@ -140,60 +141,11 @@ export function useAIFocus(): UseAIFocusResult {
       const storedData = await focusStore.getTodaysFocus();
 
       setData((reactState) => {
-        const prev = storedData || reactState;
+        const merged = mergeFocusComponent(storedData || reactState, componentResult, component);
 
-        const challenge =
-          component === 'challenge' && componentResult.challenge ? componentResult.challenge : prev?.challenge;
-        const goal = component === 'goal' && componentResult.goal ? componentResult.goal : prev?.goal;
-        const learningTopics =
-          component === 'learningTopics' && componentResult.learningTopics
-            ? componentResult.learningTopics
-            : prev?.learningTopics;
-
-        // Only persist once every component has real data. Otherwise we'd
-        // write placeholder shells that surface as blank history entries.
-        const hasValidChallenge = challenge && challenge.id && challenge.title;
-        const hasValidGoal = goal && goal.id && goal.title;
-        const hasValidTopics = learningTopics && learningTopics.length > 0;
-
-        const merged: FocusResponse = {
-          challenge: challenge || {
-            id: '',
-            title: '',
-            description: '',
-            difficulty: 'intermediate',
-            language: '',
-            estimatedTime: '',
-            whyThisChallenge: [],
-          },
-          goal: goal || { id: '', title: '', description: '', progress: 0, target: '', reasoning: '' },
-          learningTopics: learningTopics || [],
-          meta: componentResult.meta ||
-            prev?.meta || {
-              generatedAt: now(),
-              aiEnabled: true,
-              model: 'gpt-5-mini',
-              toolsUsed: [],
-              totalTimeMs: 0,
-              usedCachedProfile: true,
-            },
-          calibrationNeeded: componentResult.calibrationNeeded || prev?.calibrationNeeded,
-        };
-
-        if (hasValidChallenge && hasValidGoal && hasValidTopics) {
-          focusStore
-            .saveTodaysFocus(merged)
-            .then(() => {
-              log.debug(`Component ${component} saved to storage`);
-            })
-            .catch((err) => {
-              log.error('Failed to save focus:', err);
-            });
-        } else {
-          log.debug(`Component ${component} merged but not saved yet (waiting for all components)`, {
-            hasValidChallenge: !!hasValidChallenge,
-            hasValidGoal: !!hasValidGoal,
-            hasValidTopics: !!hasValidTopics,
+        if (isFocusReadyToPersist(merged)) {
+          focusStore.saveTodaysFocus(merged).catch((err) => {
+            log.error('Failed to save focus:', err);
           });
         }
 

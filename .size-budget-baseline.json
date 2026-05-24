@@ -8,7 +8,6 @@
     "src/hooks/use-threads.test.ts": 784,
     "src/lib/api-client.test.ts": 509,
     "src/lib/auth/token-store.test.ts": 672,
-    "src/lib/focus/storage.test.ts": 965,
     "src/lib/streaming/sse-client.test.ts": 511,
     "src/lib/workspace/file-templates.test.ts": 555,
     "src/test/integration/multitenancy.test.ts": 516
