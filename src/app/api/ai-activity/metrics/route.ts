@@ -16,8 +16,6 @@ import {
 } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 export interface UpdateActivityMetricsRequest {
   /** Event ID to update */

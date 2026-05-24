@@ -37,8 +37,6 @@ import { NextRequest } from 'next/server';
 
 const log = logger.withTag('Solve API');
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 /** Request body structure */
 interface SolveRequest {

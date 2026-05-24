@@ -19,8 +19,6 @@ import { authorizeInternalActivity } from '../auth';
 
 // Guarded by COPILOT_WORKER_SECRET via authorizeInternalActivity.
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 // Streaming SSE connection: hold the route open for the stream lifetime.
 export const maxDuration = 300;
 

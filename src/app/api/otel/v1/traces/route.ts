@@ -14,8 +14,6 @@
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
 
 const log = logger.withTag('OTLP Proxy');
 

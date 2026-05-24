@@ -23,8 +23,6 @@ import { authorizeInternalActivity } from './auth';
 
 // Guarded by COPILOT_WORKER_SECRET via authorizeInternalActivity.
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 async function handleGet(request: NextRequest) {
   const authResult = authorizeInternalActivity(request);

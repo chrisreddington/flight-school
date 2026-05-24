@@ -22,8 +22,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getWorkerJob } from '../../worker-client';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 // Streaming SSE connection: hold the route open for the worker's stream
 // lifetime. Default of 10s would cut clients off mid-token.
 export const maxDuration = 300;

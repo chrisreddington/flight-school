@@ -20,8 +20,6 @@ import { authorizeInternalActivity } from '../../auth';
 
 // Guarded by COPILOT_WORKER_SECRET via authorizeInternalActivity.
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 interface Params {
   params: Promise<{ id: string }>;

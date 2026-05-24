@@ -93,6 +93,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.5",
     "@vitest/ui": "^4.0.17",
+    "babel-plugin-react-compiler": "^1.0.0",
     "depcheck": "^1.4.7",
     "eslint": "^10.0.3",
     "eslint-config-next": "16.2.6",

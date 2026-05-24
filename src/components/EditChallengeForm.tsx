@@ -16,7 +16,7 @@ import { useCallback, useState } from 'react';
 
 import type { DailyChallenge } from '@/lib/focus/types';
 
-import styles from '../../app/challenge/challenge.module.css';
+import styles from '../app/challenge/challenge.module.css';
 
 interface ValidationErrors {
   title?: string;
