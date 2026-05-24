@@ -22,7 +22,6 @@
  */
 
 import { createSSEResponse, knownApiErrorResponse, parseJsonBody } from '@/lib/api';
-import { requireUserContext } from '@/lib/auth/context';
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { nowMs } from '@/lib/utils/date-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
@@ -30,6 +29,9 @@ import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-par
 import type { AuthoringContext } from '@/lib/challenge/authoring/types';
 import { validateAuthoringRequest } from '@/lib/challenge/authoring/validation';
 import { logger } from '@/lib/logger';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { AUTHOR_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest } from 'next/server';
 
 const log = logger.withTag('Author API');
@@ -70,64 +72,75 @@ export async function POST(request: NextRequest) {
 
     const { prompt, conversationId, context, action } = parseResult.data;
 
-    const { userId, accessToken } = await requireUserContext();
-    const identity = createSessionIdentity({ userId, accessToken });
-
-    log.info(`Authoring request: ${action || 'auto'} (conv: ${conversationId ? 'existing' : 'new'})`);
-
-    // Create streaming session for authoring
-    const { stream, cleanup, model, newConversationId, streamingMetrics } = await createGenericStreamingSession({
-      prompt,
-      conversationId,
-      context,
-      action,
-      identity,
-    });
-
-    const sessionCreateTime = nowMs() - startTime;
-    log.info(`Session created in ${sessionCreateTime}ms`);
-
-    // Track full content for parsing
-    let fullContent = '';
-
-    return createSSEResponse(
-      async function* () {
-        for await (const event of stream) {
-          if (event.type === 'delta') {
-            fullContent += event.content;
-            yield { type: 'delta' as const, content: event.content };
-          }
-
-          if (event.type === 'done') {
-            fullContent = event.totalContent;
-          }
-        }
-
-        const parsedChallenge = parseGeneratedChallenge(fullContent);
-        if (parsedChallenge) {
-          yield { type: 'challenge' as const, challenge: parsedChallenge };
-          log.info(`Parsed challenge: ${parsedChallenge.title}`);
-        } else {
-          log.debug(`No challenge parsed from response (length: ${fullContent.length})`);
-        }
-      },
+    return await withUserGuards(
       {
-        onComplete: () => ({
-          type: 'meta' as const,
-          model,
-          sessionCreateMs: sessionCreateTime,
-          totalMs: nowMs() - startTime,
-          firstDeltaMs: streamingMetrics.firstDeltaMs,
-          conversationId: newConversationId,
-        }),
-        onError: (error) => {
-          const errorMessage = error instanceof Error ? error.message : 'Stream error';
-          log.error('Stream error:', errorMessage);
+        ...AUTHOR_GUARD,
+        eventType: 'copilot.session.create',
+        auditMetadata: {
+          route: '/api/challenge/author',
+          action: action || 'auto',
         },
-        cleanup,
-      }
+      },
+      async (userCtx) => {
+        const identity = createSessionIdentity(userCtx);
+
+        log.info(`Authoring request: ${action || 'auto'} (conv: ${conversationId ? 'existing' : 'new'})`);
+
+        const { stream, cleanup, model, newConversationId, streamingMetrics } = await createGenericStreamingSession({
+          prompt,
+          conversationId,
+          context,
+          action,
+          identity,
+        });
+
+        const sessionCreateTime = nowMs() - startTime;
+        log.info(`Session created in ${sessionCreateTime}ms`);
+
+        let fullContent = '';
+
+        return createSSEResponse(
+          async function* () {
+            for await (const event of stream) {
+              if (event.type === 'delta') {
+                fullContent += event.content;
+                yield { type: 'delta' as const, content: event.content };
+              }
+
+              if (event.type === 'done') {
+                fullContent = event.totalContent;
+              }
+            }
+
+            const parsedChallenge = parseGeneratedChallenge(fullContent);
+            if (parsedChallenge) {
+              yield { type: 'challenge' as const, challenge: parsedChallenge };
+              log.info(`Parsed challenge: ${parsedChallenge.title}`);
+            } else {
+              log.debug(`No challenge parsed from response (length: ${fullContent.length})`);
+            }
+          },
+          {
+            onComplete: () => ({
+              type: 'meta' as const,
+              model,
+              sessionCreateMs: sessionCreateTime,
+              totalMs: nowMs() - startTime,
+              firstDeltaMs: streamingMetrics.firstDeltaMs,
+              conversationId: newConversationId,
+            }),
+            onError: (error) => {
+              const errorMessage = error instanceof Error ? error.message : 'Stream error';
+              log.error('Stream error:', errorMessage);
+            },
+            cleanup,
+          },
+        );
+      },
     );
   } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
     const knownResponse = knownApiErrorResponse(error);
     if (knownResponse) return knownResponse;
 

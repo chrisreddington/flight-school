@@ -9,6 +9,9 @@
  * - `RATE_LIMIT_CHAT_PER_MIN`, `RATE_LIMIT_CHAT_CAP`
  * - `RATE_LIMIT_EVAL_PER_MIN`, `RATE_LIMIT_EVAL_CAP`
  * - `RATE_LIMIT_SUGGESTIONS_PER_MIN`, `RATE_LIMIT_SUGGESTIONS_CAP`
+ * - `RATE_LIMIT_QUIZ_PER_MIN`, `RATE_LIMIT_QUIZ_CAP`
+ * - `RATE_LIMIT_PLAN_PER_MIN`, `RATE_LIMIT_PLAN_CAP`
+ * - `RATE_LIMIT_AUTHOR_PER_MIN`, `RATE_LIMIT_AUTHOR_CAP`
  */
 
 function num(name: string, fallback: number): number {
@@ -39,4 +42,19 @@ export const EVAL_GUARD = {
 export const SUGGESTIONS_GUARD = {
   rateLimit: { limit: num('RATE_LIMIT_SUGGESTIONS_PER_MIN', 20), windowMs: 60_000 },
   concurrentCap: num('RATE_LIMIT_SUGGESTIONS_CAP', 2),
+} as const;
+
+export const QUIZ_GUARD = {
+  rateLimit: { limit: num('RATE_LIMIT_QUIZ_PER_MIN', 15), windowMs: 60_000 },
+  concurrentCap: num('RATE_LIMIT_QUIZ_CAP', 2),
+} as const;
+
+export const PLAN_GUARD = {
+  rateLimit: { limit: num('RATE_LIMIT_PLAN_PER_MIN', 15), windowMs: 60_000 },
+  concurrentCap: num('RATE_LIMIT_PLAN_CAP', 2),
+} as const;
+
+export const AUTHOR_GUARD = {
+  rateLimit: { limit: num('RATE_LIMIT_AUTHOR_PER_MIN', 15), windowMs: 60_000 },
+  concurrentCap: num('RATE_LIMIT_AUTHOR_CAP', 2),
 } as const;

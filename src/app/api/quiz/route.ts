@@ -1,10 +1,12 @@
 import { knownApiErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateTopicQuiz, type QuizResult } from '@/lib/copilot/quiz';
 import { createSessionIdentity } from '@/lib/copilot/server';
-import { requireUserContext } from '@/lib/auth/context';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { logger } from '@/lib/logger';
+import { withUserGuards } from '@/lib/security/guard';
+import { guardErrorResponse } from '@/lib/security/http';
+import { QUIZ_GUARD } from '@/lib/security/route-defaults';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Quiz API');
@@ -57,31 +59,46 @@ export async function POST(request: NextRequest) {
   const topicTitle = body.topicTitle?.trim() || 'This topic';
   const topicDescription = body.topicDescription?.trim() || '';
 
-  let profileContext = '';
   try {
-    const octokit = await getOctokitForRequest();
-    const compactProfile = await buildCompactContext(octokit, 500);
-    profileContext = serializeContext(compactProfile);
-  } catch (error) {
-    log.warn('Failed to build profile context for quiz generation', error);
-  }
+    return await withUserGuards(
+      { ...QUIZ_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/quiz' } },
+      async (ctx) => {
+        let profileContext = '';
+        try {
+          const octokit = await getOctokitForRequest();
+          const compactProfile = await buildCompactContext(octokit, 500);
+          profileContext = serializeContext(compactProfile);
+        } catch (error) {
+          log.warn('Failed to build profile context for quiz generation', error);
+        }
 
-  try {
-    const ctx = await requireUserContext();
-    const quiz = await generateTopicQuiz(
-      createSessionIdentity(ctx),
-      topicTitle,
-      topicDescription,
-      profileContext
+        try {
+          const quiz = await generateTopicQuiz(
+            createSessionIdentity(ctx),
+            topicTitle,
+            topicDescription,
+            profileContext,
+          );
+          return NextResponse.json(quiz);
+        } catch (error) {
+          // Map known errors (entitlement → 402, etc.) before the
+          // generic AI-unavailable fallback so paying-customer signals
+          // are never silently swallowed by the static placeholder.
+          const knownResponse = knownApiErrorResponse(error);
+          if (knownResponse) return knownResponse;
+          if (isAIUnavailableError(error)) {
+            return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
+          }
+          log.error('Failed to generate quiz', error);
+          return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+        }
+      },
     );
-    return NextResponse.json(quiz);
   } catch (error) {
+    const guardResponse = guardErrorResponse(error);
+    if (guardResponse) return guardResponse;
     const knownResponse = knownApiErrorResponse(error);
     if (knownResponse) return knownResponse;
-    if (isAIUnavailableError(error)) {
-      return NextResponse.json(getUnavailableFallbackQuiz(topicTitle));
-    }
-    log.error('Failed to generate quiz', error);
-    return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+    throw error;
   }
 }

@@ -1,4 +1,3 @@
-import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
 import type { BackgroundJob } from '@/lib/jobs/storage';
 import type { JobListDTO } from '@/lib/jobs/redact';
 import type {
@@ -6,28 +5,8 @@ import type {
   DispatchableJobType,
   WorkerDispatchCredentials,
 } from '@/lib/jobs/dispatch';
-import {
-  mergeTracePropagationHeaders,
-  type TracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
-
-function getRequiredWorkerConfig() {
-  const config = getCopilotWorkerConfig();
-  if (!config) {
-    throw new Error('Copilot worker is required for background job execution');
-  }
-  return config;
-}
-
-function buildHeaders(secret: string, traceContext?: TracePropagationHeaders) {
-  return mergeTracePropagationHeaders(
-    {
-      authorization: `Bearer ${secret}`,
-      'content-type': 'application/json',
-    },
-    traceContext ?? {},
-  );
-}
+import { workerFetchJson } from '@/lib/copilot/execution/worker-fetch';
+import type { TracePropagationHeaders } from '@/lib/observability/context-propagation';
 
 /**
  * Payload for {@link createWorkerJob}. Mirrors the body shape expected
@@ -50,20 +29,13 @@ export interface CreateWorkerJobInput {
  * stored record without re-dispatching.
  */
 export async function createWorkerJob(input: CreateWorkerJobInput): Promise<BackgroundJob> {
-  const config = getRequiredWorkerConfig();
   const { traceContext, ...body } = input;
-  const headers = buildHeaders(config.secret, traceContext);
-
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job create failed with HTTP ${response.status}`);
-  }
-  return (await response.json()) as BackgroundJob;
+  const result = await workerFetchJson<BackgroundJob>(
+    '/api/internal/jobs',
+    { method: 'POST', body: JSON.stringify(body) },
+    { errorContext: 'job create', traceContext },
+  );
+  return result as BackgroundJob;
 }
 
 export interface ListWorkerJobsOptions {
@@ -74,23 +46,16 @@ export interface ListWorkerJobsOptions {
 }
 
 export async function listWorkerJobs(opts: ListWorkerJobsOptions): Promise<JobListDTO[]> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, opts.traceContext);
-
   const params = new URLSearchParams({ userId: opts.userId });
   if (opts.type) params.set('type', opts.type);
   if (opts.status) params.set('status', opts.status);
 
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs?${params.toString()}`, {
-    method: 'GET',
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job list failed with HTTP ${response.status}`);
-  }
-  const jobsPayload = (await response.json()) as { jobs: JobListDTO[] };
-  return jobsPayload.jobs ?? [];
+  const payload = await workerFetchJson<{ jobs: JobListDTO[] }>(
+    `/api/internal/jobs?${params.toString()}`,
+    { method: 'GET' },
+    { errorContext: 'job list', traceContext: opts.traceContext },
+  );
+  return payload?.jobs ?? [];
 }
 
 export async function getWorkerJob(
@@ -98,20 +63,12 @@ export async function getWorkerJob(
   userId: string,
   traceContext?: TracePropagationHeaders,
 ): Promise<BackgroundJob | null> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, traceContext);
-
   const params = new URLSearchParams({ userId });
-  const response = await fetch(
-    `${config.baseUrl}/api/internal/jobs/${encodeURIComponent(id)}?${params.toString()}`,
-    { method: 'GET', headers },
+  return workerFetchJson<BackgroundJob>(
+    `/api/internal/jobs/${encodeURIComponent(id)}?${params.toString()}`,
+    { method: 'GET' },
+    { errorContext: 'job fetch', traceContext, allowNotFound: true },
   );
-
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Copilot worker job fetch failed with HTTP ${response.status}`);
-  }
-  return (await response.json()) as BackgroundJob;
 }
 
 export interface CancelWorkerJobRecordResult {
@@ -127,22 +84,13 @@ export async function cancelWorkerJobRecord(
   userId: string,
   traceContext?: TracePropagationHeaders,
 ): Promise<CancelWorkerJobRecordResult> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, traceContext);
-
   const params = new URLSearchParams({ userId });
-  const response = await fetch(
-    `${config.baseUrl}/api/internal/jobs/${encodeURIComponent(id)}?${params.toString()}`,
-    { method: 'DELETE', headers },
+  const result = await workerFetchJson<CancelWorkerJobRecordResult>(
+    `/api/internal/jobs/${encodeURIComponent(id)}?${params.toString()}`,
+    { method: 'DELETE' },
+    { errorContext: 'job cancel-record', traceContext, allowNotFound: true },
   );
-
-  if (response.status === 404) {
-    return { cancelled: false, notFound: true };
-  }
-  if (!response.ok) {
-    throw new Error(`Copilot worker job cancel-record failed with HTTP ${response.status}`);
-  }
-  return (await response.json()) as CancelWorkerJobRecordResult;
+  return result ?? { cancelled: false, notFound: true };
 }
 
 export interface SweepWorkerJobsResult {
@@ -154,57 +102,36 @@ export interface SweepWorkerJobsResult {
 export async function sweepWorkerJobs(
   opts: { nowMs?: number; traceContext?: TracePropagationHeaders } = {},
 ): Promise<SweepWorkerJobsResult> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, opts.traceContext);
-
   const body = opts.nowMs !== undefined ? JSON.stringify({ nowMs: opts.nowMs }) : '{}';
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs/sweep`, {
-    method: 'POST',
-    headers,
-    body,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job sweep failed with HTTP ${response.status}`);
-  }
-  return (await response.json()) as SweepWorkerJobsResult;
+  const result = await workerFetchJson<SweepWorkerJobsResult>(
+    '/api/internal/jobs/sweep',
+    { method: 'POST', body },
+    { errorContext: 'job sweep', traceContext: opts.traceContext },
+  );
+  return result as SweepWorkerJobsResult;
 }
 
 export async function exportWorkerJobsForUser(
   userId: string,
   traceContext?: TracePropagationHeaders,
 ): Promise<BackgroundJob[]> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, traceContext);
-
   const params = new URLSearchParams({ userId });
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs/user-data?${params.toString()}`, {
-    method: 'GET',
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job export failed with HTTP ${response.status}`);
-  }
-  const jobsPayload = (await response.json()) as { jobs: BackgroundJob[] };
-  return jobsPayload.jobs ?? [];
+  const payload = await workerFetchJson<{ jobs: BackgroundJob[] }>(
+    `/api/internal/jobs/user-data?${params.toString()}`,
+    { method: 'GET' },
+    { errorContext: 'job export', traceContext },
+  );
+  return payload?.jobs ?? [];
 }
 
 export async function deleteWorkerJobsForUser(
   userId: string,
   traceContext?: TracePropagationHeaders,
 ): Promise<{ deleted: number; cancelled: number }> {
-  const config = getRequiredWorkerConfig();
-  const headers = buildHeaders(config.secret, traceContext);
-
-  const params = new URLSearchParams({ userId });
-  const response = await fetch(`${config.baseUrl}/api/internal/jobs/user-data?${params.toString()}`, {
-    method: 'DELETE',
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Copilot worker job delete-for-user failed with HTTP ${response.status}`);
-  }
-  return (await response.json()) as { deleted: number; cancelled: number };
+  const result = await workerFetchJson<{ deleted: number; cancelled: number }>(
+    `/api/internal/jobs/user-data?${new URLSearchParams({ userId }).toString()}`,
+    { method: 'DELETE' },
+    { errorContext: 'job delete-for-user', traceContext },
+  );
+  return result as { deleted: number; cancelled: number };
 }

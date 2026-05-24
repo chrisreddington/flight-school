@@ -1,16 +1,5 @@
-import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import {
-  mergeTracePropagationHeaders,
-  type TracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
-
-function getRequiredWorkerConfig() {
-  const config = getCopilotWorkerConfig();
-  if (!config) {
-    throw new Error('Copilot worker is required for activity operations');
-  }
-  return config;
-}
+import { workerFetch } from '@/lib/copilot/execution/worker-fetch';
+import type { TracePropagationHeaders } from '@/lib/observability/context-propagation';
 
 /**
  * Wipe all activity events owned by `userId` on the worker (in-memory
@@ -22,19 +11,9 @@ export async function deleteWorkerActivityForUser(
   userId: string,
   traceContext?: TracePropagationHeaders,
 ): Promise<void> {
-  const config = getRequiredWorkerConfig();
-  const headers = mergeTracePropagationHeaders(
-    {
-      authorization: `Bearer ${config.secret}`,
-      'x-user-id': userId,
-    },
-    traceContext ?? {},
+  await workerFetch(
+    '/api/internal/ai-activity',
+    { method: 'DELETE', headers: { 'x-user-id': userId } },
+    { errorContext: 'activity delete', traceContext },
   );
-  const response = await fetch(`${config.baseUrl}/api/internal/ai-activity`, {
-    method: 'DELETE',
-    headers,
-  });
-  if (!response.ok) {
-    throw new Error(`Copilot worker activity delete failed with HTTP ${response.status}`);
-  }
 }

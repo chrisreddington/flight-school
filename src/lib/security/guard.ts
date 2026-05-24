@@ -1,21 +1,41 @@
 /**
- * Per-user guard composition for API routes.
+ * Per-user guards for any expensive (AI-backed) call site.
  *
- * `withUserGuards` is the standard wrapper for any expensive (AI-backed)
- * API route. It resolves the authenticated user, enforces a sliding-window
- * rate limit, acquires a concurrent-session slot, and emits an audit event
- * for the operation.
+ * Two entry points:
  *
- * @example
+ * - {@link requireGuardedUserContext} — the reusable async core. Resolves
+ *   the authenticated user, enforces rate limit + concurrent-session cap,
+ *   emits the audit event, and returns the `UserContext` plus a `release`
+ *   function the caller must call when the work is done. Use this from
+ *   Server Actions, RSC data loaders, and any other non-route call site
+ *   that should share the same security policy as route handlers.
+ *
+ * - {@link withUserGuards} — a thin adapter that wraps the core for the
+ *   common API-route pattern (`return await withUserGuards(opts, work)`).
+ *   Handles `release` automatically.
+ *
+ * @example Route handler
  * ```ts
  * export async function POST(request: NextRequest) {
  *   return withUserGuards(
- *     { rateLimit: { limit: 10, windowMs: 60_000 }, concurrentCap: 2, eventType: 'copilot.session.create' },
- *     async ({ userId }) => {
- *       // ...do the work...
- *       return NextResponse.json({ ok: true });
- *     },
+ *     { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus' } },
+ *     async (ctx) => NextResponse.json(await doWork(ctx)),
  *   );
+ * }
+ * ```
+ *
+ * @example Server Action
+ * ```ts
+ * 'use server';
+ * export async function refreshFocusAction() {
+ *   const { ctx, release } = await requireGuardedUserContext({
+ *     ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { action: 'refreshFocus' },
+ *   });
+ *   try {
+ *     return await doWork(ctx);
+ *   } finally {
+ *     release();
+ *   }
  * }
  * ```
  */
@@ -38,18 +58,28 @@ export interface GuardOptions {
   auditMetadata?: Record<string, unknown>;
 }
 
+/** Result of {@link requireGuardedUserContext}. */
+export interface GuardedContext {
+  ctx: UserContext;
+  /**
+   * Release any concurrent-session slot acquired by the guard. Always
+   * call this from a `finally` block — even if `concurrentCap` was not
+   * set, calling `release` is safe (no-op).
+   */
+  release: () => void;
+}
+
 /**
- * Apply auth + rate-limit + concurrent-cap + audit logging around `work`.
+ * Resolve the authenticated user and apply the guard policy. Returns the
+ * `UserContext` plus a `release` handle the caller MUST invoke when the
+ * guarded work finishes (success or failure). The audit event is emitted
+ * once the user has cleared rate-limit and session-cap checks.
  *
  * @throws {@link RateLimitedError} when the user is over the rate limit.
- * @throws {@link TooManyConcurrentSessionsError} when the user is over the
- *   concurrent-session cap.
+ * @throws {@link TooManyConcurrentSessionsError} when over the cap.
  * @throws {@link UnauthorizedError} when the request is unauthenticated.
  */
-export async function withUserGuards<T>(
-  opts: GuardOptions,
-  work: (ctx: UserContext) => Promise<T>,
-): Promise<T> {
+export async function requireGuardedUserContext(opts: GuardOptions): Promise<GuardedContext> {
   const ctx = await requireUserContext();
   const userIdHash = hashUserId(ctx.userId);
 
@@ -83,15 +113,30 @@ export async function withUserGuards<T>(
     }
   }
 
-  auditLog({
-    type: opts.eventType,
-    userIdHash,
-    metadata: opts.auditMetadata,
-  });
+  auditLog({ type: opts.eventType, userIdHash, metadata: opts.auditMetadata });
 
+  return {
+    ctx,
+    release: () => {
+      release?.();
+      release = null;
+    },
+  };
+}
+
+/**
+ * Apply the guard policy and invoke `work`. Wraps
+ * {@link requireGuardedUserContext} so route handlers don't have to manage
+ * `release` themselves.
+ */
+export async function withUserGuards<T>(
+  opts: GuardOptions,
+  work: (ctx: UserContext) => Promise<T>,
+): Promise<T> {
+  const { ctx, release } = await requireGuardedUserContext(opts);
   try {
     return await work(ctx);
   } finally {
-    release?.();
+    release();
   }
 }
