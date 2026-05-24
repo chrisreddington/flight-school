@@ -33,7 +33,7 @@
 
 import { createChatStreamingSession } from '@/lib/copilot/streaming';
 import { buildCapabilityContextPrompt } from '@/lib/copilot/capabilities';
-import { resolveProfile, InvalidCapabilityError } from '@/lib/copilot/profiles';
+import { resolveProfile } from '@/lib/copilot/profiles';
 import {
   isBaseProfileId,
   isChatResponseProfile,
@@ -107,17 +107,11 @@ export async function executeChatResponse(
   // Resolve once on the raw user prompt. The streaming factory reuses
   // this `ResolvedProfile` so `shouldElevate` is never re-evaluated
   // against the worker-decorated `contextualPrompt`.
-  let preResolved;
-  try {
-    preResolved = resolveProfile(profile, {
-      prompt,
-      capabilities,
-      conversationCapabilities: getConversationCapabilities(userId, threadId),
-    });
-  } catch (err) {
-    if (err instanceof InvalidCapabilityError) throw err;
-    throw err;
-  }
+  const preResolved = resolveProfile(profile, {
+    prompt,
+    capabilities,
+    conversationCapabilities: getConversationCapabilities(userId, threadId),
+  });
 
   await jobStorage.markRunning(jobId);
 

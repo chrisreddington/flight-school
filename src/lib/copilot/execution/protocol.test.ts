@@ -22,7 +22,30 @@ describe('parseCopilotWorkerChatRequest', () => {
     expect(() => parseCopilotWorkerChatRequest({
       identity: { userId: '123' },
       prompt: 'hello',
+      profile: 'chat',
     })).toThrow('identity.gitHubToken is required');
+  });
+
+  it('rejects non-chat-response profile values', () => {
+    expect(() => parseCopilotWorkerChatRequest({
+      identity: { userId: '123', gitHubToken: 'ghu_user' },
+      prompt: 'hello',
+      profile: 'coach',
+    })).toThrow('profile must be a chat-response profile');
+  });
+
+  it('rejects capabilities that the profile does not allow', () => {
+    // 'learning' allows ['github'] today; pick a capabilities arg that
+    // the profile-types allowlist will reject. (Currently the only
+    // registered capability is `github`, which `learning` allows, so
+    // exercise the disallowed path via `chat` with an unknown id —
+    // the parser rejects via `isCapabilitiesArg` first.)
+    expect(() => parseCopilotWorkerChatRequest({
+      identity: { userId: '123', gitHubToken: 'ghu_user' },
+      prompt: 'hello',
+      profile: 'chat',
+      capabilities: ['not-a-real-capability'],
+    })).toThrow("capabilities must be 'auto' or an array of valid capability ids");
   });
 });
 

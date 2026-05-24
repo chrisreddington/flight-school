@@ -1,10 +1,10 @@
-import type { BaseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
+import type { ChatResponseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
 import type { SessionIdentity } from '@/lib/copilot/session-identity';
 
 export interface CopilotChatExecutionRequest {
   identity: SessionIdentity;
   prompt: string;
-  profile: BaseProfileId;
+  profile: ChatResponseProfileId;
   /**
    * Caller-supplied capability selection from the wire. The worker
    * resolves this against the profile's allowed list and defaults; the
@@ -30,7 +30,7 @@ export interface CopilotChatExecutionResult {
     model: string;
     toolsUsed: string[];
     totalTimeMs: number;
-    profile: BaseProfileId;
+    profile: ChatResponseProfileId;
     sessionCreateMs: number | null;
     sessionPoolHit: boolean | null;
     mcpEnabled: boolean | null;

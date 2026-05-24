@@ -8,15 +8,15 @@
 import { validateObject, validateRequiredString } from '@/lib/api';
 import {
   areCapabilitiesAllowedForProfile,
-  isBaseProfileId,
   isCapabilitiesArg,
-  type BaseProfileId,
+  isChatResponseProfile,
+  type ChatResponseProfileId,
   type CapabilitiesArg,
 } from '@/lib/copilot/profile-types';
 
 export interface CopilotChatRequest {
   prompt: string;
-  profile: BaseProfileId;
+  profile: ChatResponseProfileId;
   /**
    * Caller-supplied capability selection. Worker resolves this against
    * the profile's allowed list and defaults. Omitted = profile defaults.
@@ -41,8 +41,8 @@ export function validateCopilotChatRequest(body: unknown): string | null {
   const promptError = validateRequiredString(req.prompt, 'prompt');
   if (promptError) return promptError;
 
-  if (!isBaseProfileId(req.profile)) {
-    return 'profile must be a valid base chat profile';
+  if (!isChatResponseProfile(req.profile)) {
+    return 'profile must be a chat-response profile (chat | learning)';
   }
   if (req.capabilities !== undefined && !isCapabilitiesArg(req.capabilities)) {
     return "capabilities must be 'auto' or an array of valid capability ids";

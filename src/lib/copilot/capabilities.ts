@@ -254,7 +254,9 @@ export function buildCapabilityContextPrompt(
   ctx: CapabilityPromptContext,
 ): string {
   if (selections.length === 0) return '';
-  const sorted = [...selections].sort((left, right) => left.id.localeCompare(right.id));
+  const sorted = [...selections].sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+  );
   const parts: string[] = [];
   for (const selection of sorted) {
     const part = CAPABILITIES[selection.id].buildContextPrompt?.(ctx);

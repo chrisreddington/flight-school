@@ -45,11 +45,13 @@ export function isBaseProfileId(value: unknown): value is BaseProfileId {
  */
 export const CHAT_RESPONSE_PROFILES = ['chat', 'learning'] as const;
 export type ChatResponseProfileId = (typeof CHAT_RESPONSE_PROFILES)[number];
+export const CHAT_RESPONSE_PROFILE_SET: ReadonlySet<ChatResponseProfileId> =
+  new Set(CHAT_RESPONSE_PROFILES);
 
 /** Type guard for `chat-response` profile narrowing. */
 export function isChatResponseProfile(value: unknown): value is ChatResponseProfileId {
   return typeof value === 'string'
-    && (CHAT_RESPONSE_PROFILES as readonly string[]).includes(value);
+    && CHAT_RESPONSE_PROFILE_SET.has(value as ChatResponseProfileId);
 }
 
 /**

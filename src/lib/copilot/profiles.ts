@@ -339,8 +339,10 @@ export function resolveProfile(
     }
   }
 
+  // Byte-deterministic sort: avoids locale-dependent ordering so cache
+  // keys are stable across Node runtimes / ICU configurations.
   const capabilities = [...selected.values()].sort((left, right) =>
-    left.id.localeCompare(right.id),
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
   );
 
   const requestedForTelemetry: CapabilitiesArg | 'default' =
@@ -406,7 +408,7 @@ export function capabilityFingerprintOf(
     return 'caps=none';
   }
   const parts = [...selections]
-    .sort((left, right) => left.id.localeCompare(right.id))
+    .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
     .map((selection) => {
       const tail: string[] = [];
       if (selection.tools && selection.tools.length > 0) {

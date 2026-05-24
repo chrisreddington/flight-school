@@ -41,7 +41,7 @@ import { createLearningChatSendTrigger } from '@/lib/observability/job-trigger-b
 import { operationsManager } from '@/lib/operations';
 import type { Message, RepoReference, Thread } from '@/lib/threads';
 import { threadStore } from '@/lib/threads';
-import type { BaseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
+import type { ChatResponseProfileId, CapabilitiesArg } from '@/lib/copilot/profile-types';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
 import { useLearningChatStream } from './use-learning-chat-stream';
@@ -75,7 +75,7 @@ async function isStorageStreaming(threadId: string): Promise<boolean> {
 /** Options for sending a learning chat message */
 interface SendLearningMessageOptions {
   /** Base chat profile to use (defaults to `'learning'`). */
-  profile?: BaseProfileId;
+  profile?: ChatResponseProfileId;
   /**
    * Capability selection for this turn. `'auto'` lets the server elevate
    * based on prompt heuristics; an explicit array opts into specific
@@ -223,7 +223,7 @@ export function useLearningChat(): UseLearningChatReturn {
       targetThreadId: string,
       message: string,
       effectiveRepos: RepoReference[],
-      profile: BaseProfileId,
+      profile: ChatResponseProfileId,
       capabilities: CapabilitiesArg | undefined,
     ): Promise<void> => {
       const assistantMessageId = crypto.randomUUID();

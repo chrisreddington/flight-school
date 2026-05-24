@@ -36,6 +36,28 @@ describe('PROFILES registry', () => {
       expect(PROFILES[id].autoCapabilities).toEqual([]);
     }
   });
+
+  it.each(Object.keys(PROFILES) as BaseProfileId[])(
+    'profile %s: every autoCapability is in allowedCapabilities',
+    (id) => {
+      const profile = PROFILES[id];
+      const allowed = new Set<string>(profile.allowedCapabilities);
+      for (const capId of profile.autoCapabilities) {
+        expect(allowed.has(capId)).toBe(true);
+      }
+    },
+  );
+
+  it.each(Object.keys(PROFILES) as BaseProfileId[])(
+    'profile %s: every defaultCapability is in allowedCapabilities',
+    (id) => {
+      const profile = PROFILES[id];
+      const allowed = new Set<string>(profile.allowedCapabilities);
+      for (const capId of profile.defaultCapabilities) {
+        expect(allowed.has(capId)).toBe(true);
+      }
+    },
+  );
 });
 
 describe('resolveProfile', () => {
@@ -113,6 +135,27 @@ describe('resolveProfile', () => {
   it('produces a stable capability fingerprint for chat+github', () => {
     const resolved = resolveProfile('chat', { capabilities: ['github'] });
     expect(resolved.capabilityFingerprint).toMatch(/^caps=github;sys=[0-9a-f]{8}$/);
+  });
+
+  it('fingerprint is deterministic across repeated calls with identical inputs', () => {
+    const first = resolveProfile('chat', { capabilities: ['github'] }).capabilityFingerprint;
+    const second = resolveProfile('chat', { capabilities: ['github'] }).capabilityFingerprint;
+    expect(first).toBe(second);
+  });
+
+  it('different base prompts produce different sys= segments', () => {
+    const chatFp = resolveProfile('chat').capabilityFingerprint;
+    const learningFp = resolveProfile('learning').capabilityFingerprint;
+    expect(chatFp.split(';sys=')[1]).not.toBe(learningFp.split(';sys=')[1]);
+  });
+
+  it('drops conversationCapabilities disallowed by the current profile', () => {
+    // evaluation has empty allowedCapabilities; carrying 'github' from a
+    // previous chat turn must be silently dropped, not smuggled in.
+    const resolved = resolveProfile('evaluation', {
+      conversationCapabilities: ['github'],
+    });
+    expect(resolved.capabilities).toEqual([]);
   });
 
   it('composes the system message from base prompt + capability addenda', () => {

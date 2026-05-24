@@ -1,7 +1,8 @@
 import {
-  BASE_PROFILE_ID_SET,
+  CHAT_RESPONSE_PROFILE_SET,
   isCapabilitiesArg,
-  type BaseProfileId,
+  areCapabilitiesAllowedForProfile,
+  type ChatResponseProfileId,
   type CapabilitiesArg,
 } from '@/lib/copilot/profile-types';
 import type {
@@ -19,14 +20,20 @@ export function parseCopilotWorkerChatRequest(value: unknown): CopilotChatExecut
   const record = requireRecord(value, 'request');
   const identity = requireRecord(record.identity, 'identity');
 
+  const profile = requireChatResponseProfile(record.profile, 'profile');
+  const capabilities = requireCapabilities(record.capabilities, 'capabilities');
+  if (!areCapabilitiesAllowedForProfile(profile, capabilities)) {
+    throw new Error(`capabilities are not allowed by profile '${profile}'`);
+  }
+
   return {
     identity: {
       userId: requireString(identity.userId, 'identity.userId'),
       gitHubToken: requireString(identity.gitHubToken, 'identity.gitHubToken'),
     },
     prompt: requireString(record.prompt, 'prompt'),
-    profile: requireProfile(record.profile, 'profile'),
-    capabilities: requireCapabilities(record.capabilities, 'capabilities'),
+    profile,
+    capabilities,
     conversationId: optionalString(record.conversationId, 'conversationId'),
   };
 }
@@ -43,7 +50,7 @@ export function parseCopilotWorkerChatResult(value: unknown): CopilotChatExecuti
       model: requireString(meta.model, 'meta.model'),
       toolsUsed: requireStringArray(meta.toolsUsed, 'meta.toolsUsed'),
       totalTimeMs: requireNumber(meta.totalTimeMs, 'meta.totalTimeMs'),
-      profile: requireProfile(meta.profile, 'meta.profile'),
+      profile: requireChatResponseProfile(meta.profile, 'meta.profile'),
       sessionCreateMs: nullableNumber(meta.sessionCreateMs, 'meta.sessionCreateMs'),
       sessionPoolHit: nullableBoolean(meta.sessionPoolHit, 'meta.sessionPoolHit'),
       mcpEnabled: nullableBoolean(meta.mcpEnabled, 'meta.mcpEnabled'),
@@ -87,11 +94,11 @@ export function parseCopilotWorkerCoachResult(value: unknown): CopilotCoachJobRe
   };
 }
 
-function requireProfile(value: unknown, name: string): BaseProfileId {
-  if (typeof value !== 'string' || !BASE_PROFILE_ID_SET.has(value as BaseProfileId)) {
-    throw new Error(`${name} must be a valid BaseProfileId`);
+function requireChatResponseProfile(value: unknown, name: string): ChatResponseProfileId {
+  if (typeof value !== 'string' || !CHAT_RESPONSE_PROFILE_SET.has(value as ChatResponseProfileId)) {
+    throw new Error(`${name} must be a chat-response profile (chat | learning)`);
   }
-  return value as BaseProfileId;
+  return value as ChatResponseProfileId;
 }
 
 function requireCapabilities(value: unknown, name: string): CapabilitiesArg | undefined {

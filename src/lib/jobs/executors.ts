@@ -58,7 +58,7 @@ export interface ChatResponseInput {
   /** Repository full names (e.g., 'owner/repo') to focus MCP tools on */
   repos?: string[];
   /** Chat profile that drives model, prompt, and MCP capabilities. */
-  profile: import('@/lib/copilot/profile-types').BaseProfileId;
+  profile: import('@/lib/copilot/profile-types').ChatResponseProfileId;
   /**
    * Caller-supplied capability selection. Omitted = use the profile's
    * `defaultCapabilities` on the worker side. The worker validates the

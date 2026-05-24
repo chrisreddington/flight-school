@@ -63,6 +63,12 @@ export async function createChatStreamingSession(
   options: ChatStreamingFactoryOptions,
 ): Promise<StreamingSession> {
   const { profile, capabilities, resolved: preResolved, operationName, conversationId } = options;
+  if (preResolved && preResolved.profileId !== profile) {
+    throw new Error(
+      `createChatStreamingSession: pre-resolved profile '${preResolved.profileId}' ` +
+        `does not match factory profile '${profile}' — caller bug`,
+    );
+  }
   const resolved = preResolved ?? resolveProfile(profile, {
     prompt,
     capabilities,
@@ -103,6 +109,15 @@ export async function createEvaluationStreamingSession(
   operationName = 'Challenge Evaluation',
 ): Promise<StreamingSession> {
   const resolved = resolveProfile('evaluation');
+  // Cache invariant: the caller-supplied `systemMessage` overrides
+  // `resolved.systemMessage`, so the `capabilityFingerprint` (which
+  // hashes `resolved.systemMessage`) does NOT reflect the effective
+  // prompt. This is only safe because `conversationId` is hard-coded
+  // to `undefined` here — every evaluation runs a fresh session and
+  // never reuses a pooled one. If you ever expose a `conversationId`
+  // option, you MUST fold a hash of the caller's `systemMessage` into
+  // the pool key or two evaluations with different prompts will
+  // silently share a session.
   return createGenericStreamingSession({
     prompt,
     profile: resolved.profileId,

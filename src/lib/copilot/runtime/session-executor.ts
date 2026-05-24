@@ -33,7 +33,7 @@ export async function executeChatWithSessionFactory(
         model: loggedSession.model,
         toolsUsed: result.toolCalls.map((toolCall) => toolCall.name),
         totalTimeMs: result.totalTimeMs,
-        profile: resolved.profileId,
+        profile: request.profile,
         sessionCreateMs: loggedSession.sessionMetrics?.sessionCreateMs ?? null,
         sessionPoolHit: loggedSession.sessionMetrics ? !loggedSession.sessionMetrics.createdNew : null,
         mcpEnabled: loggedSession.sessionMetrics?.mcpEnabled ?? null,
