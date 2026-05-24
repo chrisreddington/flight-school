@@ -102,7 +102,31 @@ describe('API route auth inventory', () => {
         if (!marker) return null;
 
         const source = readFileSync(filePath, 'utf8');
-        return source.includes(marker) ? null : `${key} missing ${marker}`;
+        if (source.includes(marker)) return null;
+
+        // The route may delegate to a handler module from `@/lib/...`
+        // (named `handle*Request`). When it does, follow that import
+        // and check the marker there. Keeps thin route shims valid.
+        const handlerMatch = source.match(/from\s+['"](@\/lib\/[^'"]+)['"]/g);
+        if (handlerMatch) {
+          for (const fromClause of handlerMatch) {
+            const importPath = fromClause.match(/@\/lib\/[^'"]+/)?.[0];
+            if (!importPath) continue;
+            const handlerPath = path.join(
+              process.cwd(),
+              'src',
+              importPath.replace('@/', ''),
+            ) + '.ts';
+            try {
+              const handlerSource = readFileSync(handlerPath, 'utf8');
+              if (handlerSource.includes(marker)) return null;
+            } catch {
+              // Handler module not found at that path; keep looking.
+            }
+          }
+        }
+
+        return `${key} missing ${marker}`;
       })
       .filter(Boolean);
 
