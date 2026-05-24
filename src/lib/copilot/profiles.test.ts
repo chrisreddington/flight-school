@@ -236,7 +236,7 @@ describe('composeCapabilityFingerprint', () => {
 
   it('matches the resolveProfile shape (capability fingerprint + ;sys=hex)', () => {
     const fp = composeCapabilityFingerprint([{ id: 'github' }], 'hello');
-    expect(fp).toMatch(/^caps=github;sys=[0-9a-f]+$/);
+    expect(fp).toMatch(/^caps=github;sys=[0-9a-f]{16}$/);
   });
 
   it('is deterministic for identical inputs', () => {

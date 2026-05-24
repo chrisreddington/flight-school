@@ -187,9 +187,19 @@ export interface CapabilitySelection {
 
 /**
  * Resolve the credential a capability needs to build its server config.
- * Returning `undefined` means "no credential available for this id" and
- * the capability is silently skipped (the surface stays valid; the
- * tool just isn't installed for this request).
+ *
+ * Contract:
+ * - Return the credential string for any selected MCP capability that
+ *   needs one (e.g. a user GitHub token).
+ * - Return `undefined` only for capability ids the caller did not
+ *   intend to install (e.g. ids outside this caller's known set).
+ *
+ * Returning `undefined` for an MCP capability that IS in the resolved
+ * surface is treated as a caller bug by `buildMcpServersForCapabilities`
+ * (it throws), because the upstream profile has already composed a
+ * system prompt promising those tools and the fingerprint cache key
+ * assumes resolved-surface == installed-surface. Native capabilities
+ * never call the resolver.
  *
  * One resolver per request keeps the seam between capability code and
  * credential sourcing thin: when a future capability needs a different

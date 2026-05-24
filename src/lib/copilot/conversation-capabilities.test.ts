@@ -14,15 +14,9 @@ import {
   getConversationCapabilities,
   rememberConversationCapabilities,
 } from './conversation-capabilities';
+import { clearConversationCapsCache } from '@/test/helpers/conversation-caps';
 
 const ONE_MINUTE_MS = 60 * 1000;
-
-// Reset the module-global cache between tests by reaching through the
-// well-known global handle the production module installs.
-function clearConversationCapsCache(): void {
-  const g = globalThis as { __chatConversationCapsCache?: Map<string, unknown> };
-  g.__chatConversationCapsCache?.clear();
-}
 
 describe('conversation-capabilities cache', () => {
   beforeEach(() => {

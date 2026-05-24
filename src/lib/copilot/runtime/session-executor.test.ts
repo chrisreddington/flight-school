@@ -1,12 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeChatWithSessionFactory } from './session-executor';
 import { getConversationCapabilities } from '@/lib/copilot/conversation-capabilities';
+import { clearConversationCapsCache } from '@/test/helpers/conversation-caps';
 import type { ResolvedProfile } from '@/lib/copilot/profiles';
-
-function clearConversationCapsCache(): void {
-  (globalThis as { __chatConversationCapsCache?: Map<string, unknown> })
-    .__chatConversationCapsCache?.clear();
-}
 
 const mocks = {
   sendAndWait: vi.fn(),

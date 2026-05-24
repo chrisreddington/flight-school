@@ -29,15 +29,20 @@ export async function executeChatWithSessionFactory(
   });
   const loggedSession = await createChatSession(request, resolved);
 
+  // Persist resolved capabilities BEFORE send so a mid-turn failure
+  // still carries auto-elevated tools forward to the next turn —
+  // the surface has been committed (system prompt composed, MCP
+  // installed) regardless of whether the LLM completes its reply.
+  if (request.conversationId) {
+    rememberConversationCapabilities(
+      request.identity.userId,
+      request.conversationId,
+      resolved.capabilities.map((selection) => selection.id),
+    );
+  }
+
   try {
     const result = await loggedSession.sendAndWait(request.prompt);
-    if (request.conversationId) {
-      rememberConversationCapabilities(
-        request.identity.userId,
-        request.conversationId,
-        resolved.capabilities.map((selection) => selection.id),
-      );
-    }
     return {
       response: result.responseText,
       toolCalls: result.toolCalls.map((toolCall) => ({
