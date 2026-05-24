@@ -93,26 +93,43 @@ export async function createHabitAction(payload: CreateHabitPayload): Promise<Ha
 }
 
 /**
- * Persists an edited habit. The dialog already trimmed/validated fields;
- * we re-check the title/description requirement server-side.
+ * Fields a user is allowed to edit on a habit. Server-owned state
+ * (tracking schedule, check-in history, lifecycle status) is preserved
+ * from the canonical record on disk.
  */
-export async function updateHabitAction(habit: HabitWithHistory): Promise<HabitActionResult> {
+export interface HabitEditableFields {
+  title: string;
+  description: string;
+}
+
+/**
+ * Persists an edited habit. The dialog already trimmed/validated fields;
+ * we re-check the title/description requirement server-side and merge
+ * only the editable fields into the canonical habit record.
+ */
+export async function updateHabitAction(
+  habitId: string,
+  edits: HabitEditableFields,
+): Promise<HabitActionResult> {
   const { release } = await requireGuardedUserContext({
     ...HABITS_ACTION_GUARD,
     auditMetadata: { ...HABITS_ACTION_GUARD.auditMetadata, action: 'updateHabit' },
   });
   try {
-    if (!habit.title?.trim() || !habit.description?.trim()) {
+    const title = edits.title?.trim();
+    const description = edits.description?.trim();
+    if (!title || !description) {
       return { ok: false, error: 'Title and description are required' };
     }
     const collection = await readUserHabits();
-    const index = collection.habits.findIndex((h) => h.id === habit.id);
-    if (index === -1) return { ok: false, error: `Habit ${habit.id} not found` };
+    const index = collection.habits.findIndex((h) => h.id === habitId);
+    if (index === -1) return { ok: false, error: `Habit ${habitId} not found` };
+    const merged: HabitWithHistory = { ...collection.habits[index], title, description };
     const updated = [...collection.habits];
-    updated[index] = habit;
+    updated[index] = merged;
     await writeUserStorage(HABITS_FILENAME, { ...collection, habits: updated }, isHabitCollection);
     revalidatePath('/habits');
-    return { ok: true, habit };
+    return { ok: true, habit: merged };
   } finally {
     release();
   }

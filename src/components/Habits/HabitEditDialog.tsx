@@ -42,12 +42,10 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
     setIsSaving(true);
     setError(null);
     try {
-      const updated: HabitWithHistory = {
-        ...habit,
+      const result = await updateHabitAction(habit.id, {
         title: title.trim(),
         description: description.trim(),
-      };
-      const result = await updateHabitAction(updated);
+      });
       if (!result.ok) {
         setError(result.error ?? 'Failed to save changes. Please try again.');
         return;
