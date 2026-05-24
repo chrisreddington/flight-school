@@ -17,8 +17,8 @@ import type {
   TopicRegenerationResult,
 } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
-import { extractJSON } from '@/lib/utils/json-utils';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
+import { parseRegenerationResponse } from './parse-regeneration';
 import { registerSession, unregisterSession } from './session-registry';
 
 const log = logger.withTag('JobRegeneration');
@@ -82,17 +82,17 @@ export async function executeTopicRegeneration(
 
     log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
 
-    const parsed = extractJSON<{ learningTopic: LearningTopic }>(result.responseText);
-    if (!parsed?.learningTopic) {
-      throw new Error('Failed to parse topic response');
-    }
+    const learningTopic = parseRegenerationResponse<
+      { learningTopic: LearningTopic },
+      LearningTopic
+    >(result.responseText, 'learningTopic', 'topic');
 
-    if (!parsed.learningTopic.id) {
-      parsed.learningTopic.id = crypto.randomUUID();
+    if (!learningTopic.id) {
+      learningTopic.id = crypto.randomUUID();
     }
 
     await jobStorage.markCompleted<TopicRegenerationResult>(jobId, {
-      learningTopic: parsed.learningTopic,
+      learningTopic,
     });
 
     log.info(`[Job ${jobId}] Completed successfully`);
@@ -151,17 +151,17 @@ export async function executeChallengeRegeneration(
 
     log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
 
-    const parsed = extractJSON<{ challenge: DailyChallenge }>(result.responseText);
-    if (!parsed?.challenge) {
-      throw new Error('Failed to parse challenge response');
-    }
+    const challenge = parseRegenerationResponse<
+      { challenge: DailyChallenge },
+      DailyChallenge
+    >(result.responseText, 'challenge', 'challenge');
 
-    if (!parsed.challenge.id) {
-      parsed.challenge.id = crypto.randomUUID();
+    if (!challenge.id) {
+      challenge.id = crypto.randomUUID();
     }
 
     await jobStorage.markCompleted<ChallengeRegenerationResult>(jobId, {
-      challenge: parsed.challenge,
+      challenge,
     });
 
     log.info(`[Job ${jobId}] Completed successfully`);
@@ -220,17 +220,18 @@ export async function executeGoalRegeneration(
 
     log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
 
-    const parsed = extractJSON<{ goal: DailyGoal }>(result.responseText);
-    if (!parsed?.goal) {
-      throw new Error('Failed to parse goal response');
-    }
+    const goal = parseRegenerationResponse<{ goal: DailyGoal }, DailyGoal>(
+      result.responseText,
+      'goal',
+      'goal',
+    );
 
-    if (!parsed.goal.id) {
-      parsed.goal.id = crypto.randomUUID();
+    if (!goal.id) {
+      goal.id = crypto.randomUUID();
     }
 
     await jobStorage.markCompleted<GoalRegenerationResult>(jobId, {
-      goal: parsed.goal,
+      goal,
     });
 
     log.info(`[Job ${jobId}] Completed successfully`);
