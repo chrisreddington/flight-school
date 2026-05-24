@@ -1,16 +1,20 @@
 'use client';
 
 import type { RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
-import { CheckIcon, CopilotIcon, PencilIcon, XIcon } from '@primer/octicons-react';
-import { Heading, IconButton, Stack, TextInput, Tooltip } from '@primer/react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CopilotIcon } from '@primer/octicons-react';
+import { Heading } from '@primer/react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useSmoothedText } from '@/lib/chat/use-smoothed-text';
+import { ChatHeader } from './ChatHeader';
 import { ChatInput } from '../ChatInput';
 import { MessageBubble } from '../MessageBubble';
 import { RepoSelector } from '../RepoSelector';
 import type { RepoOption } from '../RepoSelector/types';
 import { ThreadSidebar } from '../ThreadSidebar';
 import styles from './LearningChat.module.css';
+import { mergeStreamingMessage } from './streaming-display';
+import { useAutoScrollOnNewMessages } from './useAutoScrollOnNewMessages';
+import { useThreadTitleEditing } from './useThreadTitleEditing';
 import typingStyles from '@/styles/typing-indicator.module.css';
 
 /**
@@ -110,14 +114,6 @@ export const LearningChat = memo(function LearningChat({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Track pending repos when no thread is active yet
   const [pendingRepos, setPendingRepos] = useState<RepoReference[]>([]);
-  // Track inline editing state for thread title
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editingTitle, setEditingTitle] = useState('');
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const prevMessageCountRef = useRef(0);
-  const hasInitializedScrollRef = useRef(false);
-  const previousActiveThreadIdRef = useRef<string | null>(null);
 
   // Get active thread's messages
   const activeThread = useMemo(
@@ -128,6 +124,12 @@ export const LearningChat = memo(function LearningChat({
   const messages = useMemo(() => activeThread?.messages ?? [], [activeThread]);
   // Use pending repos when no thread exists, otherwise use thread repos
   const selectedRepos = activeThread?.context?.repos ?? pendingRepos;
+
+  const titleEditing = useThreadTitleEditing(
+    activeThread,
+    activeThreadId,
+    handlers.renameThread,
+  );
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev);
@@ -155,41 +157,6 @@ export const LearningChat = memo(function LearningChat({
     }
   }, [handlers, selectedRepos, activeThreadId]);
 
-  // Handle starting title edit
-  const handleStartEditTitle = useCallback(() => {
-    if (activeThread) {
-      setEditingTitle(activeThread.title);
-      setIsEditingTitle(true);
-      // Focus input after state update
-      setTimeout(() => titleInputRef.current?.focus(), 0);
-    }
-  }, [activeThread]);
-
-  // Handle saving title edit
-  const handleSaveTitle = useCallback(() => {
-    if (activeThreadId && editingTitle.trim()) {
-      handlers.renameThread(activeThreadId, editingTitle.trim());
-    }
-    setIsEditingTitle(false);
-    setEditingTitle('');
-  }, [activeThreadId, handlers, editingTitle]);
-
-  // Handle canceling title edit
-  const handleCancelEdit = useCallback(() => {
-    setIsEditingTitle(false);
-    setEditingTitle('');
-  }, []);
-
-  // Handle key press in title input
-  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSaveTitle();
-    } else if (e.key === 'Escape') {
-      handleCancelEdit();
-    }
-  }, [handleSaveTitle, handleCancelEdit]);
-
   // Detect if active thread is streaming based on thread.isStreaming flag
   // This is set by the background job in storage
   const isStreamingInActiveThread = (isStreaming === true) || (activeThread?.isStreaming === true);
@@ -206,60 +173,33 @@ export const LearningChat = memo(function LearningChat({
     streamingAssistantMessageId,
   );
 
-  // Synthesise the in-flight assistant message at the tail of
-  // `displayMessages` whenever the chat-stream store has live content
-  // for this thread. The durable thread no longer contains a partial
-  // message during streaming, so the UI is wholly responsible for
-  // blending the live buffer into the visible message list.
-  const displayMessages = useMemo(() => {
-    if (!isStreamingInActiveThread) return messages;
-    if (!streamingAssistantMessageId) return messages;
-    const alreadyPresent = messages.some((m) => m.id === streamingAssistantMessageId);
-    if (alreadyPresent) return messages;
-    if (!streamingContent && streamingToolEvents.length === 0) return messages;
-    const synthesized = {
-      id: streamingAssistantMessageId,
-      role: 'assistant' as const,
-      content: smoothedStreamingContent,
-      timestamp: new Date().toISOString(),
-      toolEvents: streamingToolEvents.length > 0 ? streamingToolEvents : undefined,
-    };
-    return [...messages, synthesized];
-  }, [
-    messages,
-    isStreamingInActiveThread,
-    streamingAssistantMessageId,
-    streamingContent,
-    smoothedStreamingContent,
-    streamingToolEvents,
-  ]);
+  const displayMessages = useMemo(
+    () =>
+      mergeStreamingMessage(messages, {
+        isStreaming: isStreamingInActiveThread,
+        assistantMessageId: streamingAssistantMessageId,
+        rawContent: streamingContent,
+        smoothedContent: smoothedStreamingContent,
+        toolEvents: streamingToolEvents,
+      }),
+    [
+      messages,
+      isStreamingInActiveThread,
+      streamingAssistantMessageId,
+      streamingContent,
+      smoothedStreamingContent,
+      streamingToolEvents,
+    ],
+  );
   // Show typing indicator when streaming starts but no streaming content has arrived yet.
   const hasStreamingMessage = Boolean(streamingAssistantMessageId) && Boolean(streamingContent);
   const showTypingIndicator = isStreamingInActiveThread && !hasStreamingMessage;
 
-  // Auto-scroll to bottom when messages change or typing indicator appears
-  useEffect(() => {
-    const currentCount = displayMessages.length;
-    const previousActiveThreadId = previousActiveThreadIdRef.current;
-    const didHydrateInitialThread = previousActiveThreadId === null && activeThreadId !== null;
-    previousActiveThreadIdRef.current = activeThreadId;
-
-    if (!hasInitializedScrollRef.current) {
-      hasInitializedScrollRef.current = true;
-      prevMessageCountRef.current = currentCount;
-      return;
-    }
-
-    if (didHydrateInitialThread) {
-      prevMessageCountRef.current = currentCount;
-      return;
-    }
-
-    if (currentCount > prevMessageCountRef.current || showTypingIndicator) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-    prevMessageCountRef.current = currentCount;
-  }, [activeThreadId, displayMessages, showTypingIndicator]);
+  const messagesEndRef = useAutoScrollOnNewMessages({
+    activeThreadId,
+    messageCount: displayMessages.length,
+    showTypingIndicator,
+  });
 
   return (
     <div className={styles.container}>
@@ -278,64 +218,7 @@ export const LearningChat = memo(function LearningChat({
 
       {/* Main Chat Area */}
       <div className={styles.chatArea}>
-        {/* Header */}
-        <div className={styles.header}>
-          <Stack direction="horizontal" align="center" gap="condensed" className={styles.headerContent}>
-            <span className={styles.headerIcon}>
-              <CopilotIcon size={20} />
-            </span>
-            {isEditingTitle ? (
-              <Stack direction="horizontal" align="center" gap="condensed" className={styles.titleEditContainer}>
-                <TextInput
-                  ref={titleInputRef}
-                  value={editingTitle}
-                  onChange={(e) => setEditingTitle(e.target.value)}
-                  onKeyDown={handleTitleKeyDown}
-                  onBlur={handleSaveTitle}
-                  size="small"
-                  aria-label="Edit thread title"
-                  className={styles.titleInput}
-                />
-                <Tooltip text="Save" direction="s">
-                  <IconButton
-                    icon={CheckIcon}
-                    aria-label="Save title"
-                    variant="invisible"
-                    size="small"
-                    onClick={handleSaveTitle}
-                  />
-                </Tooltip>
-                <Tooltip text="Cancel" direction="s">
-                  <IconButton
-                    icon={XIcon}
-                    aria-label="Cancel edit"
-                    variant="invisible"
-                    size="small"
-                    onClick={handleCancelEdit}
-                  />
-                </Tooltip>
-              </Stack>
-            ) : (
-              <Stack direction="horizontal" align="center" gap="condensed">
-                <Heading as="h2" className={styles.headerTitle}>
-                  {activeThread?.title || 'Learning Chat'}
-                </Heading>
-                {activeThread && (
-                  <Tooltip text="Rename thread" direction="s">
-                    <IconButton
-                      icon={PencilIcon}
-                      aria-label="Rename thread"
-                      variant="invisible"
-                      size="small"
-                      onClick={handleStartEditTitle}
-                      className={styles.editButton}
-                    />
-                  </Tooltip>
-                )}
-              </Stack>
-            )}
-          </Stack>
-        </div>
+        <ChatHeader activeThread={activeThread} titleEditing={titleEditing} />
 
         {/* Messages */}
         <div className={styles.messagesContainer} role="log" aria-label="Chat messages">
