@@ -78,6 +78,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   const [customDays, setCustomDays] = useState('');
   const [includesWeekends, setIncludesWeekends] = useState(true);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Focus management: focus first input when dialog opens
   const titleInputRef = React.useRef<HTMLInputElement>(null);
@@ -101,6 +102,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   }, [totalDays, customDays]);
 
   const handleSubmit = useCallback(async () => {
+    if (isSubmitting) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -111,6 +113,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
     }
 
     try {
+      setIsSubmitting(true);
       let tracking: TrackingConfig;
       
       if (trackingMode === 'time') {
@@ -174,8 +177,10 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create habit');
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [title, description, trackingMode, minMinutes, maxMinutes, countTarget, countUnit, getActiveDays, includesWeekends, onClose, onCreated]);
+  }, [isSubmitting, title, description, trackingMode, minMinutes, maxMinutes, countTarget, countUnit, getActiveDays, includesWeekends, onClose, onCreated]);
 
   const handleTrackingModeChange = (index: number) => {
     const modes: TrackingMode[] = ['time', 'count', 'binary'];
@@ -191,8 +196,8 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
       onClose={onClose}
       width="large"
       footerButtons={[
-        { content: 'Cancel', onClick: onClose },
-        { content: 'Create Habit', onClick: handleSubmit, buttonType: 'primary' },
+        { content: 'Cancel', onClick: onClose, disabled: isSubmitting },
+        { content: isSubmitting ? 'Creating…' : 'Create Habit', onClick: handleSubmit, buttonType: 'primary', disabled: isSubmitting },
       ]}
       aria-describedby={error ? 'habit-creation-error' : undefined}
     >

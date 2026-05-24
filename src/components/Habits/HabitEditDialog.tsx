@@ -32,6 +32,7 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = useCallback(async () => {
+    if (isSaving) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -58,7 +59,7 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
     } finally {
       setIsSaving(false);
     }
-  }, [habit, title, description, onUpdated, onClose]);
+  }, [habit, isSaving, title, description, onUpdated, onClose]);
 
   const handleClose = useCallback(() => {
     // Reset form state on close

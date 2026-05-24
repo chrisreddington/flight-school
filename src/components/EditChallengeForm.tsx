@@ -73,6 +73,7 @@ export function EditChallengeForm({
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+      if (isSaving) return;
       const validationErrors = validateChallenge(formData);
       setErrors(validationErrors);
       if (Object.keys(validationErrors).length > 0) return;
@@ -90,7 +91,7 @@ export function EditChallengeForm({
         setIsSaving(false);
       }
     },
-    [formData, onSave]
+    [formData, isSaving, onSave]
   );
 
   return (
