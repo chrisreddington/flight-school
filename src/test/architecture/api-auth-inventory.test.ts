@@ -42,7 +42,7 @@ const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   'guided-plan/route.ts': 'withGuardedRoute',
   'habits/storage/route.ts': 'createStorageRoute',
   'health/route.ts': 'public',
-  'issues/route.ts': 'getOctokitForRequest',
+  'issues/route.ts': 'withGuardedRoute',
   'jobs/[id]/route.ts': 'requireUserContext',
   'jobs/[id]/stream/route.ts': 'requireUserContext',
   // `jobs/route.ts` is a mixed boundary: POST is wrapped in

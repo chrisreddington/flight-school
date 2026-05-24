@@ -11,6 +11,7 @@
 
 import { parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
+import { handleApiError } from '@/lib/api-error';
 import {
   type IssueRequest,
   validateIssueRequest,
@@ -105,39 +106,46 @@ export async function POST(
   return withGuardedRoute(
     { ...ISSUES_GUARD, eventType: 'issues.create', auditMetadata: { route: '/api/issues', type: req.type } },
     async () => {
-      const octokit = await getOctokitForRequest();
-      const result =
-        req.type === 'generic'
-          ? await createIssue(octokit, {
-              owner: req.owner,
-              repo: req.repo,
-              title: req.title,
-              body: req.body,
-              labels: req.labels,
-            })
-          : await createLearningGoalIssue(
-              octokit,
-              req.owner,
-              req.repo,
-              req.topic,
-              req.description,
-            );
+      try {
+        const octokit = await getOctokitForRequest();
+        const result =
+          req.type === 'generic'
+            ? await createIssue(octokit, {
+                owner: req.owner,
+                repo: req.repo,
+                title: req.title,
+                body: req.body,
+                labels: req.labels,
+              })
+            : await createLearningGoalIssue(
+                octokit,
+                req.owner,
+                req.repo,
+                req.topic,
+                req.description,
+              );
 
-      const totalTime = nowMs() - startTime;
-      log.info(`Issue #${result.number} created in ${totalTime}ms`);
+        const totalTime = nowMs() - startTime;
+        log.info(`Issue #${result.number} created in ${totalTime}ms`);
 
-      return NextResponse.json({
-        success: true,
-        issue: {
-          number: result.number,
-          title: result.title,
-          url: result.htmlUrl,
-        },
-        meta: {
-          createdAt: now(),
-          totalTimeMs: totalTime,
-        },
-      } satisfies IssueResponse);
+        return NextResponse.json({
+          success: true,
+          issue: {
+            number: result.number,
+            title: result.title,
+            url: result.htmlUrl,
+          },
+          meta: {
+            createdAt: now(),
+            totalTimeMs: totalTime,
+          },
+        } satisfies IssueResponse);
+      } catch (error) {
+        // Keep the JSON envelope contract for non-guard failures
+        // (Octokit / network errors). Guard-related errors are still
+        // mapped to standard responses by withGuardedRoute itself.
+        return handleApiError(error, 'Issues API', startTime);
+      }
     },
   ) as Promise<NextResponse<IssueResponse | ErrorResponse>>;
 }
