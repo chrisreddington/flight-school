@@ -4,7 +4,7 @@
  * `POST /api/internal/jobs` — create (or idempotently replay) a job
  * record. The web edge captures causality and pre-validates the
  * payload before forwarding here; this route is the single writer of
- * job records once Phase 2B.2 lands.
+ * job records.
  *
  * `GET /api/internal/jobs?userId=&type=&status=` — list redacted
  * job DTOs scoped to a user. Mirrors the multi-tenant filter on
@@ -122,97 +122,62 @@ function authorize(request: NextRequest): NextResponse | null {
   return null;
 }
 
-async function handleCreate(request: NextRequest) {
-  const authError = authorize(request);
-  if (authError) return authError;
-
-  const parseResult = await parseJsonBody<unknown>(request);
-  if (!parseResult.success) {
-    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
-  }
-  const parsed = parseCreateBody(parseResult.data);
-  if (!parsed.ok) {
-    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
-  }
-  const body = parsed.body;
-
-  // Cross-user id collision is detected atomically below — we read first
-  // ONLY to give a 409 response. The race window between this read and
-  // the atomic create is fine because the atomic primitive will also
-  // detect the id collision and (correctly) reject the create. We just
-  // wouldn't get to distinguish the cross-user case from the same-user
-  // replay case via response code if a TOCTOU happened mid-flight; in
-  // practice this is benign because the storage already has 1 valid
-  // owner and we never insert.
+/**
+ * Pre-flight ownership check so cross-user id collisions return a clean 409.
+ * The atomic `createIfAbsent` also detects this, but only by failing the
+ * insert — without this read we'd lose the distinction between cross-user
+ * conflict and same-user idempotent replay in the response code.
+ */
+async function rejectIfOwnedByDifferentUser(
+  body: CreateJobBody,
+): Promise<NextResponse | null> {
   const preExisting = await jobStorage.get(body.id);
   if (preExisting && preExisting.userId !== body.userId) {
     return NextResponse.json({ error: 'Conflict' }, { status: 409 });
   }
+  return null;
+}
 
-  // Atomic check-then-create. Runs both the by-id and the chat-tuple
-  // collision check under the same `withJobsMutation` lock that the
-  // insert holds, closing the race that the old check-then-create
-  // pattern had. See `jobStorage.createIfAbsent` jsdoc.
-  const chatThreadId =
-    body.type === 'chat-response' && typeof (body.input as { threadId?: unknown }).threadId === 'string'
-      ? (body.input as { threadId: string }).threadId
-      : undefined;
-  const chatAssistantMessageId =
-    body.type === 'chat-response'
-      && typeof (body.input as { assistantMessageId?: unknown }).assistantMessageId === 'string'
-      ? (body.input as { assistantMessageId: string }).assistantMessageId
-      : undefined;
+/**
+ * For chat-response jobs only: build a predicate that flags an in-flight
+ * job targeting the same (threadId, assistantMessageId) tuple as a collision.
+ * Returning `undefined` skips the tuple check inside `createIfAbsent`.
+ */
+function buildChatTupleCollisionFinder(
+  body: CreateJobBody,
+): ((jobs: Readonly<Record<string, BackgroundJob>>) => BackgroundJob | undefined) | undefined {
+  if (body.type !== 'chat-response') return undefined;
+  const input = body.input as { threadId?: unknown; assistantMessageId?: unknown };
+  const threadId = typeof input.threadId === 'string' ? input.threadId : undefined;
+  const assistantMessageId =
+    typeof input.assistantMessageId === 'string' ? input.assistantMessageId : undefined;
+  if (!threadId || !assistantMessageId) return undefined;
 
-  const findCollision = (chatThreadId && chatAssistantMessageId)
-    ? (jobs: Readonly<Record<string, BackgroundJob>>): BackgroundJob | undefined => {
-        for (const j of Object.values(jobs)) {
-          if (j.userId !== body.userId) continue;
-          if (j.type !== 'chat-response') continue;
-          if (j.status !== 'pending' && j.status !== 'running') continue;
-          const input = j.input as { threadId?: string; assistantMessageId?: string } | undefined;
-          if (input?.threadId === chatThreadId && input?.assistantMessageId === chatAssistantMessageId) {
-            return j;
-          }
-        }
-        return undefined;
+  return (jobs) => {
+    for (const candidate of Object.values(jobs)) {
+      if (candidate.userId !== body.userId) continue;
+      if (candidate.type !== 'chat-response') continue;
+      if (candidate.status !== 'pending' && candidate.status !== 'running') continue;
+      const candidateInput = candidate.input as
+        | { threadId?: string; assistantMessageId?: string }
+        | undefined;
+      if (
+        candidateInput?.threadId === threadId
+        && candidateInput?.assistantMessageId === assistantMessageId
+      ) {
+        return candidate;
       }
-    : undefined;
-
-  if (body.credentials) {
-    await getTokenStore().setTokenIfNewer(body.userId, body.credentials);
-  }
-
-  const causality = body.causality as
-    | (Record<string, unknown> & { capturedAt?: string })
-    | undefined;
-  const outcome = await jobStorage.createIfAbsent(
-    {
-      id: body.id,
-      type: body.type,
-      targetId: body.targetId,
-      userId: body.userId,
-      causality: causality as never,
-      input: body.input as unknown as Record<string, unknown>,
-    },
-    findCollision,
-  );
-
-  // Idempotent replay path: same id or chat-collision tuple won the
-  // race; return the existing record without re-dispatching.
-  if (!outcome.created) {
-    // Tie-break for cross-user TOCTOU: if the existing record belongs
-    // to a different user, treat as 409 (do not leak ownership).
-    if (outcome.existing.userId !== body.userId) {
-      return NextResponse.json({ error: 'Conflict' }, { status: 409 });
     }
-    return NextResponse.json(redactJobForDetail(outcome.existing), { status: 200 });
-  }
+    return undefined;
+  };
+}
 
-  const job = outcome.job;
-
-  // Schedule executor on the next tick. Errors here mark the SAME job
-  // failed so the polling client sees a deterministic terminal state
-  // instead of a permanently `pending` row.
+/**
+ * Schedule executor on the next tick. Errors here mark the SAME job failed
+ * so the polling client sees a deterministic terminal state instead of a
+ * permanently `pending` row.
+ */
+function dispatchExecutorOnNextTick(job: BackgroundJob, body: CreateJobBody): void {
   setImmediate(() => {
     try {
       scheduleWorkerJobExecution(
@@ -229,8 +194,56 @@ async function handleCreate(request: NextRequest) {
       void jobStorage.markFailed(job.id, 'Worker executor setup failed', 'unknown');
     }
   });
+}
 
-  return NextResponse.json(redactJobForDetail(job), { status: 202 });
+async function handleCreate(request: NextRequest) {
+  const authError = authorize(request);
+  if (authError) return authError;
+
+  const parseResult = await parseJsonBody<unknown>(request);
+  if (!parseResult.success) {
+    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
+  }
+  const parsed = parseCreateBody(parseResult.data);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
+  }
+  const body = parsed.body;
+
+  const ownershipConflict = await rejectIfOwnedByDifferentUser(body);
+  if (ownershipConflict) return ownershipConflict;
+
+  if (body.credentials) {
+    await getTokenStore().setTokenIfNewer(body.userId, body.credentials);
+  }
+
+  // Atomic check-then-create — both id and chat-tuple collisions run under
+  // the same `withJobsMutation` lock as the insert. See `createIfAbsent`.
+  const causality = body.causality as
+    | (Record<string, unknown> & { capturedAt?: string })
+    | undefined;
+  const outcome = await jobStorage.createIfAbsent(
+    {
+      id: body.id,
+      type: body.type,
+      targetId: body.targetId,
+      userId: body.userId,
+      causality: causality as never,
+      input: body.input as unknown as Record<string, unknown>,
+    },
+    buildChatTupleCollisionFinder(body),
+  );
+
+  // Idempotent replay path: same id or chat-collision tuple won the race.
+  if (!outcome.created) {
+    if (outcome.existing.userId !== body.userId) {
+      return NextResponse.json({ error: 'Conflict' }, { status: 409 });
+    }
+    return NextResponse.json(redactJobForDetail(outcome.existing), { status: 200 });
+  }
+
+  dispatchExecutorOnNextTick(outcome.job, body);
+  return NextResponse.json(redactJobForDetail(outcome.job), { status: 202 });
 }
 
 async function handleList(request: NextRequest) {

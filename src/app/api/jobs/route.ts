@@ -1,10 +1,10 @@
 /**
  * Jobs API - Create and List Jobs (web tier, thin proxy)
  *
- * After Phase 2B.2 the web tier owns NO job state. POST proxies the
- * create request to the worker (`POST /api/internal/jobs`), which
- * runs the atomic check-then-create primitive and dispatches the
- * executor. GET proxies the redacted list endpoint.
+ * The web tier owns NO job state. POST proxies the create request to the
+ * worker (`POST /api/internal/jobs`), which runs the atomic
+ * check-then-create primitive and dispatches the executor. GET proxies the
+ * redacted list endpoint.
  *
  * POST /api/jobs - Create a new background job (proxy → worker)
  * GET  /api/jobs - List the caller's jobs (proxy → worker)
@@ -87,22 +87,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleCreateJob(request: NextRequest, userId: string) {
-  const body = await parseJsonBodyWithFallback<CreateJobRequest>(request, {} as CreateJobRequest);
-
-  if (!body.type) {
-    return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
-  }
-
-  // Hard precondition: ensure the shared TokenStore has a refresh-capable
-  // record for this user before we enqueue any work. Background executors
-  // resolve a fresh `ghu_` token from the store at run-time; if the store
-  // is unwritable now, the executor will have no credentials later.
+/**
+ * Hard precondition: ensure the shared TokenStore has a refresh-capable
+ * record for this user before we enqueue any work. Background executors
+ * resolve a fresh `ghu_` token from the store at run-time; if the store
+ * is unwritable now, the executor will have no credentials later.
+ */
+async function ensureTokenStoreSeeded(
+  userId: string,
+  jobType: JobType,
+): Promise<NextResponse | null> {
   const seedResult = await seedTokenStoreFromJwt(userId);
   if (seedResult.status === 'error') {
     log.error('Refusing to enqueue job: token-store seed failed', {
       userId,
-      type: body.type,
+      type: jobType,
       message: seedResult.error.message,
     });
     return NextResponse.json(
@@ -113,48 +112,79 @@ async function handleCreateJob(request: NextRequest, userId: string) {
       { status: 503 },
     );
   }
+  return null;
+}
+
+/**
+ * Server-validated `assistantMessageId` for chat jobs. The id is the
+ * stable handle the worker uses to upsert deltas into a single assistant
+ * message on `threads.json`. The worker enforces the
+ * `(threadId, assistantMessageId)` uniqueness inside its atomic create;
+ * we just normalise the shape here (or fall back to a fresh uuid for
+ * older clients).
+ */
+function normalizeChatAssistantMessageId(
+  body: CreateJobRequest,
+): { ok: true; body: CreateJobRequest } | { ok: false; response: NextResponse } {
+  if (body.type !== 'chat-response') return { ok: true, body };
+
+  const chatInput = body.input as ChatResponseInput | undefined;
+  let assistantMessageId = chatInput?.assistantMessageId;
+
+  if (assistantMessageId !== undefined) {
+    if (typeof assistantMessageId !== 'string' || !UUID_V4_RE.test(assistantMessageId)) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: 'Invalid assistantMessageId; expected RFC4122 v4 uuid.' },
+          { status: 400 },
+        ),
+      };
+    }
+  } else {
+    assistantMessageId = crypto.randomUUID();
+  }
+
+  return {
+    ok: true,
+    body: { ...body, input: { ...chatInput, assistantMessageId } as ChatResponseInput },
+  };
+}
+
+function recordTriggerOnActiveSpan(request: NextRequest): ClientTriggerMetadata | undefined {
+  const triggerMetadata = parseClientTriggerFromHeaders(request.headers);
+  if (triggerMetadata) {
+    trace.getActiveSpan()?.setAttributes(toClientTriggerSpanAttributes(triggerMetadata));
+  }
+  return triggerMetadata;
+}
+
+async function handleCreateJob(request: NextRequest, userId: string) {
+  const body = await parseJsonBodyWithFallback<CreateJobRequest>(request, {} as CreateJobRequest);
+
+  if (!body.type) {
+    return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
+  }
+
+  const seedError = await ensureTokenStoreSeeded(userId, body.type);
+  if (seedError) return seedError;
+
+  const normalized = normalizeChatAssistantMessageId(body);
+  if (!normalized.ok) return normalized.response;
+  const finalBody = normalized.body;
 
   const jobId = crypto.randomUUID();
   const traceContext = captureTracePropagationHeaders();
-  const triggerMetadata = parseClientTriggerFromHeaders(request.headers);
-  if (triggerMetadata) {
-    trace.getActiveSpan()?.setAttributes(
-      toClientTriggerSpanAttributes(triggerMetadata),
-    );
-  }
+  const triggerMetadata = recordTriggerOnActiveSpan(request);
   const causality = toJobCausalityContext(traceContext, triggerMetadata);
-
-  // Phase D — server-validated assistantMessageId for chat jobs. The id
-  // is the stable handle the worker uses to upsert deltas into a single
-  // assistant message on `threads.json`. The worker enforces the
-  // `(threadId, assistantMessageId)` uniqueness inside its atomic
-  // create primitive; we just normalise the shape here.
-  if (body.type === 'chat-response') {
-    const chatInput = body.input as ChatResponseInput | undefined;
-    let assistantMessageId = chatInput?.assistantMessageId;
-
-    if (assistantMessageId !== undefined) {
-      if (typeof assistantMessageId !== 'string' || !UUID_V4_RE.test(assistantMessageId)) {
-        return NextResponse.json(
-          { error: 'Invalid assistantMessageId; expected RFC4122 v4 uuid.' },
-          { status: 400 },
-        );
-      }
-    } else {
-      // Backwards-compat fallback for pre-Phase-D clients.
-      assistantMessageId = crypto.randomUUID();
-    }
-
-    body.input = { ...chatInput, assistantMessageId } as ChatResponseInput;
-  }
 
   const proxyInput: CreateWorkerJobInput = {
     id: jobId,
-    type: body.type,
-    targetId: body.targetId,
+    type: finalBody.type,
+    targetId: finalBody.targetId,
     userId,
     causality,
-    input: body.input as unknown as DispatchableJobInput,
+    input: finalBody.input as unknown as DispatchableJobInput,
     credentials: await getWorkerDispatchCredentials(),
     traceContext: hasTraceContext(traceContext) ? traceContext : undefined,
   };
@@ -163,7 +193,7 @@ async function handleCreateJob(request: NextRequest, userId: string) {
   try {
     job = await createWorkerJob(proxyInput);
   } catch (err) {
-    log.error('Failed to create job on worker', { userId, type: body.type, err });
+    log.error('Failed to create job on worker', { userId, type: finalBody.type, err });
     return NextResponse.json(
       { error: 'Job service temporarily unavailable. Please retry.' },
       { status: 503 },
