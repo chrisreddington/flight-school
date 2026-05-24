@@ -4,6 +4,7 @@ import type { RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
 import { CheckIcon, CopilotIcon, PencilIcon, XIcon } from '@primer/octicons-react';
 import { Heading, IconButton, Stack, TextInput, Tooltip } from '@primer/react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSmoothedText } from '@/lib/chat/use-smoothed-text';
 import { ChatInput } from '../ChatInput';
 import { MessageBubble } from '../MessageBubble';
 import { RepoSelector } from '../RepoSelector';
@@ -193,11 +194,18 @@ export const LearningChat = memo(function LearningChat({
   // This is set by the background job in storage
   const isStreamingInActiveThread = (isStreaming === true) || (activeThread?.isStreaming === true);
 
-  // Phase 5: synthesize the in-flight assistant message at the tail
-  // of `displayMessages` whenever the chat-stream store has live
-  // content for this thread. The durable thread no longer contains a
-  // partial message during streaming, so the UI is wholly responsible
-  // for blending the live buffer into the visible message list.
+  // Decouple bursty token arrival from the visible render cadence so
+  // chunks feel like smooth typing instead of stuttering blocks. Keyed
+  // on assistantMessageId so each new reply starts from empty rather
+  // than inheriting the previous response's buffer. Visibility gates
+  // still key off raw `streamingContent` — we want the typing indicator
+  // to hide the instant tokens land, even if the bubble fills in over
+  // the next few frames.
+  const smoothedStreamingContent = useSmoothedText(
+    streamingContent,
+    streamingAssistantMessageId,
+  );
+
   const displayMessages = useMemo(() => {
     if (!isStreamingInActiveThread) return messages;
     if (!streamingAssistantMessageId) return messages;
@@ -207,7 +215,7 @@ export const LearningChat = memo(function LearningChat({
     const synthesized = {
       id: streamingAssistantMessageId,
       role: 'assistant' as const,
-      content: streamingContent,
+      content: smoothedStreamingContent,
       timestamp: new Date().toISOString(),
       toolEvents: streamingToolEvents.length > 0 ? streamingToolEvents : undefined,
     };
@@ -217,6 +225,7 @@ export const LearningChat = memo(function LearningChat({
     isStreamingInActiveThread,
     streamingAssistantMessageId,
     streamingContent,
+    smoothedStreamingContent,
     streamingToolEvents,
   ]);
   // Show typing indicator when streaming starts but no streaming content has arrived yet.
