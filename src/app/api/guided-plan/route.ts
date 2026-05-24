@@ -1,8 +1,7 @@
 import { knownApiErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateGuidedPlan, getGuidedPlanFallback } from '@/lib/copilot/guided-mode';
 import { createSessionIdentity } from '@/lib/copilot/server';
-import { getOctokitForRequest } from '@/lib/github/client';
-import { buildCompactContext, serializeContext } from '@/lib/github/profile';
+import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
 import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
@@ -37,14 +36,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return await withUserGuards(
       { ...PLAN_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/guided-plan' } },
       async (ctx) => {
-        let profileContext = '';
-        try {
-          const octokit = await getOctokitForRequest();
-          const compactContext = await buildCompactContext(octokit, 1000);
-          profileContext = serializeContext(compactContext);
-        } catch (error) {
-          log.warn('Failed to build profile context for guided plan', error);
-        }
+        const { context: profileContext } = await buildProfileContext({
+          maxChars: 1000,
+          logger: log,
+          context: 'guided plan',
+        });
 
         try {
           const plan = await generateGuidedPlan(

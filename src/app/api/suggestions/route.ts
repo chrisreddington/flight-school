@@ -2,8 +2,7 @@ import { parseJsonBodyWithFallback } from '@/lib/api';
 import { createSessionIdentity } from '@/lib/copilot/server';
 import { generateWhatsNext, getWhatsNextFallback, type WhatsNextResult } from '@/lib/copilot/suggestions';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
-import { getOctokitForRequest } from '@/lib/github/client';
-import { buildCompactContext, serializeContext } from '@/lib/github/profile';
+import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
 import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
@@ -35,14 +34,11 @@ export async function POST(request: NextRequest) {
     return await withUserGuards(
       { ...SUGGESTIONS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/suggestions' } },
       async (ctx) => {
-        let profileContext = '';
-        try {
-          const octokit = await getOctokitForRequest();
-          const compactContext = await buildCompactContext(octokit, 1000);
-          profileContext = serializeContext(compactContext);
-        } catch (error) {
-          log.warn('Failed to build profile context for suggestions', error);
-        }
+        const { context: profileContext } = await buildProfileContext({
+          maxChars: 1000,
+          logger: log,
+          context: 'suggestions',
+        });
 
         try {
           const result: WhatsNextResult = await generateWhatsNext(

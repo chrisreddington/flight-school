@@ -1,8 +1,7 @@
 import { knownApiErrorResponse, parseJsonBodyWithFallback } from '@/lib/api';
 import { generateTopicQuiz, type QuizResult } from '@/lib/copilot/quiz';
 import { createSessionIdentity } from '@/lib/copilot/server';
-import { getOctokitForRequest } from '@/lib/github/client';
-import { buildCompactContext, serializeContext } from '@/lib/github/profile';
+import { buildProfileContext } from '@/lib/github/profile-context';
 import { logger } from '@/lib/logger';
 import { withUserGuards } from '@/lib/security/guard';
 import { guardErrorResponse } from '@/lib/security/http';
@@ -63,14 +62,11 @@ export async function POST(request: NextRequest) {
     return await withUserGuards(
       { ...QUIZ_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/quiz' } },
       async (ctx) => {
-        let profileContext = '';
-        try {
-          const octokit = await getOctokitForRequest();
-          const compactProfile = await buildCompactContext(octokit, 500);
-          profileContext = serializeContext(compactProfile);
-        } catch (error) {
-          log.warn('Failed to build profile context for quiz generation', error);
-        }
+        const { context: profileContext } = await buildProfileContext({
+          maxChars: 500,
+          logger: log,
+          context: 'quiz generation',
+        });
 
         try {
           const quiz = await generateTopicQuiz(

@@ -32,8 +32,7 @@ import {
 } from '@/lib/focus/server-utils';
 import type { FocusResponse, LearningTopic } from '@/lib/focus/types';
 import type { InterleavingHint } from '@/lib/focus/interleaving';
-import { getOctokitForRequest } from '@/lib/github/client';
-import { buildCompactContext, serializeContext } from '@/lib/github/profile';
+import { buildProfileContext } from '@/lib/github/profile-context';
 import type { CompactDeveloperProfile } from '@/lib/github/types';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import { logger } from '@/lib/logger';
@@ -190,15 +189,14 @@ async function generateFocus(identity: SessionIdentity, options: {
   let compactProfile: CompactDeveloperProfile | null = null;
 
   try {
-    // Build compact profile context
-    try {
-      const octokit = await getOctokitForRequest();
-      compactProfile = await buildCompactContext(octokit, 1000);
-      serializedContext = serializeContext(compactProfile);
-      log.info(`Context: ${serializedContext.length} chars`);
-    } catch (profileError) {
-      log.warn('Failed to build context:', profileError);
-    }
+    const built = await buildProfileContext({
+      maxChars: 1000,
+      logger: log,
+      context: 'focus',
+    });
+    serializedContext = built.context;
+    compactProfile = built.profile;
+    if (serializedContext) log.info(`Context: ${serializedContext.length} chars`);
 
     // Single topic replacement request
     if (component === 'singleTopic') {
