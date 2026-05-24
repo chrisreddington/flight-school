@@ -5,7 +5,6 @@
 
 
     "src/lib/copilot/streaming.ts": 625,
-    "src/lib/focus/storage.ts": 633,
     "src/lib/jobs/storage.ts": 579,
     "src/lib/operations/active-operations.ts": 725
   },
