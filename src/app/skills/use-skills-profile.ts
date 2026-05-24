@@ -42,9 +42,12 @@ export interface UseSkillsProfileResult {
   handleClearAllData: () => Promise<void>;
 }
 
-export function useSkillsProfile(): UseSkillsProfileResult {
-  const [profile, setProfile] = useState<SkillProfile>(DEFAULT_SKILL_PROFILE);
-  const [isLoading, setIsLoading] = useState(true);
+export function useSkillsProfile(options?: { initialProfile?: SkillProfile }): UseSkillsProfileResult {
+  const initialProfile = options?.initialProfile;
+  const [profile, setProfile] = useState<SkillProfile>(initialProfile ?? DEFAULT_SKILL_PROFILE);
+  // Server-Component seeded loads start non-blocking — the profile is already
+  // visible, only the (light) calibration query is still in flight.
+  const [isLoading, setIsLoading] = useState(!initialProfile);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[]>([]);
@@ -53,6 +56,12 @@ export function useSkillsProfile(): UseSkillsProfileResult {
     (async () => {
       try {
         setLoadError(null);
+        if (initialProfile) {
+          // Profile was server-rendered; only calibration still needs fetching.
+          const calibration = await focusStore.getCalibrationNeeded();
+          setCalibrationItems(calibration);
+          return;
+        }
         const [loaded, calibration] = await Promise.all([
           skillsStore.get(),
           focusStore.getCalibrationNeeded(),
@@ -66,7 +75,7 @@ export function useSkillsProfile(): UseSkillsProfileResult {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [initialProfile]);
 
   const handleCalibrationChange = useCallback(async (items: CalibrationNeededItem[]) => {
     setCalibrationItems(items);
