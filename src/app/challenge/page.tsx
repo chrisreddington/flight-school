@@ -1,133 +1,56 @@
+'use client';
+
 /**
  * Challenge Page
  *
- * Dedicated page for the challenge sandbox experience.
- * Displays the shared header with dynamic breadcrumbs based on navigation history.
+ * Reads challenge details from URL search params and renders the full-page
+ * sandbox experience. Param parsing + Monaco preload live in
+ * {@link ./challenge-page-helpers}.
  */
 
-'use client';
+import { useSearchParams } from 'next/navigation';
+import { lazy, Suspense, useCallback, useMemo } from 'react';
 
 import { AppHeader } from '@/components/AppHeader';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
-import type { ChallengeDef } from '@/lib/copilot/types';
 import { focusStore } from '@/lib/focus';
 import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
-import { useSearchParams } from 'next/navigation';
-import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
+
+import { parseChallengeFromSearchParams, useMonacoPreload } from './challenge-page-helpers';
 import styles from './challenge.module.css';
 
 const log = logger.withTag('ChallengePage');
 
 // PERF: Code split ChallengeSandbox (includes Monaco Editor ~200KB)
-const ChallengeSandbox = lazy(() => 
-  import('@/components/ChallengeSandbox').then(mod => ({ default: mod.ChallengeSandbox }))
+const ChallengeSandbox = lazy(() =>
+  import('@/components/ChallengeSandbox').then((mod) => ({ default: mod.ChallengeSandbox }))
 );
 
-/** Default challenge when none provided */
-const DEFAULT_CHALLENGE: ChallengeDef = {
-  title: 'Practice Challenge',
-  description: 'Write a solution to the coding challenge.',
-  type: 'implement',
-  language: 'TypeScript',
-  difficulty: 'beginner',
-  testCases: [],
-};
-
-/**
- * PERF: Preload Monaco Editor during idle time to reduce perceived load
- * This kicks off the ~2MB download before user interacts with editor
- */
-function useMonacoPreload() {
-  useEffect(() => {
-    // Use requestIdleCallback to avoid blocking initial render
-    const preload = () => {
-      // Dynamically import Monaco to warm the cache
-      import('@monaco-editor/react').catch(() => {
-        // Silently fail - editor will load on demand anyway
-      });
-    };
-
-    if ('requestIdleCallback' in window) {
-      const id = window.requestIdleCallback(preload, { timeout: 2000 });
-      return () => window.cancelIdleCallback(id);
-    } else {
-      // Fallback for browsers without requestIdleCallback
-      const id = setTimeout(preload, 100);
-      return () => clearTimeout(id);
-    }
-  }, []);
-}
-
-/**
- * Inner component that uses useSearchParams (must be wrapped in Suspense)
- */
 function ChallengePageContent() {
   const searchParams = useSearchParams();
-  
-  // PERF: Start loading Monaco early during idle time
+
   useMonacoPreload();
 
-  // Parse challenge from URL params
-  const { challengeId, challenge } = useMemo((): { challengeId: string; challenge: ChallengeDef } => {
-    // Get actual challenge ID from URL (passed by ChallengeCard)
-    const id = searchParams.get('id');
-    const title = searchParams.get('title');
-    const description = searchParams.get('description');
-    const type = searchParams.get('type') as ChallengeDef['type'];
-    const brokenCode = searchParams.get('brokenCode');
-    const language = searchParams.get('language');
-    const difficulty = searchParams.get('difficulty') as ChallengeDef['difficulty'];
+  const { challengeId, challenge } = useMemo(
+    () => parseChallengeFromSearchParams(searchParams),
+    [searchParams]
+  );
 
-    if (!title) {
-      return {
-        challengeId: 'default-challenge',
-        challenge: DEFAULT_CHALLENGE,
-      };
-    }
-
-    // Use actual ID if available, otherwise generate stable ID from title
-    const actualId = id || `challenge-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)}`;
-
-    return {
-      challengeId: actualId,
-        challenge: {
-          title,
-          description: description ?? '',
-          type: type || 'implement',
-          brokenCode: brokenCode ?? undefined,
-          language: language ?? 'TypeScript',
-          difficulty: difficulty || 'beginner',
-          testCases: [],
-      },
-    };
-  }, [searchParams]);
-
-  // Register this page in breadcrumb history
-  // Memoize the href to avoid re-registrations on unrelated changes
+  // Memoise the breadcrumb href so unrelated re-renders don't re-register it.
   const breadcrumbHref = useMemo(() => {
     const params = new URLSearchParams();
-    searchParams.forEach((value, key) => {
-      params.set(key, value);
-    });
+    searchParams.forEach((value, key) => params.set(key, value));
     return `/challenge?${params.toString()}`;
   }, [searchParams]);
 
   useBreadcrumb('/challenge', challenge.title, breadcrumbHref);
 
-  /**
-   * Handle challenge completion when evaluation returns 100%.
-   * Registers the challenge in the focus store if not already present
-   * (custom challenges from the dashboard are passed via URL params and may
-   * not be pre-registered), then marks it as completed.
-   * Does NOT redirect - user may want to export to GitHub.
-   */
   const handleComplete = useCallback(async () => {
     try {
       const dateKey = getDateKey();
       log.info('Marking challenge as completed', { challengeId, dateKey });
 
-      // Ensure the challenge is registered in the focus store.
       // Custom challenges generated on-the-fly are passed via URL params and
       // are not pre-loaded into the daily history, so transitionChallenge would
       // fail with "not found". addChallenge is idempotent — safe to call always.
@@ -144,13 +67,7 @@ function ChallengePageContent() {
         isCustom: challengeId.startsWith('custom-'),
       });
 
-      await focusStore.transitionChallenge(
-        dateKey,
-        challengeId,
-        'completed',
-        'challenge-sandbox'
-      );
-      
+      await focusStore.transitionChallenge(dateKey, challengeId, 'completed', 'challenge-sandbox');
       log.info('Challenge marked as completed', { challengeId, dateKey });
     } catch (error) {
       log.error('Failed to mark challenge as completed', { challengeId, error });
@@ -160,7 +77,6 @@ function ChallengePageContent() {
   return (
     <div className={styles.root}>
       <AppHeader />
-
       <main className={styles.main}>
         <ChallengeSandbox
           challengeId={challengeId}
@@ -173,28 +89,19 @@ function ChallengePageContent() {
   );
 }
 
-/**
- * Challenge page component.
- *
- * Reads challenge details from URL search params and renders
- * the full-page sandbox experience.
- */
+function ChallengePageLoading() {
+  return (
+    <div className={styles.root}>
+      <AppHeader />
+      <div className={styles.loading}>Loading challenge...</div>
+    </div>
+  );
+}
+
 export default function ChallengePage() {
   return (
     <Suspense fallback={<ChallengePageLoading />}>
       <ChallengePageContent />
     </Suspense>
-  );
-}
-
-/** Loading state while params are being read */
-function ChallengePageLoading() {
-  return (
-    <div className={styles.root}>
-      <AppHeader />
-      <div className={styles.loading}>
-        Loading challenge...
-      </div>
-    </div>
   );
 }

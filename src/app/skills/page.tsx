@@ -1,37 +1,19 @@
-/**
- * Skill Profile Page
- *
- * User-facing skill calibration interface. Allows users to review and adjust
- * their skill levels for personalized learning recommendations.
- *
- * @remarks
- * State + mutators live in {@link useSkillsProfile}; sidebar + list JSX live
- * in `_components/`. This file is the coordinator.
- */
-
 'use client';
 
+import { InfoIcon, PlusIcon } from '@primer/octicons-react';
+import { Banner, Button, Heading, Spinner, Stack } from '@primer/react';
 import { useCallback, useState } from 'react';
 
 import { AppHeader } from '@/components/AppHeader';
 import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
-import { InfoIcon, PlusIcon } from '@primer/octicons-react';
-import {
-  Banner,
-  Button,
-  FormControl,
-  Heading,
-  Spinner,
-  Stack,
-  TextInput,
-} from '@primer/react';
+import layoutStyles from '@/styles/two-column-layout.module.css';
 
+import { AddSkillForm } from './_components/AddSkillForm';
 import { SkillsList } from './_components/SkillsList';
 import { SkillsSidebar } from './_components/SkillsSidebar';
 import styles from './profile-skills.module.css';
 import { useSkillsProfile } from './use-skills-profile';
-import layoutStyles from '@/styles/two-column-layout.module.css';
 
 export default function SkillProfilePage() {
   const {
@@ -48,19 +30,15 @@ export default function SkillProfilePage() {
     handleClearAllData,
   } = useSkillsProfile();
 
-  const [newSkillName, setNewSkillName] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useBreadcrumb('/skills', 'Skills', '/skills');
 
-  const handleSubmitNewSkill = useCallback(async () => {
-    const name = newSkillName.trim();
-    if (!name) return;
+  const handleSubmitNewSkill = useCallback(async (name: string) => {
     await handleAddSkill(undefined, name);
-    setNewSkillName('');
     setShowAddForm(false);
-  }, [handleAddSkill, newSkillName]);
+  }, [handleAddSkill]);
 
   const handleAddLearningPathSkill = useCallback(
     (skillId: string, displayName: string) => {
@@ -75,9 +53,7 @@ export default function SkillProfilePage() {
         <AppHeader />
         <main className={layoutStyles.main}>
           <aside className={layoutStyles.sidebar}>
-            <div className={layoutStyles.sidebarCard}>
-              <Spinner size="medium" />
-            </div>
+            <div className={layoutStyles.sidebarCard}><Spinner size="medium" /></div>
           </aside>
           <div className={styles.content}>
             <Stack direction="horizontal" align="center" justify="center" gap="condensed">
@@ -111,9 +87,7 @@ export default function SkillProfilePage() {
             <div className={styles.pageHeader}>
               <Stack direction="horizontal" align="center" justify="space-between">
                 <div>
-                  <Heading as="h1" className={styles.pageTitle}>
-                    Your Skills
-                  </Heading>
+                  <Heading as="h1" className={styles.pageTitle}>Your Skills</Heading>
                   <p className={styles.pageDescription}>
                     Calibrate your skill levels for personalized learning recommendations.
                   </p>
@@ -123,6 +97,7 @@ export default function SkillProfilePage() {
                 </Button>
               </Stack>
             </div>
+
             {actionError && (
               <Banner
                 title="Failed to save"
@@ -151,25 +126,10 @@ export default function SkillProfilePage() {
             )}
 
             {showAddForm && (
-              <div className={styles.addSkillForm}>
-                <FormControl>
-                  <FormControl.Label>Skill Name</FormControl.Label>
-                  <Stack direction="horizontal" gap="condensed">
-                    <TextInput
-                      value={newSkillName}
-                      onChange={(e) => setNewSkillName(e.target.value)}
-                      placeholder="e.g., TypeScript, React, Docker"
-                      aria-label="New skill name"
-                    />
-                    <Button onClick={handleSubmitNewSkill} disabled={!newSkillName.trim()}>
-                      Add
-                    </Button>
-                    <Button variant="invisible" onClick={() => setShowAddForm(false)}>
-                      Cancel
-                    </Button>
-                  </Stack>
-                </FormControl>
-              </div>
+              <AddSkillForm
+                onSubmit={handleSubmitNewSkill}
+                onCancel={() => setShowAddForm(false)}
+              />
             )}
 
             <div className={styles.skillsSection}>
