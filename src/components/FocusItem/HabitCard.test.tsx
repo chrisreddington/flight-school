@@ -9,6 +9,11 @@ const { updateMock, deleteMock, getRemainingSkipsMock } = vi.hoisted(() => ({
   getRemainingSkipsMock: vi.fn(() => 3),
 }));
 
+vi.mock('@/app/habits/actions', () => ({
+  updateHabitAction: vi.fn().mockResolvedValue({ ok: true }),
+  createHabitAction: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock('@/lib/habits', () => ({
   habitStore: {
     update: updateMock,

@@ -5,8 +5,8 @@
  * Supports three tracking modes: time, count, binary.
  */
 
-import { habitStore } from '@/lib/habits';
-import { createHabit, type TrackingConfig } from '@/lib/habits/types';
+import { createHabitAction } from '@/app/habits/actions';
+import type { TrackingConfig } from '@/lib/habits/types';
 import { 
   Banner,
   Checkbox, 
@@ -154,13 +154,22 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
         return;
       }
 
-      const habit = createHabit(title.trim(), description.trim(), tracking, days, includesWeekends);
-      await habitStore.create(habit);
+      const result = await createHabitAction({
+        title: title.trim(),
+        description: description.trim(),
+        tracking,
+        activeDays: days,
+        includesWeekends,
+      });
+      if (!result.ok) {
+        setError(result.error ?? 'Failed to create habit');
+        return;
+      }
 
       setTitle('');
       setDescription('');
       setError('');
-      
+
       if (onCreated) onCreated();
       onClose();
     } catch (err) {

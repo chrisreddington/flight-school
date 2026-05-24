@@ -2,6 +2,7 @@
 
 import { InfoIcon, PlusIcon } from '@primer/octicons-react';
 import { Banner, Button, Heading, Spinner, Stack } from '@primer/react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
 import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
@@ -27,6 +28,7 @@ interface SkillsClientProps {
  * skill, reset) and re-fetches as needed.
  */
 export function SkillsClient({ initialProfile }: SkillsClientProps) {
+  const router = useRouter();
   const {
     profile,
     isLoading,
@@ -37,7 +39,6 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
     handleCalibrationChange,
     handleSkillChange,
     handleRemoveSkill,
-    handleAddSkill,
     handleClearAllData,
   } = useSkillsProfile({ initialProfile });
 
@@ -46,16 +47,24 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
 
   useBreadcrumb('/skills', 'Skills', '/skills');
 
-  const handleSubmitNewSkill = useCallback(async (name: string) => {
-    await handleAddSkill(undefined, name);
+  const handleSuccessfulAdd = useCallback(() => {
+    // Server Action wrote to disk + revalidated the route; refresh the RSC
+    // payload so the parent page re-reads the canonical profile.
     setShowAddForm(false);
-  }, [handleAddSkill]);
+    router.refresh();
+  }, [router]);
 
   const handleAddLearningPathSkill = useCallback(
     (skillId: string, displayName: string) => {
-      void handleAddSkill({ skillId, displayName });
+      void (async () => {
+        const formData = new FormData();
+        formData.set('name', displayName);
+        const { addSkillAction } = await import('../actions');
+        await addSkillAction({ ok: false }, formData);
+        router.refresh();
+      })();
     },
-    [handleAddSkill],
+    [router],
   );
 
   return (
@@ -123,7 +132,7 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
 
           {showAddForm && (
             <AddSkillForm
-              onSubmit={handleSubmitNewSkill}
+              onSuccess={handleSuccessfulAdd}
               onCancel={() => setShowAddForm(false)}
             />
           )}

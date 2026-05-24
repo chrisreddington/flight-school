@@ -17,6 +17,7 @@ import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
 import type { DailyChallenge } from '@/lib/focus/types';
 
+import { updateChallengeAction } from '../../actions';
 import styles from '../../challenge.module.css';
 
 export default function EditChallengePage() {
@@ -24,7 +25,7 @@ export default function EditChallengePage() {
   const router = useRouter();
   const challengeId = params.id as string;
 
-  const { getById, updateChallenge } = useCustomChallengeQueue(null);
+  const { getById } = useCustomChallengeQueue(null);
 
   const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,17 +42,17 @@ export default function EditChallengePage() {
 
   const handleSave = useCallback(
     async (updated: DailyChallenge) => {
-      const success = await updateChallenge(challengeId, updated);
-      if (success) {
+      const result = await updateChallengeAction(challengeId, updated);
+      if (result.ok) {
         router.push('/');
         return { success: true };
       }
       return {
         success: false,
-        error: 'Failed to save changes. The challenge may no longer exist.',
+        error: result.error ?? 'Failed to save changes. The challenge may no longer exist.',
       };
     },
-    [updateChallenge, challengeId, router]
+    [challengeId, router]
   );
 
   const handleCancel = useCallback(() => router.back(), [router]);

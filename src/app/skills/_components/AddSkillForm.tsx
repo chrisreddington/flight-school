@@ -1,41 +1,53 @@
 'use client';
 
 import { Button, FormControl, Stack, TextInput } from '@primer/react';
-import { useCallback, useState } from 'react';
+import { useActionState, useEffect, useRef } from 'react';
 
+import { addSkillAction, type AddSkillState } from '../actions';
 import styles from '../profile-skills.module.css';
 
 interface AddSkillFormProps {
-  onSubmit: (name: string) => Promise<void> | void;
+  /** Called after the Server Action resolves successfully so the parent can refresh / close. */
+  onSuccess: () => void;
   onCancel: () => void;
 }
 
-/** Controlled "add skill by name" inline form used at the top of the skills list. */
-export function AddSkillForm({ onSubmit, onCancel }: AddSkillFormProps) {
-  const [name, setName] = useState('');
+const INITIAL_STATE: AddSkillState = { ok: false };
 
-  const submit = useCallback(async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    await onSubmit(trimmed);
-    setName('');
-  }, [name, onSubmit]);
+/**
+ * Inline form that submits a new manual skill via `addSkillAction`.
+ * Pending state, validation errors, and revalidation are all driven by
+ * `useActionState` + the Server Action — no client-side hook required.
+ */
+export function AddSkillForm({ onSuccess, onCancel }: AddSkillFormProps) {
+  const [state, formAction, isPending] = useActionState(addSkillAction, INITIAL_STATE);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (state.ok) {
+      if (inputRef.current) inputRef.current.value = '';
+      onSuccess();
+    }
+  }, [state, onSuccess]);
 
   return (
-    <div className={styles.addSkillForm}>
+    <form action={formAction} className={styles.addSkillForm}>
       <FormControl>
         <FormControl.Label>Skill Name</FormControl.Label>
         <Stack direction="horizontal" gap="condensed">
           <TextInput
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            ref={inputRef}
+            name="name"
+            defaultValue=""
             placeholder="e.g., TypeScript, React, Docker"
             aria-label="New skill name"
+            disabled={isPending}
           />
-          <Button onClick={submit} disabled={!name.trim()}>Add</Button>
-          <Button variant="invisible" onClick={onCancel}>Cancel</Button>
+          <Button type="submit" disabled={isPending}>{isPending ? 'Adding…' : 'Add'}</Button>
+          <Button type="button" variant="invisible" onClick={onCancel} disabled={isPending}>Cancel</Button>
         </Stack>
+        {state.error && <FormControl.Validation variant="error">{state.error}</FormControl.Validation>}
       </FormControl>
-    </div>
+    </form>
   );
 }

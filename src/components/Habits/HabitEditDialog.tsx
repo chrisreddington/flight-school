@@ -1,13 +1,6 @@
-/**
- * Habit Edit Dialog
- * 
- * Modal for editing an existing habit's title and description.
- * Note: Tracking configuration cannot be changed to preserve check-in history integrity.
- */
-
 'use client';
 
-import { habitStore } from '@/lib/habits';
+import { updateHabitAction } from '@/app/habits/actions';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { logger } from '@/lib/logger';
 import {
@@ -27,6 +20,11 @@ interface HabitEditDialogProps {
   onUpdated?: () => void;
 }
 
+/**
+ * Modal for editing an existing habit's title/description. Tracking
+ * configuration is immutable to preserve check-in history; the
+ * informational banner in the dialog explains that constraint.
+ */
 export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEditDialogProps) {
   const [title, setTitle] = useState(habit.title);
   const [description, setDescription] = useState(habit.description);
@@ -38,20 +36,20 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
       setError('Title is required');
       return;
     }
-
     setIsSaving(true);
     setError(null);
-
     try {
       const updated: HabitWithHistory = {
         ...habit,
         title: title.trim(),
         description: description.trim(),
       };
-
-      await habitStore.update(updated);
+      const result = await updateHabitAction(updated);
+      if (!result.ok) {
+        setError(result.error ?? 'Failed to save changes. Please try again.');
+        return;
+      }
       logger.info('Habit updated', { habitId: habit.id }, 'HabitEditDialog');
-      
       if (onUpdated) onUpdated();
       onClose();
     } catch (err) {
