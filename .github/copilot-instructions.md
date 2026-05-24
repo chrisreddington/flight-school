@@ -100,8 +100,9 @@ Rules:
   audit log + standard error → `NextResponse` mapping around the handler.
   The module exports three layered primitives:
   - `requireGuardedUserContext(policy)` — transport-agnostic core; returns
-    `{ userId, login, accessToken, policyResult }` or throws a typed error.
-    Use this from Server Actions and RSC data loaders.
+    `{ ctx, release }` (where `ctx` is the `UserContext`) or throws a typed
+    error. Always call `release()` from a `finally` block. Use this from
+    Server Actions and RSC data loaders.
   - `withUserGuards(opts, work)` — wraps the core for non-route callers that
     handle their own response shape (e.g. background jobs).
   - `withGuardedRoute(opts, work)` — the route adapter: maps `UnauthorizedError`

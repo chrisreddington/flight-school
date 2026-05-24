@@ -91,23 +91,29 @@ treat any new import of it outside `src/worker/**` as a defect.
 
 ## CI enforcement
 
-`scripts/check-copilot-sdk-boundary.mjs` (lands with this skill) walks
-the dependency graph and fails the build if:
+`scripts/check-copilot-sdk-boundary.mjs` (lands with this skill)
+direct-scans the import statements of every `.ts`/`.tsx` file under
+`src/` and fails the build if:
 
-- Any file under `src/app/**` imports `@github/copilot-sdk` directly.
-- Any file under `src/app/**` or `src/lib/**` (outside `src/lib/copilot/runtime/**`, `src/lib/copilot/execution/**`, `src/lib/copilot/server.ts`, `src/lib/copilot/sessions.ts`, `src/lib/copilot/logged-session.ts`, and tests of those) imports `createLoggedCoachSession`, `createLoggedLightweightCoachSession`, `createSession`, `createSessionWithMetrics`, or `wrapSessionWithLogging`.
-- Any file outside `src/worker/**` calls `.sendAndWait(` or `.on('assistant.message',` on a value originating from those factories.
+- Any file outside `src/worker/**` or `src/lib/copilot/runtime/**`
+  references `@github/copilot-sdk` in an import (including type-only
+  `import('@github/copilot-sdk').X` references).
+- Any file outside the worker-internal allow-list (see
+  `WORKER_INTERNAL_PREFIXES` in the script) imports the session
+  factories (`createLoggedCoachSession`,
+  `createLoggedLightweightCoachSession`, `createSession`,
+  `createSessionWithMetrics`, `wrapSessionWithLogging`,
+  `getConversationSession`, `createGenericStreamingSession`,
+  `createEvaluationStreamingSession`).
+
+Runtime call patterns (`session.sendAndWait`, `session.on(...)`) are
+not pattern-matched directly — they're caught transitively because
+you cannot get a `CopilotSession` value without importing one of the
+factories, which the script blocks at the import site.
 
 The script has **no name-based allowlist** and **no `// boundary-ok:`
 escape hatch**. If you need to expand the worker dispatch surface,
 add a new primitive to `src/lib/copilot/execution/` and call that.
-
-## Architecture test backstop
-
-`src/test/architecture/copilot-sdk-boundary.test.ts` walks every file
-under `src/app/**` and asserts the import graph never reaches
-`@github/copilot-sdk`. This catches transitive leaks that a flat grep
-would miss (e.g. a hook re-exporting a session factory).
 
 ## Adding a new AI job kind
 

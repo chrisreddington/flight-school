@@ -32,6 +32,7 @@ export type AuditEventType =
   | 'job.credentials_missing'
   | 'job.credentials_refresh_failed'
   | 'storage.write'
+  | 'issues.create'
   | 'page.view';
 
 export interface AuditEvent {

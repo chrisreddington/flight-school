@@ -63,7 +63,9 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
   }, [habit, title, description, onUpdated, onClose]);
 
   const handleClose = useCallback(() => {
-    // Reset form state on close
+    // Block close while a save is in-flight; remount would reset the
+    // submit lock and let the user double-submit on reopen.
+    if (submitLockRef.current) return;
     setTitle(habit.title);
     setDescription(habit.description);
     setError(null);

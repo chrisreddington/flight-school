@@ -92,18 +92,32 @@ export async function GET() {
 }
 ```
 
-For AI-backed routes, prefer `withUserGuards`:
+For AI-backed routes, prefer `withGuardedRoute` (composes `withUserGuards` + standard error mapping):
 
 ```typescript
-import { withUserGuards } from '@/lib/security/guard';
+import { withGuardedRoute } from '@/lib/security/guard';
 
 export async function POST(req: Request) {
-  return withUserGuards(
+  return withGuardedRoute(
     { rateLimit: { limit: 30, windowMs: 60_000 }, concurrentCap: 3, eventType: 'copilot.session.create' },
-    async ({ userId, accessToken }) => {
+    async (ctx) => {
+      const { userId, accessToken } = ctx;
       // ...
     },
   );
+}
+```
+
+For non-route callers (Server Actions, RSC loaders) use the core directly:
+
+```typescript
+import { requireGuardedUserContext } from '@/lib/security/guard';
+
+const { ctx, release } = await requireGuardedUserContext({ eventType: 'habit.update' });
+try {
+  // ctx.userId, ctx.accessToken, ctx.login
+} finally {
+  release();
 }
 ```
 
@@ -143,12 +157,12 @@ const session = await createChatSession();
 import { executeCopilotChat } from '@/lib/copilot/execution';
 import { requireGuardedUserContext } from '@/lib/security/guard';
 
-const { userId, accessToken, release } = await requireGuardedUserContext({
+const { ctx, release } = await requireGuardedUserContext({
   eventType: 'chat.request',
 });
 try {
   const result = await executeCopilotChat({
-    identity: { userId, gitHubToken: accessToken },
+    identity: { userId: ctx.userId, gitHubToken: ctx.accessToken },
     operationName: 'chat',
     prompt,
   });

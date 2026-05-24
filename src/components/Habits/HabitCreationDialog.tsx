@@ -116,52 +116,50 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
       return;
     }
 
+    // All sync validation runs BEFORE the lock so early-returns don't
+    // briefly toggle isSubmitting and stay structurally consistent with
+    // the other dialogs in this app.
+    let tracking: TrackingConfig;
+    if (trackingMode === 'time') {
+      const min = parseInt(minMinutes, 10);
+      const max = maxMinutes ? parseInt(maxMinutes, 10) : undefined;
+      if (isNaN(min) || min <= 0) {
+        setError('Minimum minutes must be a positive number');
+        return;
+      }
+      if (max !== undefined && (isNaN(max) || max < min)) {
+        setError('Maximum minutes must be greater than minimum');
+        return;
+      }
+      tracking = { mode: 'time', minMinutes: min, maxMinutes: max };
+    } else if (trackingMode === 'count') {
+      const target = parseInt(countTarget, 10);
+      if (isNaN(target) || target <= 0) {
+        setError('Count target must be a positive number');
+        return;
+      }
+      if (!countUnit.trim()) {
+        setError('Count unit is required');
+        return;
+      }
+      tracking = { mode: 'count', target, unit: countUnit.trim() };
+    } else {
+      tracking = { mode: 'binary' };
+    }
+
+    const days = getActiveDays();
+    if (days <= 0) {
+      setError('Duration must be a positive number');
+      return;
+    }
+    if (days > 365) {
+      setError('Duration cannot exceed 365 days');
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
     try {
-      submitLockRef.current = true;
-      setIsSubmitting(true);
-      let tracking: TrackingConfig;
-      
-      if (trackingMode === 'time') {
-        const min = parseInt(minMinutes, 10);
-        const max = maxMinutes ? parseInt(maxMinutes, 10) : undefined;
-        
-        if (isNaN(min) || min <= 0) {
-          setError('Minimum minutes must be a positive number');
-          return;
-        }
-        if (max !== undefined && (isNaN(max) || max < min)) {
-          setError('Maximum minutes must be greater than minimum');
-          return;
-        }
-        
-        tracking = { mode: 'time', minMinutes: min, maxMinutes: max };
-      } else if (trackingMode === 'count') {
-        const target = parseInt(countTarget, 10);
-        
-        if (isNaN(target) || target <= 0) {
-          setError('Count target must be a positive number');
-          return;
-        }
-        if (!countUnit.trim()) {
-          setError('Count unit is required');
-          return;
-        }
-        
-        tracking = { mode: 'count', target, unit: countUnit.trim() };
-      } else {
-        tracking = { mode: 'binary' };
-      }
-
-      const days = getActiveDays();
-      if (days <= 0) {
-        setError('Duration must be a positive number');
-        return;
-      }
-      if (days > 365) {
-        setError('Duration cannot exceed 365 days');
-        return;
-      }
-
       const result = await createHabitAction({
         title: title.trim(),
         description: description.trim(),
@@ -193,16 +191,23 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
     setTrackingMode(modes[index]);
   };
 
+  const handleClose = useCallback(() => {
+    // Block close while a create is in-flight; remount would reset the
+    // submit lock and let the user double-submit on reopen.
+    if (submitLockRef.current) return;
+    onClose();
+  }, [onClose]);
+
   if (!isOpen) return null;
 
   return (
     <Dialog
       title="Create New Habit"
       subtitle="Build consistency with daily practice"
-      onClose={onClose}
+      onClose={handleClose}
       width="large"
       footerButtons={[
-        { content: 'Cancel', onClick: onClose, disabled: isSubmitting },
+        { content: 'Cancel', onClick: handleClose, disabled: isSubmitting },
         { content: isSubmitting ? 'Creating…' : 'Create Habit', onClick: handleSubmit, buttonType: 'primary', disabled: isSubmitting },
       ]}
       aria-describedby={error ? 'habit-creation-error' : undefined}
