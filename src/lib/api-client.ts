@@ -214,6 +214,7 @@ async function apiRequest<T>(
             signal: combinedSignal,
             // Keep the request alive even during navigation - critical for background operations
             keepalive: true,
+            cache: 'no-store',
             headers: buildRequestHeaders(fetchOptions.headers, clientTrigger),
           });
 

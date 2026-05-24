@@ -30,7 +30,7 @@ jobs:
         run: npm run lint
 
       - name: Run guardrails (file sizes, test boundaries)
-        run: npm run check:sizes && npm run check:test-boundaries
+        run: npm run check:sizes && npm run check:test-boundaries && npm run check:cache-key-scope && npm run check:server-fetch-tenancy && npm run check:server-action-guards
 
       - name: Run tests
         run: npm test

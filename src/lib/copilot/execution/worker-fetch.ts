@@ -67,7 +67,7 @@ export async function workerFetch(
     opts.traceContext ?? {},
   );
 
-  const response = await fetch(`${config.baseUrl}${path}`, { ...init, headers });
+  const response = await fetch(`${config.baseUrl}${path}`, { ...init, headers, cache: 'no-store' });
 
   if (opts.allowNotFound && response.status === 404) return null;
   if (!response.ok) {

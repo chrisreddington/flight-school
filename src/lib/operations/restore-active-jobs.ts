@@ -50,7 +50,7 @@ export async function fetchActiveJobEntries(
   }
 
   try {
-    const response = await fetch('/api/jobs');
+    const response = await fetch('/api/jobs', { cache: 'no-store' });
     if (!response.ok) return [];
     const data = (await response.json()) as { jobs?: RawApiJob[] };
     return (data.jobs ?? [])

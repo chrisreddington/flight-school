@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: buildProxyHeaders(userId, workerConfig.secret),
       signal: request.signal,
+      cache: 'no-store',
     });
     const body = await upstream.text();
     return new Response(body, {

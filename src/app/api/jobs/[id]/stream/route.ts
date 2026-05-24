@@ -104,6 +104,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       method: 'GET',
       headers: upstreamHeaders,
       signal: request.signal,
+      cache: 'no-store',
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') {

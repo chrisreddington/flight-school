@@ -71,6 +71,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       method: 'GET',
       headers,
       signal: request.signal,
+      cache: 'no-store',
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
