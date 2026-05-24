@@ -135,7 +135,7 @@ describe('resolveProfile', () => {
 
   it('produces a stable capability fingerprint for chat+github', () => {
     const resolved = resolveProfile('chat', { capabilities: ['github'] });
-    expect(resolved.capabilityFingerprint).toMatch(/^caps=github;sys=[0-9a-f]{8}$/);
+    expect(resolved.capabilityFingerprint).toMatch(/^caps=github;sys=[0-9a-f]{16}$/);
   });
 
   it('fingerprint is deterministic across repeated calls with identical inputs', () => {

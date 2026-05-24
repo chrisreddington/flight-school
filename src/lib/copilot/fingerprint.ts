@@ -7,6 +7,8 @@
  * caller that bypasses `resolveProfile`.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { CapabilitySelection } from './capabilities';
 
 /**
@@ -52,13 +54,10 @@ export function composeCapabilityFingerprint(
   return `${capabilityFingerprintOf(selections)};sys=${shortHash(systemMessage)}`;
 }
 
-// Cheap deterministic 32-bit djb2 hash, hex-encoded. Not crypto; the
-// fingerprint is a cache key and the upstream `userId` partition
-// already isolates tenants.
+// SHA-256 truncated to 16 hex chars (64 bits). Birthday-collision
+// surface is ~4 billion entries at p=0.5; the per-process cache holds
+// at most CHAT_SESSION_MAX (50). Stronger than djb2's 32 bits at
+// negligible cost, and removes the codex-panel correctness flag.
 function shortHash(input: string): string {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(16);
+  return createHash('sha256').update(input).digest('hex').slice(0, 16);
 }

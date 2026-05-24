@@ -69,9 +69,10 @@ describe('buildMcpServersForCapabilities', () => {
     expect(github.tools).toEqual([...expectedTools]);
   });
 
-  it('silently skips MCP capabilities whose credential resolver returns undefined', () => {
-    const servers = buildMcpServersForCapabilities([{ id: 'github' }], () => undefined);
-    expect(servers).toEqual({});
+  it('throws when an MCP capability has no credential (caller-bug guard)', () => {
+    expect(() =>
+      buildMcpServersForCapabilities([{ id: 'github' }], () => undefined),
+    ).toThrow(/no credential for MCP capability 'github'/);
   });
 });
 

@@ -1,6 +1,10 @@
 import { now } from '@/lib/utils/date-utils';
 import type { LoggedCopilotSession } from '@/lib/copilot/logged-session';
 import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from '@/lib/copilot/execution/types';
+import {
+  getConversationCapabilities,
+  rememberConversationCapabilities,
+} from '@/lib/copilot/conversation-capabilities';
 import { resolveProfile, type ResolvedProfile } from '@/lib/copilot/profiles';
 
 export type RuntimeSessionFactory = (
@@ -12,14 +16,28 @@ export async function executeChatWithSessionFactory(
   request: CopilotChatExecutionRequest,
   createChatSession: RuntimeSessionFactory,
 ): Promise<CopilotChatExecutionResult> {
+  // Fold in carried conversation capabilities so multi-turn `auto`
+  // requests on the direct worker path stay monotonic-add — matches
+  // the streaming chat factory's behaviour (see `streaming.ts`).
   const resolved = resolveProfile(request.profile, {
     prompt: request.prompt,
     capabilities: request.capabilities,
+    conversationCapabilities: getConversationCapabilities(
+      request.identity.userId,
+      request.conversationId,
+    ),
   });
   const loggedSession = await createChatSession(request, resolved);
 
   try {
     const result = await loggedSession.sendAndWait(request.prompt);
+    if (request.conversationId) {
+      rememberConversationCapabilities(
+        request.identity.userId,
+        request.conversationId,
+        resolved.capabilities.map((selection) => selection.id),
+      );
+    }
     return {
       response: result.responseText,
       toolCalls: result.toolCalls.map((toolCall) => ({

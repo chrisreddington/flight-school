@@ -70,7 +70,10 @@ export interface SessionOptions {
    * Precomputed capability fingerprint (from `resolveProfile`). Optional
    * — when supplied, the session factory and cache layer skip a
    * recomputation. The fingerprint MUST match
-   * `capabilityFingerprintOf(capabilities)`.
+   * `composeCapabilityFingerprint(capabilities, effectiveSystemMessage)`
+   * (capabilities surface AND a hash of the composed system message);
+   * omitting the system-message hash silently breaks the
+   * equal-fingerprint-equals-effective-prompt cache invariant.
    */
   capabilityFingerprint?: string;
   /**

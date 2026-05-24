@@ -206,8 +206,15 @@ export type CapabilityCredentialResolver = (
  * Stable keys are derived from the capability id, so SDK telemetry and
  * tool attribution remain readable (`github`, `web-search`, …). Native
  * capabilities are skipped here — by definition they have no MCP server.
- * MCP capabilities whose credential resolver returns `undefined` are
- * skipped too, mirroring the "not installed for this request" contract.
+ *
+ * Throws if an MCP capability has no credential. We deliberately do
+ * NOT silently drop: the profile resolution upstream has already
+ * composed a system message that promises the model these tools are
+ * available, and the fingerprint cache key assumes the resolved set
+ * IS the installed set. A missing credential at this layer is a
+ * caller bug (capability composed into the surface without a paired
+ * resolver branch) — fail loud rather than ship a system prompt that
+ * advertises tools the session does not actually have.
  */
 export function buildMcpServersForCapabilities(
   selections: readonly CapabilitySelection[],
@@ -221,7 +228,11 @@ export function buildMcpServersForCapabilities(
     const spec = CAPABILITIES[selection.id];
     if (spec.kind !== 'mcp') continue;
     const token = credentials(selection.id);
-    if (!token) continue;
+    if (!token) {
+      throw new Error(
+        `buildMcpServersForCapabilities: no credential for MCP capability '${selection.id}' — caller bug (resolved capability surface and credential resolver are out of sync)`,
+      );
+    }
     servers[selection.id] = spec.buildMcpServer({
       token,
       tools: selection.tools ?? spec.defaultTools,

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeChatWithSessionFactory } from './session-executor';
+import { getConversationCapabilities } from '@/lib/copilot/conversation-capabilities';
 import type { ResolvedProfile } from '@/lib/copilot/profiles';
+
+function clearConversationCapsCache(): void {
+  (globalThis as { __chatConversationCapsCache?: Map<string, unknown> })
+    .__chatConversationCapsCache?.clear();
+}
 
 const mocks = {
   sendAndWait: vi.fn(),
@@ -11,6 +17,7 @@ const mocks = {
 describe('executeChatWithSessionFactory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearConversationCapsCache();
     mocks.sendAndWait.mockResolvedValue({
       responseText: 'hello',
       totalTimeMs: 42,
@@ -86,5 +93,38 @@ describe('executeChatWithSessionFactory', () => {
     ).rejects.toThrow('send failed');
 
     expect(mocks.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('carries conversation capabilities forward on the direct worker path', async () => {
+    // First turn: caller explicitly asks for github.
+    await executeChatWithSessionFactory(
+      {
+        identity: { userId: 'user-7', gitHubToken: 'ghu_user' },
+        prompt: 'Find issues in my repo',
+        profile: 'chat',
+        capabilities: ['github'],
+        conversationId: 'thread-cc',
+      },
+      mocks.createChatSession,
+    );
+
+    // Memory now has github for (user-7, thread-cc).
+    expect(getConversationCapabilities('user-7', 'thread-cc')).toEqual(['github']);
+
+    // Second turn: caller omits capabilities (i.e. `auto`). The
+    // executor must fold the remembered set back in so the surface
+    // does not shrink across turns.
+    await executeChatWithSessionFactory(
+      {
+        identity: { userId: 'user-7', gitHubToken: 'ghu_user' },
+        prompt: 'Continue',
+        profile: 'chat',
+        conversationId: 'thread-cc',
+      },
+      mocks.createChatSession,
+    );
+
+    const resolved = mocks.createChatSession.mock.calls[1][1] as ResolvedProfile;
+    expect(resolved.capabilities.map((selection) => selection.id)).toEqual(['github']);
   });
 });
