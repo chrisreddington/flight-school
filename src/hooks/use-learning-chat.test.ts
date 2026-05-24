@@ -1,11 +1,9 @@
 /**
  * useLearningChat hook tests.
  *
- * Scope: the orchestration unique to `useLearningChat` — primarily `sendMessage`
- * (resolve target thread → ensure title → guard against double dispatch →
- * append user message → mark pending → POST /api/jobs → seed stream tracking
- * → recover on failure). SSE/stream concerns live in the sibling
- * `use-learning-chat-stream.test.ts` and the peer hook is stubbed here.
+ * Scope: the orchestration unique to `useLearningChat` — primarily `sendMessage`.
+ * SSE/stream concerns live in `use-learning-chat-stream.test.ts`; the peer hook
+ * is stubbed here so a single integration surface (fetch) drives the scenarios.
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -13,22 +11,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Thread } from '@/lib/threads';
 import { useLearningChat } from './use-learning-chat';
 
-// ---------------------------------------------------------------------------
-// Peer hook + tiny module stubs (system-seam style — the real implementations
-// are exercised by their own dedicated test files).
-// ---------------------------------------------------------------------------
-
+// --- Peer hook + tiny module stubs -----------------------------------------
 const streamState = vi.hoisted(() => ({
   registered: [] as Array<{ jobId: string; threadId: string; assistantId: string }>,
   marked: [] as Array<{ threadId: string; userMessageId: string }>,
   cleared: [] as string[],
-  stopped: 0,
   pending: new Set<string>(),
   reset() {
     this.registered.length = 0;
     this.marked.length = 0;
     this.cleared.length = 0;
-    this.stopped = 0;
     this.pending.clear();
   },
 }));
@@ -36,9 +28,9 @@ const streamState = vi.hoisted(() => ({
 vi.mock('./use-learning-chat-stream', () => ({
   useLearningChatStream: () => ({
     allStreamingThreadIds: Array.from(streamState.pending),
-    clearPendingStream: (threadId: string) => {
-      streamState.cleared.push(threadId);
-      streamState.pending.delete(threadId);
+    clearPendingStream: (id: string) => {
+      streamState.cleared.push(id);
+      streamState.pending.delete(id);
     },
     isStreaming: streamState.pending.size > 0,
     markStreamPending: (threadId: string, userMessageId: string) => {
@@ -48,9 +40,7 @@ vi.mock('./use-learning-chat-stream', () => ({
     registerStream: (jobId: string, threadId: string, assistantId: string) => {
       streamState.registered.push({ jobId, threadId, assistantId });
     },
-    stopStreaming: () => {
-      streamState.stopped += 1;
-    },
+    stopStreaming: () => {},
     streamingAssistantMessageId: null,
     streamingContent: '',
     streamingThreadId: null,
@@ -61,9 +51,8 @@ vi.mock('./use-learning-chat-stream', () => ({
 const opsRegistered = vi.hoisted(() => [] as Array<{ jobId: string; threadId: string }>);
 vi.mock('@/lib/operations', () => ({
   operationsManager: {
-    registerExistingJob: (jobId: string, _type: string, threadId: string) => {
-      opsRegistered.push({ jobId, threadId });
-    },
+    registerExistingJob: (jobId: string, _t: string, threadId: string) =>
+      opsRegistered.push({ jobId, threadId }),
   },
 }));
 
@@ -77,18 +66,14 @@ vi.mock('@/lib/utils/date-utils', async (importOriginal) => {
   return { ...actual, now: () => '2026-01-01T00:00:00.000Z' };
 });
 
-// startChatJob mints a stable assistant id via crypto.randomUUID; trigger-metadata
-// validation requires a v4 UUID, so a fixed valid value is used.
+// trigger-metadata requires a v4 UUID for correlationId/assistantMessageId.
 const ASSISTANT_ID = '00000000-0000-4000-8000-000000000000';
 Object.defineProperty(globalThis, 'crypto', {
   configurable: true,
   value: { ...globalThis.crypto, randomUUID: () => ASSISTANT_ID },
 });
 
-// ---------------------------------------------------------------------------
-// In-memory fetch responder. apiPost/apiGet route through the global fetch
-// mock already installed by src/test/setup.ts.
-// ---------------------------------------------------------------------------
+// --- In-memory fetch responder (apiPost/apiGet → global.fetch from setup.ts) -
 
 interface FakeBackend {
   threads: Thread[];
@@ -96,57 +81,47 @@ interface FakeBackend {
   jobFailure?: Error;
   jobPosts: Array<Record<string, unknown>>;
 }
-
 const backend: FakeBackend = { threads: [], jobIdSeq: 0, jobPosts: [] };
 
-function json(body: unknown, init: ResponseInit = {}): Response {
-  return new Response(JSON.stringify(body), {
+const json = (body: unknown, init: ResponseInit = {}): Response =>
+  new Response(JSON.stringify(body), {
     status: 200,
     headers: { 'content-type': 'application/json' },
     ...init,
   });
-}
 
 function installFetch(): void {
   vi.mocked(global.fetch).mockImplementation(async (input, init) => {
     const url = typeof input === 'string' ? input : input.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
-
     if (url === '/api/threads/storage' && method === 'GET') {
       return json({ threads: backend.threads });
     }
     if (url === '/api/threads/storage' && method === 'POST') {
-      const body = JSON.parse((init?.body as string) ?? '{"threads":[]}') as {
+      backend.threads = (JSON.parse((init?.body as string) ?? '{"threads":[]}') as {
         threads: Thread[];
-      };
-      backend.threads = body.threads;
+      }).threads;
       return json({ ok: true });
     }
     if (url === '/api/jobs' && method === 'POST') {
-      const body = JSON.parse((init?.body as string) ?? '{}') as Record<string, unknown>;
-      backend.jobPosts.push(body);
-      if (backend.jobFailure) {
-        return json({ error: backend.jobFailure.message }, { status: 500 });
-      }
+      backend.jobPosts.push(JSON.parse((init?.body as string) ?? '{}'));
+      if (backend.jobFailure) return json({ error: backend.jobFailure.message }, { status: 500 });
       backend.jobIdSeq += 1;
       return json({ id: `job-${backend.jobIdSeq}` });
     }
-    // Unexpected calls fail loudly so missing seam mocks surface as test failures.
     return json({ error: `unexpected ${method} ${url}` }, { status: 404 });
   });
 }
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
-  return {
-    id: 'thread-1',
-    title: 'Existing Thread',
-    context: { repos: [] },
-    messages: [],
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
-  };
-}
+const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
+  id: 'thread-1',
+  title: 'Existing Thread',
+  context: { repos: [] },
+  messages: [],
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
 
 async function renderHookWithSeed(seed: Thread[] = []) {
   backend.threads = seed;
@@ -155,9 +130,7 @@ async function renderHookWithSeed(seed: Thread[] = []) {
   return view;
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+// --- Tests -----------------------------------------------------------------
 
 beforeEach(() => {
   streamState.reset();
@@ -172,7 +145,6 @@ beforeEach(() => {
 describe('useLearningChat — composed state surface', () => {
   it('exposes thread state and the action API', async () => {
     const { result } = await renderHookWithSeed([makeThread()]);
-
     expect(result.current.threads.map((t) => t.id)).toEqual(['thread-1']);
     expect(result.current.activeThread?.id).toBe('thread-1');
     expect(result.current.activeThreadId).toBe('thread-1');
@@ -291,41 +263,23 @@ describe('useLearningChat.sendMessage — pending stream bookkeeping', () => {
 });
 
 describe('useLearningChat.sendMessage — job payload composition', () => {
-  it.each<[string, { useGitHubTools?: boolean; repos?: Thread['context']['repos'] } | undefined,
-    Partial<{ useGitHubTools: boolean; repos: string[] }>, Thread['context']['repos']]>([
-    [
-      'forwards explicit repos and useGitHubTools',
-      {
-        useGitHubTools: true,
-        repos: [
-          { fullName: 'octo/one', owner: 'octo', name: 'one' },
-          { fullName: 'octo/two', owner: 'octo', name: 'two' },
-        ],
-      },
-      { useGitHubTools: true, repos: ['octo/one', 'octo/two'] },
-      [],
-    ],
-    [
-      'falls back to thread.context.repos when none supplied',
-      undefined,
-      { useGitHubTools: false, repos: ['octo/ctx'] },
-      [{ fullName: 'octo/ctx', owner: 'octo', name: 'ctx' }],
-    ],
-    [
-      'defaults to no repos when neither option nor context provides any',
-      undefined,
-      { useGitHubTools: false, repos: [] },
-      [],
-    ],
-  ])('%s', async (_, options, expected, contextRepos) => {
+  const repo = (n: string) => ({ fullName: `octo/${n}`, owner: 'octo', name: n });
+
+  it.each([
+    ['forwards explicit repos and useGitHubTools',
+      { useGitHubTools: true, repos: [repo('one'), repo('two')] },
+      { useGitHubTools: true, repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
+    ['falls back to thread.context.repos when none supplied',
+      undefined, { useGitHubTools: false, repos: ['octo/ctx'] }, [repo('ctx')]],
+    ['defaults to no repos when neither option nor context provides any',
+      undefined, { useGitHubTools: false, repos: [] }, [] as ReturnType<typeof repo>[]],
+  ] as const)('%s', async (_, options, expected, contextRepos) => {
     const { result } = await renderHookWithSeed([
       makeThread({ id: 'thread-x', context: { repos: contextRepos } }),
     ]);
-
     await act(async () => {
       await result.current.sendMessage('Q', options);
     });
-
     expect(backend.jobPosts[0]).toMatchObject({
       type: 'chat-response',
       input: expect.objectContaining({
