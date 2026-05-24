@@ -107,15 +107,52 @@ describe('executeChatWithSessionFactory', () => {
     // Memory now has github for (user-7, thread-cc).
     expect(getConversationCapabilities('user-7', 'thread-cc')).toEqual(['github']);
 
-    // Second turn: caller omits capabilities (i.e. `auto`). The
-    // executor must fold the remembered set back in so the surface
-    // does not shrink across turns.
+    // Second turn: caller omits capabilities; the remembered
+    // conversation capabilities should still be folded in so the
+    // resolved surface does not shrink across turns.
     await executeChatWithSessionFactory(
       {
         identity: { userId: 'user-7', gitHubToken: 'ghu_user' },
         prompt: 'Continue',
         profile: 'chat',
         conversationId: 'thread-cc',
+      },
+      mocks.createChatSession,
+    );
+
+    const resolved = mocks.createChatSession.mock.calls[1][1] as ResolvedProfile;
+    expect(resolved.capabilities.map((selection) => selection.id)).toEqual(['github']);
+  });
+
+  it('still carries capabilities forward when the first turn fails mid-send', async () => {
+    // First turn auto-elevates to github but the LLM call throws
+    // before completion. Because `rememberConversationCapabilities`
+    // is called BEFORE `sendAndWait`, the surface should still be
+    // committed to the conversation memory.
+    mocks.sendAndWait.mockRejectedValueOnce(new Error('LLM crashed mid-turn'));
+
+    await expect(
+      executeChatWithSessionFactory(
+        {
+          identity: { userId: 'user-fail', gitHubToken: 'ghu_user' },
+          prompt: 'Find issues in my repo',
+          profile: 'chat',
+          capabilities: ['github'],
+          conversationId: 'thread-fail',
+        },
+        mocks.createChatSession,
+      ),
+    ).rejects.toThrow('LLM crashed mid-turn');
+
+    expect(getConversationCapabilities('user-fail', 'thread-fail')).toEqual(['github']);
+
+    // Next turn omits capabilities — must still see github resolved.
+    await executeChatWithSessionFactory(
+      {
+        identity: { userId: 'user-fail', gitHubToken: 'ghu_user' },
+        prompt: 'Retry',
+        profile: 'chat',
+        conversationId: 'thread-fail',
       },
       mocks.createChatSession,
     );
