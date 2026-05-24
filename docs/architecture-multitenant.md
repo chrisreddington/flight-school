@@ -21,14 +21,18 @@ traffic.
 flowchart LR
     Browser([Browser])
 
-    subgraph NextProc["Next.js server process"]
+    subgraph NextProc["Next.js server (Web/API)"]
         AuthJS["Auth.js v5<br/>GitHub App OAuth"]
-        Route["API route<br/>+ withUserGuards"]
-        Exec["Copilot execution boundary<br/>executeCopilotChat()"]
-        Ctx["getUserContext()<br/>requireUserContext()"]
+        Route["API route<br/>+ withGuardedRoute"]
+        Ctx["requireGuardedUserContext()"]
         Oct["getOctokitForRequest()<br/>(fresh per request)"]
-        Sess["createLoggedChatSession(<br/>{ userId, gitHubToken })"]
-        Client["CopilotClient<br/>(singleton, useLoggedInUser:false)"]
+        Exec["copilot/execution/<br/>worker dispatch"]
+    end
+
+    subgraph WorkerProc["Worker (Next.js, COPILOT_WORKER_MODE=1)"]
+        WRoute["/api/internal/copilot/*<br/>(bearer-auth)"]
+        Sess["createLogged*Session(<br/>{ userId, gitHubToken })"]
+        Client["CopilotClient<br/>(per-user pool)"]
         MCP["getMcpServerConfig({ token })<br/>(rebuilt per call)"]
     end
 
@@ -40,7 +44,8 @@ flowchart LR
     AuthJS --> Route
     Route --> Ctx
     Ctx --> Oct --> GH
-    Route --> Exec --> Sess
+    Route --> Exec -->|HTTP+Bearer| WRoute
+    WRoute --> Sess
     Sess --> Client --> Copilot
     Sess --> MCP --> MCPSrv
 ```
@@ -132,9 +137,9 @@ combined with `gitHubToken` / `useLoggedInUser`.
 | Auth.js session | `src/lib/auth/config.ts` | `auth`, `handlers`, `signIn`, `signOut` |
 | User context in handlers | `src/lib/auth/context.ts` | `getUserContext`, `requireUserContext`, `UnauthorizedError` |
 | Per-request Octokit | `src/lib/github/client.ts` | `getOctokitForRequest`, `getOctokitForToken` |
-| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, worker HTTP client, worker-required guard |
-| Copilot session factory | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
-| Logged session helpers | `src/lib/copilot/server.ts` | `createLoggedChatSession`, `createLoggedCoachSession`, `SessionIdentity` |
+| Copilot execution boundary | `src/lib/copilot/execution/` | `executeCopilotChat`, `executeCopilotCoachJob`, `openCopilotAuthoringStreamViaWorker` |
+| Copilot session factory (worker-only) | `src/lib/copilot/sessions.ts` | `createSessionWithMetrics`, `getConversationSession` |
+| Logged session helpers (worker-only) | `src/lib/copilot/server.ts` | `createLoggedCoachSession`, `createLoggedLightweightCoachSession`, `wrapSessionWithLogging` |
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
 | Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution` (web -> worker HTTP dispatch) |
 | Prototype runtime-pool contracts | `src/lib/copilot/runtime/` | `createPerUserRuntimePool`, `CopilotRuntimePool` |

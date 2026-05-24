@@ -31,7 +31,8 @@ export type AuditEventType =
   | 'session-cap.blocked'
   | 'job.credentials_missing'
   | 'job.credentials_refresh_failed'
-  | 'storage.write';
+  | 'storage.write'
+  | 'page.view';
 
 export interface AuditEvent {
   type: AuditEventType;

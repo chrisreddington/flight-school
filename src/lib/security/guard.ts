@@ -166,3 +166,26 @@ export async function withGuardedRoute<R extends Response>(
     throw error;
   }
 }
+
+/**
+ * RSC page adapter. Resolves the authenticated user and emits the audit
+ * event for a read-only page view. Server Components don't need
+ * concurrent-session caps or rate limits, so we short-circuit those
+ * fields and release immediately.
+ *
+ * Returns `null` when there is no signed-in user, so the caller can
+ * issue a `redirect()` to the sign-in page (Next.js does not allow
+ * `redirect()` to be called from inside a `try`/`catch`).
+ */
+export async function requireGuardedRscContext(
+  eventType: AuditEventType,
+): Promise<UserContext | null> {
+  try {
+    const { ctx, release } = await requireGuardedUserContext({ eventType });
+    release();
+    return ctx;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'UnauthorizedError') return null;
+    throw error;
+  }
+}

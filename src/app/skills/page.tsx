@@ -10,14 +10,14 @@
 import { redirect } from 'next/navigation';
 
 import { AppHeader } from '@/components/AppHeader';
-import { getUserContext } from '@/lib/auth/context';
+import { requireGuardedRscContext } from '@/lib/security/guard';
 import { readUserSkillsProfile } from '@/lib/skills/server';
 import layoutStyles from '@/styles/two-column-layout.module.css';
 
 import { SkillsClient } from './_components/SkillsClient';
 
 export default async function SkillProfilePage() {
-  const ctx = await getUserContext();
+  const ctx = await requireGuardedRscContext('page.view');
   if (!ctx) redirect('/sign-in?callbackUrl=/skills');
 
   const initialProfile = await readUserSkillsProfile();

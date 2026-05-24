@@ -9,9 +9,9 @@
 import { redirect } from 'next/navigation';
 
 import { AppHeader } from '@/components/AppHeader';
-import { getUserContext } from '@/lib/auth/context';
 import { readUserHabits } from '@/lib/habits/server';
 import type { HabitWithHistory } from '@/lib/habits/types';
+import { requireGuardedRscContext } from '@/lib/security/guard';
 import layoutStyles from '@/styles/two-column-layout.module.css';
 
 import { HabitsClient } from './_components/HabitsClient';
@@ -29,7 +29,7 @@ function partitionByState(habits: HabitWithHistory[]) {
 }
 
 export default async function HabitsPage() {
-  const ctx = await getUserContext();
+  const ctx = await requireGuardedRscContext('page.view');
   if (!ctx) redirect('/sign-in?callbackUrl=/habits');
 
   const collection = await readUserHabits();

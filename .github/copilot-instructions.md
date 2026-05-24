@@ -112,20 +112,29 @@ must sign in through the same OAuth flow as production. The
 
 ### Copilot SDK: per-session GitHub identity
 
-The `CopilotClient` is constructed once with `useLoggedInUser: false` (see
-`src/lib/copilot/sessions.ts`). Every session passes the user's token via
-`SessionOptions.gitHubToken`, and the MCP server config is rebuilt per call
-with that same token (see `src/lib/copilot/mcp.ts`).
+The `CopilotClient` lives inside the worker (`src/worker/jobs/executors/`).
+**Web/API never invoke the SDK in-process**. All AI work — chat, coach, hints,
+authoring, evaluation — is dispatched to the worker through
+`src/lib/copilot/execution/` (`executeCopilotChat`, `executeCopilotCoachJob`,
+`openCopilotAuthoringStreamViaWorker`). See
+`.github/skills/copilot-sdk-worker-only/SKILL.md`. The boundary script
+`scripts/check-copilot-sdk-boundary.mjs` enforces this.
 
 ```typescript
-import {
-  createLoggedChatSession,
-  createLoggedCoachSession,
-  type SessionIdentity,
-} from '@/lib/copilot/server';
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { requireUserContext } from '@/lib/auth/context';
 
-const identity: SessionIdentity = { userId, gitHubToken: accessToken };
-const session = await createLoggedChatSession(identity, 'chat', prompt);
+const ctx = await requireUserContext();
+const identity = createSessionIdentity(ctx);
+const result = await executeCopilotCoachJob({
+  identity,
+  variant: 'lightweight',
+  operationName: 'Daily focus',
+  prompt,
+  inputSummary: 'focus',
+});
+return result.response;
 ```
 
 Chat session cache keys include `userId` so two users sharing a
@@ -138,8 +147,9 @@ Chat session cache keys include `userId` so two users sharing a
 | Fetch user data | `octokit.rest.users.getAuthenticated()` | Fast, deterministic |
 | List repositories | `octokit.rest.repos.listForAuthenticatedUser()` | Fast, deterministic |
 | Get activity events | `octokit.rest.activity.listEventsForAuthenticatedUser()` | Fast, deterministic |
-| Creative AI generation | Copilot SDK session via `createLoggedCoachSession` | AI adds real value |
-| Multi-turn chat | Copilot SDK session via `createLoggedChatSession` (+ MCP) | Conversation context |
+| Creative AI generation | `executeCopilotCoachJob` (worker dispatch) | AI adds real value |
+| Multi-turn chat | `executeCopilotChat` (worker dispatch) | Conversation context |
+| Streaming authoring | `openCopilotAuthoringStreamViaWorker` (worker SSE proxy) | Live token stream |
 
 ### Code Location
 
@@ -147,7 +157,9 @@ Chat session cache keys include `userId` so two users sharing a
 |------|---------|
 | `src/lib/auth/` | Auth.js v5 config, user-context resolution, token store |
 | `src/lib/github/` | Per-request Octokit factories + GitHub data access |
-| `src/lib/copilot/` | Copilot SDK sessions (per-session `gitHubToken`), MCP config |
+| `src/lib/copilot/execution/` | Worker-dispatch primitives — the ONLY SDK call paths from Web/API |
+| `src/lib/copilot/` | Session-identity helpers, SDK adapters (worker-internal only) |
+| `src/worker/jobs/executors/` | Where the SDK actually runs |
 | `src/lib/security/` | `requireGuardedUserContext` / `withUserGuards` / `withGuardedRoute`, rate limit, session cap, audit log |
 
 ### Never Use SDK For
@@ -158,29 +170,36 @@ Chat session cache keys include `userId` so two users sharing a
 
 ## Critical Patterns
 
-### Copilot SDK Usage (`src/lib/copilot/`)
+### Copilot SDK Usage (worker-only)
 
-The SDK is used authentically for:
-- **Creative generation** (daily focus): AI genuinely adds personalization value
-- **Multi-turn chat**: Core SDK use case with conversation context
-- **MCP tool access**: Real-time GitHub exploration during chat
+The SDK runs inside the worker. Web and API code dispatch to it via
+`src/lib/copilot/execution/`:
+
+- **Coach jobs** (focus, hints, quiz, suggestions, guided plans):
+  `executeCopilotCoachJob({ identity, variant, operationName, prompt, inputSummary })`.
+- **Multi-turn chat**: `executeCopilotChat(...)`.
+- **Streaming authoring**: `openCopilotAuthoringStreamViaWorker(...)` —
+  returns a `Response` whose body the public route pipes back to the client.
 
 ```typescript
-// Create a session for chat or coaching. The caller must supply the
-// per-request user identity so the session inherits their GitHub token.
-import {
-  createLoggedChatSession,
-  createLoggedCoachSession,
-} from '@/lib/copilot/server';
-import { requireUserContext } from '@/lib/auth/context';
+// Dispatch a coach job from any authenticated route handler.
+import { executeCopilotCoachJob } from '@/lib/copilot/execution';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { withGuardedRoute } from '@/lib/security/guard';
 
-const { userId, accessToken } = await requireUserContext();
-const session = await createLoggedChatSession(
-  { userId, gitHubToken: accessToken },
-  'chat',
-  prompt,
-);
-const response = await session.sendAndWait({ prompt });
+export async function POST() {
+  return withGuardedRoute(QUIZ_GUARD, async (ctx) => {
+    const identity = createSessionIdentity(ctx);
+    const result = await executeCopilotCoachJob({
+      identity,
+      variant: 'lightweight',
+      operationName: 'Topic quiz',
+      prompt,
+      inputSummary: 'quiz',
+    });
+    return Response.json(result.response);
+  });
+}
 ```
 
 ### Graceful Degradation
