@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => {
     completeOperationMock,
     logEventMock: vi.fn(),
     recordAiOperationMock: vi.fn(),
-    startOperationMock: vi.fn(() => completeOperationMock),
+    startOperationMock: vi.fn(async () => ({ eventId: 'evt-1', complete: completeOperationMock })),
   };
 });
 
@@ -21,6 +21,7 @@ vi.mock('./activity/logger', () => ({
 
 vi.mock('@/lib/observability/telemetry', () => ({
   recordAiOperation: mocks.recordAiOperationMock,
+  recordAiTokenUsage: vi.fn(),
   setSpanError: vi.fn(),
   withSpan: vi.fn((_name, _attributes, callback) => callback({})),
 }));

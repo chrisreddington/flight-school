@@ -25,6 +25,28 @@ interface AuthoringMessageListProps {
   onCreateChallenge: () => void;
 }
 
+function renderAvatar(
+  role: 'user' | 'assistant',
+  userAvatarUrl: string | undefined,
+  styles: { readonly [key: string]: string },
+): React.ReactNode {
+  if (role === 'assistant') {
+    return (
+      <div className={styles.messageAvatarAssistant}>
+        <CopilotIcon size={16} />
+      </div>
+    );
+  }
+  if (userAvatarUrl) {
+    return <Avatar src={userAvatarUrl} size={32} alt="You" />;
+  }
+  return (
+    <div className={styles.messageAvatarUser}>
+      <PersonIcon size={16} />
+    </div>
+  );
+}
+
 /**
  * Message list component for the authoring chat.
  * Renders conversation history with avatars and proper semantic structure.
@@ -60,19 +82,7 @@ export function AuthoringMessageList({
         {messages.map((message) => (
           <li key={message.id} className={styles.message}>
             <div className={styles.messageAvatar}>
-              {message.role === 'user' ? (
-                userAvatarUrl ? (
-                  <Avatar src={userAvatarUrl} size={32} alt="You" />
-                ) : (
-                  <div className={styles.messageAvatarUser}>
-                    <PersonIcon size={16} />
-                  </div>
-                )
-              ) : (
-                <div className={styles.messageAvatarAssistant}>
-                  <CopilotIcon size={16} />
-                </div>
-              )}
+              {renderAvatar(message.role, userAvatarUrl, styles)}
             </div>
             <div
               className={`${styles.messageContent} ${
@@ -111,7 +121,7 @@ export function AuthoringMessageList({
               </div>
             </div>
             <div className={styles.messageContent}>
-              <MarkdownContent content={streamingContent} isStreaming />
+              <MarkdownContent content={streamingContent} />
             </div>
           </li>
         )}

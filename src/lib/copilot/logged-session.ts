@@ -2,7 +2,14 @@ import type { CopilotSession } from '@github/copilot-sdk';
 import { nowMs } from '@/lib/utils/date-utils';
 
 import { logger } from '@/lib/logger';
-import { recordAiOperation, setSpanError, withSpan } from '@/lib/observability/telemetry';
+import { recordAiOperation, recordAiTokenUsage, setSpanError, withSpan } from '@/lib/observability/telemetry';
+import {
+  GEN_AI_OPERATION,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_PROVIDER_GITHUB_COPILOT,
+  GEN_AI_PROVIDER_NAME,
+  GEN_AI_REQUEST_MODEL,
+} from '@/lib/observability/semconv';
 import { activityLogger, type CompleteOperation } from './activity/logger';
 import type { AIActivityOutput } from './activity/types';
 import type {
@@ -13,8 +20,16 @@ import type {
 
 const log = logger.withTag('Copilot SDK');
 
+/**
+ * Default upper bound on a single `sendAndWait` round-trip. The Copilot
+ * SDK can in principle stall on a long tool chain or a slow upstream;
+ * 2 minutes is generous enough to cover realistic chat turns but tight
+ * enough that a stuck call doesn't hold the worker indefinitely.
+ */
+const DEFAULT_SEND_TIMEOUT_MS = 120_000;
+
 export interface LoggedCopilotSession {
-  sendAndWait: (prompt: string, timeout?: number) => Promise<LoggedSessionResult>;
+  sendAndWait: (prompt: string, timeoutMs?: number) => Promise<LoggedSessionResult>;
   destroy: () => Promise<void>;
   /** The model used for this session */
   model: string;
@@ -37,46 +52,63 @@ export function wrapSessionWithLogging(
 ): LoggedCopilotSession {
   const toolCalls: ToolCallRecord[] = [];
   let complete: CompleteOperation | null = null;
+  const usageTotals = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
 
   session.on((event) => {
     const eventType = event.type;
 
     if (eventType === 'tool.execution_start') {
-      const data = event.data;
-      log.debug(`Tool start: ${data.toolName}`);
+      const toolStart = event.data;
+      log.debug(`Tool start: ${toolStart.toolName}`);
       toolCalls.push({
-        name: data.toolName,
-        args: data.arguments,
+        name: toolStart.toolName,
+        args: toolStart.arguments,
         result: '',
         startTime: nowMs(),
       });
 
-      activityLogger.logEvent(userId, 'tool', `mcp.${data.toolName}`, {
-        metadata: { args: data.arguments },
+      activityLogger.logEvent(userId, 'tool', `mcp.${toolStart.toolName}`, {
+        metadata: { args: toolStart.arguments },
       });
     }
 
     if (eventType === 'tool.execution_complete') {
       const lastCall = toolCalls[toolCalls.length - 1];
-      const data = event.data;
+      const toolComplete = event.data;
       if (lastCall) {
-        lastCall.result = String(data.result || '').slice(0, 500);
+        lastCall.result = String(toolComplete.result || '').slice(0, 500);
         lastCall.endTime = nowMs();
         log.debug(
           `Tool complete: ${lastCall.name} (${lastCall.endTime - lastCall.startTime}ms)`,
         );
       }
     }
+
+    if (eventType === 'assistant.usage') {
+      // The SDK emits one or more `assistant.usage` events per turn (e.g.
+      // multiple inferences across tool hops). Accumulate so the histogram
+      // is recorded once per `sendAndWait` rather than per delta event.
+      const usage = event.data;
+      usageTotals.inputTokens += usage.inputTokens ?? 0;
+      usageTotals.outputTokens += usage.outputTokens ?? 0;
+      usageTotals.cacheReadTokens += usage.cacheReadTokens ?? 0;
+      usageTotals.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
+    }
   });
 
   return {
-    async sendAndWait(prompt: string, timeout = 120000): Promise<LoggedSessionResult> {
+    async sendAndWait(prompt: string, timeoutMs = DEFAULT_SEND_TIMEOUT_MS): Promise<LoggedSessionResult> {
       const startTime = nowMs();
       const metadata = sessionMetrics
         ? ({ ...sessionMetrics } as Record<string, unknown>)
         : undefined;
 
-      complete = activityLogger.startOperation(userId, 'ask', operationName, {
+      const started = await activityLogger.startOperation(userId, 'ask', operationName, {
         prompt: inputPrompt.slice(0, 100),
         model,
         metadata,
@@ -87,18 +119,21 @@ export function wrapSessionWithLogging(
           conversationReused: sessionMetrics.reusedConversation,
         } : undefined,
       });
+      complete = started.complete;
 
       try {
         log.info(`Sending prompt for: ${operationName}`);
         const response = await withSpan(
-          'copilot.session.send_and_wait',
+          `${GEN_AI_OPERATION.CHAT} ${model}`,
           {
-            'ai.operation': operationName,
-            'ai.model': model,
+            [GEN_AI_OPERATION_NAME]: GEN_AI_OPERATION.CHAT,
+            [GEN_AI_REQUEST_MODEL]: model,
+            [GEN_AI_PROVIDER_NAME]: GEN_AI_PROVIDER_GITHUB_COPILOT,
+            'app.operation': operationName,
           },
           async (span) => {
             try {
-              return await session.sendAndWait({ prompt }, timeout);
+              return await session.sendAndWait({ prompt }, timeoutMs);
             } catch (error) {
               setSpanError(span, error);
               throw error;
@@ -120,6 +155,14 @@ export function wrapSessionWithLogging(
         };
         complete(output);
         recordAiOperation('sendAndWait', totalTimeMs, model, 'ok');
+        recordAiTokenUsage({
+          operation: GEN_AI_OPERATION.CHAT,
+          model,
+          inputTokens: usageTotals.inputTokens,
+          outputTokens: usageTotals.outputTokens,
+          cacheReadTokens: usageTotals.cacheReadTokens,
+          cacheWriteTokens: usageTotals.cacheWriteTokens,
+        });
 
         return {
           responseText,

@@ -190,19 +190,23 @@ export async function createGenericStreamingSession(
   };
 
   // Start activity logging
-  const complete = activityLogger.startOperation(identity.userId, 'ask', 'Challenge Authoring', {
-    prompt: prompt.slice(0, 100),
-    model,
-    sessionMetrics: {
-      poolHit: !metrics.createdNew,
-      sessionCreateMs: metrics.sessionCreateMs,
-      mcpEnabled: false,
-      conversationReused: metrics.reusedConversation,
+  const { eventId: activityEventId, complete } = await activityLogger.startOperation(
+    identity.userId,
+    'ask',
+    'Challenge Authoring',
+    {
+      prompt: prompt.slice(0, 100),
+      model,
+      sessionMetrics: {
+        poolHit: !metrics.createdNew,
+        sessionCreateMs: metrics.sessionCreateMs,
+        mcpEnabled: false,
+        conversationReused: metrics.reusedConversation,
+      },
     },
-  });
+  );
 
-  // Capture activity event ID (scoped to this user)
-  streamingMetrics.activityEventId = activityLogger.latestEventIdForUser(identity.userId);
+  streamingMetrics.activityEventId = activityEventId ?? undefined;
 
   // Track content
   let totalContent = '';
@@ -257,11 +261,12 @@ export async function createGenericStreamingSession(
         }
 
         // Check if we're done
+        const STREAM_POLL_INTERVAL_MS = 20;
         const raceResult = await Promise.race([
           idlePromise.then(() => 'idle' as const),
           new Promise<'more'>((resolve) => {
             queueResolver = () => resolve('more');
-            setTimeout(() => resolve('more'), 20);
+            setTimeout(() => resolve('more'), STREAM_POLL_INTERVAL_MS);
           }),
         ]);
 

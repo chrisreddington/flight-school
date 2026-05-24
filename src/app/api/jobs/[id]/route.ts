@@ -1,20 +1,26 @@
 /**
- * Jobs API - Get/Delete Individual Job
- * GET /api/jobs/[id] - Get job status and result (caller must own the job)
- * DELETE /api/jobs/[id] - Cancel/delete a job (caller must own the job)
+ * Jobs API - Get/Delete Individual Job (web tier, thin proxy)
  *
- * Both endpoints enforce multi-tenant ownership: jobs belonging to another
- * user return `404 Not Found` (not 403) to avoid leaking job-id existence
- * across tenants.
+ * GET    /api/jobs/[id] - Get job status and result (proxy → worker)
+ * DELETE /api/jobs/[id] - Cancel the job (proxy → worker)
+ *
+ * Multi-tenant ownership is enforced on the worker; this proxy passes
+ * the resolved `userId` as a query string so the worker can scope its
+ * read. Mismatched ownership returns `404 Not Found` to avoid leaking
+ * job-id existence across tenants.
+ *
+ * NOTE: After Phase 2B.2 the DELETE no longer hard-deletes — the worker
+ * marks the record cancelled and retention sweeps clear it later. This
+ * preserves the synthesized-terminal SSE path for late reconnects.
  */
 
-import { jobStorage } from '@/lib/jobs';
-import { redactJobForDetail } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
+import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
-import { cancelRunningJob } from '../route';
+
+import { cancelWorkerJobRecord, getWorkerJob } from './../worker-client';
 
 const log = logger.withTag('Jobs API');
 
@@ -22,65 +28,86 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+function captureTraceContext() {
+  const traceHeaders = captureTracePropagationHeaders();
+  return Object.keys(traceHeaders).length > 0 ? traceHeaders : undefined;
+}
+
 export async function GET(
   _request: NextRequest,
-  context: RouteContext
+  context: RouteContext,
 ) {
+  let userId: string;
+  let id: string;
   try {
-    const { userId } = await requireUserContext();
-    const { id } = await context.params;
-
-    jobStorage.invalidateCache();
-    const job = await jobStorage.get(id);
-
-    // Treat "not found" and "not yours" identically to avoid leaking
-    // existence of jobs across tenants.
-    if (!job || job.userId !== userId) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
-
-    return NextResponse.json(redactJobForDetail(job));
+    ({ userId } = await requireUserContext());
+    ({ id } = await context.params);
   } catch (err) {
     return handleUnauthorizedError(err);
+  }
+
+  try {
+    const job = await getWorkerJob(id, userId, captureTraceContext());
+    if (!job) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+    return NextResponse.json(job);
+  } catch (err) {
+    log.error(`[Job ${id}] Failed to fetch from worker`, { err });
+    return NextResponse.json(
+      { error: 'Job service temporarily unavailable. Please retry.' },
+      { status: 503 },
+    );
   }
 }
 
 export async function DELETE(
   _request: NextRequest,
-  context: RouteContext
+  context: RouteContext,
 ) {
+  let userId: string;
+  let id: string;
   try {
-    const { userId } = await requireUserContext();
-    const { id } = await context.params;
-
-    log.info(`[Job ${id}] DELETE request received - attempting cancellation`);
-
-    const existing = await jobStorage.get(id);
-    if (!existing || existing.userId !== userId) {
-      // Refuse to cancel/delete jobs we don't own; 404 not 403 to avoid leakage.
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
-
-    const wasCancelled = await cancelRunningJob(id);
-    if (wasCancelled) {
-      log.info(`[Job ${id}] Successfully cancelled running job`);
-    }
-
-    const deleted = await jobStorage.delete(id);
-
-    if (!deleted && !wasCancelled) {
-      log.warn(`[Job ${id}] Job not found in storage or running jobs`);
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
-
-    log.info(`[Job ${id}] Job cancelled/deleted successfully (wasCancelled: ${wasCancelled}, deletedFromStorage: ${deleted})`);
-
-    return NextResponse.json({
-      success: true,
-      cancelled: wasCancelled,
-      deletedFromStorage: deleted,
-    });
+    ({ userId } = await requireUserContext());
+    ({ id } = await context.params);
   } catch (err) {
     return handleUnauthorizedError(err);
   }
+
+  log.info(`[Job ${id}] DELETE request received - forwarding to worker`);
+
+  let result;
+  try {
+    result = await cancelWorkerJobRecord(id, userId, captureTraceContext());
+  } catch (err) {
+    log.error(`[Job ${id}] Failed to cancel on worker`, { err });
+    return NextResponse.json(
+      { error: 'Job service temporarily unavailable. Please retry.' },
+      { status: 503 },
+    );
+  }
+
+  // Worker reported the job missing (or not owned by this user). Mirror
+  // the GET semantics so callers see a deterministic 404 instead of a
+  // generic 500.
+  if (result.notFound) {
+    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+  }
+
+  if (result.alreadyTerminal) {
+    return NextResponse.json({
+      success: true,
+      cancelled: false,
+      deletedFromStorage: false,
+      alreadyTerminal: true,
+      status: result.status,
+    });
+  }
+
+  return NextResponse.json({
+    success: true,
+    cancelled: result.cancelled,
+    // Worker no longer hard-deletes on cancel; retention handles it.
+    deletedFromStorage: false,
+  });
 }

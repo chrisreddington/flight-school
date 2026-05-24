@@ -10,7 +10,14 @@ export interface OperationState {
   };
 }
 
-export function buildOperationState(operations: Iterable<[string, ActiveOperation]>): OperationState {
+/**
+ * Partition active operations into per-domain snapshots and a target-id index
+ * used by hooks to gate UI affordances ("topic X has an in-flight regenerate").
+ */
+export function buildOperationState(
+  operations: Iterable<[string, ActiveOperation]>,
+  hydrated = false,
+): OperationState {
   const topicRegenerations = new Map<string, ActiveOperation>();
   const challengeRegenerations = new Map<string, ActiveOperation>();
   const goalRegenerations = new Map<string, ActiveOperation>();
@@ -37,7 +44,7 @@ export function buildOperationState(operations: Iterable<[string, ActiveOperatio
         goalRegenerations.set(id, operation);
         if (isActive) goals.add(targetId);
         break;
-      case 'chat-message':
+      case 'chat-response':
         chatMessages.set(id, operation);
         if (isActive) chat.add(id);
         break;
@@ -50,6 +57,7 @@ export function buildOperationState(operations: Iterable<[string, ActiveOperatio
       challengeRegenerations,
       goalRegenerations,
       chatMessages,
+      hydrated,
     },
     activeIds: {
       topics,

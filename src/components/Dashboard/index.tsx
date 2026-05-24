@@ -96,13 +96,15 @@ export function Dashboard() {
     stopGoalSkip(goalId);
   }, [stopGoalSkip]);
   
-  // Use the new learning chat hook for multi-thread chat
   const {
     threads,
     activeThreadId,
     isThreadsLoading,
     isStreaming,
+    streamingAssistantMessageId,
+    streamingContent,
     streamingThreadIds,
+    streamingToolEvents,
     sendMessage,
     stopStreaming,
     createThread,
@@ -202,6 +204,9 @@ export function Dashboard() {
               isThreadsLoading={isThreadsLoading}
               isStreaming={isStreaming}
               streamingThreadIds={streamingThreadIds}
+              streamingAssistantMessageId={streamingAssistantMessageId}
+              streamingContent={streamingContent}
+              streamingToolEvents={streamingToolEvents}
                 userAvatarUrl={profile?.user?.avatarUrl}
             />
           </Stack>

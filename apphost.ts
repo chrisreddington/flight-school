@@ -20,7 +20,18 @@ async function main(): Promise<void> {
     .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
     .withEnvironment('COPILOT_WORKER_ENABLED', '1')
     .withEnvironment('COPILOT_WORKER_MODE', '1')
-    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
+    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    // Distinct OTEL service name per Aspire resource so dashboards/logs/
+    // traces can tell the web tier from the worker tier. Without this both
+    // processes emit `service.name=flight-school` and every startup-side
+    // log line ("Server starting", "Copilot client warmed", token-store
+    // warnings) appears as a duplicate because the dashboard groups by
+    // service.
+    .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-worker')
+    // Suppress Next.js's built-in `AppRender.fetch` span so we don't
+    // double-count every server fetch alongside @vercel/otel's
+    // FetchInstrumentation. See .github/skills/opentelemetry/SKILL.md.
+    .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
   const workerEndpoint = await copilotWorker.getEndpoint('http');
   const workerUrl = await workerEndpoint.property(EndpointProperty.Url);
 
@@ -30,12 +41,14 @@ async function main(): Promise<void> {
     .withExternalHttpEndpoints()
     .withEnvironment('CRON_SKIP_AUTH', '1')
     .withEnvironment('COPILOT_WORKER_URL', workerUrl)
-    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret);
+    .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-web')
+    .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
 
   await flightSchool.withCommand(
     'sweep-retention',
     'Run retention sweep',
-    async (ctx) => {
+    async (commandContext) => {
       const endpoint = await flightSchool.getEndpoint('http');
       const url = await endpoint.url();
       try {
@@ -44,7 +57,7 @@ async function main(): Promise<void> {
         if (!res.ok) {
           return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
         }
-        const commandLogger = await ctx.logger.get();
+        const commandLogger = await commandContext.logger.get();
         await commandLogger.logInformation(`Retention sweep complete: ${body}`);
         return { success: true };
       } catch (err) {

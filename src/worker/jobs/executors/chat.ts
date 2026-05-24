@@ -1,27 +1,75 @@
+/**
+ * Chat-response job executor.
+ *
+ * The worker is the **sole writer** of both `background-jobs` and
+ * `threads.json` for chat. Clients consume live state via SSE through
+ * the {@link chatStreamStore}; the durable thread file is written
+ * exactly twice per chat job:
+ *
+ *   1. Before terminal: a single `consolidateFinalToThread()` call
+ *      that materialises the final assistant message and clears
+ *      `isStreaming`. Optionally appends `*(Response stopped)*` or
+ *      `*(Response interrupted)*` for user-cancelled or
+ *      worker-failed jobs respectively.
+ *   2. (Implicit) any later sweep that promotes a cancelled-but-not-
+ *      annotated message — see `src/app/api/internal/jobs/sweep/route.ts`.
+ *
+ * The terminal sequence uses the jobStorage CAS helpers
+ * (`markCompletedIdempotent`, `markFailedIfNonTerminal`,
+ * `markCancelledIfNonTerminal`) together with
+ * `jobEventBus.appendTerminalIfNotTerminated` so a DELETE-initiated
+ * cancellation racing the worker's happy path produces a single
+ * terminal frame and a single durable thread write, in either order,
+ * with the user-intent annotation preserved.
+ *
+ * `unregisterSession()` is intentionally deferred to a `finally`
+ * AFTER the terminal frame is appended; while the session is
+ * registered, the DELETE handler can call `requestCancellation()`
+ * to receive a trustworthy `true` and the worker will reach this
+ * branch via the next `isJobStillValid` check or the SDK abort path.
+ *
+ * @module worker/jobs/executors/chat
+ */
+
 import { createLearningStreamingSession, createStreamingChatSession } from '@/lib/copilot/streaming';
 import { jobStorage } from '@/lib/jobs';
 import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
 import { buildRepositoryContextPrompt } from '@/lib/jobs/repository-context';
 import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage';
 import { logger } from '@/lib/logger';
-import { deleteScratchpad, writeScratchpad } from '@/lib/storage/scratchpad';
 import type { Message, ToolCallEvent } from '@/lib/threads';
 import { detectActionableContent } from '@/lib/utils/content-detection';
 import { now } from '@/lib/utils/date-utils';
 import { generateMessageId } from '@/lib/utils/id-generator';
+import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
+import { terminalEventFromStatus } from '@/worker/jobs/streaming/types';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
 import { registerSession, unregisterSession } from './session-registry';
-import {
-  consolidateScratchpadToThread,
-  STREAM_CURSOR,
-  upsertMessageById,
-} from './thread-consolidation';
+import { upsertMessageById } from './thread-consolidation';
 
 const log = logger.withTag('JobChatExecutor');
 
+/** Annotation appended when the user (DELETE) stopped the stream. */
+export const RESPONSE_STOPPED_ANNOTATION = '\n\n*(Response stopped)*';
+/** Annotation appended when the worker or sweeper interrupted the stream. */
+export const RESPONSE_INTERRUPTED_ANNOTATION = '\n\n*(Response interrupted)*';
+
+/**
+ * Idempotently append `annotation` to `content` if it isn't already
+ * present at the tail. Used by the cancellation/error consolidation
+ * helpers so a concurrent path that already annotated the message
+ * doesn't double-tag it.
+ */
+function appendAnnotationIdempotent(content: string, annotation: string): string {
+  if (content.endsWith(annotation.trimEnd()) || content.endsWith(annotation)) return content;
+  return content + annotation;
+}
+
 /**
  * Execute a chat response job.
- * Generates AI response and saves it incrementally to thread storage.
+ *
+ * @see RESPONSE_STOPPED_ANNOTATION
+ * @see RESPONSE_INTERRUPTED_ANNOTATION
  */
 export async function executeChatResponse(
   jobId: string,
@@ -30,8 +78,80 @@ export async function executeChatResponse(
 ): Promise<void> {
   await jobStorage.markRunning(jobId);
 
-  const { threadId, prompt, assistantMessageId: providedAssistantId, learningMode = false, useGitHubTools = false, repos } = input;
+  const {
+    threadId,
+    prompt,
+    assistantMessageId: providedAssistantId,
+    learningMode = false,
+    useGitHubTools = false,
+    repos,
+  } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
+
+  let fullContent = '';
+  const toolCalls: string[] = [];
+  const toolEvents: ToolCallEvent[] = [];
+  let hasActionableItem = false;
+  let sessionRegistered = false;
+
+  /**
+   * Write the final assistant message to the durable thread store.
+   *
+   * Always sets `isStreaming: false`. Optionally appends an annotation
+   * (idempotently) to mark the message as cancelled-by-user or
+   * interrupted-by-worker. Returns silently if the thread no longer
+   * exists (e.g. user deleted it mid-stream).
+   */
+  const consolidateFinalToThread = async (annotation?: string): Promise<void> => {
+    try {
+      const currentThread = await getThreadById(userId, threadId);
+      if (!currentThread) return;
+      const contentToPersist = annotation
+        ? appendAnnotationIdempotent(fullContent, annotation)
+        : fullContent;
+      const consolidatedMessage: Message = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: contentToPersist,
+        timestamp: now(),
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        toolEvents: toolEvents.length > 0 ? toolEvents.map((e) => ({ ...e })) : undefined,
+        hasActionableItem,
+      };
+      const updatedMessages = upsertMessageById(
+        currentThread.messages,
+        assistantMessageId,
+        consolidatedMessage,
+        false,
+      );
+      await updateThread(userId, {
+        ...currentThread,
+        messages: updatedMessages,
+        updatedAt: now(),
+        isStreaming: false,
+      });
+      log.debug(`[Job ${jobId}] Final consolidation: ${contentToPersist.length} chars`);
+    } catch (err) {
+      log.warn(`[Job ${jobId}] consolidateFinalToThread failed:`, err);
+    }
+  };
+
+  /** Idempotently emit the matching terminal SSE frame. No-op if already terminated. */
+  const emitTerminal = (status: 'completed' | 'cancelled' | 'failed', message?: string): void => {
+    try {
+      jobEventBus.appendTerminalIfNotTerminated(
+        jobId,
+        terminalEventFromStatus(status, {
+          content: fullContent,
+          toolEvents: toolEvents.map((e) => ({ ...e })),
+          hasActionableItem,
+          message,
+        }),
+      );
+    } catch (err) {
+      log.warn(`[Job ${jobId}] Failed to emit terminal ${status} to bus:`, err);
+    }
+  };
 
   try {
     log.info(`[Job ${jobId}] Starting chat response for thread ${threadId}`);
@@ -59,64 +179,22 @@ export async function executeChatResponse(
         session.cleanup();
       },
     });
+    sessionRegistered = true;
 
-    let fullContent = '';
-    const toolCalls: string[] = [];
-    const toolEvents: ToolCallEvent[] = [];
     let toolCounter = 0;
-    let hasActionableItem = false;
-    let lastSaveTime = Date.now();
-    const SAVE_INTERVAL_MS = 400;
+    let lastSnapshotMs = 0;
+    const SNAPSHOT_INTERVAL_MS = 400;
 
-    const flushScratchpad = async (status: 'streaming' | 'completed' | 'failed') => {
+    const emitSnapshot = (): void => {
+      lastSnapshotMs = Date.now();
       try {
-        await writeScratchpad(userId, jobId, {
-          threadId,
-          assistantMessageId,
+        jobEventBus.snapshot(jobId, {
           content: fullContent,
-          toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
+          toolEvents: toolEvents.map((e) => ({ ...e })),
           hasActionableItem,
-          status,
         });
       } catch (err) {
-        log.warn(`[Job ${jobId}] Failed to flush scratchpad:`, err);
-      }
-    };
-
-    const consolidateToThread = async (isFinal: boolean) => {
-      try {
-        const currentThread = await getThreadById(userId, threadId);
-        if (!currentThread) return;
-
-        const consolidatedMessage: Message = {
-          id: assistantMessageId,
-          role: 'assistant',
-          content: fullContent + (isFinal ? '' : STREAM_CURSOR),
-          timestamp: now(),
-          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-          toolEvents: toolEvents.length > 0 ? toolEvents.map(e => ({ ...e })) : undefined,
-          hasActionableItem,
-        };
-
-        const updatedMessages = upsertMessageById(
-          currentThread.messages,
-          assistantMessageId,
-          consolidatedMessage,
-          false,
-        );
-
-        await updateThread(userId, {
-          ...currentThread,
-          messages: updatedMessages,
-          updatedAt: now(),
-          isStreaming: !isFinal,
-        });
-
-        await deleteScratchpad(userId, jobId);
-
-        log.debug(`[Job ${jobId}] Consolidated to thread: ${fullContent.length} chars, final=${isFinal}`);
-      } catch (err) {
-        log.warn(`[Job ${jobId}] Failed to consolidate to thread:`, err);
+        log.warn(`[Job ${jobId}] Failed to emit state snapshot to bus:`, err);
       }
     };
 
@@ -130,25 +208,39 @@ export async function executeChatResponse(
 
       if (event.type === 'delta') {
         fullContent += event.content;
-
-        const nowMs = Date.now();
-        if (nowMs - lastSaveTime >= SAVE_INTERVAL_MS) {
-          await flushScratchpad('streaming');
-          lastSaveTime = nowMs;
+        try {
+          jobEventBus.append(jobId, { type: 'delta', content: event.content });
+        } catch (err) {
+          log.warn(`[Job ${jobId}] Failed to emit delta to bus:`, err);
+        }
+        if (Date.now() - lastSnapshotMs >= SNAPSHOT_INTERVAL_MS) {
+          emitSnapshot();
         }
       } else if (event.type === 'tool_start') {
         toolCalls.push(event.name);
+        const toolCallId = `tool-${jobId}-${toolCounter++}`;
         toolEvents.push({
-          id: `tool-${jobId}-${toolCounter++}`,
+          id: toolCallId,
           name: event.name,
           status: 'running',
           args: event.args,
         });
-        await flushScratchpad('streaming');
-        lastSaveTime = Date.now();
+        try {
+          jobEventBus.append(jobId, {
+            type: 'tool_start',
+            toolCallId,
+            name: event.name,
+            args: event.args,
+          });
+        } catch (err) {
+          log.warn(`[Job ${jobId}] Failed to emit tool_start to bus:`, err);
+        }
+        emitSnapshot();
       } else if (event.type === 'tool_complete') {
+        let completedToolCallId: string | null = null;
         for (let i = toolEvents.length - 1; i >= 0; i--) {
           if (toolEvents[i].status === 'running' && toolEvents[i].name === event.name) {
+            completedToolCallId = toolEvents[i].id;
             toolEvents[i] = {
               ...toolEvents[i],
               status: 'complete',
@@ -158,8 +250,20 @@ export async function executeChatResponse(
             break;
           }
         }
-        await flushScratchpad('streaming');
-        lastSaveTime = Date.now();
+        if (completedToolCallId !== null) {
+          try {
+            jobEventBus.append(jobId, {
+              type: 'tool_complete',
+              toolCallId: completedToolCallId,
+              name: event.name,
+              result: event.result,
+              durationMs: event.duration,
+            });
+          } catch (err) {
+            log.warn(`[Job ${jobId}] Failed to emit tool_complete to bus:`, err);
+          }
+        }
+        emitSnapshot();
       } else if (event.type === 'done') {
         hasActionableItem = detectActionableContent(fullContent);
       } else if (event.type === 'error') {
@@ -168,33 +272,62 @@ export async function executeChatResponse(
     }
 
     session.cleanup();
-    unregisterSession(jobId);
 
     if (wasCancelled) {
       log.info(`[Job ${jobId}] Chat response cancelled after ${fullContent.length} chars`);
-      await consolidateToThread(true);
+      await consolidateFinalToThread(RESPONSE_STOPPED_ANNOTATION);
+      const cas = await jobStorage.markCancelledIfNonTerminal(jobId);
+      emitTerminal(cas.status === 'cancelled' ? 'cancelled' : (cas.status as 'completed' | 'failed'));
       return;
     }
 
-    await consolidateToThread(true);
-
-    await jobStorage.markCompleted<ChatResponseResult>(jobId, {
+    // Happy path: persist the durable thread first, then CAS the job.
+    // Order matters: if the thread write throws we leave the job
+    // non-terminal so a sweep / retry can recover; if the CAS races
+    // with a concurrent cancellation we degrade gracefully below.
+    await consolidateFinalToThread();
+    const status = await jobStorage.markCompletedIdempotent<ChatResponseResult>(jobId, {
       threadId,
       content: fullContent,
       hasActionableItem,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     });
 
+    if (status === 'cancelled') {
+      // A concurrent DELETE won the CAS race. Re-annotate the durable
+      // message with the stopped marker so the user's intent is
+      // preserved, and emit the matching terminal frame.
+      await consolidateFinalToThread(RESPONSE_STOPPED_ANNOTATION);
+      emitTerminal('cancelled');
+    } else if (status === 'failed') {
+      await consolidateFinalToThread(RESPONSE_INTERRUPTED_ANNOTATION);
+      emitTerminal('failed', 'interrupted');
+    } else {
+      emitTerminal('completed');
+    }
+
     log.info(`[Job ${jobId}] Chat response completed: ${fullContent.length} chars`);
   } catch (error) {
-    unregisterSession(jobId);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     log.error(`[Job ${jobId}] Chat response failed:`, errorMessage);
-    try {
-      await consolidateScratchpadToThread(userId, jobId, true);
-    } catch (consolidationErr) {
-      log.warn(`[Job ${jobId}] Failed to consolidate after error:`, consolidationErr);
+    // CAS first so a concurrent DELETE that already moved the job to
+    // `cancelled` is honoured: in that case we annotate as stopped
+    // (user intent), not interrupted (worker error).
+    const cas = await jobStorage.markFailedIfNonTerminal(jobId, errorMessage);
+    if (cas.transitioned) {
+      await consolidateFinalToThread(RESPONSE_INTERRUPTED_ANNOTATION);
+      emitTerminal('failed', errorMessage);
+    } else if (cas.status === 'cancelled') {
+      await consolidateFinalToThread(RESPONSE_STOPPED_ANNOTATION);
+      emitTerminal('cancelled');
+    } else {
+      // Already terminal as completed — somehow the catch fired
+      // after a successful happy-path completion. Don't overwrite.
+      emitTerminal(cas.status as 'completed' | 'failed' | 'cancelled', errorMessage);
     }
-    await jobStorage.markFailed(jobId, errorMessage);
+  } finally {
+    if (sessionRegistered) {
+      unregisterSession(jobId);
+    }
   }
 }

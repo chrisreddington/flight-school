@@ -15,8 +15,15 @@ type Boundary =
 
 const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   'internal/copilot/execute/route.ts': 'internalWorkerSecret',
-  'internal/jobs/cancel/route.ts': 'internalWorkerSecret',
-  'internal/jobs/execute/route.ts': 'internalWorkerSecret',
+  'internal/ai-activity/route.ts': 'internalWorkerSecret',
+  'internal/ai-activity/event/route.ts': 'internalWorkerSecret',
+  'internal/ai-activity/event/[id]/route.ts': 'internalWorkerSecret',
+  'internal/ai-activity/stream/route.ts': 'internalWorkerSecret',
+  'internal/jobs/route.ts': 'internalWorkerSecret',
+  'internal/jobs/sweep/route.ts': 'internalWorkerSecret',
+  'internal/jobs/user-data/route.ts': 'internalWorkerSecret',
+  'internal/jobs/[id]/route.ts': 'internalWorkerSecret',
+  'internal/jobs/[id]/stream/route.ts': 'internalWorkerSecret',
   'ai-activity/metrics/route.ts': 'requireUserContext',
   'ai-activity/route.ts': 'requireUserContext',
   'ai-activity/stream/route.ts': 'requireUserContext',
@@ -36,7 +43,13 @@ const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   'health/route.ts': 'public',
   'issues/route.ts': 'getOctokitForRequest',
   'jobs/[id]/route.ts': 'requireUserContext',
-  'jobs/route.ts': 'requireUserContext',
+  'jobs/[id]/stream/route.ts': 'requireUserContext',
+  // `jobs/route.ts` is a mixed boundary: POST is wrapped in
+  // `withUserGuards` (rate-limit + concurrent-cap + audit) because it
+  // initiates AI work; GET uses `requireUserContext` only (a redacted
+  // list is a cheap read). The inventory marker uses the strongest
+  // boundary present in the file.
+  'jobs/route.ts': 'withUserGuards',
   'otel/v1/traces/route.ts': 'requireUserContext',
   'profile/route.ts': 'getOctokitForRequest',
   'profile/storage/route.ts': 'createStorageRoute',

@@ -47,6 +47,25 @@ describe('redactJobForList', () => {
     expect(dto.error).toBeDefined();
     expect(dto.error!.length).toBeLessThan(1000);
   });
+
+  it('surfaces assistantMessageId from chat-response input', () => {
+    const dto = redactJobForList(
+      mkJob({ type: 'chat-response', input: { assistantMessageId: 'asst-42', prompt: 'p' } }),
+    );
+    expect(dto.assistantMessageId).toBe('asst-42');
+  });
+
+  it('does not surface assistantMessageId for non-chat-response job types', () => {
+    const dto = redactJobForList(
+      mkJob({ type: 'topic-regeneration', input: { assistantMessageId: 'asst-42' } }),
+    );
+    expect(dto.assistantMessageId).toBeUndefined();
+  });
+
+  it('omits assistantMessageId when not present in input', () => {
+    const dto = redactJobForList(mkJob({ type: 'chat-response', input: { prompt: 'p' } }));
+    expect(dto.assistantMessageId).toBeUndefined();
+  });
 });
 
 describe('redactJobForDetail', () => {

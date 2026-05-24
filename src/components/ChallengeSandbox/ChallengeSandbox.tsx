@@ -36,21 +36,13 @@ import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { BeforeMount, OnMount } from '@monaco-editor/react';
 import {
-    BeakerIcon,
-    ChevronDownIcon,
-    ChevronRightIcon,
     CodeIcon,
-    InfoIcon,
-    LightBulbIcon,
-    PlayIcon,
-    RocketIcon,
     ScreenFullIcon,
     ScreenNormalIcon,
-    SkipIcon,
 } from '@primer/octicons-react';
-import { Banner, Button, ConfirmationDialog, IconButton, Label, SegmentedControl, useTheme } from '@primer/react';
+import { Banner, ConfirmationDialog, IconButton, useTheme } from '@primer/react';
 import dynamic from 'next/dynamic';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 
 // Lazy load Monaco Editor (2MB+) to avoid blocking initial page load
 // PERF: Use loading placeholder with exact dimensions to avoid layout shift
@@ -65,18 +57,14 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
 });
 
 import { useDebugMode } from '@/contexts/debug-context';
-import { DifficultyBadge } from '@/components/DifficultyBadge';
-import { MarkdownContent } from '@/components/MarkdownContent';
 import styles from './ChallengeSandbox.module.css';
-import { EvaluationResultDisplay } from './evaluation-result-display';
+import { ChallengeHeader } from './ChallengeHeader';
 import { ExportToGitHubDialog } from './export-dialog';
 import { FileManager } from './file-manager';
-import { HintDisplay } from './hint-display';
-import { RelatedSuggestions } from './RelatedSuggestions';
+import { ResultsPanel } from './ResultsPanel';
 import { CodeOutputPanel } from './CodeOutputPanel';
 import { GuidedModePanel } from './GuidedModePanel';
 import type { ChallengeSandboxProps } from './types';
-import { SelfExplanationCard } from './self-explanation-card';
 import {
   MONACO_KEYBINDING_RUN,
   configureMonacoLanguageDefaults,
@@ -84,6 +72,7 @@ import {
   getMonacoTheme,
   initializeMonacoLanguageDefaults,
 } from './monaco-config';
+import { useDeferredEditorMount } from './use-deferred-editor-mount';
 
 initializeMonacoLanguageDefaults();
 
@@ -118,25 +107,8 @@ export function ChallengeSandbox({
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [hasPromptedSelfExplanation, setHasPromptedSelfExplanation] = useState(false);
-  
-  // PERF: Defer Monaco editor mount until after initial paint to prevent
-  // forced reflow during page load. Monaco's measureReferenceDomElement
-  // triggers synchronous layout that blocks render if mounted immediately.
-  const [isEditorReady, setIsEditorReady] = useState(false);
-  useEffect(() => {
-    // Use requestIdleCallback if available, otherwise requestAnimationFrame + setTimeout
-    // This ensures editor mounts after browser has completed initial paint
-    if (typeof requestIdleCallback !== 'undefined') {
-      const id = requestIdleCallback(() => setIsEditorReady(true), { timeout: 100 });
-      return () => cancelIdleCallback(id);
-    } else {
-      const rafId = requestAnimationFrame(() => {
-        const timeoutId = setTimeout(() => setIsEditorReady(true), 16);
-        return () => clearTimeout(timeoutId);
-      });
-      return () => cancelAnimationFrame(rafId);
-    }
-  }, []);
+
+  const isEditorReady = useDeferredEditorMount();
   
   const {
     workspace,
@@ -258,65 +230,17 @@ export function ChallengeSandbox({
       aria-label={`Challenge: ${challenge.title}`}
     >
       {/* Header */}
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <span className={styles.headerIcon}>
-            <CodeIcon size={20} />
-          </span>
-          <div className={styles.headerTitleGroup}>
-            <div className={styles.headerTitleRow}>
-              <h2 className={styles.headerTitle}>{challenge.title}</h2>
-              {challenge.type === 'debug' && (
-                <Label size="small" variant="attention">
-                  🐛 Debug Mode
-                </Label>
-              )}
-              {challenge.description && (
-                <button
-                  className={styles.descriptionToggle}
-                  onClick={() => setIsDescriptionCollapsed(!isDescriptionCollapsed)}
-                  aria-expanded={!isDescriptionCollapsed}
-                  aria-label={isDescriptionCollapsed ? 'Expand description' : 'Collapse description'}
-                  type="button"
-                >
-                  {isDescriptionCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
-                  <span className={styles.sectionIcon}>
-                    <InfoIcon size={16} />
-                  </span>
-                  <span className={styles.sectionTitle}>Description</span>
-                </button>
-              )}
-            </div>
-            {challenge.description && !isDescriptionCollapsed && (
-              <div className={styles.headerDescription}>
-                <MarkdownContent content={challenge.description} />
-              </div>
-            )}
-          </div>
-          <DifficultyBadge difficulty={challenge.difficulty} variant="css" />
-        </div>
-        <div className={styles.headerRight}>
-          <SegmentedControl aria-label="Challenge mode">
-            <SegmentedControl.Button selected={mode === 'free'} onClick={() => setMode('free')}>
-              Free Mode
-            </SegmentedControl.Button>
-            <SegmentedControl.Button selected={mode === 'guided'} onClick={() => setMode('guided')}>
-              Guided Mode
-            </SegmentedControl.Button>
-          </SegmentedControl>
-          {isDebugMode && (
-            <Button
-              variant="invisible"
-              size="small"
-              onClick={solveChallengeWithAI}
-              leadingVisual={RocketIcon}
-              disabled={isSolving || isEvaluating}
-            >
-              {isSolving ? 'Solving...' : 'Solve Challenge'}
-            </Button>
-          )}
-        </div>
-      </div>
+      <ChallengeHeader
+        challenge={challenge}
+        mode={mode}
+        onSelectMode={setMode}
+        isDescriptionCollapsed={isDescriptionCollapsed}
+        onToggleDescription={() => setIsDescriptionCollapsed(!isDescriptionCollapsed)}
+        isDebugMode={isDebugMode}
+        onSolveChallenge={solveChallengeWithAI}
+        isSolving={isSolving}
+        isEvaluating={isEvaluating}
+      />
 
       {/* Solution error message */}
       {solveError && (
@@ -402,127 +326,35 @@ export function ChallengeSandbox({
           <CodeOutputPanel result={runResult} isRunning={isRunning} language={challenge.language} />
         </div>
 
-        {/* Right panel */}
-        <div className={styles.rightPanel}>
-          {/* Evaluation section */}
-          <div className={`${styles.evaluationSection} ${isEvaluationCollapsed ? styles.collapsed : ''} ${isHintsCollapsed && !isEvaluationCollapsed ? styles.expanded : ''}`}>
-            <div className={styles.sectionHeader}>
-              <button
-                className={styles.sectionHeaderToggle}
-                onClick={() => setIsEvaluationCollapsed(!isEvaluationCollapsed)}
-                aria-expanded={!isEvaluationCollapsed}
-                aria-label={`${isEvaluationCollapsed ? 'Expand' : 'Collapse'} evaluation section`}
-              >
-                {isEvaluationCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
-                <span className={styles.sectionIcon}>
-                  <BeakerIcon size={16} />
-                </span>
-                <h3 className={styles.sectionTitle}>Evaluation</h3>
-              </button>
-              <div className={styles.sectionHeaderRight}>
-                <Button
-                  variant="invisible"
-                  size="small"
-                  onClick={() => setIsResetDialogOpen(true)}
-                  leadingVisual={SkipIcon}
-                  disabled={isEvaluating}
-                  aria-label="Reset code and evaluation results"
-                >
-                  Reset
-                </Button>
-                {isEvaluating ? (
-                  <Button
-                    variant="danger"
-                    size="small"
-                    onClick={stopEvaluation}
-                    disabled={evaluation.isCancelling}
-                    aria-label={evaluation.isCancelling ? 'Cancelling evaluation' : 'Stop evaluation'}
-                  >
-                    {evaluation.isCancelling ? 'Cancelling…' : 'Stop'}
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="default"
-                      size="small"
-                      onClick={handleRunCode}
-                      disabled={!canRunInBrowser || isRunning}
-                      aria-label="Run code in browser"
-                    >
-                      {isRunning ? 'Running...' : '▷ Run'}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="small"
-                      onClick={handleEvaluate}
-                      leadingVisual={PlayIcon}
-                      disabled={!workspace.files.some(f => f.content.trim()) || isRateLimited}
-                      aria-label={
-                        isRateLimited
-                          ? `Evaluation paused. Retry in ${rateLimitRetryInSeconds}s`
-                          : 'Evaluate code solution'
-                      }
-                    >
-                      {isRateLimited ? `Retry in ${rateLimitRetryInSeconds}s` : 'Evaluate'}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-            {!isEvaluationCollapsed && (
-              <>
-                <EvaluationResultDisplay evaluation={evaluation} />
-                {showSelfExplanationCard && (
-                  <SelfExplanationCard
-                    challengeId={challengeId}
-                    dateKey={dateKey}
-                    onSave={handleSaveSelfExplanation}
-                    onSkip={handleSkipSelfExplanation}
-                  />
-                )}
-                {evaluationResult?.isCorrect === true && (
-                  <RelatedSuggestions
-                    completedChallenge={{
-                      title: challenge.title,
-                      language: challenge.language,
-                      difficulty: challenge.difficulty,
-                    }}
-                    onSelectSuggestion={(suggestion) => {
-                      console.log('Selected related suggestion:', suggestion);
-                    }}
-                  />
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Hints section */}
-          <div className={`${styles.hintSection} ${isHintsCollapsed ? styles.collapsed : ''}`}>
-            <div className={styles.sectionHeader}>
-              <button
-                className={styles.sectionHeaderToggle}
-                onClick={() => setIsHintsCollapsed(!isHintsCollapsed)}
-                aria-expanded={!isHintsCollapsed}
-                aria-label={`${isHintsCollapsed ? 'Expand' : 'Collapse'} hints section`}
-              >
-                {isHintsCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
-                <span className={styles.sectionIcon}>
-                  <LightBulbIcon size={16} />
-                </span>
-                <h3 className={styles.sectionTitle}>Hints ({hints.length})</h3>
-              </button>
-            </div>
-            {!isHintsCollapsed && (
-              <HintDisplay
-                hints={hints}
-                isLoading={isLoadingHint}
-                error={hintError}
-                onRequestHint={requestHint}
-                onStopHint={stopHint}
-              />
-            )}
-          </div>
-        </div>
+        <ResultsPanel
+          challenge={challenge}
+          challengeId={challengeId}
+          dateKey={dateKey}
+          evaluation={evaluation}
+          evaluationResult={evaluationResult}
+          isEvaluating={isEvaluating}
+          isEvaluationCollapsed={isEvaluationCollapsed}
+          onToggleEvaluationCollapsed={() => setIsEvaluationCollapsed(!isEvaluationCollapsed)}
+          onOpenResetDialog={() => setIsResetDialogOpen(true)}
+          onStopEvaluation={stopEvaluation}
+          onRunCode={handleRunCode}
+          onEvaluate={handleEvaluate}
+          isRunning={isRunning}
+          canRunInBrowser={canRunInBrowser}
+          canEvaluate={workspace.files.some((f) => f.content.trim().length > 0)}
+          isRateLimited={isRateLimited}
+          rateLimitRetryInSeconds={rateLimitRetryInSeconds}
+          showSelfExplanationCard={showSelfExplanationCard}
+          onSaveSelfExplanation={handleSaveSelfExplanation}
+          onSkipSelfExplanation={handleSkipSelfExplanation}
+          hints={hints}
+          isLoadingHint={isLoadingHint}
+          hintError={hintError}
+          onRequestHint={requestHint}
+          onStopHint={stopHint}
+          isHintsCollapsed={isHintsCollapsed}
+          onToggleHintsCollapsed={() => setIsHintsCollapsed(!isHintsCollapsed)}
+        />
       </div>
 
       {/* Reset confirmation dialog */}

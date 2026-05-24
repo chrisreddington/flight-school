@@ -25,10 +25,10 @@ describe('operation result state', () => {
       result: { challenge: { id: 'new-challenge' } },
     };
     const chat: ActiveOperation = {
-      id: 'chat-message:thread-1',
+      id: 'chat-response:thread-1',
       status: 'in-progress',
       meta: {
-        type: 'chat-message',
+        type: 'chat-response',
         targetId: 'thread-1',
         startedAt: '2024-01-01T00:00:00.000Z',
       },
@@ -45,7 +45,7 @@ describe('operation result state', () => {
     expect(state.snapshot.chatMessages.get(chat.id)).toBe(chat);
     expect(state.activeIds.topics).toEqual(new Set(['topic-1']));
     expect(state.activeIds.challenges).toEqual(new Set());
-    expect(state.activeIds.chat).toEqual(new Set(['chat-message:thread-1']));
+    expect(state.activeIds.chat).toEqual(new Set(['chat-response:thread-1']));
   });
 
   it('should derive active IDs from target IDs for regeneration operations', () => {

@@ -28,8 +28,6 @@ const ReactMarkdown = dynamic(() => import('react-markdown'), {
 interface MarkdownContentProps {
   /** Markdown content to render */
   content: string;
-  /** Whether the content is currently streaming */
-  isStreaming?: boolean;
   /** Additional CSS class name */
   className?: string;
 }
@@ -44,7 +42,6 @@ interface MarkdownContentProps {
  */
 export function MarkdownContent({
   content,
-  isStreaming = false,
   className,
 }: MarkdownContentProps) {
   return (
@@ -81,7 +78,6 @@ export function MarkdownContent({
       >
         {content}
       </ReactMarkdown>
-      {isStreaming && <span className={styles.streamingCursor}>▊</span>}
     </div>
   );
 }

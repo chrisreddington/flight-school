@@ -74,12 +74,8 @@ describe('telemetry stream and queue metrics', () => {
 
     expect(mocks.histogramRecords).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        name: 'flight_school.ai.stream.first_token_ms',
-        value: 180,
-      }),
-      expect.objectContaining({
-        name: 'flight_school.ai.stream.duration_ms',
-        value: 2500,
+        name: 'gen_ai.client.operation.time_to_first_chunk',
+        value: 0.18,
       }),
       expect.objectContaining({
         name: 'flight_school.ai.stream.delta_count',
@@ -103,8 +99,8 @@ describe('telemetry stream and queue metrics', () => {
 
     expect(mocks.histogramRecords).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        name: 'flight_school.jobs.queue_wait_ms',
-        value: 420,
+        name: 'flight_school.jobs.queue_wait',
+        value: 0.42,
       }),
     ]));
   });

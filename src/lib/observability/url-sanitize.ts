@@ -20,3 +20,19 @@ export function stripQueryString(url: string): string {
     return url;
   }
 }
+
+/**
+ * Returns just the pathname portion of a URL (e.g. `/api/foo`). Falls back
+ * to the input when parsing fails. Used to produce compact, scannable span
+ * names like `GET /api/foo` instead of full origin-prefixed URLs.
+ */
+export function extractPathname(url: string): string {
+  if (!url) return url;
+  if (url.startsWith('/')) return url;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname || url;
+  } catch {
+    return url;
+  }
+}

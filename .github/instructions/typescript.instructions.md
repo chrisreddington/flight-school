@@ -297,6 +297,41 @@ export function publicFunction() {
 }
 ```
 
+### Concurrency Patterns
+
+#### In-flight request dedup
+
+Several modules in this codebase coalesce concurrent calls to the same
+remote operation. Components mount in parallel (Dashboard subtrees,
+StrictMode double-invoke) and call the same storage read on the same
+tick — without dedup that produces two HTTP requests, two traces, and
+sometimes a GET/POST race.
+
+The pattern is a module-level `Map<key, Promise>`:
+
+```typescript
+const inflight = new Map<string, Promise<unknown>>();
+
+function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+  const promise = fn().finally(() => {
+    if (inflight.get(key) === promise) inflight.delete(key);
+  });
+  inflight.set(key, promise);
+  return promise;
+}
+```
+
+**Rules:**
+- Apply to **reads** and **deletes** — same key always yields the same response.
+- **Never** apply to writes whose payload can differ between callers (last-writer-wins is the documented semantic; coalescing would silently drop one writer's data).
+- The `inflight.get(key) === promise` guard on cleanup prevents a slow original from clearing a newer in-flight entry.
+- Live examples: `src/lib/focus/persistence.ts`, `src/lib/workspace/storage.ts`.
+
+Reach for this whenever you see duplicate identical client requests in
+traces during idle/mount windows.
+
 ### Comments and Documentation
 
 > **📌 SINGLE SOURCE OF TRUTH**: See [documentation.instructions.md](.github/instructions/documentation.instructions.md) for all TSDoc and inline comment standards including right-sizing rules, tag requirements, and comment prefixes.

@@ -5,13 +5,9 @@ import type { AuthoringMessage } from './authoring-chat';
 import { AuthoringMessageList } from './authoring-message-list';
 
 vi.mock('@/components/MarkdownContent', () => ({
-  MarkdownContent: ({
-    content,
-    isStreaming,
-  }: {
-    content: string;
-    isStreaming?: boolean;
-  }) => <div data-testid={isStreaming ? 'markdown-streaming' : 'markdown'}>{content}</div>,
+  MarkdownContent: ({ content }: { content: string }) => (
+    <div data-testid="markdown">{content}</div>
+  ),
 }));
 
 const mockPendingChallenge: DailyChallenge = {
@@ -76,7 +72,8 @@ describe('AuthoringMessageList', () => {
   it('shows streaming content bubble and not typing indicator when streaming has content', () => {
     renderMessageList({ isStreaming: true, streamingContent: 'Hello' });
 
-    expect(screen.getByTestId('markdown-streaming')).toHaveTextContent('Hello');
+    // The streaming bubble renders the partial content via MarkdownContent.
+    expect(screen.getByTestId('markdown')).toHaveTextContent('Hello');
     expect(screen.queryByRole('status', { name: 'Copilot is thinking' })).not.toBeInTheDocument();
   });
 

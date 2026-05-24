@@ -1,15 +1,23 @@
 /**
- * PATCH /api/ai-activity/metrics
+ * Web proxy for the activity event metrics PATCH.
  *
- * Updates an existing activity event with client-side metrics.
- * **Per-user**: a user can only update metrics on their own events.
+ * `PATCH /api/ai-activity/metrics` body `{ eventId, clientMetrics }`
+ *   Proxies to `PATCH /api/internal/ai-activity/event/${eventId}` with
+ *   body `{ clientMetrics }`. Preserves the existing 404 semantics —
+ *   the worker returns 404 for both "unknown id" and "not owned" so
+ *   we don't leak existence.
  */
-
 import { authErrorResponse } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
-import { activityLogger } from '@/lib/copilot/activity/logger';
-import { updateShadowActivityMetrics } from '@/lib/copilot/activity/shadow-store';
+import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
+import {
+  captureTracePropagationHeaders,
+  mergeTracePropagationHeaders,
+} from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export interface UpdateActivityMetricsRequest {
   /** Event ID to update */
@@ -32,18 +40,39 @@ export async function PATCH(request: NextRequest) {
     if (!eventId || !clientMetrics) {
       return NextResponse.json(
         { error: 'eventId and clientMetrics are required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const updated = activityLogger.updateWithClientMetrics(userId, eventId, clientMetrics);
-
-    if (!updated) {
-      // 404 for both "not found" and "not yours" — don't leak existence.
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    const workerConfig = getCopilotWorkerConfig();
+    if (!workerConfig) {
+      return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
     }
 
-    await updateShadowActivityMetrics(userId, eventId, clientMetrics);
+    const headers = mergeTracePropagationHeaders(
+      {
+        authorization: `Bearer ${workerConfig.secret}`,
+        'content-type': 'application/json',
+        'x-user-id': userId,
+      },
+      captureTracePropagationHeaders(),
+    );
+
+    const upstream = await fetch(
+      `${workerConfig.baseUrl}/api/internal/ai-activity/event/${encodeURIComponent(eventId)}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ clientMetrics }),
+      },
+    );
+
+    if (upstream.status === 404) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+    if (!upstream.ok) {
+      return NextResponse.json({ error: 'Worker unreachable' }, { status: 502 });
+    }
 
     return NextResponse.json({ success: true, eventId });
   } catch (err) {

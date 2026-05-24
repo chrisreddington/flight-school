@@ -88,15 +88,16 @@ vi.mock('./sessions', () => ({
 vi.mock('./activity/logger', () => ({
   activityLogger: {
     logEvent: vi.fn(),
-    startOperation: vi.fn(() => mocks.activityComplete),
-    latestEventIdForUser: mocks.latestEventIdForUser,
-    getEvents: vi.fn(() => []),
+    startOperation: vi.fn(async () => ({ eventId: 'evt-1', complete: mocks.activityComplete })),
+    updateWithClientMetrics: vi.fn(async () => true),
+    clear: vi.fn(async () => undefined),
   },
 }));
 
 vi.mock('@/lib/observability/telemetry', () => ({
   recordAiOperation: mocks.recordAiOperation,
   recordAiStreamMetrics: mocks.recordAiStreamMetrics,
+  recordAiTokenUsage: vi.fn(),
 }));
 
 vi.mock('@opentelemetry/api', () => ({

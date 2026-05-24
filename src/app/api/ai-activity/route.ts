@@ -1,73 +1,104 @@
 /**
- * AI Activity API Route
- * GET /api/ai-activity
- * DELETE /api/ai-activity
+ * Web proxy for AI activity events.
  *
- * Exposes server-side activity logger events **scoped to the caller**.
- * The activity logger is a server-side singleton that captures all SDK
- * operations across every user, so this endpoint MUST filter by the
- * authenticated user — never return the raw buffer.
+ * `GET /api/ai-activity?cursor=&include=`
+ * `DELETE /api/ai-activity`
+ *
+ * Thin proxy to the worker-internal endpoints. The web tier never
+ * trusts a client-supplied `userId` — it sets `x-user-id` from the
+ * server-resolved auth context and forwards query params verbatim.
  */
-
-import { apiSuccess, handleUnauthorizedError } from '@/lib/api';
+import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
-import { activityLogger } from '@/lib/copilot/activity/logger';
+import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
 import {
-  clearShadowActivityEvents,
-  loadShadowActivityEvents,
-} from '@/lib/copilot/activity/shadow-store';
-import { mergeActivityEventStreams } from '@/lib/copilot/activity/stream-cursor';
-import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
-import { now } from '@/lib/utils/date-utils';
-import { NextRequest } from 'next/server';
+  captureTracePropagationHeaders,
+  mergeTracePropagationHeaders,
+} from '@/lib/observability/context-propagation';
+import { NextRequest, NextResponse } from 'next/server';
 
-export interface AIActivityResponse {
-  events: ReturnType<typeof toPublicActivityEvent>[];
-  stats: ReturnType<typeof activityLogger.getStats>;
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function buildProxyHeaders(userId: string, secret: string) {
+  return mergeTracePropagationHeaders(
+    {
+      authorization: `Bearer ${secret}`,
+      'x-user-id': userId,
+    },
+    captureTracePropagationHeaders(),
+  );
 }
 
-/**
- * GET /api/ai-activity
- * Returns activity events and stats owned by the authenticated caller.
- *
- * Events are mapped through {@link toPublicActivityEvent} so
- * `output.fullResponse` and MCP tool args/results never reach the
- * browser. The dev-only `?include=full` query unlocks the full
- * response, gated server-side by `NODE_ENV === 'development'` (the
- * gate is inside the DTO).
- */
 export async function GET(request: NextRequest) {
+  let userId: string;
   try {
-    const { userId } = await requireUserContext();
-    const includeFull = request.nextUrl.searchParams.get('include') === 'full';
-    const shadowEvents = await loadShadowActivityEvents(userId);
-    const liveEvents = activityLogger.getEvents(userId);
-    const mergedEvents = mergeActivityEventStreams(shadowEvents, liveEvents);
-    const events = mergedEvents.map((event) =>
-      toPublicActivityEvent(event, { includeFull }),
-    );
-    const stats = activityLogger.getStats(userId);
-
-    return apiSuccess<AIActivityResponse>(
-      { events, stats },
-      { fetchedAt: now(), eventCount: events.length }
-    );
+    ({ userId } = await requireUserContext());
   } catch (err) {
     return handleUnauthorizedError(err);
   }
+
+  const workerConfig = getCopilotWorkerConfig();
+  if (!workerConfig) {
+    return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
+  }
+
+  const forwardParams = new URLSearchParams();
+  const include = request.nextUrl.searchParams.get('include');
+  if (include) forwardParams.set('include', include);
+  const cursor = request.nextUrl.searchParams.get('cursor');
+  if (cursor) forwardParams.set('cursor', cursor);
+
+  const qs = forwardParams.toString();
+  const upstreamUrl = `${workerConfig.baseUrl}/api/internal/ai-activity${qs ? `?${qs}` : ''}`;
+
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      method: 'GET',
+      headers: buildProxyHeaders(userId, workerConfig.secret),
+      signal: request.signal,
+    });
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      return new Response(null, { status: 499 });
+    }
+    return NextResponse.json({ error: 'Worker unreachable' }, { status: 502 });
+  }
 }
 
-/**
- * DELETE /api/ai-activity
- * Clears activity events owned by the authenticated caller only.
- */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  let userId: string;
   try {
-    const { userId } = await requireUserContext();
-    activityLogger.clear(userId);
-    await clearShadowActivityEvents(userId);
-    return apiSuccess({ cleared: true });
+    ({ userId } = await requireUserContext());
   } catch (err) {
     return handleUnauthorizedError(err);
+  }
+
+  const workerConfig = getCopilotWorkerConfig();
+  if (!workerConfig) {
+    return NextResponse.json({ error: 'Worker not configured' }, { status: 503 });
+  }
+
+  try {
+    const upstream = await fetch(`${workerConfig.baseUrl}/api/internal/ai-activity`, {
+      method: 'DELETE',
+      headers: buildProxyHeaders(userId, workerConfig.secret),
+      signal: request.signal,
+    });
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      return new Response(null, { status: 499 });
+    }
+    return NextResponse.json({ error: 'Worker unreachable' }, { status: 502 });
   }
 }

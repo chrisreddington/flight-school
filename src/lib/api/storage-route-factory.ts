@@ -47,8 +47,7 @@ interface StorageRouteConfig<T> {
   /**
    * Optional async hook invoked on GET after the storage file is read,
    * allowing the route to mutate the response body before it's
-   * serialized. Used by threads storage to merge in per-job streaming
-   * scratchpads. Failures here are caught and logged; the raw storage
+   * serialized. Failures here are caught and logged; the raw storage
    * payload is returned on hook error.
    */
   transformRead?: (userId: string, data: T) => Promise<T> | T;
