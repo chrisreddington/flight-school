@@ -58,9 +58,18 @@ Rules:
   any environment, including local dev. The OAuth flow is the only auth path.
 - **No `gh auth token` fallback.** The client module does not shell out;
   every token comes from the Auth.js session.
-- **Hot AI routes should use `withUserGuards`** (`src/lib/security/guard.ts`),
+- **Hot AI routes should use `withGuardedRoute`** (`src/lib/security/guard.ts`),
   which composes `requireUserContext` + rate limit + concurrent-session cap +
-  audit log around the handler.
+  audit log + standard error → `NextResponse` mapping around the handler.
+  The module exports three layered primitives:
+  - `requireGuardedUserContext(policy)` — transport-agnostic core; returns
+    `{ userId, login, accessToken, policyResult }` or throws a typed error.
+    Use this from Server Actions and RSC data loaders.
+  - `withUserGuards(opts, work)` — wraps the core for non-route callers that
+    handle their own response shape (e.g. background jobs).
+  - `withGuardedRoute(opts, work)` — the route adapter: maps `UnauthorizedError`
+    and entitlement errors to the standard JSON responses automatically, so
+    route handlers don't need an outer `knownApiErrorResponse` catch.
 
 ### `gh` CLI fallback is gone
 
@@ -106,7 +115,7 @@ Chat session cache keys include `userId` so two users sharing a
 | `src/lib/auth/` | Auth.js v5 config, user-context resolution, token store |
 | `src/lib/github/` | Per-request Octokit factories + GitHub data access |
 | `src/lib/copilot/` | Copilot SDK sessions (per-session `gitHubToken`), MCP config |
-| `src/lib/security/` | `withUserGuards`, rate limit, session cap, audit log |
+| `src/lib/security/` | `requireGuardedUserContext` / `withUserGuards` / `withGuardedRoute`, rate limit, session cap, audit log |
 
 ### Never Use SDK For
 

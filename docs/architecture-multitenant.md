@@ -138,7 +138,7 @@ combined with `gitHubToken` / `useLoggedInUser`.
 | MCP per-call config | `src/lib/copilot/mcp.ts` | `getMcpServerConfig` |
 | Worker-ready job dispatch | `src/app/api/jobs/dispatcher.ts` | `dispatchJobExecution` (web -> worker HTTP dispatch) |
 | Prototype runtime-pool contracts | `src/lib/copilot/runtime/` | `createPerUserRuntimePool`, `CopilotRuntimePool` |
-| Route guard composition | `src/lib/security/guard.ts` | `withUserGuards` |
+| Route guard composition | `src/lib/security/guard.ts` | `requireGuardedUserContext`, `withUserGuards`, `withGuardedRoute` |
 | Audit + abuse controls | `src/lib/security/` | `auditLog`, `checkRateLimit`, `acquireSlot` |
 
 ## Storage isolation
