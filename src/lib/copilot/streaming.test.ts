@@ -83,7 +83,6 @@ vi.mock('./sessions', () => ({
   CHAT_MODEL: 'claude-haiku-4.5',
   getConversationSession: mocks.getConversationSession,
   getConversationCapabilities: vi.fn(() => undefined),
-  getCopilotGithubMcpTools: vi.fn(() => []),
 }));
 
 vi.mock('./activity/logger', () => ({

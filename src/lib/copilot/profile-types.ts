@@ -30,7 +30,7 @@ export const BASE_PROFILE_IDS: readonly BaseProfileId[] = [
 ] as const;
 
 /** Set form of {@link BASE_PROFILE_IDS} for O(1) wire validation. */
-export const BASE_PROFILE_ID_SET: ReadonlySet<BaseProfileId> = new Set(BASE_PROFILE_IDS);
+const BASE_PROFILE_ID_SET: ReadonlySet<BaseProfileId> = new Set(BASE_PROFILE_IDS);
 
 /** Type guard for wire validation. */
 export function isBaseProfileId(value: unknown): value is BaseProfileId {

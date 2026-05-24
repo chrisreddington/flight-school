@@ -24,12 +24,12 @@ import { ALL_CAPABILITY_IDS, type CapabilityId } from './capability-ids';
 import { getMcpServerConfig } from './mcp';
 import { needsGitHubCapability } from './profile-heuristics';
 
-export { ALL_CAPABILITY_IDS, isCapabilityId, type CapabilityId } from './capability-ids';
+export { ALL_CAPABILITY_IDS, type CapabilityId } from './capability-ids';
 
 /**
  * Parameters passed to an MCP capability's server factory.
  */
-export interface BuildMcpServerParams {
+interface BuildMcpServerParams {
   /** GitHub user-to-server token from the active `UserContext`. */
   token: string;
   /** Optional tool allowlist override; falls back to capability defaults. */
@@ -54,7 +54,7 @@ export interface CapabilityPromptContext {
 }
 
 /** Shared metadata for every capability regardless of kind. */
-export interface BaseCapabilitySpec {
+interface BaseCapabilitySpec {
   id: CapabilityId;
   /**
    * Capability-specific addendum appended to the profile base prompt when
@@ -76,7 +76,7 @@ export interface BaseCapabilitySpec {
 }
 
 /** MCP-backed capability: composes into `session.mcpServers`. */
-export interface McpCapabilitySpec extends BaseCapabilitySpec {
+interface McpCapabilitySpec extends BaseCapabilitySpec {
   kind: 'mcp';
   /** Default tools exposed when no profile-specific override is given. */
   defaultTools: readonly string[];
@@ -89,7 +89,7 @@ export interface McpCapabilitySpec extends BaseCapabilitySpec {
  * today; the discriminator exists so adding the first native capability
  * does not require rewriting consumers of `CapabilitySpec`.
  */
-export interface NativeCapabilitySpec extends BaseCapabilitySpec {
+interface NativeCapabilitySpec extends BaseCapabilitySpec {
   kind: 'native';
 }
 

@@ -43,15 +43,7 @@ import {
   type CapabilitiesArg,
 } from './profile-types';
 
-export {
-  BASE_PROFILE_IDS,
-  BASE_PROFILE_ID_SET,
-  PROFILE_ALLOWED_CAPABILITIES,
-  areCapabilitiesAllowedForProfile,
-  isBaseProfileId,
-  type BaseProfileId,
-  type CapabilitiesArg,
-} from './profile-types';
+export type { BaseProfileId } from './profile-types';
 // Re-export from `./fingerprint` so older callers (and tests) can keep
 // importing the fingerprint helpers from `./profiles`.
 export { capabilityFingerprintOf, composeCapabilityFingerprint } from './fingerprint';

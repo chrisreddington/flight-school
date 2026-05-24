@@ -54,7 +54,7 @@ const log = logger.withTag('Copilot SDK');
 // Model Configuration
 
 /** Model tiers for different use cases */
-export const MODEL_TIERS = {
+const MODEL_TIERS = {
   /** Standard model for chat and coaching */
   standard: 'gpt-5-mini',
   /** Faster model for low-latency chat */
@@ -63,8 +63,6 @@ export const MODEL_TIERS = {
 
 /** Override chat model for performance tuning */
 export const CHAT_MODEL = process.env.COPILOT_CHAT_MODEL ?? MODEL_TIERS.fastChat;
-
-export { getCopilotGithubMcpTools } from './mcp-tools';
 
 const mcpOnlyPermissionHandler: PermissionHandler = (request) => {
   if (request.kind === 'mcp') {
