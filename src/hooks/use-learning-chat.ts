@@ -62,7 +62,7 @@ function deriveAutoTitle(message: string): string {
  * by up to one poll interval, so we always re-read from storage before
  * dispatching a new chat job.
  */
-async function isThreadStreaming(threadId: string): Promise<boolean> {
+async function isStorageStreaming(threadId: string): Promise<boolean> {
   const fresh = await threadStore.getById(threadId);
   return fresh?.isStreaming === true;
 }
@@ -268,7 +268,7 @@ export function useLearningChat(): UseLearningChatReturn {
       const { useGitHubTools = false, repos, threadId: explicitThreadId } = options;
       const thread = await resolveTargetThread(message, explicitThreadId, repos);
 
-      if (await isThreadStreaming(thread.id)) {
+      if (await isStorageStreaming(thread.id)) {
         log.warn(`Thread ${thread.id} is already streaming`);
         return;
       }

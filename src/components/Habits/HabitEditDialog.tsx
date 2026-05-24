@@ -11,7 +11,7 @@ import {
   TextInput,
   Textarea,
 } from '@primer/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 interface HabitEditDialogProps {
   habit: HabitWithHistory;
@@ -29,14 +29,16 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
   const [title, setTitle] = useState(habit.title);
   const [description, setDescription] = useState(habit.description);
   const [isSaving, setIsSaving] = useState(false);
+  const submitLockRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = useCallback(async () => {
-    if (isSaving) return;
+    if (submitLockRef.current) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
     }
+    submitLockRef.current = true;
     setIsSaving(true);
     setError(null);
     try {
@@ -57,9 +59,10 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
       logger.error('Failed to update habit', { error: err }, 'HabitEditDialog');
       setError('Failed to save changes. Please try again.');
     } finally {
+      submitLockRef.current = false;
       setIsSaving(false);
     }
-  }, [habit, isSaving, title, description, onUpdated, onClose]);
+  }, [habit, title, description, onUpdated, onClose]);
 
   const handleClose = useCallback(() => {
     // Reset form state on close

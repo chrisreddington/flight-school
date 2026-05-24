@@ -21,11 +21,6 @@ import {
   isCopilotEntitlementError,
   markNegativeEntitlement,
 } from './entitlement';
-import type {
-  SessionCreationMetrics,
-  SessionOptions,
-  SessionWithMetrics,
-} from './types';
 import { logger } from '@/lib/logger';
 import { recordAiOperation, withSpan } from '@/lib/observability/telemetry';
 import {
@@ -36,6 +31,20 @@ import {
   GEN_AI_REQUEST_MODEL,
 } from '@/lib/observability/semconv';
 import { createNewSessionMetrics, createReusedSessionMetrics } from './session-metrics';
+import type { SessionCreationMetrics, SessionOptions } from './types';
+
+/**
+ * Session with its creation metrics.
+ *
+ * @remarks Declared inline (rather than in `./types`) because the
+ * `CopilotSession` reference must stay inside the worker-allowlisted file
+ * boundary — `./types` is consumed from Web/API and may not import the
+ * SDK, even at the type level.
+ */
+export interface SessionWithMetrics {
+  session: CopilotSession;
+  metrics: SessionCreationMetrics;
+}
 
 const log = logger.withTag('Copilot SDK');
 

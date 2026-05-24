@@ -42,7 +42,7 @@
 
 import 'server-only';
 
-import { requireUserContext, type UserContext } from '@/lib/auth/context';
+import { requireUserContext, UnauthorizedError, type UserContext } from '@/lib/auth/context';
 import { auditLog, hashUserId, type AuditEventType } from '@/lib/security/audit';
 import { guardErrorResponse } from '@/lib/security/http';
 import { checkRateLimit, RateLimitedError } from '@/lib/security/rate-limit';
@@ -185,7 +185,7 @@ export async function requireGuardedRscContext(
     release();
     return ctx;
   } catch (error) {
-    if (error instanceof Error && error.name === 'UnauthorizedError') return null;
+    if (error instanceof UnauthorizedError) return null;
     throw error;
   }
 }

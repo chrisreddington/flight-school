@@ -20,7 +20,6 @@ import { deleteStorage } from '@/lib/storage/utils';
 import {
   type BackgroundJob,
   type JobErrorCode,
-  type JobsStorageSchema,
   type JobStatus,
   STORAGE_KEY,
   cleanup,

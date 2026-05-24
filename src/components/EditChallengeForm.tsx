@@ -12,7 +12,7 @@ import {
   TextInput,
   Textarea,
 } from '@primer/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { DailyChallenge } from '@/lib/focus/types';
 
@@ -57,6 +57,7 @@ export function EditChallengeForm({
   const [formData, setFormData] = useState<DailyChallenge>({ ...initialChallenge });
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isSaving, setIsSaving] = useState(false);
+  const submitLockRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const updateField = useCallback(
@@ -73,11 +74,12 @@ export function EditChallengeForm({
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (isSaving) return;
+      if (submitLockRef.current) return;
       const validationErrors = validateChallenge(formData);
       setErrors(validationErrors);
       if (Object.keys(validationErrors).length > 0) return;
 
+      submitLockRef.current = true;
       setIsSaving(true);
       setSaveError(null);
       try {
@@ -88,10 +90,11 @@ export function EditChallengeForm({
       } catch {
         setSaveError('An error occurred while saving.');
       } finally {
+        submitLockRef.current = false;
         setIsSaving(false);
       }
     },
-    [formData, isSaving, onSave]
+    [formData, onSave]
   );
 
   return (

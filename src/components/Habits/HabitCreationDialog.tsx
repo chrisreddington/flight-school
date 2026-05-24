@@ -21,7 +21,7 @@ import {
   TextInput 
 } from '@primer/react';
 import { CalendarIcon, CheckCircleIcon, ClockIcon, NumberIcon } from '@primer/octicons-react';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import styles from './HabitCreationDialog.module.css';
 
 interface HabitCreationDialogProps {
@@ -79,6 +79,10 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   const [includesWeekends, setIncludesWeekends] = useState(true);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // useState alone isn't enough for an async double-submit guard — two
+  // synchronous calls within the same tick would both see `false`. The
+  // ref flips atomically and is the real gate; state drives the UI.
+  const submitLockRef = useRef(false);
   
   // Focus management: focus first input when dialog opens
   const titleInputRef = React.useRef<HTMLInputElement>(null);
@@ -102,7 +106,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
   }, [totalDays, customDays]);
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -113,6 +117,7 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
     }
 
     try {
+      submitLockRef.current = true;
       setIsSubmitting(true);
       let tracking: TrackingConfig;
       
@@ -178,9 +183,10 @@ export function HabitCreationDialog({ isOpen, onClose, onCreated }: HabitCreatio
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create habit');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
-  }, [isSubmitting, title, description, trackingMode, minMinutes, maxMinutes, countTarget, countUnit, getActiveDays, includesWeekends, onClose, onCreated]);
+  }, [title, description, trackingMode, minMinutes, maxMinutes, countTarget, countUnit, getActiveDays, includesWeekends, onClose, onCreated]);
 
   const handleTrackingModeChange = (index: number) => {
     const modes: TrackingMode[] = ['time', 'count', 'binary'];

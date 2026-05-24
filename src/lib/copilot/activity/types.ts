@@ -100,9 +100,6 @@ export interface AIActivityEvent {
   error?: string;
 }
 
-/** Listener function for activity events */
-type ActivityListener = (event: AIActivityEvent) => void;
-
 /** Statistics about activity events */
 export interface AIActivityStats {
   /** Total number of events */

@@ -31,6 +31,7 @@ const ALLOWED_EXPORTS: Record<string, string[]> = {
     'getCopilotGithubMcpTools',
     'getConversationSession',
     'MODEL_TIERS',
+    'SessionWithMetrics',
     'shutdownAllPools',
     'warmCopilotClient',
   ],

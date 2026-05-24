@@ -22,7 +22,11 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const SCAN_ROOTS = ['src'];
 
-const SDK_IMPORT_PATTERN = /from\s+['"]@github\/copilot-sdk['"]/;
+// Catches both `import ... from '@github/copilot-sdk'` and dynamic type
+// references like `import('@github/copilot-sdk').CopilotSession`. The
+// boundary applies equally to type-only references, so type-erased SDK
+// types do not leak into Web/API surface modules.
+const SDK_IMPORT_PATTERN = /['"]@github\/copilot-sdk['"]/;
 
 const FACTORY_NAMES = [
   'createLoggedCoachSession',

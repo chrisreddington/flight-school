@@ -259,10 +259,12 @@ export function useLearningChatStream({
           job.status === 'running' && job.type === 'chat-response' && job.targetId === threadId,
       );
 
-      for (const job of runningJobs) {
-        log.debug('Cancelling job:', job.id);
-        await apiDelete(`/api/jobs/${job.id}`);
-      }
+      await Promise.all(
+        runningJobs.map((job) => {
+          log.debug('Cancelling job:', job.id);
+          return apiDelete(`/api/jobs/${job.id}`);
+        }),
+      );
     } catch (err) {
       log.error('Failed to stop streaming:', err);
     }

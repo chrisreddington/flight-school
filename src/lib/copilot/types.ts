@@ -57,14 +57,6 @@ export interface SessionOptions {
   model?: string;
 }
 
-/**
- * Session with its creation metrics
- */
-export interface SessionWithMetrics {
-  session: import('@github/copilot-sdk').CopilotSession;
-  metrics: SessionCreationMetrics;
-}
-
 // ============================================================================
 // Streaming Types
 // ============================================================================

@@ -17,7 +17,7 @@ import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
 import type { DailyChallenge } from '@/lib/focus/types';
 
-import { updateChallengeAction } from '../../actions';
+import { updateChallengeAction, type ChallengeEditableFields } from '../../actions';
 import styles from '../../challenge.module.css';
 
 export default function EditChallengePage() {
@@ -42,7 +42,15 @@ export default function EditChallengePage() {
 
   const handleSave = useCallback(
     async (updated: DailyChallenge) => {
-      const result = await updateChallengeAction(challengeId, updated);
+      const editableFields: ChallengeEditableFields = {
+        title: updated.title,
+        description: updated.description,
+        difficulty: updated.difficulty,
+        language: updated.language,
+        estimatedTime: updated.estimatedTime,
+        whyThisChallenge: updated.whyThisChallenge,
+      };
+      const result = await updateChallengeAction(challengeId, editableFields);
       if (result.ok) {
         router.push('/');
         return { success: true };
