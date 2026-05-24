@@ -56,10 +56,13 @@ const SDK_ALLOWED_FILES = new Set([
   'src/lib/copilot/mcp.ts',
 ]);
 
+// Factory imports are allowed only in worker-runtime modules and the
+// internal worker API routes. `src/lib/copilot/execution/` is the public
+// dispatch API consumed by Web/API and intentionally NOT on this list:
+// the dispatchers there speak HTTP/IPC to the worker, never the SDK.
 const WORKER_INTERNAL_PREFIXES = [
   'src/worker/',
   'src/lib/copilot/runtime/',
-  'src/lib/copilot/execution/',
   'src/app/api/internal/copilot/',
 ];
 

@@ -35,7 +35,11 @@ tagged for revalidation, or annotated `// public-cache:` with a justification.
 Pages that load per-user JSON storage (e.g. `/skills`, `/habits`) render as
 async Server Components. The pattern:
 
-1. Page calls `getUserContext()`; redirect to `/sign-in` if unauthenticated.
+1. Page calls `requireGuardedRscContext('page.view')` from
+   `@/lib/security/guard`; redirect to `/sign-in` if it returns `null`.
+   This emits a `page.view` audit event and applies the per-user rate
+   limit / session cap policy that protects API routes — RSC pages share
+   the same guard primitive.
 2. Page calls a server-side reader (`readUserSkillsProfile`,
    `readUserHabits`, …) backed by `src/lib/storage/user-storage.ts`. These
    helpers resolve the user, validate the path with `userScopedFilename`,
