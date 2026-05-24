@@ -2,30 +2,19 @@
  * Challenge Authoring Streaming API Route
  * POST /api/challenge/author
  *
- * Uses Server-Sent Events (SSE) to stream challenge authoring conversation.
- * Supports multi-turn conversation with clarifying questions and final generation.
+ * Thin proxy: authenticates the caller (rate limit + session cap + audit
+ * via `withGuardedRoute`) and pipes an SSE stream from the worker's
+ * `/api/internal/copilot/authoring` endpoint, which is the only place
+ * that may construct an in-process Copilot SDK session.
  *
- * Request body:
- * - prompt: string - User's message or description of desired challenge
- * - conversationId?: string - Optional conversation ID for multi-turn support
- * - context?: AuthoringContext - Optional context (language, difficulty, template)
- * - action?: 'clarify' | 'generate' | 'validate' - Action type (default: depends on conversation stage)
- *
- * Response (SSE events):
- * - delta: { type: 'delta', content: string } - Streaming text
- * - challenge: { type: 'challenge', challenge: DailyChallenge } - Generated challenge
- * - validation: { type: 'validation', isValid: boolean, issues: string[] } - Validation result
- * - meta: { type: 'meta', model: string, totalMs: number, conversationId: string } - Metadata
- * - [DONE]: End of stream
- *
- * @see SPEC-006 for custom challenge authoring requirements (S1, AC1.1-AC1.4)
+ * @see SPEC-006 for custom challenge authoring requirements
+ * @see .github/skills/copilot-sdk-worker-only/SKILL.md
  */
 
-import { createSSEResponse, parseJsonBody } from '@/lib/api';
+import { parseJsonBody } from '@/lib/api';
+import { openCopilotAuthoringStreamViaWorker } from '@/lib/copilot/execution';
+import { CopilotEntitlementRequiredError } from '@/lib/copilot/entitlement';
 import { createSessionIdentity } from '@/lib/copilot/session-identity';
-import { nowMs } from '@/lib/utils/date-utils';
-import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
-import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-parser';
 import type { AuthoringContext } from '@/lib/challenge/authoring/types';
 import { validateAuthoringRequest } from '@/lib/challenge/authoring/validation';
 import { logger } from '@/lib/logger';
@@ -35,10 +24,8 @@ import { NextRequest } from 'next/server';
 
 const log = logger.withTag('Author API');
 
-// Long-running AI streaming: extend timeout beyond Vercel/Node default.
 export const maxDuration = 300;
 
-/** Request body structure */
 interface AuthorRequest {
   prompt: string;
   conversationId?: string;
@@ -47,104 +34,78 @@ interface AuthorRequest {
 }
 
 export async function POST(request: NextRequest) {
-  const startTime = nowMs();
+  const parseResult = await parseJsonBody<AuthorRequest>(request);
+  if (!parseResult.success) {
+    log.error(`Parse error: ${parseResult.error}`);
+    return new Response(JSON.stringify({ error: parseResult.error }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
-  try {
-    const parseResult = await parseJsonBody<AuthorRequest>(request);
-    if (!parseResult.success) {
-      log.error(`Parse error: ${parseResult.error}`);
-      return new Response(JSON.stringify({ error: parseResult.error }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+  const validationError = validateAuthoringRequest(parseResult.data);
+  if (validationError) {
+    log.error(`Validation error: ${validationError}`);
+    return new Response(JSON.stringify({ error: validationError }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
-    // Validate request
-    const validationError = validateAuthoringRequest(parseResult.data);
-    if (validationError) {
-      log.error(`Validation error: ${validationError}`);
-      return new Response(JSON.stringify({ error: validationError }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+  const { prompt, conversationId, context, action } = parseResult.data;
 
-    const { prompt, conversationId, context, action } = parseResult.data;
-
-    return await withGuardedRoute(
-      {
-        ...AUTHOR_GUARD,
-        eventType: 'copilot.session.create',
-        auditMetadata: {
-          route: '/api/challenge/author',
-          action: action || 'auto',
-        },
+  return await withGuardedRoute(
+    {
+      ...AUTHOR_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: {
+        route: '/api/challenge/author',
+        action: action || 'auto',
       },
-      async (userCtx) => {
-        const identity = createSessionIdentity(userCtx);
-
-        log.info(`Authoring request: ${action || 'auto'} (conv: ${conversationId ? 'existing' : 'new'})`);
-
-        const { stream, cleanup, model, newConversationId, streamingMetrics } = await createGenericStreamingSession({
+    },
+    async (userCtx) => {
+      const identity = createSessionIdentity(userCtx);
+      try {
+        const workerResponse = await openCopilotAuthoringStreamViaWorker({
+          identity,
           prompt,
           conversationId,
           context,
           action,
-          identity,
         });
-
-        const sessionCreateTime = nowMs() - startTime;
-        log.info(`Session created in ${sessionCreateTime}ms`);
-
-        let fullContent = '';
-
-        return createSSEResponse(
-          async function* () {
-            for await (const event of stream) {
-              if (event.type === 'delta') {
-                fullContent += event.content;
-                yield { type: 'delta' as const, content: event.content };
-              }
-
-              if (event.type === 'done') {
-                fullContent = event.totalContent;
-              }
-            }
-
-            const parsedChallenge = parseGeneratedChallenge(fullContent);
-            if (parsedChallenge) {
-              yield { type: 'challenge' as const, challenge: parsedChallenge };
-              log.info(`Parsed challenge: ${parsedChallenge.title}`);
-            } else {
-              log.debug(`No challenge parsed from response (length: ${fullContent.length})`);
-            }
+        return new Response(workerResponse.body, {
+          status: workerResponse.status,
+          headers: {
+            'content-type':
+              workerResponse.headers.get('content-type') ?? 'text/event-stream',
+            'cache-control': 'no-store, no-transform',
+            connection: 'keep-alive',
           },
-          {
-            onComplete: () => ({
-              type: 'meta' as const,
-              model,
-              sessionCreateMs: sessionCreateTime,
-              totalMs: nowMs() - startTime,
-              firstDeltaMs: streamingMetrics.firstDeltaMs,
-              conversationId: newConversationId,
-            }),
-            onError: (error) => {
-              const errorMessage = error instanceof Error ? error.message : 'Stream error';
-              log.error('Stream error:', errorMessage);
-            },
-            cleanup,
-          },
-        );
-      },
-    );
-  } catch (error) {
-    const totalTime = nowMs() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Failed to start authoring session';
-    log.error(`Error after ${totalTime}ms:`, errorMessage);
+        });
+      } catch (error) {
+        if (error instanceof CopilotEntitlementRequiredError) {
+          return new Response(JSON.stringify({ error: 'copilot_required' }), {
+            status: 402,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        const message = error instanceof Error ? error.message : 'Worker dispatch failed';
+        log.error('Authoring proxy error:', message);
+        const status = extractStatusFromMessage(message) ?? 500;
+        return new Response(JSON.stringify({ error: errorForStatus(status, message) }), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    },
+  );
+}
 
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+function extractStatusFromMessage(message: string): number | null {
+  const match = message.match(/HTTP (\d{3})/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function errorForStatus(status: number, fallback: string): string {
+  return status === 402 ? 'copilot_required' : fallback;
 }

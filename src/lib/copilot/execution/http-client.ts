@@ -12,6 +12,7 @@ import {
 
 const WORKER_CHAT_PATH = '/api/internal/copilot/execute';
 const WORKER_COACH_PATH = '/api/internal/copilot/coach';
+const WORKER_AUTHORING_PATH = '/api/internal/copilot/authoring';
 
 interface ExecuteViaWorkerOptions {
   signal?: AbortSignal;
@@ -31,6 +32,33 @@ export async function executeCopilotCoachJobViaWorker(
   options: ExecuteViaWorkerOptions = {},
 ): Promise<CopilotCoachJobResult> {
   return postToWorker(config, WORKER_COACH_PATH, request, parseCopilotWorkerCoachResult, options);
+}
+
+/**
+ * Open an NDJSON stream from the worker authoring endpoint.
+ *
+ * Returns the raw `Response` so the caller can pipe the body straight
+ * back to the client without parsing or copying every chunk.
+ */
+export async function openCopilotAuthoringStream(
+  config: CopilotWorkerConfig,
+  body: unknown,
+  options: ExecuteViaWorkerOptions = {},
+): Promise<Response> {
+  const response = await fetch(`${config.baseUrl}${WORKER_AUTHORING_PATH}`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${config.secret}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Copilot worker authoring stream failed: HTTP ${response.status}`);
+  }
+  return response;
 }
 
 async function postToWorker<TResult>(

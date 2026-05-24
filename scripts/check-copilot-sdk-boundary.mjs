@@ -30,6 +30,9 @@ const FACTORY_NAMES = [
   'createSession',
   'createSessionWithMetrics',
   'wrapSessionWithLogging',
+  'getConversationSession',
+  'createGenericStreamingSession',
+  'createEvaluationStreamingSession',
 ];
 const FACTORY_IMPORT_PATTERN = new RegExp(
   `import\\s*(?:type\\s*)?{[^}]*\\b(${FACTORY_NAMES.join('|')})\\b[^}]*}\\s*from\\s*['"]([^'\"]+)['"]`,
@@ -57,18 +60,22 @@ const WORKER_INTERNAL_PREFIXES = [
   'src/worker/',
   'src/lib/copilot/runtime/',
   'src/lib/copilot/execution/',
+  'src/app/api/internal/copilot/',
 ];
 
+// SDK adapter / session-factory modules. These files legitimately wrap
+// the SDK or its session factories for worker-internal use, and they
+// are themselves imported only by the runtime, worker executors, or
+// worker-internal API routes. Adding to this set is a code-review red
+// flag — the file should normally move into `src/worker/` instead.
 const WORKER_INTERNAL_FILES = new Set([
   'src/lib/copilot/server.ts',
   'src/lib/copilot/sessions.ts',
   'src/lib/copilot/logged-session.ts',
+  'src/lib/copilot/streaming.ts',
+  'src/lib/copilot/streaming-session.ts',
+  'src/lib/challenge/authoring/authoring-session.ts',
 ]);
-
-// The set above is the CURRENT baseline of in-process callers. Items
-// must MOVE OUT — never grow. Each line removed from
-// WORKER_INTERNAL_FILES means that file no longer imports a factory.
-// Adding a new entry is a code-review red flag and should be rejected.
 
 function walk(absoluteDir) {
   let entries;

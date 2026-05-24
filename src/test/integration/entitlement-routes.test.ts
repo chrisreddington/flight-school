@@ -15,13 +15,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
   requireUserContextMock: vi.fn(),
-  // copilot/execution — worker dispatch primitive used by every coach caller
+  // copilot/execution — worker dispatch primitives used by every coach caller
   executeCopilotCoachJobMock: vi.fn(),
+  openCopilotAuthoringStreamMock: vi.fn(),
   // higher-level generator helpers
   generateGuidedPlanMock: vi.fn(),
   generateTopicQuizMock: vi.fn(),
   generateWhatsNextMock: vi.fn(),
-  // authoring streaming session
+  // authoring streaming session (still needed for direct module tests; routes go via worker dispatch)
   createGenericStreamingSessionMock: vi.fn(),
   // octokit / profile fetch — always fail softly so we focus on the AI path
   getOctokitForRequestMock: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock('@/lib/auth/context', () => ({
 
 vi.mock('@/lib/copilot/execution', () => ({
   executeCopilotCoachJob: hoisted.executeCopilotCoachJobMock,
+  openCopilotAuthoringStreamViaWorker: hoisted.openCopilotAuthoringStreamMock,
 }));
 
 vi.mock('@/lib/copilot/session-identity', () => ({
@@ -262,8 +264,8 @@ describe('AI route entitlement mapping (D2)', () => {
   });
 
   describe('POST /api/challenge/author', () => {
-    it('returns 402 when createGenericStreamingSession throws CopilotEntitlementRequiredError', async () => {
-      hoisted.createGenericStreamingSessionMock.mockRejectedValue(
+    it('returns 402 when worker stream dispatch throws CopilotEntitlementRequiredError', async () => {
+      hoisted.openCopilotAuthoringStreamMock.mockRejectedValue(
         new CopilotEntitlementRequiredError(),
       );
       const { POST } = await import('@/app/api/challenge/author/route');
@@ -278,7 +280,7 @@ describe('AI route entitlement mapping (D2)', () => {
     });
 
     it('returns 500 for unrelated errors', async () => {
-      hoisted.createGenericStreamingSessionMock.mockRejectedValue(new Error('boom'));
+      hoisted.openCopilotAuthoringStreamMock.mockRejectedValue(new Error('boom'));
       const { POST } = await import('@/app/api/challenge/author/route');
       const res = await POST(
         jsonRequest('http://localhost/api/challenge/author', {

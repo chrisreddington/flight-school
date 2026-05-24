@@ -2,6 +2,7 @@ import { getCopilotWorkerConfig } from './config';
 import {
   executeCopilotChatViaWorker,
   executeCopilotCoachJobViaWorker,
+  openCopilotAuthoringStream,
 } from './http-client';
 import type {
   CopilotChatExecutionRequest,
@@ -39,6 +40,18 @@ function requireWorker() {
     throw new CopilotWorkerRequiredError();
   }
   return workerConfig;
+}
+
+/**
+ * Open an NDJSON authoring stream from the worker. Callers are
+ * responsible for piping/parsing the response body.
+ */
+export async function openCopilotAuthoringStreamViaWorker(
+  body: unknown,
+  options: { signal?: AbortSignal } = {},
+): Promise<Response> {
+  const workerConfig = requireWorker();
+  return openCopilotAuthoringStream(workerConfig, body, options);
 }
 
 export type {
