@@ -103,7 +103,13 @@ class ChatStreamStore {
   register(jobId: string, threadId: string, assistantMessageId: string): void {
     const existing = this.records.get(jobId);
     if (existing) {
-      this.records.set(jobId, { ...existing, threadId, assistantMessageId });
+      // Never let a later caller with an empty id clobber a previously
+      // registered stable id — `useLearningChat.sendMessage` seeds the
+      // store first with a real id, then `registerExistingJob` runs;
+      // if the SSE-subscribe effect re-reads stale operation metadata
+      // it must not downgrade the stored value to ''.
+      const nextId = assistantMessageId || existing.assistantMessageId;
+      this.records.set(jobId, { ...existing, threadId, assistantMessageId: nextId });
     } else {
       this.records.set(jobId, {
         jobId,

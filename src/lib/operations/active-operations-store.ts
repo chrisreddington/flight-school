@@ -21,6 +21,12 @@ export interface ActiveOperationEntry {
   jobId: string;
   /** ISO timestamp when the operation started. */
   startedAt: string;
+  /**
+   * For chat operations: stable assistant-message id the worker is
+   * streaming into. Persisted so cold reloads can rebind the
+   * `chatStreamStore` record without waiting for the first delta.
+   */
+  assistantMessageId?: string;
 }
 
 interface ActiveOperationsSchema {

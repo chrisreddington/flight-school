@@ -288,7 +288,7 @@ export function useLearningChat(): UseLearningChatReturn {
         // through raw `apiPost` (not `startBackgroundJob`) because chat
         // streams over SSE and does not want the per-job status poll
         // that `startBackgroundJob` attaches.
-        operationsManager.registerExistingJob(jobId, 'chat-response', targetThreadId);
+        operationsManager.registerExistingJob(jobId, 'chat-response', targetThreadId, assistantMessageId);
 
         // Trigger immediate refresh to pick up the isStreaming flag
         await refreshThreads();

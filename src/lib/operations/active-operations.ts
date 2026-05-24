@@ -637,6 +637,7 @@ class ActiveOperationsManager {
     jobId: string,
     type: OperationType,
     targetId: string,
+    assistantMessageId?: string,
   ): void {
     const operationId = `${type}:${targetId}`;
     const existing = this.operations.get(operationId);
@@ -648,7 +649,16 @@ class ActiveOperationsManager {
       if (existing.meta.jobId && existing.meta.jobId !== jobId) {
         this.jobToOperation.delete(existing.meta.jobId);
       }
-      existing.meta = { ...existing.meta, jobId, startedAt: now() };
+      existing.meta = {
+        ...existing.meta,
+        jobId,
+        startedAt: now(),
+        // Preserve a previously-set assistantMessageId if the caller
+        // doesn't supply one — losing it would later cause the SSE
+        // subscriber to register an empty id in the chat-stream-store
+        // and the UI would refuse to render the streaming bubble.
+        assistantMessageId: assistantMessageId ?? existing.meta.assistantMessageId,
+      };
       existing.status = 'in-progress';
     } else {
       const operation: ActiveOperation = {
@@ -659,6 +669,7 @@ class ActiveOperationsManager {
           startedAt: now(),
           targetId,
           jobId,
+          assistantMessageId,
         },
       };
       this.operations.set(operationId, operation);
@@ -672,6 +683,7 @@ class ActiveOperationsManager {
         itemType,
         jobId,
         startedAt: this.operations.get(operationId)?.meta.startedAt ?? now(),
+        assistantMessageId: this.operations.get(operationId)?.meta.assistantMessageId,
       }).catch((err) => {
         log.warn('Failed to persist active operation entry', { err, jobId, operationId });
       });
