@@ -15,6 +15,21 @@ Next.js 16 App Router application on React 19.2 with Primer React UI. All API ca
 
 **Data Flow**: Dashboard → `/api/profile` (Octokit direct) → `/api/focus` (Copilot SDK creative generation) → UI
 
+### Next 16 / React 19.2 build flags
+
+`next.config.ts` enables two opt-in features that the rest of the codebase
+must respect:
+
+- **`reactCompiler: true`** — the compiler auto-memoises components, so don't add `useMemo` / `useCallback` / `React.memo` unless a profile shows it's needed. If a Primer component breaks the compiler's Rules of React, opt that file out with `"use no memo"` and leave a `TODO:` comment.
+- **`experimental.cacheComponents: true`** — Partial Prerender mode. Any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
+
+**Route-segment config is forbidden under `cacheComponents`.** Do not add
+`export const dynamic = '…'` or `export const runtime = 'nodejs'` to any
+route — Next 16 infers dynamism from the route's actual API use, and Node
+is the project-wide default. CI guard `scripts/check-server-fetch-tenancy.mjs`
+enforces that every server-side `fetch` is either explicitly `cache: 'no-store'`,
+tagged for revalidation, or annotated `// public-cache:` with a justification.
+
 ## Multi-tenant design
 
 Flight School is **multi-tenant**: every request is authenticated as a specific
