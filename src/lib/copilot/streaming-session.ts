@@ -18,7 +18,7 @@ import {
 import { context, trace } from '@opentelemetry/api';
 
 import { activityLogger } from './activity/logger';
-import type { CapabilitySelection } from './capabilities';
+import { mcpCapabilityIdsOf, type CapabilitySelection } from './capabilities';
 import type { BaseProfileId, CapabilitiesArg } from './profile-types';
 import { getConversationSession } from './sessions';
 import {
@@ -27,6 +27,7 @@ import {
   recordTerminalError,
   recordTerminalSuccess,
 } from './streaming-telemetry';
+import { formatRequestedCapabilities } from './telemetry-attrs';
 import type { StreamEvent, StreamingSession, StreamingToolCall } from './types';
 
 /** Configuration for creating a streaming session. */
@@ -78,7 +79,9 @@ export async function createGenericStreamingSession(
   } = config;
   const startTime = Date.now();
   const log = logger.withTag(logPrefix);
-  const mcpServerCount = capabilities.length;
+  const mcpServerIds = mcpCapabilityIdsOf(capabilities);
+  const mcpServerCount = mcpServerIds.length;
+  const sortedMcpServerIds = [...mcpServerIds].sort().join(',');
   const sortedCapabilityIds = [...capabilities]
     .map((selection) => selection.id)
     .sort()
@@ -136,8 +139,10 @@ export async function createGenericStreamingSession(
         'copilot.profile': profile,
         'copilot.profile.elevated': wasAutoElevated,
         'copilot.profile.requested_capabilities': requestedCapabilitiesAttr,
+        'copilot.capability.count': capabilities.length,
+        'copilot.capability.ids': sortedCapabilityIds,
         'copilot.mcp.server_count': mcpServerCount,
-        'copilot.mcp.servers': sortedCapabilityIds,
+        'copilot.mcp.servers': sortedMcpServerIds,
       },
     });
     streamSpan.addEvent('stream.started');
@@ -288,16 +293,4 @@ export async function createGenericStreamingSession(
     sessionMetrics: metrics,
     streamingMetrics,
   };
-}
-
-/**
- * Format `requestedCapabilities` for the
- * `copilot.profile.requested_capabilities` span attribute. `'auto'` and
- * `'default'` pass through; arrays are sorted + comma-joined so
- * identical sets produce identical telemetry regardless of input order.
- */
-function formatRequestedCapabilities(value: CapabilitiesArg | 'default'): string {
-  if (value === 'default') return 'default';
-  if (value === 'auto') return 'auto';
-  return [...value].sort().join(',') || 'none';
 }

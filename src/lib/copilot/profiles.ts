@@ -38,7 +38,6 @@ import { type CapabilityId } from './capability-ids';
 import {
   BASE_PROFILE_IDS,
   PROFILE_ALLOWED_CAPABILITIES,
-  isBaseProfileId,
   type BaseProfileId,
   type CapabilitiesArg,
 } from './profile-types';
@@ -294,10 +293,17 @@ export function resolveProfile(
 
   // Carry forward any capabilities the conversation already has so the
   // cache fingerprint stays monotonic across turns even if a later
-  // prompt doesn't re-trigger elevation.
+  // prompt doesn't re-trigger elevation. Filter through the profile's
+  // current allowlist so a conversation that switches profiles mid-flight
+  // (or a profile that tightens its allowlist) cannot smuggle in a now-
+  // forbidden capability.
   const carriedIn = ctx?.conversationCapabilities;
+  const carriedAllowedSet = new Set<CapabilityId>();
   if (carriedIn && carriedIn.length > 0) {
+    const allowedForProfile = new Set<CapabilityId>(profile.allowedCapabilities);
     for (const id of carriedIn) {
+      if (!allowedForProfile.has(id)) continue;
+      carriedAllowedSet.add(id);
       if (!selected.has(id)) {
         selected.set(id, { id });
       }
@@ -325,9 +331,8 @@ export function resolveProfile(
   // considered. Only count it as auto-elevation if the addition wasn't
   // already part of defaults OR carried in.
   if (wasAutoElevated) {
-    const carriedSet = new Set<CapabilityId>(carriedIn ?? []);
     const trulyAdded = [...selected.keys()].some(
-      (id) => !inDefaults.has(id) && !carriedSet.has(id),
+      (id) => !inDefaults.has(id) && !carriedAllowedSet.has(id),
     );
     if (!trulyAdded) {
       wasAutoElevated = false;
@@ -341,12 +346,17 @@ export function resolveProfile(
   const requestedForTelemetry: CapabilitiesArg | 'default' =
     requested === undefined ? 'default' : requested;
 
+  const systemMessage = composeSystemMessage(profile.basePrompt, capabilities);
   return {
     profileId,
     model: profile.model,
-    systemMessage: composeSystemMessage(profile.basePrompt, capabilities),
+    systemMessage,
     capabilities,
-    capabilityFingerprint: capabilityFingerprintOf(capabilities),
+    // Fingerprint folds in the composed system message hash so a change to
+    // a profile's basePrompt (e.g. dev-time HMR or a future config-driven
+    // prompt) invalidates the session pool entry. Without this, cached
+    // sessions could serve a stale system prompt for the same capability set.
+    capabilityFingerprint: `${capabilityFingerprintOf(capabilities)};sys=${shortHash(systemMessage)}`,
     wasAutoElevated,
     requestedCapabilities: requestedForTelemetry,
   };
@@ -411,9 +421,9 @@ export function capabilityFingerprintOf(
 }
 
 /**
- * Narrow the `as const satisfies` registry into the wider `ChatProfile`
- * shape so optional fields like `capabilityDefaults` are visible at the
- * call site without sprinkling `as ChatProfile` everywhere.
+ * Widen the `as const satisfies` registry entry back to the declared
+ * `ChatProfile` shape so optional fields like `capabilityDefaults` are
+ * visible at the call site without sprinkling `as ChatProfile` everywhere.
  */
 function getCapabilityDefaults(
   profile: (typeof PROFILES)[BaseProfileId],
@@ -434,6 +444,4 @@ function shortHash(input: string): string {
   return (hash >>> 0).toString(16);
 }
 
-// Re-exported so existing imports such as `isBaseProfileId` keep working
-// without callers tracking the module split.
-void isBaseProfileId;
+

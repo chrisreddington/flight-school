@@ -29,7 +29,7 @@ import { withExtractedTraceContext } from '@/lib/observability/context-propagati
 import { NextRequest, NextResponse } from 'next/server';
 import {
   areCapabilitiesAllowedForProfile,
-  isBaseProfileId,
+  isChatResponseProfile,
   isCapabilitiesArg,
   type CapabilitiesArg,
 } from '@/lib/copilot/profile-types';
@@ -105,7 +105,7 @@ function parseCreateBody(requestBody: unknown):
       profile?: unknown;
       capabilities?: unknown;
     };
-    if (!isBaseProfileId(chatInput.profile)) return { ok: false };
+    if (!isChatResponseProfile(chatInput.profile)) return { ok: false };
     if (
       chatInput.capabilities !== undefined
       && !isCapabilitiesArg(chatInput.capabilities)

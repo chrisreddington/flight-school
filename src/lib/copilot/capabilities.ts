@@ -110,15 +110,27 @@ search code, read files, and get repo details. Never use local shell, \
 filesystem, or web tools for repository questions. Always use GitHub tools \
 to look up real information rather than guessing.`;
 
+/** RFC 1123-ish `owner/repo` shape: 1-39 chars each side, GitHub-allowed set. */
+const REPO_HANDLE_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+
+/** Cap repos to keep the per-turn context block bounded. */
+const MAX_REPOS_IN_CONTEXT = 25;
+
 /**
  * Build the per-turn GitHub repo-scope block. Emits a directive that
  * pins the model to MCP tools (no local shell, no web fallback) before
- * answering. Returns `null` when no repos were supplied.
+ * answering. Returns `null` when no repos were supplied or every entry
+ * failed the `owner/repo` validation (don't smuggle attacker-controlled
+ * strings into a privileged instruction block).
  */
 function buildGitHubContextPrompt(ctx: CapabilityPromptContext): string | null {
   const repos = ctx.repositories;
   if (!repos || repos.length === 0) return null;
-  const repoList = repos.map((repo) => `- ${repo}`).join('\n');
+  const safeRepos = repos
+    .filter((repo) => typeof repo === 'string' && REPO_HANDLE_RE.test(repo))
+    .slice(0, MAX_REPOS_IN_CONTEXT);
+  if (safeRepos.length === 0) return null;
+  const repoList = safeRepos.map((repo) => `- ${repo}`).join('\n');
   return (
     `The user has selected these repositories as context.\n` +
     `You MUST use GitHub MCP tools to look up live repository information before answering.\n` +
@@ -199,12 +211,32 @@ export function buildMcpServersForCapabilities(
   return servers;
 }
 
-// Type-level sanity: ALL_CAPABILITY_IDS must enumerate every registry key.
+// Type-level sanity: the union ALL_CAPABILITY_IDS and the registry must
+// describe exactly the same set of ids — neither side may grow without
+// the other.
 type _IdsCoverRegistry = (typeof ALL_CAPABILITY_IDS)[number] extends keyof typeof CAPABILITIES
   ? true
   : false;
+type _RegistryCoveredByIds = keyof typeof CAPABILITIES extends (typeof ALL_CAPABILITY_IDS)[number]
+  ? true
+  : false;
 const _ASSERT_IDS_COVER_REGISTRY: _IdsCoverRegistry = true;
+const _ASSERT_REGISTRY_COVERED_BY_IDS: _RegistryCoveredByIds = true;
 void _ASSERT_IDS_COVER_REGISTRY;
+void _ASSERT_REGISTRY_COVERED_BY_IDS;
+
+/**
+ * Filter a selection set down to the ids whose capability is MCP-backed.
+ * Use for `copilot.mcp.*` telemetry attributes so native capabilities
+ * don't inflate MCP server counts.
+ */
+export function mcpCapabilityIdsOf(
+  selections: readonly CapabilitySelection[],
+): readonly CapabilityId[] {
+  return selections
+    .filter((selection) => CAPABILITIES[selection.id].kind === 'mcp')
+    .map((selection) => selection.id);
+}
 
 /**
  * Build the per-turn prompt prefix contributed by the active capabilities.

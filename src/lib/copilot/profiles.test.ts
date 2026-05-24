@@ -112,7 +112,7 @@ describe('resolveProfile', () => {
 
   it('produces a stable capability fingerprint for chat+github', () => {
     const resolved = resolveProfile('chat', { capabilities: ['github'] });
-    expect(resolved.capabilityFingerprint).toBe('caps=github');
+    expect(resolved.capabilityFingerprint).toMatch(/^caps=github;sys=[0-9a-f]{8}$/);
   });
 
   it('composes the system message from base prompt + capability addenda', () => {

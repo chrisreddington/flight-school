@@ -183,19 +183,6 @@ export function useLearningChat(): UseLearningChatReturn {
   });
 
   /**
-   * Send a message and save to the active thread.
-   *
-   * Handles:
-   * 1. Adding user message to thread
-   * 2. Streaming the response
-   * 3. Saving assistant message to thread on completion
-   *
-   * Now supports multiple concurrent streams - each thread can stream independently.
-   *
-   * @param content - Message content
-   * @param options - Send options
-   */
-  /**
    * Resolve which thread a new message targets: explicit id wins, then the
    * active thread, then auto-create one with a title derived from the
    * message. Auto-rename placeholder threads on first send so the sidebar

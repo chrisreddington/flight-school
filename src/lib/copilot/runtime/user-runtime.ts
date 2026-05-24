@@ -1,7 +1,7 @@
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import type { CopilotSession, PermissionHandler } from '@github/copilot-sdk';
 
-import { buildMcpServersForCapabilities } from '@/lib/copilot/capabilities';
+import { buildMcpServersForCapabilities, mcpCapabilityIdsOf } from '@/lib/copilot/capabilities';
 import { wrapSessionWithLogging } from '@/lib/copilot/logged-session';
 import type { SessionCreationMetrics } from '@/lib/copilot/types';
 import type { CopilotChatExecutionRequest } from '@/lib/copilot/execution/types';
@@ -124,7 +124,7 @@ function createRuntimeSessionMetrics(
     poolKey: `worker:${resolved.profileId}:${resolved.capabilityFingerprint}`,
     createdNew: true,
     sessionCreateMs,
-    mcpEnabled: resolved.capabilities.length > 0,
+    mcpEnabled: mcpCapabilityIdsOf(resolved.capabilities).length > 0,
     model: resolved.model,
     reusedConversation: false,
   };

@@ -14,7 +14,7 @@ import type { PermissionHandler } from '@github/copilot-sdk';
 import { approveAll, CopilotClient } from '@github/copilot-sdk';
 import { context, propagation } from '@opentelemetry/api';
 
-import { buildMcpServersForCapabilities } from './capabilities';
+import { buildMcpServersForCapabilities, mcpCapabilityIdsOf } from './capabilities';
 import { capabilityFingerprintOf } from './profiles';
 import { rememberConversationCapabilities } from './conversation-capabilities';
 import {
@@ -33,6 +33,7 @@ import {
   GEN_AI_REQUEST_MODEL,
 } from '@/lib/observability/semconv';
 import { createNewSessionMetrics, createReusedSessionMetrics } from './session-metrics';
+import { formatRequestedCapabilities } from './telemetry-attrs';
 import type { SessionCreationMetrics, SessionOptions } from './types';
 
 /**
@@ -169,20 +170,6 @@ function pruneChatSessions(): void {
 }
 
 /**
- * Format `requestedCapabilities` for the `copilot.profile.requested_capabilities`
- * span attribute. `'auto'` and `'default'` pass through; arrays are
- * sorted + comma-joined so identical sets produce identical telemetry
- * regardless of input order.
- */
-function formatRequestedCapabilities(
-  value: SessionOptions['requestedCapabilities'],
-): string {
-  if (value === undefined || value === 'default') return 'default';
-  if (value === 'auto') return 'auto';
-  return [...value].sort().join(',') || 'none';
-}
-
-/**
  * Create a Copilot session with metrics tracking.
  *
  * @remarks
@@ -214,6 +201,8 @@ export async function createSessionWithMetrics(
   const capabilityFingerprint =
     options.capabilityFingerprint ?? capabilityFingerprintOf(capabilities);
   const poolKey = `${options.profile}:${capabilityFingerprint}`;
+  const mcpServerIds = mcpCapabilityIdsOf(capabilities);
+  const sortedMcpServerIds = [...mcpServerIds].sort().join(',');
   const sortedCapabilityIds = [...capabilities]
     .map((selection) => selection.id)
     .sort()
@@ -231,8 +220,10 @@ export async function createSessionWithMetrics(
       'copilot.profile': options.profile,
       'copilot.profile.elevated': options.wasAutoElevated === true,
       'copilot.profile.requested_capabilities': requestedCapabilitiesAttr,
-      'copilot.mcp.server_count': capabilities.length,
-      'copilot.mcp.servers': sortedCapabilityIds,
+      'copilot.capability.count': capabilities.length,
+      'copilot.capability.ids': sortedCapabilityIds,
+      'copilot.mcp.server_count': mcpServerIds.length,
+      'copilot.mcp.servers': sortedMcpServerIds,
     },
     async () => {
       // P5: short-circuit for users already known to lack a Copilot license.

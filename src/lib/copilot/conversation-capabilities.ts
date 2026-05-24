@@ -21,14 +21,20 @@ interface CachedConversationCaps {
   lastUsed: number;
 }
 
-/** Same TTL the session pool uses; kept in sync deliberately. */
+/**
+ * TTL for conversation capability memory. Intentionally longer than the
+ * session pool's TTL (10m, see `CHAT_SESSION_TTL_MS` in `./sessions`):
+ * the session can be evicted and rebuilt on the next turn — but the
+ * capability set must NOT shrink across that rebuild, or the
+ * fingerprint flip-flops and breaks the cache invariant.
+ */
 const CONVERSATION_CAPS_TTL_MS = 30 * 60 * 1000;
 
 /**
- * Max entries; must be ≥ the session pool size so the secondary map
- * never expires the row that a still-cached session is keyed off of.
- * The current session pool caps at 50, so 200 keeps four turns of
- * headroom for late-arriving cancels.
+ * Max entries; must be ≥ the session pool size (currently 50, see
+ * `CHAT_SESSION_MAX` in `./sessions`) so the secondary map never
+ * expires the row that a still-cached session is keyed off of. 200
+ * keeps four turns of headroom for late-arriving cancels.
  */
 const CONVERSATION_CAPS_MAX = 200;
 

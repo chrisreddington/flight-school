@@ -38,6 +38,21 @@ export function isBaseProfileId(value: unknown): value is BaseProfileId {
 }
 
 /**
+ * Profiles permitted on `chat-response` jobs (streamed worker chat). The
+ * worker streaming factory is the single consumer; HTTP + IPC validators
+ * import this so all three layers reject doomed payloads with the same
+ * shape.
+ */
+export const CHAT_RESPONSE_PROFILES = ['chat', 'learning'] as const;
+export type ChatResponseProfileId = (typeof CHAT_RESPONSE_PROFILES)[number];
+
+/** Type guard for `chat-response` profile narrowing. */
+export function isChatResponseProfile(value: unknown): value is ChatResponseProfileId {
+  return typeof value === 'string'
+    && (CHAT_RESPONSE_PROFILES as readonly string[]).includes(value);
+}
+
+/**
  * Caller-supplied capability selection on the wire / IPC. The worker
  * resolves this against the profile's allowed list and defaults; the
  * caller never gets authority to bypass profile policy.

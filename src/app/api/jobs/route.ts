@@ -36,8 +36,9 @@ import { createWorkerJob, listWorkerJobs, type CreateWorkerJobInput } from './wo
 import type { DispatchableJobInput, DispatchableJobType } from '@/lib/jobs/dispatch';
 import {
   areCapabilitiesAllowedForProfile,
-  isBaseProfileId,
+  isChatResponseProfile,
   isCapabilitiesArg,
+  CHAT_RESPONSE_PROFILES,
   type CapabilitiesArg,
 } from '@/lib/copilot/profile-types';
 
@@ -115,9 +116,10 @@ async function ensureTokenStoreSeeded(
 }
 
 /**
- * Validate the chat-response wire shape: `input.profile` must be a known
- * base profile, and `input.capabilities` (if present) must be `'auto'`
- * or an array of valid capability ids that all sit within the profile's
+ * Validate the chat-response wire shape: `input.profile` must be a chat
+ * surface (`chat` | `learning` — the only profiles the streaming worker
+ * supports), and `input.capabilities` (if present) must be `'auto'` or
+ * an array of valid capability ids that all sit within the profile's
  * allowlist. Rejecting here keeps doomed requests off the worker.
  */
 function validateChatResponseProfile(
@@ -125,11 +127,15 @@ function validateChatResponseProfile(
 ): { ok: true } | { ok: false; response: NextResponse } {
   if (body.type !== 'chat-response') return { ok: true };
   const chatInput = body.input as ChatResponseInput | undefined;
-  if (!chatInput || !isBaseProfileId(chatInput.profile)) {
+  if (!chatInput || !isChatResponseProfile(chatInput.profile)) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Invalid 'profile': must be a known base chat profile." },
+        {
+          error:
+            `Invalid 'profile' for chat-response: must be one of `
+            + `${CHAT_RESPONSE_PROFILES.join(' | ')}.`,
+        },
         { status: 400 },
       ),
     };
@@ -211,14 +217,16 @@ async function handleCreateJob(request: NextRequest, userId: string) {
     return NextResponse.json({ error: 'Missing job type' }, { status: 400 });
   }
 
-  const seedError = await ensureTokenStoreSeeded(userId, body.type);
-  if (seedError) return seedError;
-
+  // Validate profile BEFORE the token-store seed so a 400 (bad payload)
+  // is never masked as a 503 (credential store unavailable).
   const normalized = normalizeChatAssistantMessageId(body);
   if (!normalized.ok) return normalized.response;
   const profileCheck = validateChatResponseProfile(normalized.body);
   if (!profileCheck.ok) return profileCheck.response;
   const finalBody = normalized.body;
+
+  const seedError = await ensureTokenStoreSeeded(userId, finalBody.type);
+  if (seedError) return seedError;
 
   const jobId = crypto.randomUUID();
   const traceContext = captureTracePropagationHeaders();

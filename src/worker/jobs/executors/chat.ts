@@ -34,7 +34,11 @@
 import { createChatStreamingSession } from '@/lib/copilot/streaming';
 import { buildCapabilityContextPrompt } from '@/lib/copilot/capabilities';
 import { resolveProfile, InvalidCapabilityError } from '@/lib/copilot/profiles';
-import { isBaseProfileId } from '@/lib/copilot/profile-types';
+import {
+  isBaseProfileId,
+  isChatResponseProfile,
+  CHAT_RESPONSE_PROFILES,
+} from '@/lib/copilot/profile-types';
 import { getConversationCapabilities } from '@/lib/copilot/sessions';
 import { jobStorage } from '@/lib/jobs';
 import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
@@ -79,8 +83,6 @@ export async function executeChatResponse(
   input: ChatResponseInput,
   userId: string,
 ): Promise<void> {
-  await jobStorage.markRunning(jobId);
-
   const {
     threadId,
     prompt,
@@ -90,18 +92,21 @@ export async function executeChatResponse(
     repos,
   } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
+
+  // Validate BEFORE markRunning so malformed input can't leave a job
+  // stuck in `running` with no terminal event. Worker validation is
+  // defence-in-depth — the HTTP / IPC routes reject these too.
   if (!isBaseProfileId(profile)) {
     throw new Error(`Invalid chat profile: ${String(profile)}`);
   }
-  if (profile !== 'chat' && profile !== 'learning') {
+  if (!isChatResponseProfile(profile)) {
     throw new Error(
-      `chat-response job only supports 'chat' or 'learning' profiles, got '${profile}'`,
+      `chat-response job only supports ${CHAT_RESPONSE_PROFILES.join(' | ')} profiles, got '${profile}'`,
     );
   }
-  // Resolve once here so capability-driven context prefixes (e.g. github
-  // repo scope) can be composed on top of the prompt; the streaming
-  // factory re-resolves with the same inputs and lands on the same
-  // capability set + fingerprint.
+  // Resolve once on the raw user prompt. The streaming factory reuses
+  // this `ResolvedProfile` so `shouldElevate` is never re-evaluated
+  // against the worker-decorated `contextualPrompt`.
   let preResolved;
   try {
     preResolved = resolveProfile(profile, {
@@ -110,11 +115,11 @@ export async function executeChatResponse(
       conversationCapabilities: getConversationCapabilities(userId, threadId),
     });
   } catch (err) {
-    if (err instanceof InvalidCapabilityError) {
-      throw err;
-    }
+    if (err instanceof InvalidCapabilityError) throw err;
     throw err;
   }
+
+  await jobStorage.markRunning(jobId);
 
   let fullContent = '';
   const toolCalls: string[] = [];
@@ -204,7 +209,7 @@ export async function executeChatResponse(
 
     const session = await createChatStreamingSession(identity, contextualPrompt, {
       profile,
-      capabilities,
+      resolved: preResolved,
       operationName: `Job: ${jobId}`,
       conversationId: threadId,
     });

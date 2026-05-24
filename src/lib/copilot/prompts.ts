@@ -70,36 +70,6 @@ real profile data; do not attempt to read file contents or search code.`;
 
 
 /**
- * Builds a focus generation prompt with compact profile context.
- *
- * @param profileContext - Serialized compact profile (from serializeContext)
- * @param requestedComponents - Which components to generate
- * @param skillProfile - Optional user skill profile for calibration
- * @returns Full prompt for focus generation
- *
- * @remarks
- * When a skill profile is provided, additional sections are added:
- * - SK: skill levels in format `skillId:level` (e.g., `typescript:advanced`)
- * - EX: skills marked as not interested (exclude from suggestions)
- *
- * The key insight: if a user took time to configure a skill, that's a
- * STRONG SIGNAL of interest. Challenges/goals should prioritize these.
- *
- * @example
- * ```typescript
- * const prompt = buildFocusPrompt(profileContext, ['challenge'], {
- *   skills: [
- *     { skillId: 'typescript', level: 'advanced', source: 'manual' },
- *     { skillId: 'kubernetes', level: 'beginner', source: 'manual' },
- *     { skillId: 'docker', level: 'beginner', source: 'manual', notInterested: true }
- *   ],
- *   lastUpdated: '2026-01-21T10:00:00.000Z'
- * });
- * // Prompt includes: SK:typescript:advanced,kubernetes:beginner
- * // Prompt includes: EX:docker
- * ```
- */
-/**
  * Builds a minimal challenge prompt.
  */
 export function buildChallengePrompt(
