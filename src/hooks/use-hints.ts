@@ -12,7 +12,7 @@ import { apiPost } from '@/lib/api-client';
 import type { ChallengeDef, HintResult } from '@/lib/copilot/types';
 import { now } from '@/lib/utils/date-utils';
 import { generateHintId } from '@/lib/utils/id-generator';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Hint with timestamp for display */
 export interface HintMessage {
@@ -53,7 +53,9 @@ export function useHints(options: UseHintsOptions): UseHintsReturn {
 
   const hintAbortControllerRef = useRef<AbortController | null>(null);
   const getCurrentCodeRef = useRef(getCurrentCode);
-  getCurrentCodeRef.current = getCurrentCode;
+  useEffect(() => {
+    getCurrentCodeRef.current = getCurrentCode;
+  }, [getCurrentCode]);
 
   const requestHint = useCallback(
     async (question: string) => {
