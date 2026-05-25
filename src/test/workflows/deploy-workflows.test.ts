@@ -1,18 +1,19 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Contract test for the two ACA deploy workflows
-// (`.github/workflows/deploy-web.yml`, `.github/workflows/deploy-worker.yml`)
-// and their path-filter scopes
-// (`.github/path-filters/web.yml`, `.github/path-filters/worker.yml`).
+// Contract test for the three ACA deploy workflows
+// (`.github/workflows/deploy-web.yml`,
+//  `.github/workflows/deploy-worker.yml`,
+//  `.github/workflows/deploy-infra.yml`).
 //
-// These workflows are independent of CI/test feedback loops — they only
-// run on `main` after CI succeeds — so a silent regression here would
-// only surface in production deploys. This file pins the invariants
-// the design depends on: trigger model, concurrency, permissions,
-// gate logic, stale-deploy guards, image-tag handling, and the
-// CI ↔ CD coupling via display name.
+// These workflows only run on `main` after CI succeeds, so a silent
+// regression here would only surface in production deploys. This
+// file pins the invariants the design depends on: trigger model,
+// concurrency, permissions, gate logic, stale-deploy guards,
+// image-tag handling, the CI ↔ CD coupling via display name, and
+// the split of responsibility between image rollouts (web/worker
+// workflows) and Bicep applies (infra workflow).
 
 const REPO = process.cwd();
 
@@ -22,17 +23,20 @@ function read(relPath: string): string {
 
 const webWf = read('.github/workflows/deploy-web.yml');
 const workerWf = read('.github/workflows/deploy-worker.yml');
+const infraWf = read('.github/workflows/deploy-infra.yml');
 const ciWf = read('.github/workflows/ci.yml');
-const webFilter = read('.github/path-filters/web.yml');
-const workerFilter = read('.github/path-filters/worker.yml');
 
-const wfPair: { name: 'web' | 'worker'; src: string }[] = [
+const appWorkflows: { name: 'web' | 'worker'; src: string }[] = [
   { name: 'web', src: webWf },
   { name: 'worker', src: workerWf },
 ];
+const allWorkflows: { name: 'web' | 'worker' | 'infra'; src: string }[] = [
+  ...appWorkflows,
+  { name: 'infra', src: infraWf },
+];
 
 describe('deploy workflows — triggers, permissions, concurrency', () => {
-  for (const { name, src } of wfPair) {
+  for (const { name, src } of allWorkflows) {
     it(`${name}: triggers on workflow_run after CI succeeds on main`, () => {
       expect(src).toMatch(/on:[\s\S]*workflow_run:[\s\S]*workflows:\s*\[CI\]/);
       expect(src).toMatch(/types:\s*\[completed\]/);
@@ -50,6 +54,10 @@ describe('deploy workflows — triggers, permissions, concurrency', () => {
     });
 
     it(`${name}: shares the deploy-aca-<ref_name> concurrency group with cancel-in-progress: false`, () => {
+      // The shared concurrency group serialises web/worker/infra
+      // rollouts. Without it, an infra apply could read each app's
+      // current image tag, then a parallel app rollout could change
+      // the running image, and the infra apply would roll it back.
       expect(src).toMatch(/concurrency:[\s\S]*group:\s*deploy-aca-\$\{\{\s*github\.ref_name\s*\}\}/);
       expect(src).toMatch(/cancel-in-progress:\s*false/);
     });
@@ -57,55 +65,37 @@ describe('deploy workflows — triggers, permissions, concurrency', () => {
 });
 
 describe('deploy workflows — should-deploy gate', () => {
-  for (const { name, src } of wfPair) {
+  for (const { name, src } of allWorkflows) {
     it(`${name}: should-deploy job has the declarative if: covering both event paths`, () => {
       for (const needle of [
         'workflow_run.conclusion',
         'workflow_run.event',
         'workflow_run.head_branch',
-        "refs/heads/main",
-        "workflow_dispatch",
+        'refs/heads/main',
+        'workflow_dispatch',
       ]) {
         expect(src).toContain(needle);
       }
     });
 
-    it(`${name}: Resolve deploy SHA emits both value (full 40-hex) and short (12 hex)`, () => {
+    it(`${name}: Resolve deploy SHA emits a 40-hex value output`, () => {
       expect(src).toMatch(/echo "value=\$sha" >> "\$GITHUB_OUTPUT"/);
-      expect(src).toMatch(/echo "short=\$\{sha:0:12\}" >> "\$GITHUB_OUTPUT"/);
       expect(src).toMatch(/\^\[0-9a-f\]\{40\}\$/);
     });
 
-    it(`${name}: short-SHA output is only consumed by DEPLOY_NAME`, () => {
-      // Image tags MUST use the full SHA so `docker pull` produces a
-      // deterministic identifier. The short form is a one-off for
-      // ARM deployment names.
-      const shortRefs = src.match(/sha_short/g) ?? [];
-      // Allowed appearances: outputs declaration + DEPLOY_NAME consumer.
-      // Each may have a couple of references; cap at 4 as a tight bound.
-      expect(shortRefs.length).toBeLessThanOrEqual(4);
-      expect(src).toMatch(/DEPLOY_NAME:[^\n]*sha_short/);
-    });
-
-    it(`${name}: ancestry verify uses gh api /compare (not git merge-base in active script)`, () => {
+    it(`${name}: ancestry verify uses gh api /compare (not git merge-base)`, () => {
       expect(src).toMatch(/gh api "\/repos\/\$\{?GH_REPO\}?\/compare\//);
-      // Allow `merge-base` only inside a comment line. Strip comments
-      // before asserting absence.
       const stripped = src.replace(/^\s*#[^\n]*$/gm, '');
       expect(stripped).not.toMatch(/git merge-base/);
     });
 
     it(`${name}: CI-green check queries by workflow file path, not display name`, () => {
       expect(src).toMatch(/actions\/workflows\/ci\.yml\/runs/);
-      // Forbid the display-name selector form. Without this guard a
-      // rename of `name: CI` in ci.yml would silently break the check.
       expect(src).not.toMatch(/select\(\.name\s*==\s*"CI"\)/);
     });
 
-    it(`${name}: Refuse stale workflow_run step writes superseded= step output (not env)`, () => {
+    it(`${name}: Refuse stale workflow_run step writes superseded= as a step output`, () => {
       expect(src).toMatch(/superseded=(?:true|false)[^\n]*>>\s*"\$GITHUB_OUTPUT"/);
-      // Forbid SUPERSEDED leaking through $GITHUB_ENV — downstream
-      // gating must read steps.<id>.outputs.superseded.
       expect(src).not.toMatch(/superseded=[^\n]*>>\s*"\$GITHUB_ENV"/);
     });
 
@@ -122,31 +112,34 @@ describe('deploy workflows — should-deploy gate', () => {
     });
 
     it(`${name}: gate step considers superseded + first_deploy + filter hit + dispatch`, () => {
-      // Look for an env block on the gate step that wires all four signals.
       expect(src).toMatch(/SUPERSEDED:[^\n]*\$\{\{\s*steps\./);
       expect(src).toMatch(/FIRST_DEPLOY:[^\n]*\$\{\{\s*steps\./);
       expect(src).toMatch(/FILTER_HIT:[^\n]*\$\{\{\s*steps\./);
     });
   }
 
-  it("web wf: gate step's FILTER_HIT reads steps.filter.outputs.web (NOT .worker)", () => {
+  // FILTER_HIT must read its own workflow's filter output. A
+  // copy-paste swap (web reading worker's output, or any other
+  // mis-wiring) would leave the gate permanently empty so
+  // workflow_run-triggered deploys never fire.
+  it("web wf: gate's FILTER_HIT reads steps.filter.outputs.web", () => {
     expect(webWf).toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.web\s*\}\}/);
-    // Copy-paste swap is the highest-likelihood implementation
-    // mistake when authoring the worker workflow from the web
-    // template (or vice versa). A swap would leave FILTER_HIT
-    // permanently empty so workflow_run-triggered deploys silently
-    // never fire.
-    expect(webWf).not.toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.worker\s*\}\}/);
+    expect(webWf).not.toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.(worker|infra)\s*\}\}/);
   });
 
-  it("worker wf: gate step's FILTER_HIT reads steps.filter.outputs.worker (NOT .web)", () => {
+  it("worker wf: gate's FILTER_HIT reads steps.filter.outputs.worker", () => {
     expect(workerWf).toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.worker\s*\}\}/);
-    expect(workerWf).not.toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.web\s*\}\}/);
+    expect(workerWf).not.toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.(web|infra)\s*\}\}/);
+  });
+
+  it("infra wf: gate's FILTER_HIT reads steps.filter.outputs.infra", () => {
+    expect(infraWf).toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.infra\s*\}\}/);
+    expect(infraWf).not.toMatch(/FILTER_HIT:\s*\$\{\{\s*steps\.filter\.outputs\.(web|worker)\s*\}\}/);
   });
 });
 
-describe('deploy workflows — deploy job', () => {
-  for (const { name, src } of wfPair) {
+describe('deploy workflows — deploy job permissions and stale guard', () => {
+  for (const { name, src } of allWorkflows) {
     it(`${name}: deploy job declares id-token: write and contents: read`, () => {
       const deployBlock = src.match(/\n {2}deploy:[\s\S]*$/)?.[0] ?? '';
       expect(deployBlock).toMatch(/permissions:[\s\S]*?contents:\s*read/);
@@ -155,81 +148,51 @@ describe('deploy workflows — deploy job', () => {
       expect(deployBlock).not.toMatch(/actions:\s*read/);
     });
 
-    it(`${name}: DEPLOY_NAME uses sha_short + run_attempt and stays ≤ 64 chars`, () => {
-      const deployBlock = src.match(/\n {2}deploy:[\s\S]*$/)?.[0] ?? '';
-      expect(deployBlock).toMatch(/DEPLOY_NAME:[^\n]*sha_short[^\n]*github\.run_(?:id|attempt)/);
-
-      // Static-assert that the template-string length stays ≤ 64
-      // chars (Azure subscription-scope deployment-name cap) even
-      // when run_id is at uint64 max as a decimal string (20 chars).
-      const prefix = name === 'web' ? 'web' : 'worker';
-      const maxLen = prefix.length + 1 + 12 + 1 + 20 + 1 + 2;
-      expect(maxLen).toBeLessThanOrEqual(64);
-    });
-
     it(`${name}: deploy job has a Refuse stale deploy step gated to workflow_run`, () => {
       const deployBlock = src.match(/\n {2}deploy:[\s\S]*$/)?.[0] ?? '';
       expect(deployBlock).toMatch(/Refuse stale deploy[\s\S]*?if:\s*github\.event_name\s*==\s*'workflow_run'/);
       expect(deployBlock).toMatch(/branches\/main/);
       expect(deployBlock).toMatch(/exit 1/);
     });
-
-    it(`${name}: az deployment sub create passes parameters.json AND explicit overrides`, () => {
-      expect(src).toMatch(/--parameters @infra\/main\.parameters\.json/);
-      for (const param of [
-        'appName=',
-        'resourceGroupName=',
-        'acrLoginServer=',
-        'location=',
-        'webImageTag=',
-        'workerImageTag=',
-      ]) {
-        expect(src).toContain(param);
-      }
-    });
   }
 });
 
-describe('deploy workflows — "read other app\'s template image" step', () => {
-  it('web wf reads the worker app by resource name + container name (split, pinned)', () => {
-    // Resource name and container name differ for the worker —
-    // resource is `${appName}-worker`, container is hardcoded
-    // `copilot-worker` (see infra/modules/copilot-worker-app.bicep).
-    expect(webWf).toMatch(/OTHER_APP_NAME="\$\{APP_NAME\}-worker"/);
-    expect(webWf).toMatch(/OTHER_CONTAINER_NAME="copilot-worker"/);
-    expect(webWf).toMatch(/containers\[\?name=='\$OTHER_CONTAINER_NAME'\]\.image \| \[0\]/);
-    expect(webWf).not.toMatch(/containers\[0\]\.image/);
-  });
+describe('app workflows — image-update rollout (no Bicep apply)', () => {
+  for (const { name, src } of appWorkflows) {
+    it(`${name}: rollout uses az containerapp update --image (image-based pattern)`, () => {
+      expect(src).toMatch(/az containerapp update[\s\S]*?--image/);
+    });
 
-  it('worker wf reads the web app by APP_NAME (resource and container name coincide)', () => {
-    // Web app: resource and container both named `${appName}`
-    // (see infra/modules/container-app.bicep).
-    expect(workerWf).toMatch(/containers\[\?name=='\$APP_NAME'\]\.image \| \[0\]/);
-    expect(workerWf).not.toMatch(/containers\[0\]\.image/);
-    // `copilot-worker` may appear only inside comments. Strip them first.
-    const stripped = workerWf.replace(/^\s*#[^\n]*$/gm, '');
-    expect(stripped).not.toMatch(/copilot-worker/);
-  });
+    it(`${name}: deploy job has no \`az deployment sub create\` call`, () => {
+      // Bicep applies belong to deploy-infra.yml only. An app
+      // workflow that runs `az deployment sub create` would defeat
+      // the whole point of separating image rollouts from infra
+      // reconciliation. Strip comments so a doc-only reference
+      // doesn't false-fail.
+      const stripped = src.replace(/^\s*#[^\n]*$/gm, '');
+      expect(stripped).not.toMatch(/az deployment sub create/);
+    });
 
-  it('web wf validates the worker image prefix matches ${ACR_LOGIN_SERVER}/${APP_NAME}-worker:', () => {
-    expect(webWf).toMatch(/EXPECTED_PREFIX="\$\{ACR_LOGIN_SERVER\}\/\$\{OTHER_APP_NAME\}:"/);
-  });
+    it(`${name}: deploy job does not pass webImageTag or workerImageTag (Bicep-only inputs)`, () => {
+      const stripped = src.replace(/^\s*#[^\n]*$/gm, '');
+      expect(stripped).not.toMatch(/webImageTag=/);
+      expect(stripped).not.toMatch(/workerImageTag=/);
+    });
 
-  it('worker wf validates the web image prefix matches ${ACR_LOGIN_SERVER}/${APP_NAME}:', () => {
-    expect(workerWf).toMatch(/EXPECTED_PREFIX="\$\{ACR_LOGIN_SERVER\}\/\$\{APP_NAME\}:"/);
-  });
-});
-
-describe('deploy workflows — image tag wiring', () => {
-  it('web wf passes its built tag as webImageTag and the read tag as workerImageTag', () => {
-    expect(webWf).toMatch(/webImageTag="\$IMAGE_TAG"/);
-    expect(webWf).toMatch(/workerImageTag="\$OTHER_TAG"/);
-  });
-
-  it('worker wf passes its built tag as workerImageTag and the read tag as webImageTag', () => {
-    expect(workerWf).toMatch(/workerImageTag="\$IMAGE_TAG"/);
-    expect(workerWf).toMatch(/webImageTag="\$OTHER_TAG"/);
-  });
+    it(`${name}: deploy job verifies new revision health post-update`, () => {
+      // `az containerapp update` returns 0 once ARM accepts the
+      // request. Without a readiness poll, a failed revision keeps
+      // the previous revision routed and the workflow reports
+      // green — exactly the silent-fail mode we are guarding against.
+      const deployBlock = src.match(/\n {2}deploy:[\s\S]*$/)?.[0] ?? '';
+      expect(deployBlock).toMatch(/properties\.latestRevisionName/);
+      expect(deployBlock).toMatch(/provisioningState/);
+      expect(deployBlock).toMatch(/runningState/);
+      expect(deployBlock).toMatch(/Provisioned/);
+      expect(deployBlock).toMatch(/Running/);
+      expect(deployBlock).toMatch(/Failed\|Canceled/);
+    });
+  }
 
   it('web wf builds with -f Dockerfile and tags ${APP_NAME}', () => {
     expect(webWf).toMatch(/-f Dockerfile\b/);
@@ -241,81 +204,131 @@ describe('deploy workflows — image tag wiring', () => {
     expect(workerWf).toMatch(/-f Dockerfile\.worker/);
     expect(workerWf).toMatch(/IMAGE="\$\{ACR_LOGIN_SERVER\}\/\$\{APP_NAME\}-worker:/);
   });
+
+  it('web wf targets Container App resource $APP_NAME', () => {
+    expect(webWf).toMatch(/az containerapp update[\s\S]*?--name "\$APP_NAME"/);
+  });
+
+  it('worker wf targets Container App resource ${APP_NAME}-worker', () => {
+    expect(workerWf).toMatch(/az containerapp update[\s\S]*?--name "\$\{APP_NAME\}-worker"/);
+  });
+});
+
+describe('infra workflow — Bicep apply with live-state tag preservation', () => {
+  it('runs az deployment sub create against infra/main.bicep', () => {
+    expect(infraWf).toMatch(/az deployment sub create/);
+    expect(infraWf).toMatch(/--template-file infra\/main\.bicep/);
+  });
+
+  it('passes the full Bicep parameter set (placeholder-validated + explicit overrides)', () => {
+    expect(infraWf).toMatch(/--parameters @infra\/main\.parameters\.json/);
+    for (const param of [
+      'appName=',
+      'resourceGroupName=',
+      'acrLoginServer=',
+      'location=',
+      'webImageTag=',
+      'workerImageTag=',
+    ]) {
+      expect(infraWf).toContain(param);
+    }
+  });
+
+  it('validates infra/main.parameters.json before any Azure call', () => {
+    // The validator must reject placeholder values AND the legacy
+    // `imageTag` key — either indicates a stale rollback SHA from
+    // before the web/worker tag split.
+    expect(infraWf).toMatch(/Validate parameters\.json/);
+    expect(infraWf).toMatch(/grep -iE '"<\[\^"\]\+>"\|REPLACE_ME\|your-\[a-z0-9-\]\+\|TODO'/);
+    expect(infraWf).toMatch(/grep -E '"imageTag"/);
+  });
+
+  it('reads each app\'s current template image to preserve tags on apply', () => {
+    // Web Container App: resource and container both named `${appName}`.
+    // Worker Container App: resource `${appName}-worker`, container `copilot-worker`.
+    expect(infraWf).toMatch(/properties\.template\.containers\[\?name=='\$container_name'\]/);
+    expect(infraWf).toMatch(/copilot-worker/);
+    expect(infraWf).toMatch(/\$\{APP_NAME\}-worker/);
+  });
+
+  it('exposes bootstrap inputs for greenfield deploys (no Container Apps yet)', () => {
+    // A first-ever deploy has no Container Apps to read tags from.
+    // The operator dispatches the workflow with explicit
+    // webImageTag and workerImageTag inputs (see
+    // docs/deployment-aca.md). Both inputs are optional so the
+    // steady-state workflow_run path keeps reading live state.
+    expect(infraWf).toMatch(/webImageTag:[\s\S]*?required:\s*false/);
+    expect(infraWf).toMatch(/workerImageTag:[\s\S]*?required:\s*false/);
+  });
+
+  it('validates resolved image refs match the expected ACR repo prefix', () => {
+    // Guards against an operator manually pushing a foreign image
+    // (different ACR, different repo) under one of the app names.
+    expect(infraWf).toMatch(/expected_prefix=/);
+    expect(infraWf).toMatch(/\$\{ACR_LOGIN_SERVER\}\/\$\{resource_name\}:/);
+  });
+
+  it('DEPLOY_NAME uses sha_short + run_id + run_attempt and stays ≤ 64 chars', () => {
+    const deployBlock = infraWf.match(/\n {2}deploy:[\s\S]*$/)?.[0] ?? '';
+    expect(deployBlock).toMatch(/DEPLOY_NAME:[^\n]*sha_short[^\n]*github\.run_(?:id|attempt)/);
+    // `infra` (5) + 3× `-` (3) + sha_short (12) + run_id (≤20) +
+    // run_attempt (≤2) = 42 max.
+    const maxLen = 'infra'.length + 3 + 12 + 20 + 2;
+    expect(maxLen).toBeLessThanOrEqual(64);
+  });
+
+  it('exposes sha_short as a should-deploy output (only consumed by DEPLOY_NAME)', () => {
+    expect(infraWf).toMatch(/echo "short=\$\{sha:0:12\}" >> "\$GITHUB_OUTPUT"/);
+    const shortRefs = infraWf.match(/sha_short/g) ?? [];
+    expect(shortRefs.length).toBeLessThanOrEqual(4);
+    expect(infraWf).toMatch(/DEPLOY_NAME:[^\n]*sha_short/);
+  });
+
+  it('cancels in-flight ARM deployment on runner cancellation', () => {
+    expect(infraWf).toMatch(/if:\s*cancelled\(\)/);
+    expect(infraWf).toMatch(/az deployment sub cancel/);
+  });
 });
 
 describe('deploy workflows — third-party action SHA pinning', () => {
   // Repo convention: every third-party `uses:` is pinned to a
   // 40-hex SHA with a version comment.
-  for (const { name, src } of wfPair) {
+  for (const { name, src } of allWorkflows) {
     const usesLines = src.match(/uses:\s*[^\n]+/g) ?? [];
     it(`${name}: every uses: pins a 40-hex SHA followed by a version comment`, () => {
       for (const line of usesLines) {
-        expect(line, `uses line: ${line}`).toMatch(/uses:\s*[\w-]+\/[\w./-]+@[0-9a-f]{40}\s+#\s*v[\d.]+/);
+        expect(line, `uses line: ${line}`).toMatch(
+          /uses:\s*[\w-]+\/[\w./-]+@[0-9a-f]{40}\s+#\s*v[\d.]+/,
+        );
       }
     });
   }
 });
 
 describe('CI ↔ CD coupling — display name', () => {
-  // workflow_run matches by **display name**. A silent rename of
-  // `name: CI` in ci.yml would stop both deploy workflows from
-  // firing without any error surface.
+  // workflow_run matches by display name. A silent rename of
+  // `name: CI` in ci.yml would stop all three deploy workflows
+  // from firing without any error surface.
   it('ci.yml declares `name: CI`', () => {
     expect(ciWf).toMatch(/^name:\s*CI\s*$/m);
   });
 
-  it('deploy workflows reference the [CI] display name', () => {
-    expect(webWf).toMatch(/workflows:\s*\[CI\]/);
-    expect(workerWf).toMatch(/workflows:\s*\[CI\]/);
+  it('all deploy workflows reference the [CI] display name', () => {
+    for (const { src } of allWorkflows) {
+      expect(src).toMatch(/workflows:\s*\[CI\]/);
+    }
   });
 });
 
-describe('path-filter scopes — representative mapping', () => {
-  const webOnly = [
-    'src/app/page.tsx',
-    'src/components/AppHeader/AppHeader.tsx',
-    'next.config.ts',
-    'Dockerfile',
-  ];
-  const workerOnly = [
-    'src/worker/bootstrap.ts',
-    'Dockerfile.worker',
-    'scripts/build-worker.mjs',
-  ];
-  const both = [
-    'src/lib/copilot/execution/index.ts',
-    'package.json',
-    'tsconfig.json',
-    // Bicep / infra changes (env-var wiring, scaling, resource
-    // properties) must roll out via the next deploy on either side —
-    // included in BOTH filters so the deploy that fires re-converges
-    // both apps.
-    'infra/main.bicep',
-    'infra/main.parameters.json',
-    'infra/modules/container-app.bicep',
-  ];
-  const neither = [
-    'README.md',
-    'docs/architecture.md',
-    'CONTRIBUTING.md',
-    // Infra docs and operational notes do NOT trigger a deploy —
-    // only runtime-affecting infra (Bicep + parameters JSON) does.
-    'infra/README.md',
-  ];
-
-  function matchesAny(file: string, globs: string[]): boolean {
-    return globs.some((g) => {
-      if (g === file) return true;
-      if (g.endsWith('/**')) return file.startsWith(g.slice(0, -3));
-      return false;
-    });
-  }
-  function parseFilterPatterns(yamlText: string, key: 'web' | 'worker'): string[] {
-    // Capture from the key line until the next top-level key (or EOF).
-    // Tolerate interspersed comments (lines starting with `#`) so we
-    // can document scope decisions inline in the YAML.
-    const sectionPattern = new RegExp(`^${key}:\\s*\\n((?:\\s+(?:-[^\\n]*|#[^\\n]*)\\n)+)`, 'm');
-    const section = yamlText.match(sectionPattern);
+describe('path-filter scopes — inline filters parsed from each workflow', () => {
+  function parseInlineFilter(yamlText: string, key: 'web' | 'worker' | 'infra'): string[] {
+    // The inline filters live in a `filters: |` block of dorny/paths-filter.
+    // Capture the `<key>:` sub-list inside that block.
+    const filtersBlock = yamlText.match(/filters:\s*\|\s*\n([\s\S]+?)(?:\n {0,8}\S|$)/);
+    if (!filtersBlock) return [];
+    const section = filtersBlock[1].match(
+      new RegExp(`^\\s+${key}:\\s*\\n((?:\\s+(?:-[^\\n]*|#[^\\n]*)\\n?)+)`, 'm'),
+    );
     if (!section) return [];
     return section[1]
       .split('\n')
@@ -325,38 +338,77 @@ describe('path-filter scopes — representative mapping', () => {
       .filter(Boolean);
   }
 
-  const webPatterns = parseFilterPatterns(webFilter, 'web');
-  const workerPatterns = parseFilterPatterns(workerFilter, 'worker');
+  const webPatterns = parseInlineFilter(webWf, 'web');
+  const workerPatterns = parseInlineFilter(workerWf, 'worker');
+  const infraPatterns = parseInlineFilter(infraWf, 'infra');
 
-  it('parsed at least 8 web patterns and 6 worker patterns', () => {
+  it('parsed at least 8 web, 6 worker, and 3 infra patterns', () => {
     expect(webPatterns.length).toBeGreaterThanOrEqual(8);
     expect(workerPatterns.length).toBeGreaterThanOrEqual(6);
+    expect(infraPatterns.length).toBeGreaterThanOrEqual(3);
   });
 
-  for (const file of webOnly) {
-    it(`${file} → web only`, () => {
-      expect(matchesAny(file, webPatterns)).toBe(true);
-      expect(matchesAny(file, workerPatterns)).toBe(false);
+  it('each workflow file is in its own filter (self-trigger on workflow change)', () => {
+    expect(webPatterns).toContain('.github/workflows/deploy-web.yml');
+    expect(workerPatterns).toContain('.github/workflows/deploy-worker.yml');
+    expect(infraPatterns).toContain('.github/workflows/deploy-infra.yml');
+  });
+
+  it('infra filter scopes to Bicep template + parameters only', () => {
+    expect(infraPatterns).toContain('infra/main.bicep');
+    expect(infraPatterns).toContain('infra/main.parameters.json');
+    expect(infraPatterns.some((p) => p === 'infra/modules/**')).toBe(true);
+  });
+
+  function matchesAny(file: string, globs: string[]): boolean {
+    return globs.some((g) => {
+      if (g === file) return true;
+      if (g.endsWith('/**')) return file.startsWith(g.slice(0, -3));
+      return false;
     });
   }
-  for (const file of workerOnly) {
-    it(`${file} → worker only`, () => {
-      expect(matchesAny(file, workerPatterns)).toBe(true);
-      expect(matchesAny(file, webPatterns)).toBe(false);
+
+  const cases: { file: string; web: boolean; worker: boolean; infra: boolean }[] = [
+    // Web-only sources.
+    { file: 'src/app/page.tsx', web: true, worker: false, infra: false },
+    { file: 'src/components/AppHeader/AppHeader.tsx', web: true, worker: false, infra: false },
+    { file: 'src/middleware.ts', web: true, worker: false, infra: false },
+    { file: 'next.config.ts', web: true, worker: false, infra: false },
+    { file: 'Dockerfile', web: true, worker: false, infra: false },
+    // Worker-only sources.
+    { file: 'src/worker/bootstrap.ts', web: false, worker: true, infra: false },
+    { file: 'Dockerfile.worker', web: false, worker: true, infra: false },
+    // Shared libs that intersect both image surfaces.
+    { file: 'src/lib/copilot/execution/index.ts', web: true, worker: true, infra: false },
+    { file: 'package.json', web: true, worker: true, infra: false },
+    { file: 'package-lock.json', web: true, worker: true, infra: false },
+    // Infra-only.
+    { file: 'infra/main.bicep', web: false, worker: false, infra: true },
+    { file: 'infra/main.parameters.json', web: false, worker: false, infra: true },
+    { file: 'infra/modules/container-app.bicep', web: false, worker: false, infra: true },
+    // Non-deployable paths.
+    { file: 'README.md', web: false, worker: false, infra: false },
+    { file: 'docs/architecture.md', web: false, worker: false, infra: false },
+    { file: 'docs/deployment-aca.md', web: false, worker: false, infra: false },
+    { file: 'infra/README.md', web: false, worker: false, infra: false },
+    { file: 'CONTRIBUTING.md', web: false, worker: false, infra: false },
+  ];
+
+  for (const c of cases) {
+    it(`${c.file} → web=${c.web} worker=${c.worker} infra=${c.infra}`, () => {
+      expect(matchesAny(c.file, webPatterns)).toBe(c.web);
+      expect(matchesAny(c.file, workerPatterns)).toBe(c.worker);
+      expect(matchesAny(c.file, infraPatterns)).toBe(c.infra);
     });
   }
-  for (const file of both) {
-    it(`${file} → both`, () => {
-      expect(matchesAny(file, webPatterns)).toBe(true);
-      expect(matchesAny(file, workerPatterns)).toBe(true);
-    });
-  }
-  for (const file of neither) {
-    it(`${file} → neither`, () => {
-      expect(matchesAny(file, webPatterns)).toBe(false);
-      expect(matchesAny(file, workerPatterns)).toBe(false);
-    });
-  }
+});
+
+describe('legacy path-filters directory removed', () => {
+  it('.github/path-filters/ no longer exists', () => {
+    // Inline filters live in each workflow's `dorny/paths-filter`
+    // block. The old external-file pattern is gone.
+    expect(existsSync(path.join(REPO, '.github/path-filters'))).toBe(false);
+  });
 });
 
 describe('Bicep param model', () => {
@@ -372,12 +424,9 @@ describe('Bicep param model', () => {
     expect(mainBicep).not.toMatch(/param workerImageTag string\s*=/);
   });
 
-  it('parameters.json passes the workflow\'s Validate parameters.json placeholder guard', () => {
-    // Mirror the exact regex used by the "Validate parameters.json"
-    // step in both deploy workflows. A placeholder left in the
-    // committed file would make every automated deploy fail at the
-    // guard step — converts deploy-time fail-fast into test-time
-    // fail-fast.
+  it('parameters.json carries no placeholder values', () => {
+    // Mirrors the validator in deploy-infra.yml; a placeholder
+    // would make every automated deploy fail at the guard step.
     expect(params).not.toMatch(/"<[^"]+>"|REPLACE_ME|your-[a-z0-9-]+|TODO/i);
   });
 

@@ -1,10 +1,16 @@
-name: Deploy worker (Azure Container Apps)
+name: Deploy infra (Azure Container Apps Bicep apply)
 
-# Builds the Hono/Node Copilot worker image and rolls it out by
-# updating the Container App's image — no Bicep apply. Infra changes
-# are owned by `deploy-infra.yml`.
+# Reconciles the Bicep template against Azure. App image tags are
+# owned by `deploy-web.yml` and `deploy-worker.yml`; this workflow
+# preserves whatever tag each app is currently running by reading
+# the live values from Azure and passing them as parameters, so a
+# routine infra apply is image-set neutral.
 #
-# Operator runbook: `docs/deployment-aca.md`.
+# Bootstrap: a greenfield environment has no Container Apps to
+# read tags from. Operator pushes initial images to ACR by hand,
+# then `workflow_dispatch` this workflow with the `webImageTag`
+# and `workerImageTag` inputs filled in. See
+# `docs/deployment-aca.md` for the full runbook.
 
 on:
   workflow_run:
@@ -14,16 +20,28 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: 'Commit SHA to deploy (required for manual rollouts).'
+        description: 'Commit SHA to deploy.'
         required: true
+        type: string
+      webImageTag:
+        description: 'Override web image tag (bootstrap only). Leave blank to keep the currently-deployed tag.'
+        required: false
+        type: string
+      workerImageTag:
+        description: 'Override worker image tag (bootstrap only). Leave blank to keep the currently-deployed tag.'
+        required: false
         type: string
 
 permissions:
   contents: read
 
 concurrency:
-  # Shared with deploy-web.yml and deploy-infra.yml — see those
-  # workflows' concurrency blocks for the rationale.
+  # Shared with deploy-web.yml and deploy-worker.yml. The race that
+  # forces serialisation: this workflow reads each app's current
+  # image tag, then submits a Bicep apply that re-asserts those
+  # tags. If an app workflow's `containerapp update` lands between
+  # the read and the apply, this workflow would silently roll the
+  # image back. Sharing the concurrency group makes that impossible.
   group: deploy-aca-${{ github.ref_name }}
   cancel-in-progress: false
 
@@ -43,6 +61,7 @@ jobs:
     outputs:
       proceed: ${{ steps.gate.outputs.proceed }}
       sha: ${{ steps.sha.outputs.value }}
+      sha_short: ${{ steps.sha.outputs.short }}
     steps:
       - name: Validate required vars
         env:
@@ -53,11 +72,12 @@ jobs:
           ACR_NAME:               ${{ vars.ACR_NAME }}
           APP_NAME:               ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
+          LOCATION:               ${{ vars.LOCATION }}
         run: |
           set -euo pipefail
           missing=()
           for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
-                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME; do
+                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME LOCATION; do
             [[ -z "${!v:-}" ]] && missing+=("$v")
           done
           (( ${#missing[@]} )) && { echo "::error::Missing vars: ${missing[*]}"; exit 1; }
@@ -81,6 +101,11 @@ jobs:
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || \
             { echo "::error::invalid SHA: '$sha' (must be 40-hex)"; exit 1; }
           echo "value=$sha" >> "$GITHUB_OUTPUT"
+          # Short SHA for the ARM deployment name. Subscription-scope
+          # deployment names are capped at 64 chars; 12 hex chars
+          # retain collision resistance while leaving headroom for
+          # the prefix + run_id + run_attempt suffix.
+          echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout deploy SHA
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -102,11 +127,7 @@ jobs:
             *) echo "::error::SHA $SHA is not reachable from main (compare status='$status')"; exit 1 ;;
           esac
 
-      - name: Refuse stale workflow_run (head_sha != current main HEAD)
-        # Stale-deploy race guard. CI can complete out of order;
-        # the deploy workflow only rolls forward. The deploy job
-        # re-checks just before mutating ARM to close the queue
-        # window.
+      - name: Refuse stale workflow_run
         if: github.event_name == 'workflow_run'
         id: stale
         env:
@@ -136,7 +157,7 @@ jobs:
           [[ "$conclusion" == "success" ]] || \
             { echo "::error::No successful CI run found for SHA $SHA (conclusion='$conclusion')"; exit 1; }
 
-      - name: Resolve filter base (previous successful CI head_sha)
+      - name: Resolve filter base
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
         id: filter-base
         env:
@@ -164,29 +185,21 @@ jobs:
         with:
           ref:  ${{ steps.sha.outputs.value }}
           base: ${{ steps.filter-base.outputs.value }}
-          # Inline scope. Worker runtime source, shared libs the
-          # worker pulls in, the worker Dockerfile, dependency
-          # manifests, and this workflow file itself.
+          # Inline scope. Bicep template, runtime parameters, and
+          # this workflow file. Infra docs (`infra/README.md`)
+          # deliberately do NOT trigger a deploy.
           filters: |
-            worker:
-              - 'src/worker/**'
-              - 'src/lib/copilot/**'
-              - 'src/lib/auth/**'
-              - 'src/lib/jobs/**'
-              - 'src/lib/logger/**'
-              - 'src/lib/observability/**'
-              - 'src/lib/security/**'
-              - 'src/lib/storage/**'
-              - 'Dockerfile.worker'
-              - 'package.json'
-              - 'package-lock.json'
-              - '.github/workflows/deploy-worker.yml'
+            infra:
+              - 'infra/main.bicep'
+              - 'infra/main.parameters.json'
+              - 'infra/modules/**'
+              - '.github/workflows/deploy-infra.yml'
 
       - name: Decide whether to proceed
         id: gate
         env:
           GH_EVENT_NAME: ${{ github.event_name }}
-          FILTER_HIT:    ${{ steps.filter.outputs.worker }}
+          FILTER_HIT:    ${{ steps.filter.outputs.infra }}
           SUPERSEDED:    ${{ steps.stale.outputs.superseded }}
           FIRST_DEPLOY:  ${{ steps.filter-base.outputs.first_deploy }}
         run: |
@@ -213,6 +226,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      # Subscription-scope ARM deployment names are capped at 64
+      # chars. `infra` (5) + `-` (1) + sha_short (12) + `-` (1) +
+      # run_id (≤20) + `-` (1) + run_attempt (≤2) = 42 max.
+      DEPLOY_NAME: infra-${{ needs.should-deploy.outputs.sha_short }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
@@ -220,6 +238,10 @@ jobs:
           fetch-depth: 1
 
       - name: Refuse stale deploy (concurrency-queue race guard)
+        # Closes the window between the queue-time stale check and
+        # this job actually running. `workflow_dispatch` bypasses
+        # the guard so an operator can re-apply infra without
+        # being blocked by a newer main HEAD.
         if: github.event_name == 'workflow_run'
         env:
           SHA:      ${{ needs.should-deploy.outputs.sha }}
@@ -231,12 +253,20 @@ jobs:
           [[ "$tip" == "$SHA" ]] || \
             { echo "::error::superseded — main HEAD is $tip, refusing to deploy $SHA"; exit 1; }
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
-        with:
-          node-version-file: '.node-version'
-      - run: npm ci
-      - run: npm run lint && npm run check:guardrails
-      - run: npm run build:worker
+      - name: Validate parameters.json
+        # Fail-fast guard before any Azure call. Rejects
+        # placeholder values and the legacy `imageTag` key —
+        # either indicates a stale rollback SHA from before the
+        # web/worker tag split.
+        run: |
+          set -euo pipefail
+          f=infra/main.parameters.json
+          if grep -iE '"<[^"]+>"|REPLACE_ME|your-[a-z0-9-]+|TODO' "$f" >/dev/null; then
+            echo "::error::$f contains placeholder values"; exit 1
+          fi
+          if grep -E '"imageTag"\s*:' "$f" >/dev/null; then
+            echo "::error::$f still defines legacy 'imageTag' — remove it (CD passes webImageTag/workerImageTag explicitly)."; exit 1
+          fi
 
       - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474  # v2.3.0
         with:
@@ -244,69 +274,81 @@ jobs:
           tenant-id:       ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - env:
-          ACR_NAME: ${{ vars.ACR_NAME }}
-        run: az acr login --name "$ACR_NAME"
-
-      - name: Build + push image
+      - name: Resolve image tags (live state or bootstrap inputs)
+        # Steady-state: read each app's current template image
+        # tag from Azure so the Bicep apply preserves it. The
+        # template image is what Bicep last wrote, which is the
+        # right input for re-applying Bicep — the active revision
+        # may differ if a prior rollout failed readiness, but
+        # re-applying with the template tag is image-set neutral.
+        #
+        # Bootstrap: a fresh environment has no Container Apps to
+        # read from. The `workflow_dispatch` inputs `webImageTag`
+        # and `workerImageTag` let the operator pass explicit tags
+        # for the initial apply.
         env:
-          SHA:              ${{ needs.should-deploy.outputs.sha }}
-          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
-          APP_NAME:         ${{ vars.APP_NAME }}
+          APP_NAME:               ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER:       ${{ vars.ACR_LOGIN_SERVER }}
+          INPUT_WEB_IMAGE_TAG:    ${{ inputs.webImageTag }}
+          INPUT_WORKER_IMAGE_TAG: ${{ inputs.workerImageTag }}
         run: |
           set -euo pipefail
-          IMAGE_TAG="sha-$SHA"
-          # The worker's Container App resource name is
-          # `${APP_NAME}-worker`; we use that as the image
-          # repository so the image-tag-from-name convention
-          # stays uniform across both apps.
-          IMAGE="${ACR_LOGIN_SERVER}/${APP_NAME}-worker:${IMAGE_TAG}"
-          docker buildx build --push -f Dockerfile.worker -t "$IMAGE" .
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      - name: Update Container App image
-        # Worker Container App resource name is `${APP_NAME}-worker`
-        # (see `infra/modules/copilot-worker-app.bicep`). The
-        # container inside that resource is named `copilot-worker`,
-        # but `az containerapp update --image` updates the single
-        # primary container by default; no `--container-name` is
-        # needed today. If a sidecar is ever added, this command
-        # will need an explicit `--container-name copilot-worker`.
+          resolve_tag() {
+            local resource_name="$1" container_name="$2" override="$3"
+            if [[ -n "$override" ]]; then
+              echo "$override"
+              return
+            fi
+            local image
+            image=$(az containerapp show \
+              --name "$resource_name" \
+              --resource-group "$RESOURCE_GROUP_NAME" \
+              --query "properties.template.containers[?name=='$container_name'].image | [0]" \
+              -o tsv 2>/dev/null || true)
+            if [[ -z "$image" || "$image" == "None" ]]; then
+              echo "::error::Container App '$resource_name' (container '$container_name') has no template image. For a first-ever deploy, dispatch this workflow with the webImageTag and workerImageTag inputs filled in — see docs/deployment-aca.md." >&2
+              exit 1
+            fi
+            local expected_prefix="${ACR_LOGIN_SERVER}/${resource_name}:"
+            if [[ "$image" != "${expected_prefix}"* ]]; then
+              echo "::error::image '$image' does not match expected prefix '$expected_prefix'" >&2
+              exit 1
+            fi
+            echo "${image##*:}"
+          }
+
+          WEB_TAG=$(resolve_tag "$APP_NAME" "$APP_NAME" "$INPUT_WEB_IMAGE_TAG")
+          WORKER_TAG=$(resolve_tag "${APP_NAME}-worker" "copilot-worker" "$INPUT_WORKER_IMAGE_TAG")
+          echo "Resolved web tag: $WEB_TAG"
+          echo "Resolved worker tag: $WORKER_TAG"
+          echo "WEB_IMAGE_TAG=$WEB_TAG"     >> "$GITHUB_ENV"
+          echo "WORKER_IMAGE_TAG=$WORKER_TAG" >> "$GITHUB_ENV"
+
+      - name: Deploy via Bicep
         env:
+          LOCATION:            ${{ vars.LOCATION }}
           APP_NAME:            ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER:    ${{ vars.ACR_LOGIN_SERVER }}
         run: |
           set -euo pipefail
-          az containerapp update \
-            --name "${APP_NAME}-worker" \
-            --resource-group "$RESOURCE_GROUP_NAME" \
-            --image "$IMAGE" \
-            --only-show-errors >/dev/null
+          az deployment sub create \
+            --name "$DEPLOY_NAME" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters @infra/main.parameters.json \
+            --parameters \
+              appName="$APP_NAME" \
+              resourceGroupName="$RESOURCE_GROUP_NAME" \
+              acrLoginServer="$ACR_LOGIN_SERVER" \
+              location="$LOCATION" \
+              webImageTag="$WEB_IMAGE_TAG" \
+              workerImageTag="$WORKER_IMAGE_TAG" \
+            --only-show-errors
 
-      - name: Verify new revision is healthy
-        env:
-          APP_NAME:            ${{ vars.APP_NAME }}
-          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+      - name: Cancel in-flight deployment on runner cancellation
+        if: cancelled()
         run: |
-          set -euo pipefail
-          APP="${APP_NAME}-worker"
-          rev=$(az containerapp show --name "$APP" --resource-group "$RESOURCE_GROUP_NAME" \
-            --query 'properties.latestRevisionName' -o tsv)
-          [[ -n "$rev" ]] || { echo "::error::could not resolve latest revision"; exit 1; }
-          echo "Latest revision: $rev"
-          for attempt in $(seq 1 30); do
-            read -r provisioning running < <(az containerapp revision show \
-              --name "$APP" --resource-group "$RESOURCE_GROUP_NAME" --revision "$rev" \
-              --query '[properties.provisioningState, properties.runningState] | join(`\t`, @)' -o tsv)
-            echo "attempt $attempt: provisioning=$provisioning running=$running"
-            case "$provisioning" in
-              Provisioned)
-                [[ "$running" == "Running" ]] && exit 0
-                ;;
-              Failed|Canceled)
-                echo "::error::revision $rev provisioning state '$provisioning'"; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::error::revision $rev did not become healthy in 5 minutes (provisioning=$provisioning running=$running)"
-          exit 1
+          az deployment sub cancel --name "$DEPLOY_NAME" --only-show-errors || true

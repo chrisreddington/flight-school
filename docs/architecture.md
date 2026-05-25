@@ -506,14 +506,21 @@ Both Container Apps run from the **same monorepo** but ship as
 **independently tagged images** — `webImageTag` and `workerImageTag`
 are required Bicep parameters with no defaults, so a deploy is always
 deterministic and one side can be promoted without rebuilding the
-other. Two GitHub Actions workflows
+other. CD splits along the line between image rollouts and infra
+reconciliation: three workflows
 ([`deploy-web.yml`](../.github/workflows/deploy-web.yml),
-[`deploy-worker.yml`](../.github/workflows/deploy-worker.yml)) each
-trigger on `workflow_run` after CI succeeds on `main`, gate on a
-paths-filter scope ([`.github/path-filters/`](../.github/path-filters/)),
-build their own image, read the *other* app's currently-deployed tag
-from Azure, then invoke a single `az deployment sub create`. Operational
-detail lives in [`docs/deployment-aca.md`](deployment-aca.md) and
+[`deploy-worker.yml`](../.github/workflows/deploy-worker.yml),
+[`deploy-infra.yml`](../.github/workflows/deploy-infra.yml)) each
+trigger on `workflow_run` after CI succeeds on `main`, gate on an
+inline paths-filter scope, and share the
+`deploy-aca-${{ github.ref_name }}` concurrency group so the
+infra apply never races an in-flight image rollout. The app
+workflows build their image and call `az containerapp update --image`
+(the [documented image-based ACA pattern](https://learn.microsoft.com/en-us/azure/container-apps/github-actions#image-based-deployment-strategy));
+the infra workflow reads each app's current image tag from Azure and
+runs `az deployment sub create` against `infra/main.bicep`. Bootstrap
+and rollback runbooks live in
+[`docs/deployment-aca.md`](deployment-aca.md) and
 [`infra/README.md`](../infra/README.md).
 
 ## Where to go next

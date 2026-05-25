@@ -1,13 +1,16 @@
 name: Deploy web (Azure Container Apps)
 
-# Deploys the Next.js web image to Azure Container Apps. Triggered
-# automatically when CI succeeds on `main` and the in-scope paths
-# (see `.github/path-filters/web.yml`) have changed since the
+# Builds the Next.js web image and rolls it out by updating the
+# Container App's image — no Bicep apply. Infra changes (env vars,
+# scaling, secrets binding) are owned by `deploy-infra.yml`; this
+# workflow only ever creates a new image revision.
+#
+# Triggered automatically when CI succeeds on `main` and at least one
+# in-scope path (see the `filters` block below) has changed since the
 # previous successful deploy. `workflow_dispatch` is the rollback /
 # replay path and requires an explicit SHA.
 #
-# Architecture: see `docs/deployment-aca.md` and the plan artefact
-# `files/deploy-decouple-plan.md` in the session store.
+# Operator runbook: `docs/deployment-aca.md`.
 
 on:
   workflow_run:
@@ -25,13 +28,13 @@ permissions:
   contents: read
 
 concurrency:
-  # Shared with deploy-worker.yml — a single shared-lib push triggers
-  # both workflows for the same CI completion; the shared group
-  # serialises them so two concurrent ARM deployments cannot read
-  # each other's stale tag. `cancel-in-progress: false` because
-  # `az deployment sub create` submits a server-side ARM operation
-  # that GH Actions cannot abort; cancelling the runner would leak
-  # an in-flight Azure deployment.
+  # Shared with deploy-worker.yml AND deploy-infra.yml. Any of the
+  # three workflows can mutate the same Container App resources (an
+  # infra apply rewrites `properties.template.containers[].image`),
+  # so they must serialise. `cancel-in-progress: false` because
+  # `az containerapp update` and `az deployment sub create` submit
+  # server-side ARM operations that GH Actions cannot abort —
+  # cancelling the runner would leak an in-flight Azure operation.
   group: deploy-aca-${{ github.ref_name }}
   cancel-in-progress: false
 
@@ -46,16 +49,14 @@ jobs:
        github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
-      # `gh api /repos/.../compare/...` (ancestry check) uses
-      # `contents: read`. `gh api /repos/.../actions/runs`
-      # (CI-green check) needs `actions: read`. Scoped to this job
-      # so the deploy job does not inherit `actions: read`.
+      # `actions: read` is needed for the CI-green check
+      # (`gh api /actions/workflows/ci.yml/runs`). Scoped to this
+      # job so the deploy job does not inherit it.
       contents: read
       actions: read
     outputs:
       proceed: ${{ steps.gate.outputs.proceed }}
       sha: ${{ steps.sha.outputs.value }}
-      sha_short: ${{ steps.sha.outputs.short }}
     steps:
       - name: Validate required vars
         env:
@@ -66,12 +67,11 @@ jobs:
           ACR_NAME:               ${{ vars.ACR_NAME }}
           APP_NAME:               ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
-          LOCATION:               ${{ vars.LOCATION }}
         run: |
           set -euo pipefail
           missing=()
           for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
-                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME LOCATION; do
+                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME; do
             [[ -z "${!v:-}" ]] && missing+=("$v")
           done
           (( ${#missing[@]} )) && { echo "::error::Missing vars: ${missing[*]}"; exit 1; }
@@ -94,20 +94,13 @@ jobs:
           esac
           # SHA shape validation — 40-char lowercase hex. The
           # workflow_run path is GitHub-controlled and always
-          # satisfies this; the workflow_dispatch path is
-          # operator-supplied and could in principle be a tag,
-          # branch name, or shell payload. Reject anything else
-          # before it reaches checkout or docker.
+          # satisfies this; workflow_dispatch is operator-supplied
+          # and could in principle be a tag, branch, or shell
+          # payload. Reject anything else before it reaches
+          # checkout or docker.
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || \
             { echo "::error::invalid SHA: '$sha' (must be 40-hex)"; exit 1; }
           echo "value=$sha" >> "$GITHUB_OUTPUT"
-          # Short SHA for the ARM deployment name. Azure
-          # subscription-scope deployment names are capped at 64
-          # chars; full SHA (40) plus prefix plus run_id plus
-          # run_attempt can land at 61–64 and break on high-run-id
-          # repos. 12 hex chars retain collision resistance for
-          # human-scale operator browsing while leaving headroom.
-          echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout deploy SHA
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -119,9 +112,8 @@ jobs:
         # Belt-and-braces for the workflow_dispatch path. The
         # workflow_run path's head_sha is provably on main (the
         # gate's job-level `if:` enforces it), so we skip this
-        # step for that event. Uses GitHub's Compare API rather
-        # than `git merge-base` so the check works for rollback
-        # SHAs of any age without needing a deep local clone.
+        # step for that event. Uses the Compare API so old
+        # rollback SHAs work without a deep local clone.
         if: github.event_name == 'workflow_dispatch'
         env:
           SHA:      ${{ steps.sha.outputs.value }}
@@ -136,14 +128,14 @@ jobs:
           esac
 
       - name: Refuse stale workflow_run (head_sha != current main HEAD)
-        # CI can complete out of order. If commit B is at `main`
-        # HEAD and commit A's CI finishes later, A's workflow_run
-        # would otherwise deploy A — silently rolling main back.
-        # The deploy workflow only ever rolls forward;
-        # `workflow_dispatch` is the explicit rollback path. The
-        # deploy job re-checks main HEAD just before build/push
-        # to close the gap where a newer commit lands while this
-        # run is queued in the concurrency group.
+        # Stale-deploy race guard. CI can complete out of order:
+        # if commit B is at `main` HEAD and commit A's CI finishes
+        # later, A's workflow_run would otherwise deploy A and
+        # silently roll main back. The deploy workflow only rolls
+        # forward; `workflow_dispatch` is the explicit rollback
+        # path. A second check runs in the deploy job to close
+        # the window where a newer commit lands while this run
+        # waits in the concurrency queue.
         if: github.event_name == 'workflow_run'
         id: stale
         env:
@@ -162,11 +154,10 @@ jobs:
 
       - name: Verify CI was green for dispatched SHA
         # workflow_run already implies CI success for the SHA. For
-        # workflow_dispatch we must verify ourselves — otherwise
-        # an operator could deploy a SHA whose CI is red. Query
-        # CI by workflow file path (ci.yml), not by display name,
-        # so a display-name rename does not silently break the
-        # check.
+        # workflow_dispatch we must verify ourselves — otherwise an
+        # operator could deploy a SHA whose CI is red. Query CI by
+        # workflow file path (ci.yml), not display name, so a
+        # display-name rename does not silently break the check.
         if: github.event_name == 'workflow_dispatch'
         env:
           SHA:     ${{ steps.sha.outputs.value }}
@@ -187,8 +178,7 @@ jobs:
         # everything between that and the current SHA is "what
         # this push delivers". Constrain to runs with
         # `id < CURRENT_RUN_ID` so a newer successful run cannot
-        # be picked as base. `per_page=100` is the GH API max for
-        # this endpoint.
+        # be picked as base.
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
         id: filter-base
         env:
@@ -203,15 +193,15 @@ jobs:
           if [[ -z "$base" ]]; then
             # First-ever workflow_run deploy: no prior successful
             # CI on main exists. Skip paths-filter and deploy
-            # unconditionally — there's no meaningful diff to
-            # compute, and the first deploy of every app must run.
+            # unconditionally — there is no diff to compute and
+            # the first deploy must run.
             echo "first_deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Hard-assert the base commit is reachable locally.
-          # With `fetch-depth: 0` it always is, but a missing
-          # object here would silently fall back to paths-filter
-          # mis-diffing, so we fail loudly instead.
+          # Hard-assert the base commit is reachable locally. With
+          # `fetch-depth: 0` it always is, but a missing object
+          # would silently mis-diff via paths-filter so we fail
+          # loudly instead.
           git cat-file -e "${base}^{commit}" || \
             { echo "::error::filter base $base not present in local checkout (fetch-depth: 0 expected)"; exit 1; }
           echo "first_deploy=false" >> "$GITHUB_OUTPUT"
@@ -224,7 +214,24 @@ jobs:
         with:
           ref:  ${{ steps.sha.outputs.value }}
           base: ${{ steps.filter-base.outputs.value }}
-          filters: .github/path-filters/web.yml
+          # Inline scope. Anything that affects the web runtime
+          # image: app code, shared libs the web app pulls in, the
+          # Dockerfile, dependency manifests, and this workflow
+          # file itself.
+          filters: |
+            web:
+              - 'src/app/**'
+              - 'src/components/**'
+              - 'src/lib/**'
+              - 'src/middleware.ts'
+              - 'src/test/architecture/web-image-gate-**'
+              - 'scripts/check-web-image-copilot-free.mjs'
+              - 'public/**'
+              - 'Dockerfile'
+              - 'next.config.ts'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/deploy-web.yml'
 
       - name: Decide whether to proceed
         id: gate
@@ -257,27 +264,20 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      # Subscription-scope deployment names must be unique per
-      # submission AND fit in 64 chars; we use a 12-char short SHA
-      # (collision-resistant within a single repo's history) plus
-      # run_id + run_attempt so retries are distinct.
-      DEPLOY_NAME: web-${{ needs.should-deploy.outputs.sha_short }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           ref: ${{ needs.should-deploy.outputs.sha }}
           fetch-depth: 1
 
-      - name: Refuse stale deploy (concurrency-queue TOCTOU guard)
-        # The `should-deploy` stale-check runs at queue time. The
-        # shared concurrency group can hold this job for several
-        # minutes while another deploy runs; during that window a
-        # newer commit may have landed on main and already been
-        # deployed. Re-check main HEAD here so we never overwrite
-        # a newer successful deploy with an older SHA.
-        # `workflow_dispatch` (the explicit rollback path)
-        # bypasses this guard.
+      - name: Refuse stale deploy (concurrency-queue race guard)
+        # Closes the window between `should-deploy`'s queue-time
+        # check and this job actually running. The shared
+        # `deploy-aca-*` concurrency group can hold this job for
+        # minutes while another deploy (web, worker, or infra)
+        # runs; a newer commit may have landed on main during
+        # that wait. `workflow_dispatch` (the explicit rollback
+        # path) bypasses this guard.
         if: github.event_name == 'workflow_run'
         env:
           SHA:      ${{ needs.should-deploy.outputs.sha }}
@@ -288,20 +288,6 @@ jobs:
           tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
           [[ "$tip" == "$SHA" ]] || \
             { echo "::error::superseded — main HEAD is $tip, refusing to deploy $SHA"; exit 1; }
-
-      - name: Validate parameters.json
-        # Fail-fast guard before any build, ACR push, or Azure
-        # call. Rejects placeholder values and the legacy
-        # `imageTag` key — both indicate a stale rollback SHA.
-        run: |
-          set -euo pipefail
-          f=infra/main.parameters.json
-          if grep -iE '"<[^"]+>"|REPLACE_ME|your-[a-z0-9-]+|TODO' "$f" >/dev/null; then
-            echo "::error::$f contains placeholder values"; exit 1
-          fi
-          if grep -E '"imageTag"\s*:' "$f" >/dev/null; then
-            echo "::error::$f still defines legacy 'imageTag' — remove it (CD passes webImageTag/workerImageTag explicitly). If rolling back to a pre-migration commit, deploy from main HEAD with an --image-only override instead."; exit 1
-          fi
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
@@ -330,71 +316,56 @@ jobs:
           IMAGE_TAG="sha-$SHA"
           IMAGE="${ACR_LOGIN_SERVER}/${APP_NAME}:${IMAGE_TAG}"
           docker buildx build --push -f Dockerfile -t "$IMAGE" .
-          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      - name: Read other app's current template image tag
-        # Reads the desired-state image tag from the worker app's
-        # Container App template (what Bicep last applied). This
-        # is not necessarily the actively-serving revision's
-        # image — if an earlier revision failed readiness, ACA
-        # may still be routing to the previous revision. For
-        # tag-propagation this is correct: Bicep redeploys
-        # re-apply the template, so the template tag is what the
-        # next deploy would produce anyway.
+      - name: Update Container App image
+        # The image-based rollout pattern documented at
+        # https://learn.microsoft.com/azure/container-apps/github-actions.
+        # `az containerapp update --image` creates a new revision
+        # without touching env vars, scaling, secrets binding, or
+        # any other infra-owned settings — those belong to
+        # `deploy-infra.yml`. Container App resource name == APP_NAME
+        # for the web app (worker uses `${APP_NAME}-worker`).
         env:
           APP_NAME:            ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
-          ACR_LOGIN_SERVER:    ${{ vars.ACR_LOGIN_SERVER }}
         run: |
           set -euo pipefail
-          # OTHER_APP_NAME is the Container App **resource** name
-          # (used with `--name`); OTHER_CONTAINER_NAME is the
-          # **container** name inside that resource's template
-          # (used in the JMESPath filter). For the worker app
-          # they differ — see `infra/modules/copilot-worker-app.bicep`,
-          # which sets `var workerName = '${appName}-worker'` for
-          # the resource and hardcodes the container's
-          # `name: 'copilot-worker'`.
-          OTHER_APP_NAME="${APP_NAME}-worker"
-          OTHER_CONTAINER_NAME="copilot-worker"
-          # Query the worker app's main container by name (not by
-          # positional index) so a future sidecar appended to the
-          # template's container list cannot silently mis-select
-          # the wrong image.
-          OTHER_IMAGE=$(az containerapp show \
-            --name "$OTHER_APP_NAME" \
+          az containerapp update \
+            --name "$APP_NAME" \
             --resource-group "$RESOURCE_GROUP_NAME" \
-            --query "properties.template.containers[?name=='$OTHER_CONTAINER_NAME'].image | [0]" -o tsv)
-          [[ -z "$OTHER_IMAGE" || "$OTHER_IMAGE" == "None" ]] && \
-            { echo "::error::worker app has no template image for container '$OTHER_CONTAINER_NAME' in resource '$OTHER_APP_NAME' (verify Container App resource exists and container naming matches infra/modules/copilot-worker-app.bicep)"; exit 1; }
-          EXPECTED_PREFIX="${ACR_LOGIN_SERVER}/${OTHER_APP_NAME}:"
-          [[ "$OTHER_IMAGE" == "${EXPECTED_PREFIX}"* ]] || \
-            { echo "::error::other app image '$OTHER_IMAGE' does not match expected prefix '$EXPECTED_PREFIX'"; exit 1; }
-          echo "OTHER_TAG=${OTHER_IMAGE##*:}" >> "$GITHUB_ENV"
+            --image "$IMAGE" \
+            --only-show-errors >/dev/null
 
-      - name: Deploy via Bicep
+      - name: Verify new revision is healthy
+        # `az containerapp update` returns 0 once ARM accepts the
+        # revision-creation request. If the new revision fails
+        # readiness, ACA keeps routing to the previous revision
+        # and the workflow would otherwise report green. Poll the
+        # latest revision until it reports `runningState=Running`
+        # and `provisioningState=Provisioned`, or fail loudly.
         env:
-          LOCATION:            ${{ vars.LOCATION }}
           APP_NAME:            ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
-          ACR_LOGIN_SERVER:    ${{ vars.ACR_LOGIN_SERVER }}
         run: |
           set -euo pipefail
-          az deployment sub create \
-            --name "$DEPLOY_NAME" \
-            --location "$LOCATION" \
-            --template-file infra/main.bicep \
-            --parameters @infra/main.parameters.json \
-            --parameters \
-              appName="$APP_NAME" \
-              resourceGroupName="$RESOURCE_GROUP_NAME" \
-              acrLoginServer="$ACR_LOGIN_SERVER" \
-              location="$LOCATION" \
-              webImageTag="$IMAGE_TAG" \
-              workerImageTag="$OTHER_TAG" \
-            --only-show-errors
-
-      - name: Cancel in-flight deployment on runner cancellation
-        if: cancelled()
-        run: |
-          az deployment sub cancel --name "$DEPLOY_NAME" --only-show-errors || true
+          rev=$(az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP_NAME" \
+            --query 'properties.latestRevisionName' -o tsv)
+          [[ -n "$rev" ]] || { echo "::error::could not resolve latest revision"; exit 1; }
+          echo "Latest revision: $rev"
+          for attempt in $(seq 1 30); do
+            read -r provisioning running < <(az containerapp revision show \
+              --name "$APP_NAME" --resource-group "$RESOURCE_GROUP_NAME" --revision "$rev" \
+              --query '[properties.provisioningState, properties.runningState] | join(`\t`, @)' -o tsv)
+            echo "attempt $attempt: provisioning=$provisioning running=$running"
+            case "$provisioning" in
+              Provisioned)
+                [[ "$running" == "Running" ]] && exit 0
+                ;;
+              Failed|Canceled)
+                echo "::error::revision $rev provisioning state '$provisioning'"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::revision $rev did not become healthy in 5 minutes (provisioning=$provisioning running=$running)"
+          exit 1

@@ -45,22 +45,12 @@ parameters with no defaults — operators must pass each tag explicitly,
 which keeps deployments deterministic and prevents a stale or `latest`
 tag from quietly rolling out.
 
-In CI the deploys are driven by two independent workflows
-([`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml),
-[`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml))
-that each trigger on `workflow_run` after CI succeeds on `main`,
-gate on a paths-filter scope
-([`.github/path-filters/`](../.github/path-filters/)), build their
-own image, then read the *other* app's currently-deployed image tag
-from Azure so they can pass both `webImageTag` and `workerImageTag`
-to `az deployment sub create` without disturbing the unchanged side.
-
 For a manual local build (e.g. testing a one-off image), pick a tag
 per image:
 
 ```bash
-WEB_TAG=sha-$(git rev-parse --short HEAD)
-WORKER_TAG=sha-$(git rev-parse --short HEAD)
+WEB_TAG=sha-$(git rev-parse HEAD)
+WORKER_TAG=sha-$(git rev-parse HEAD)
 REGISTRY=<acrLoginServer>
 APPNAME=<appName>
 
@@ -73,12 +63,10 @@ docker build -t "${REGISTRY}/${APPNAME}-worker:${WORKER_TAG}" -f Dockerfile.work
 docker push  "${REGISTRY}/${APPNAME}-worker:${WORKER_TAG}"
 ```
 
-After pushing, redeploy with
-`--parameters webImageTag=${WEB_TAG} workerImageTag=${WORKER_TAG}`
-(see [Redeploying with a new image
-tag](../infra/README.md#redeploying-with-a-new-image-tag)). Both
-parameters must be set — there is no default; supplying only one
-fails the Bicep validation.
+After pushing, roll the running Container App over to the new image
+with a single `az containerapp update --image` call — see
+[Manual rollback / forward-fix](#manual-rollback--forward-fix)
+below.
 
 The worker image is intentionally minimal: `npm run build:worker`
 emits `dist-worker/{bootstrap,server-main}.mjs` plus a generated
@@ -87,6 +75,80 @@ packages (`@github/copilot`, `@github/copilot-*` platform variants,
 `@hono/node-server`, `@azure/cosmos`, OTel SDK, …). The runtime stage
 runs `npm install --omit=dev` inside `dist-worker/` and starts via
 `CMD ["node", "bootstrap.mjs"]`.
+
+## Deployment model (three workflows, two responsibilities)
+
+CD splits cleanly along the line between **image rollouts** (cheap,
+frequent, app-scoped) and **infra reconciliation** (rare, environment-
+scoped, Bicep-owned). Three workflows, one shared concurrency group:
+
+| Workflow | Trigger scope | What it does | What it does NOT do |
+|---|---|---|---|
+| [`deploy-web.yml`](../.github/workflows/deploy-web.yml) | web sources, `Dockerfile`, web deps, own workflow file | builds + pushes web image, runs `az containerapp update --image`, polls revision health | touch Bicep, touch env vars, touch worker |
+| [`deploy-worker.yml`](../.github/workflows/deploy-worker.yml) | worker sources, `Dockerfile.worker`, worker deps, own workflow file | builds + pushes worker image, runs `az containerapp update --image`, polls revision health | touch Bicep, touch env vars, touch web |
+| [`deploy-infra.yml`](../.github/workflows/deploy-infra.yml) | `infra/main.bicep`, `infra/main.parameters.json`, `infra/modules/**`, own workflow file | reads each app's current image from Azure (or accepts bootstrap inputs), runs `az deployment sub create` | build or push any image |
+
+All three workflows share the concurrency group
+`deploy-aca-${{ github.ref_name }}` with `cancel-in-progress: false`.
+The serialisation matters because an infra apply reads each app's
+current image tag and re-asserts it; if a parallel app rollout
+changed the image between the read and the apply, the apply would
+silently roll the image back. The shared group makes that race
+impossible at the cost of running deploys sequentially — an
+acceptable trade for the deploy volume of this project.
+
+The image-update pattern is the
+[documented approach for ACA CD](https://learn.microsoft.com/en-us/azure/container-apps/github-actions#image-based-deployment-strategy):
+Bicep provisions configuration once; subsequent rollouts mutate only
+the image. Coupling every image rollout to a full Bicep apply was
+the over-engineered original design and is now gone.
+
+### Bootstrap (greenfield environment)
+
+`az containerapp update --image` requires the Container App to
+already exist. For a first-ever deploy:
+
+1. Push initial web and worker images to ACR by hand (see
+   [Building the images](#building-the-images) above for the exact
+   commands).
+2. Dispatch `deploy-infra.yml` manually with three inputs:
+   - `sha` — the commit SHA the images were built from
+   - `webImageTag` — the tag you just pushed for the web image
+   - `workerImageTag` — the tag you just pushed for the worker image
+3. The infra workflow's `Resolve image tags` step detects the
+   override inputs, skips the live-state read (which would fail
+   against a non-existent Container App), and runs Bicep with the
+   tags you supplied. Bicep provisions the Container Apps with the
+   correct image references on the first revision.
+4. Subsequent deploys flow through `deploy-web.yml` /
+   `deploy-worker.yml` automatically on every push to `main`.
+
+### Manual rollback / forward-fix
+
+Three rollback shapes are supported, each via a single workflow
+dispatch:
+
+| What broke | Workflow to dispatch | Inputs |
+|---|---|---|
+| Web code only | `deploy-web.yml` | `sha` = last-known-good web commit |
+| Worker code only | `deploy-worker.yml` | `sha` = last-known-good worker commit |
+| Infra change (env var, scaling, identity) | `deploy-infra.yml` | `sha` = last-known-good infra commit |
+| Web + worker (combined) | dispatch both app workflows; infra is left untouched | per-app rollback SHAs |
+
+The app workflows do **not** re-run Bicep, so a code rollback never
+disturbs env vars, scaling rules, or secret bindings. The infra
+workflow does **not** rebuild images, so an infra rollback never
+risks changing what code is running — it re-reads each app's
+current tag from Azure and reapplies Bicep with those exact tags.
+
+If both code and infra need to roll back together, dispatch the app
+workflows first; they advance the running image to the rollback
+build. Then dispatch the infra workflow; its live-state tag read
+picks up the rolled-back images and Bicep reconciles the rest.
+Inverting the order would cause the infra apply's tag read to see
+the broken images.
+
+
 
 ### Web image (`Dockerfile`) stages
 

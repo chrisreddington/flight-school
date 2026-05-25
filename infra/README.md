@@ -64,16 +64,19 @@ secret references at runtime.
    - **Worker:** `${acrLoginServer}/${appName}-worker:${workerImageTag}` —
      built from `Dockerfile.worker`. The Bicep template requires both
      `webImageTag` and `workerImageTag` as explicit parameters with no
-     defaults, so deployments are always deterministic. CI deploys are
-     driven by
+     defaults, so deployments are always deterministic. CD splits the
+     work across three workflows:
      [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
      and
-     [`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml),
-     which each rebuild their own image and read the *other* app's
-     currently-deployed tag from Azure before invoking
-     `az deployment sub create`. See
+     [`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml)
+     build their image and call `az containerapp update --image`;
+     [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
+     reads each app's current tag from Azure and runs
+     `az deployment sub create`. All three share the
+     `deploy-aca-${{ github.ref_name }}` concurrency group. See
      [`docs/deployment-aca.md`](../docs/deployment-aca.md) for the
-     equivalent manual `docker build` / push commands.
+     equivalent manual `docker build` / push commands and the
+     bootstrap / rollback runbooks.
 4. A **GitHub App** (not OAuth App) — see the next section.
 
 ## GitHub App setup
@@ -209,38 +212,44 @@ update it now to the real FQDN.
 
 ## Redeploying with a new image tag
 
-Each image is promoted independently. Push the rebuilt image (see
+The CI workflows ([`deploy-web.yml`](../.github/workflows/deploy-web.yml),
+[`deploy-worker.yml`](../.github/workflows/deploy-worker.yml)) handle
+routine image rollouts automatically by running `az containerapp update --image`
+— no Bicep apply needed, no operator action needed. For a manual
+rollout (e.g. testing a one-off build, or rolling back to an older
+SHA), push the image (see
 [Building the images](../docs/deployment-aca.md#building-the-images))
-and pass both `webImageTag` and `workerImageTag` to the Bicep deploy —
-the unchanged side keeps its previous tag:
-
-- `<acrLoginServer>/<appName>:<webImageTag>`
-- `<acrLoginServer>/<appName>-worker:<workerImageTag>`
+and update the single Container App over to it:
 
 ```bash
-# Read the currently-deployed worker tag (when promoting web only).
-WORKER_TAG=$(az containerapp show \
-  --name "${APP}-worker" --resource-group "${RG}" \
-  --query "properties.template.containers[?name=='copilot-worker'].image | [0]" -o tsv)
-WORKER_TAG="${WORKER_TAG##*:}"
+APP=<appName>
+RG=<resourceGroupName>
+ACR=<acrLoginServer>
+TAG=sha-<full-sha-from-git>
 
-az deployment sub create \
-  --name flightschool-$(date +%Y%m%d-%H%M%S) \
-  --location uksouth \
-  --template-file infra/main.bicep \
-  --parameters @infra/main.parameters.local.json \
-  --parameters webImageTag=sha-abc1234 workerImageTag="${WORKER_TAG}"
+# Web rollout
+az containerapp update \
+  --name "$APP" --resource-group "$RG" \
+  --image "${ACR}/${APP}:${TAG}"
+
+# Worker rollout
+az containerapp update \
+  --name "${APP}-worker" --resource-group "$RG" \
+  --image "${ACR}/${APP}-worker:${TAG}"
 ```
 
-Both `webImageTag` and `workerImageTag` are required parameters with
-no defaults, so omitting either fails the Bicep deploy. This prevents
-a one-sided promotion from silently rolling back the unchanged side.
-The two CI deploy workflows automate this read-current-tag step before
-invoking the same `az deployment sub create` command.
+The image-update path never touches Bicep, so env vars, scaling
+rules, and secret bindings stay exactly as they were. To roll back
+to a known-good tag, run the same command with an older SHA-pinned
+tag — image immutability in ACR guarantees the bits haven't moved.
 
-To roll back to a known-good tag, re-run the same command with the
-SHA-pinned tag of a previous good build (image immutability in ACR
-guarantees the bits haven't moved).
+For infra changes (env var wiring, scaling parameters, identity
+bindings), use [`deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
+instead — it reads each app's current image tag from Azure and runs
+`az deployment sub create` against `infra/main.bicep` without
+disturbing the running images. See
+[Deployment model](../docs/deployment-aca.md#deployment-model-three-workflows-two-responsibilities)
+for the bootstrap and combined-rollback runbooks.
 
 ## Rotating secrets
 
