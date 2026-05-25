@@ -265,6 +265,17 @@ Rules of the road:
 - **Double dedup is intentional.** `src/lib/api-client.ts` has its own
   `pendingRequests` map for in-flight GET dedup; TanStack Query has its
   own. Both run; they don't conflict.
+- **Cache-bypass refetch:** when a hook needs a "force refresh" action
+  (e.g. a refresh button), use `cancelQueries({ queryKey })` followed by
+  `fetchQuery({ queryKey, queryFn: bypassVariant, staleTime: 0 })`. Track
+  concurrent calls with a ref-counted in-flight guard so the loading
+  indicator only clears when the LAST overlapping refetch settles —
+  without the counter, call 2's `cancelQueries` triggers TanStack's
+  `revert: true` path which resolves call 1's wrapper promise
+  immediately, leaving call 2 still in flight against the (deduped)
+  network promise. See `src/hooks/use-user-profile.ts` `refetch()` for
+  the reference implementation and the divergent-settlement regression
+  test alongside it.
 
 ## Code Organization
 
