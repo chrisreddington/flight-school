@@ -33,6 +33,12 @@ declare module './.modules/aspire.js' {
     ): Promise<void>;
   }
 
+  interface ExecutableResource {
+    withHttpEndpoint(options: { port: number; targetPort: number; isProxied: boolean }): ExecutableResource;
+    withEnvironment(name: string, value: string | EndpointReferenceExpression): ExecutableResource;
+    getEndpoint(name: string): Promise<EndpointReference>;
+  }
+
   interface AspireBuilder {
     addAzureContainerAppEnvironment(name: string): AzureContainerAppEnvironmentResource;
     addNextJsApp(
@@ -40,6 +46,12 @@ declare module './.modules/aspire.js' {
       appDirectory: string,
       options?: { runScriptName?: string }
     ): NextJsAppResource;
+    addExecutable(
+      name: string,
+      command: string,
+      workingDirectory: string,
+      args: string[]
+    ): ExecutableResource;
     build(): {
       run(): Promise<void>;
     };

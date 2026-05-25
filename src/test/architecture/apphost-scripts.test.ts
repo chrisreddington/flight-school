@@ -25,6 +25,11 @@ describe('AppHost npm scripts', () => {
     expect(packageJson.scripts?.['dev:worker']).not.toContain('next dev');
   });
 
+  it('wires the worker into Aspire as an executable (not a Next.js app)', () => {
+    expect(apphostSource).toContain("addExecutable('copilot-worker'");
+    expect(apphostSource).not.toContain("addNextJsApp('copilot-worker'");
+  });
+
   it('pins the Turbopack root to this repository for parallel web and worker dev servers', () => {
     expect(nextConfigSource).toContain('turbopack:');
     expect(nextConfigSource).toContain('root: process.cwd()');

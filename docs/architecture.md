@@ -389,13 +389,12 @@ What each script actually does:
 
 AppHost wiring (read alongside the code):
 
-- The resource graph is declared in [`apphost.ts`](../apphost.ts).
-  Until Aspire's JavaScript hosting integration grows a first-class
-  `addNodeApp`/`addDockerfile` primitive, the worker is still declared
-  via `addNextJsApp` pointed at `runScriptName: 'dev:worker'` for
-  **local dev only**. The deployed container is Next-free (built from
-  [`Dockerfile.worker`](../Dockerfile.worker) over `dist-worker/`),
-  so the cosmetic mismatch never leaves your laptop.
+- The resource graph is declared in [`apphost.ts`](../apphost.ts). The
+  worker is wired via `addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])`
+  which spawns `tsx watch src/worker/bootstrap.ts` as a plain Node
+  process — Aspire never treats it as a Next.js app. The deployed
+  container builds from [`Dockerfile.worker`](../Dockerfile.worker)
+  over `dist-worker/` and is identical in shape to local dev.
 - The worker resource sets a shared `COPILOT_WORKER_SECRET` and a
   distinct `OTEL_SERVICE_NAME=flight-school-worker` so the dashboard
   can tell the two processes apart.
