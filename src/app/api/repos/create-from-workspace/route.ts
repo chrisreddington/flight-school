@@ -69,7 +69,7 @@ interface ExportErrorResponse {
  */
 export async function POST(
   request: NextRequest
-): Promise<NextResponse<ExportSuccessResponse | ExportErrorResponse>> {
+): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 

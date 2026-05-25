@@ -83,7 +83,7 @@ interface ErrorResponse {
  */
 export async function POST(
   request: NextRequest
-): Promise<NextResponse<IssueResponse | ErrorResponse>> {
+): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 
@@ -147,5 +147,5 @@ export async function POST(
         return handleApiError(error, 'Issues API', startTime);
       }
     },
-  ) as Promise<NextResponse<IssueResponse | ErrorResponse>>;
+  ) as Promise<Response>;
 }

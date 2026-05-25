@@ -13,7 +13,6 @@
  * @module jobs/redact
  */
 
-import 'server-only';
 import type { BackgroundJob } from './storage';
 
 /** Cap individual string fields in detail DTOs. */

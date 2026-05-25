@@ -75,7 +75,7 @@ interface ErrorResponse {
  */
 export async function POST(
   request: NextRequest
-): Promise<NextResponse<RepoResponse | ErrorResponse>> {
+): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 

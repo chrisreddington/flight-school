@@ -9,7 +9,6 @@
  * any more — the web tier never reads this file. The only consumer
  * is the worker singleton in `logger-worker.ts`.
  */
-import 'server-only';
 
 import { logger } from '@/lib/logger';
 import { deleteFile, ensureDir, readFile, writeFile } from '@/lib/storage/utils';

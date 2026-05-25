@@ -169,7 +169,7 @@ function buildProfileResponse(input: BuildProfileInput): ProfileResponse {
  * if the session token cannot be acquired. Returns `null` when the
  * error is not auth-shaped and the caller should propagate it.
  */
-function octokitOrErrorResponse(error: unknown): NextResponse | null {
+function octokitOrErrorResponse(error: unknown): Response | null {
   return knownApiErrorResponse(error);
 }
 
@@ -178,7 +178,7 @@ function octokitOrErrorResponse(error: unknown): NextResponse | null {
  * activity fetch, and the static fallback. Throws only when the
  * per-request Octokit cannot be resolved due to a non-auth error.
  */
-export async function handleProfileRequest(): Promise<NextResponse> {
+export async function handleProfileRequest(): Promise<Response> {
   const startTime = nowMs();
   log.info('Request started');
 

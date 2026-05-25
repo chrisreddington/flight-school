@@ -5,12 +5,14 @@
  * surface stays focused on rate-limit/auth concerns. AI routes import this
  * directly when they want to translate entitlement failures into a 402.
  *
+ * Returns a Web-standard `Response` (not `NextResponse`) so this helper
+ * stays reachable from both Next.js route handlers and the worker's Hono
+ * handlers.
+ *
  * The Copilot SDK is the only AI route. Users without a Copilot
  * entitlement always receive a 402 `copilot_required`; the legacy
  * GitHub Models REST fallback has been removed (H2).
  */
-
-import { NextResponse } from 'next/server';
 
 import {
   COPILOT_ENTITLEMENT_ERROR_NAME,
@@ -28,14 +30,14 @@ function isEntitlementError(error: unknown): error is CopilotEntitlementRequired
 }
 
 /**
- * Returns a `NextResponse` for an entitlement error, or `null` if `error`
+ * Returns a `Response` for an entitlement error, or `null` if `error`
  * is unrelated. Callers should check this *before* generic guard mapping
  * so the 402 takes precedence over a 500.
  */
-export function copilotEntitlementErrorResponse(error: unknown): NextResponse | null {
+export function copilotEntitlementErrorResponse(error: unknown): Response | null {
   if (!isEntitlementError(error)) return null;
 
-  return NextResponse.json(
+  return Response.json(
     {
       error: 'copilot_required',
       message: error.message,

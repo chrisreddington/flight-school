@@ -15,7 +15,6 @@
  * @module copilot/activity/dto
  */
 
-import 'server-only';
 import type { AIActivityEvent, AIActivityOutput } from './types';
 
 /** Truncate a string to N chars, appending an ellipsis when clipped. */

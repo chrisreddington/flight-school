@@ -16,7 +16,7 @@ interface GuidedPlanRequestBody {
   challengeDifficulty: string;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<Response> {
   const body = await parseJsonBodyWithFallback<GuidedPlanRequestBody>(request, {
     challengeTitle: '',
     challengeDescription: '',

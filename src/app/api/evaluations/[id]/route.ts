@@ -22,7 +22,7 @@ interface RouteContext {
 export async function GET(
   request: NextRequest,
   context: RouteContext
-): Promise<NextResponse> {
+): Promise<Response> {
   try {
     const { userId } = await requireUserContext();
     const { id: challengeId } = await context.params;
@@ -42,7 +42,7 @@ export async function GET(
 export async function DELETE(
   request: NextRequest,
   context: RouteContext
-): Promise<NextResponse> {
+): Promise<Response> {
   try {
     const { userId } = await requireUserContext();
     const { id: challengeId } = await context.params;

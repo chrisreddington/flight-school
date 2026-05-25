@@ -86,7 +86,7 @@ function assertSafeWorkspaceFilename(workspaceDir: string, name: unknown): void 
  * response describing why the request can't proceed.
  */
 async function resolveUserWorkspacesDir(): Promise<
-  { ok: true; userId: string; root: string } | { ok: false; response: NextResponse }
+  { ok: true; userId: string; root: string } | { ok: false; response: Response }
 > {
   let userId: string;
   try {

@@ -1,13 +1,17 @@
 /**
  * API Response Utilities
- * 
+ *
  * Standardized response builders for consistent API responses.
  * All API routes should use these utilities for uniform response format.
- * 
+ *
+ * Returns Web-standard `Response` (not `NextResponse`) so this helper
+ * is reachable from both Next.js route handlers and the worker's Hono
+ * handlers without pulling `next/server` into the worker import graph.
+ * Next routes that consume the result still treat it as a `Response`,
+ * which is what they returned to begin with.
+ *
  * @module api/response-utils
  */
-
-import { NextResponse } from 'next/server';
 
 /**
  * Standard success response format.
@@ -29,65 +33,51 @@ interface ApiErrorResponse {
 
 /**
  * Create a standardized success response.
- * 
+ *
  * @template T - Type of response data
  * @param data - Response payload
  * @param meta - Optional metadata (timing, etc.)
- * @returns Next.js response with standardized format
+ * @returns Web-standard response with standardized envelope.
  */
 export function apiSuccess<T>(
   data: T,
   meta?: Record<string, unknown>
-): NextResponse<ApiSuccessResponse<T>> {
-  return NextResponse.json({
+): Response {
+  const body: ApiSuccessResponse<T> = {
     success: true,
     data,
     ...(meta && { meta }),
-  });
+  };
+  return Response.json(body);
 }
 
 /**
  * Create a standardized error response.
- * 
- * @param error - Error message or Error object
- * @param meta - Optional metadata (timing, etc.)
- * @param status - HTTP status code (default: 500)
- * @returns Next.js response with standardized format
  */
 function apiError(
   error: string | Error,
   meta?: Record<string, unknown>,
   status = 500
-): NextResponse<ApiErrorResponse> {
+): Response {
   const errorMessage = error instanceof Error ? error.message : error;
-  
-  return NextResponse.json(
-    {
-      success: false,
-      error: errorMessage,
-      ...(meta && { meta }),
-    },
-    { status }
-  );
+  const body: ApiErrorResponse = {
+    success: false,
+    error: errorMessage,
+    ...(meta && { meta }),
+  };
+  return Response.json(body, { status });
 }
 
 /**
  * Create a validation error response (400).
- * 
+ *
  * @param message - Validation error message
  * @param meta - Optional metadata
- * @returns Next.js response with 400 status
- * 
- * @example
- * ```typescript
- * if (validationError) {
- *   return validationErrorResponse(validationError, { totalTimeMs });
- * }
- * ```
+ * @returns Web-standard response with 400 status.
  */
 export function validationErrorResponse(
   message: string,
   meta?: Record<string, unknown>
-): NextResponse<ApiErrorResponse> {
+): Response {
   return apiError(message, meta, 400);
 }

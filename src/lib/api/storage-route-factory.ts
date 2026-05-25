@@ -89,7 +89,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
    * responses appropriate for an API route.
    */
   async function resolveScopedPath(): Promise<
-    { ok: true; path: string; userId: string } | { ok: false; response: NextResponse }
+    { ok: true; path: string; userId: string } | { ok: false; response: Response }
   > {
     try {
       const resolved = await resolveUserScopedPath(filename);

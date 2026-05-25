@@ -14,7 +14,6 @@
  * @module worker/jobs/retention
  */
 
-import 'server-only';
 import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
 
