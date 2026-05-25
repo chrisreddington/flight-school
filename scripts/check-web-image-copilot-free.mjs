@@ -46,14 +46,49 @@ function fail(assertion, message) {
 // Three checks on the runner stage:
 //   r1: bans `COPY ... @github` (anywhere in the file)
 //   r2: bans `COPY ... /app/node_modules` (inside the runner stage only)
-//   r3: bans broad runner-stage `/app` copies (e.g. `COPY ... /app ./`
-//       or `COPY ... /app/ ./`) that would transitively re-introduce
-//       `node_modules` from any builder stage without triggering r2
+//   r3: allowlist-based — every runner-stage COPY source that begins
+//       with `/app` MUST start with one of `RUNNER_ALLOWED_SRC_PREFIXES`.
+//       This closes the broad-copy bypass for forms r2 never sees:
+//       `COPY ... /app ./`, `COPY ... /app/ ./`, `COPY ... /app/. ./`,
+//       `COPY ... /app/* ./`, and JSON-array form
+//       `COPY ["/app", "./"]`.
 //
 // Stage detection is header-anchored: enumerate `FROM ...` lines,
 // pick the one whose header text contains `AS runner`, and slice
 // from that header to the next header (or EOF). Tolerates flags on
 // the FROM line (e.g. `FROM --platform=linux/amd64 node:20-slim AS runner`).
+const RUNNER_ALLOWED_SRC_PREFIXES = ['/app/.next/', '/app/public'];
+
+/**
+ * Extract the list of source paths from a single Dockerfile COPY
+ * instruction (line-continuations already joined). Handles both
+ * shell-form (`COPY [--flag=v]... src... dst`) and JSON-array form
+ * (`COPY [--flag=v]... ["src",...,"dst"]`). Returns sources only
+ * (the final element — the destination — is dropped).
+ */
+function extractCopySources(copyLine) {
+  // Drop the leading `COPY` keyword and any `--flag=value` options.
+  // Flag values never contain whitespace at the Dockerfile syntax
+  // level so a single-token strip is safe.
+  const withoutKeyword = copyLine.replace(/^\s*COPY\b/i, '').trim();
+  const withoutFlags = withoutKeyword.replace(/(^|\s)--\S+/g, '').trim();
+
+  // JSON-array form: `["src", ..., "dst"]`.
+  if (withoutFlags.startsWith('[')) {
+    const arrayMatch = withoutFlags.match(/^\[([^\]]*)\]/);
+    if (!arrayMatch) return [];
+    const elements = arrayMatch[1]
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+    return elements.slice(0, -1);
+  }
+
+  // Shell form: whitespace-separated tokens, last is destination.
+  const tokens = withoutFlags.split(/\s+/).filter(Boolean);
+  return tokens.slice(0, -1);
+}
+
 async function assertionA() {
   const raw = await fs.readFile(DOCKERFILE, 'utf8');
   // Join `\` line continuations so multi-line COPY instructions match.
@@ -99,25 +134,30 @@ async function assertionA() {
     );
   }
 
-  // r3: catch broad runner-stage copies whose source is `/app` or
-  // `/app/` (without a more specific tail). A line like
-  // `COPY --from=builder /app ./` would drag every builder-stage
-  // package into the runner image without matching r2.
-  //
-  // Allowed runner-stage sources are deliberately narrow — explicit
-  // descendants of `/app/.next` or `/app/public`. Anything else is
-  // suspect and must be re-justified.
-  const broadAppCopyRegex = /^\s*COPY\b[^\n]*?(\s|=)\/app(\/?)(\s|$)/gim;
-  const matches = [...runnerStage.matchAll(broadAppCopyRegex)];
-  for (const match of matches) {
-    fail(
-      'Assertion A',
-      `Runner-stage broad source path \`/app\` (or \`/app/\`) is ` +
-        `forbidden: it would transitively copy \`node_modules\` from ` +
-        `the source stage into the final image. Scope to a specific ` +
-        `descendant (e.g. \`/app/.next/standalone\`) and re-justify ` +
-        `the gate.\n  matched: ${match[0].trim()}`,
-    );
+  // r3: parse every runner-stage COPY instruction, extract its source
+  // paths, and require any source starting with `/app` to match the
+  // explicit allowlist. This catches every broad-copy shape that
+  // would drag builder-stage `node_modules` into the runner image:
+  // `/app`, `/app/`, `/app/.`, `/app/*`, and JSON-array form.
+  const copyLineRegex = /^\s*COPY\b[^\n]*/gim;
+  const copyLines = [...runnerStage.matchAll(copyLineRegex)].map((m) => m[0]);
+  for (const copyLine of copyLines) {
+    const sources = extractCopySources(copyLine);
+    for (const src of sources) {
+      if (!src.startsWith('/app')) continue;
+      const allowed = RUNNER_ALLOWED_SRC_PREFIXES.some((p) => src.startsWith(p));
+      if (!allowed) {
+        fail(
+          'Assertion A',
+          `Runner-stage COPY source \`${src}\` is not in the allowlist ` +
+            `(${RUNNER_ALLOWED_SRC_PREFIXES.join(', ')}). A broad \`/app\` ` +
+            `source would transitively copy \`node_modules\` from the ` +
+            `source stage into the final image. Scope to a specific ` +
+            `descendant or extend the allowlist with justification.\n` +
+            `  in: ${copyLine.trim()}`,
+        );
+      }
+    }
   }
 }
 
