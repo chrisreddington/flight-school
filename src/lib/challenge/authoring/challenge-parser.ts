@@ -23,8 +23,6 @@ interface RawChallenge {
   whyThisChallenge?: string[];
 }
 
-// JSON extraction logic moved to @/lib/utils/json-utils for reusability
-
 /**
  * Validates difficulty level.
  */

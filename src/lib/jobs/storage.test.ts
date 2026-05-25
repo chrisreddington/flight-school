@@ -185,7 +185,7 @@ describe('jobStorage', () => {
     });
   });
 
-  describe('concurrency (Phase 1 mutex)', () => {
+  describe('concurrency mutex', () => {
     it('serialises parallel create calls so all jobs survive', async () => {
       // Without the withJobsMutation mutex, concurrent create() calls race on
       // the load → mutate → save sequence and lose updates. With the mutex,
@@ -291,7 +291,7 @@ describe('jobStorage', () => {
     });
   });
 
-  describe('terminal CAS helpers (Phase 5)', () => {
+  describe('terminal CAS helpers', () => {
     it('markCompletedIdempotent transitions a running job and persists the result', async () => {
       await jobStorage.create({ id: 'cas-c1', type: 'chat-response', userId: 'u1', input: {} });
       await jobStorage.markRunning('cas-c1');

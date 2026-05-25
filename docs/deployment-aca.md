@@ -86,14 +86,26 @@ but the web runtime never spawns the CLI subprocess.
 2. **`builder`** – runs `npm run build`, producing `.next/standalone` thanks to
    `output: 'standalone'` in `next.config.ts`.
 3. **`runner`** – a clean `node:20-slim` image with only the standalone server,
-   static assets, `public/`, and the `@github/*` packages copied in. Runs as
-   the non-root `node` user under `tini` for clean signal handling.
+   static assets, and `public/`. Runs as the non-root `node` user under
+   `tini` for clean signal handling. The `@github/copilot*` packages are
+   deliberately **not** copied into this stage — SDK execution lives in
+   the worker image.
 
-> Trimming `@github/copilot*` out of the web image is a future
-> optimisation — once nothing in the Next.js bundle imports it
-> transitively, the web image can drop those packages entirely. The
-> [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
-> guard already enforces that SDK *execution* stays worker-only.
+> The web image is provably free of the `@github/*` namespace, enforced
+> by four CI gates running on every PR:
+>
+> 1. [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
+>    bans SDK imports outside worker scopes at the source level.
+> 2. `scripts/check-web-image-copilot-free.mjs` Assertion A lints the
+>    `Dockerfile` for any `COPY ... @github` instruction and any
+>    `COPY ... /app/node_modules` in the runner stage.
+> 3. Assertion B walks `.next/standalone/**` after build and fails if any
+>    `node_modules/@github/*` directory exists.
+> 4. Assertion C scans every built `.js`/`.mjs`/`.cjs` for runtime
+>    `require`/`import` edges into `@github/copilot*`. The
+>    `serverExternalPackages` entry in `next.config.ts` is the runtime
+>    fail-loud net — if all four gates were bypassed, the container would
+>    crash at startup with "Cannot find module".
 
 ### Worker image notes
 

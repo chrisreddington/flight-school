@@ -37,3 +37,6 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+      - name: Check web image is Copilot SDK-free
+        run: npm run check:web-image

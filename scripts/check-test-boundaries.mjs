@@ -20,8 +20,6 @@
  *
  * Baseline schema:
  *   { "<relativePath>": <count>, ... }
- *
- * Phase 8 deletes the baseline file entirely.
  */
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';

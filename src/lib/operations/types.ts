@@ -34,7 +34,7 @@ interface OperationMeta {
    * worker is filling in. Set during {@link operationsManager.initialize}
    * from the {@link JobListDTO} so the chat hook can register the
    * `chatStreamStore` record on a cold reload without waiting for a
-   * delta to arrive (Phase 5).
+   * delta to arrive.
    */
   assistantMessageId?: string;
 }
@@ -72,7 +72,7 @@ export interface OperationsSnapshot {
    * Whether {@link operationsManager.initialize} has completed at
    * least once for this session. Hooks gate stale-stream cleanup on
    * this so we never treat the empty pre-hydration snapshot as
-   * evidence that an in-flight stream has ended (Phase 5).
+   * evidence that an in-flight stream has ended.
    */
   hydrated: boolean;
 }

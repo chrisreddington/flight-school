@@ -35,8 +35,9 @@ describe('copilotEntitlementErrorResponse', () => {
     expect(res!.status).toBe(402);
   });
 
-  // H2: the GitHub Models REST fallback was removed. The 402 body must
-  // never advertise a `fallback` hint — Copilot is now the only AI route.
+  // Copilot is the only AI route. Users without a Copilot entitlement
+  // get a 402 with no `fallback` hint — there is no alternative provider
+  // to point at.
   it('never includes a `fallback` field in the 402 body', async () => {
     const res = copilotEntitlementErrorResponse(new CopilotEntitlementRequiredError());
     const body = await res!.json();

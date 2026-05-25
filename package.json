@@ -42,6 +42,7 @@
     "check:server-fetch-tenancy": "node scripts/check-server-fetch-tenancy.mjs",
     "check:server-action-guards": "node scripts/check-server-action-guards.mjs",
     "check:copilot-sdk-boundary": "node scripts/check-copilot-sdk-boundary.mjs",
+    "check:web-image": "node scripts/check-web-image-copilot-free.mjs",
     "check:worker-next-free": "node scripts/check-worker-next-free.mjs",
     "check:guardrails": "npm run check:sizes && npm run check:test-boundaries && npm run check:cache-key-scope && npm run check:server-fetch-tenancy && npm run check:server-action-guards && npm run check:copilot-sdk-boundary && npm run check:worker-next-free && npm run debt:unused",
     "maintainability:check": "npm run debt:unused -- --reporter compact && npm run debt:deps && npm run debt:circular && npm run check:sizes",

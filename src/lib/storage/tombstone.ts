@@ -5,26 +5,21 @@
  * (notably {@link executeChatResponse}) may still hold a Copilot SDK
  * session open and try to flush a final delta to `threads.json` after
  * the cancellation signal — racing the wipe and silently recreating
- * the user's data immediately after they asked to delete it
- * (rubber-duck #6).
+ * the user's data immediately after they asked to delete it.
  *
  * The fix: write the tombstone BEFORE deleting the user's directory.
  * Every background writer that touches per-user state checks
  * {@link isUserDeleted} first and aborts cleanly when set.
  *
- * ## Phase 5 path migration
+ * ## Tombstone path
  *
- * The tombstone used to live at `users/{userId}/.deleted` — INSIDE
- * the subtree the deletion endpoint then wiped. That meant the
- * tombstone itself was removed by the cleanup, so a late executor
- * write that arrived after the wipe re-materialised user data and
- * was no longer blocked by the marker (the marker was already gone).
- *
- * Phase 5 moves the path to `tombstones/{userId}` — OUTSIDE the
- * deleted subtree. A late write is now blocked indefinitely; only an
- * explicit successful sign-in clears the marker. The reader still
- * falls back to the legacy path so tombstones written by older
- * builds remain effective during a rolling deploy.
+ * The tombstone lives at `tombstones/{userId}` — outside the per-user
+ * subtree that `DELETE /api/user/data` wipes. A late executor write
+ * that arrives after the wipe is therefore still blocked: the marker
+ * survives the cleanup and only an explicit successful sign-in clears
+ * it. Lookups also fall back to the legacy `users/{userId}/.deleted`
+ * path so tombstones written by older builds remain effective during a
+ * rolling deploy.
  *
  * @module storage/tombstone
  */
@@ -57,9 +52,9 @@ export async function isUserDeleted(userId: string): Promise<boolean> {
     tombstoneCache.set(userId, true);
     return true;
   }
-  // Legacy fallback: pre-Phase-5 builds wrote to `users/{userId}/.deleted`.
-  // Honour it so a deploy that interleaves old & new instances doesn't
-  // accidentally resurrect a deleted user.
+  // Fall back to the legacy `users/{userId}/.deleted` path so a deploy
+  // that interleaves old & new instances doesn't accidentally resurrect
+  // a deleted user.
   const legacy = await readFile(
     `${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`,
     LEGACY_TOMBSTONE_FILENAME,

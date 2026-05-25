@@ -1,9 +1,9 @@
 /**
  * Chat Stream Event Helpers
  *
- * Wire-format type for chat SSE frames plus pure dispatch helpers
- * extracted from `useLearningChatStream`. Kept in the hooks layer so we
- * do not cross the `@/worker/jobs/streaming/*` boundary.
+ * Wire-format type for chat SSE frames plus pure dispatch helpers.
+ * Lives in the hooks layer so the UI does not cross the
+ * `@/worker/jobs/streaming/*` boundary.
  *
  * The `SSEStreamEvent` shape MUST stay in sync with
  * `src/worker/jobs/streaming/types.ts`.

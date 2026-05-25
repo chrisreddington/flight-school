@@ -4,7 +4,7 @@
  *
  * Every exported async function in a `'use server'` file (or function
  * with a per-function `'use server'` directive) must either:
- *   - call `requireGuardedUserContext` (the Phase 3 guard core), or
+ *   - call `requireGuardedUserContext`, or
  *   - carry a `// public-action:` comment with justification.
  *
  * Name-based allowlists are explicitly not acceptable; the only escape

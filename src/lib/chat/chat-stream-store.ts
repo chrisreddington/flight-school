@@ -1,11 +1,11 @@
 /**
  * Client-side in-memory store for live chat-stream state.
  *
- * Phase 5 of the streaming architecture refactor moves mid-stream
- * assistant content out of `threads.json` (worker no longer performs
- * 500 ms durable consolidations) and into this in-process store. The
- * store survives unmounts so cross-tab / route-change navigation can
- * resume a stream without losing buffered deltas.
+ * Mid-stream assistant content lives in this in-process store rather
+ * than `threads.json` so the worker does not need to perform durable
+ * consolidations during streaming. The store survives unmounts so
+ * cross-tab / route-change navigation can resume a stream without
+ * losing buffered deltas.
  *
  * ## Sequence model
  *

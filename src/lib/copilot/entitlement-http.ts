@@ -10,8 +10,8 @@
  * handlers.
  *
  * The Copilot SDK is the only AI route. Users without a Copilot
- * entitlement always receive a 402 `copilot_required`; the legacy
- * GitHub Models REST fallback has been removed (H2).
+ * entitlement always receive a 402 `copilot_required` with no
+ * `fallback` hint — there is no alternative provider to point at.
  */
 
 import {

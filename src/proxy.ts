@@ -1,5 +1,5 @@
 /**
- * Next.js 16 proxy (formerly `middleware`): gates the app behind Auth.js.
+ * Next.js 16 proxy: gates the app behind Auth.js.
  *
  * - Public paths (auth endpoints, health, sign-in, Next internals, static
  *   assets) are always allowed.

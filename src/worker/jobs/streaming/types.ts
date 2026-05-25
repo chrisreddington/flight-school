@@ -80,9 +80,9 @@ export function isTerminalEvent(event: JobStreamEvent): boolean {
 /**
  * Map a terminal job status into the corresponding {@link JobStreamEvent}.
  *
- * Used by the Phase 5 worker terminal sequence so the same helper is
- * used by `appendTerminalIfNotTerminated` from both the happy path and
- * the catch/cancellation branches.
+ * Used by the worker terminal sequence so the same helper drives
+ * `appendTerminalIfNotTerminated` from both the happy path and the
+ * catch/cancellation branches.
  *
  * `completed` → `done`, `cancelled` → `cancelled`, `failed` → `failed`.
  */

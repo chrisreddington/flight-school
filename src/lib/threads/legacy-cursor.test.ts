@@ -2,8 +2,9 @@
  * Tests for {@link stripLegacyCursorFromThread}.
  *
  * The helper normalises threads that may have been persisted with the
- * pre-Phase-5 `▊` cursor glyph. Identity preservation is asserted so
- * downstream `React.memo` callers can rely on reference stability.
+ * `▊` cursor glyph by an older worker. Identity preservation is
+ * asserted so downstream `React.memo` callers can rely on reference
+ * stability.
  */
 
 import { describe, expect, it } from 'vitest';

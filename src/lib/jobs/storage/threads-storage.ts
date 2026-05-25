@@ -63,8 +63,9 @@ export async function getThreadById(userId: string, threadId: string): Promise<T
   const threads = await readThreadsStorage(userId);
   const thread = threads.find(t => t.id === threadId);
   if (!thread) return null;
-  // Phase 5: scrub the legacy `▊` cursor glyph from any thread that
-  // was last persisted by a pre-Phase-5 worker.
+  // Strip the `▊` cursor glyph from any thread last persisted by an
+  // older worker that wrote partial assistant content into the
+  // durable thread.
   return stripLegacyCursorFromThread(thread);
 }
 

@@ -58,18 +58,17 @@ interface LearningChatProps {
   /** IDs of ALL threads that are currently streaming */
   streamingThreadIds?: string[];
   /**
-   * Phase 5: live partial assistant content for the active thread,
-   * served from the client `chatStreamStore` (never the durable
-   * thread). Empty when nothing is in flight.
+   * Live partial assistant content for the active thread, served from
+   * the client `chatStreamStore` (never the durable thread). Empty when
+   * nothing is in flight.
    */
   streamingContent?: string;
   /**
-   * Phase 5: stable id of the in-flight assistant message in the
-   * active thread, used to identify the streaming `MessageBubble`
-   * (replaces the pre-Phase-5 `▊` glyph check).
+   * Stable id of the in-flight assistant message in the active thread,
+   * used to identify the streaming `MessageBubble`.
    */
   streamingAssistantMessageId?: string | null;
-  /** Phase 5: tool events emitted by the in-flight chat job. */
+  /** Tool events emitted by the in-flight chat job. */
   streamingToolEvents?: import('@/lib/threads/types').ToolCallEvent[];
   /** User's avatar URL */
   userAvatarUrl?: string;
@@ -238,9 +237,9 @@ export const LearningChat = memo(function LearningChat({
           ) : (
             <div className={styles.messagesList}>
               {displayMessages.map((message) => {
-                // Phase 5: a message is rendered as streaming when
-                // its id matches the live `streamingAssistantMessageId`
-                // surfaced by the chat-stream store.
+                // A message is rendered as streaming when its id matches
+                // the live `streamingAssistantMessageId` surfaced by the
+                // chat-stream store.
                 const isMessageStreaming =
                   message.role === 'assistant' &&
                   streamingAssistantMessageId !== null &&

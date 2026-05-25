@@ -101,7 +101,7 @@ interface UseLearningChatState {
   isThreadsLoading: UseThreadsReturn['isLoading'];
   /** Whether a message is being processed (in the active thread) */
   isStreaming: boolean;
-  /** Live streaming assistant content for the active thread (post-Phase-5: served from chatStreamStore, not the durable thread). */
+  /** Live streaming assistant content for the active thread, served from `chatStreamStore` rather than the durable thread. */
   streamingContent: string;
   /** Stable id of the in-flight assistant message in the active thread, or null when nothing is streaming. */
   streamingAssistantMessageId: string | null;

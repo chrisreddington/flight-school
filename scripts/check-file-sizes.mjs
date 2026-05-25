@@ -10,7 +10,7 @@
  * today's offenders by path. For any file in the baseline, the script
  * fails if the file's current LOC exceeds the baselined LOC (regression).
  * For any file NOT in the baseline, the script fails if it exceeds the
- * applicable cap. Phase 8 deletes the baseline file entirely.
+ * applicable cap.
  *
  * Baseline schema:
  *   { "production": { "<relativePath>": <loc>, ... },
@@ -75,7 +75,7 @@ for (const relativePath of files) {
     failures.push(
       `${relativePath} has ${current} LOC, ${kind} cap is ${cap}. ` +
       `Split the module or, if unavoidable, add it to .size-budget-baseline.json ` +
-      `(every baseline entry must shrink by Phase 8).`,
+      `(every baseline entry must shrink toward the cap).`,
     );
   }
 }

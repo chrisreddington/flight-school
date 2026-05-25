@@ -398,7 +398,7 @@ describe('useLearningChatStream (renderHook)', () => {
     await waitFor(() => expect(operationsState.completeMock.calls).toEqual(['j1']));
   });
 
-  it('does NOT refresh threads on every delta — only on terminal frames (Phase 5: store carries deltas)', async () => {
+  it('does NOT refresh threads on every delta — only on terminal frames', async () => {
     const thread = streamingThread('t1');
     setChatOps([mkChatOp('j1', 't1')]);
     const { refreshThreads } = renderChatStream({

@@ -54,7 +54,7 @@ describe('tombstone', () => {
     expect(await isUserDeleted('u-2')).toBe(false);
   });
 
-  it('writes the marker outside the users/ subtree (Phase 5 path)', async () => {
+  it('writes the marker outside the users/ subtree', async () => {
     const { markUserDeleted } = await import('./tombstone');
     await markUserDeleted('u-3');
     const newPath = path.join(tmpDir, 'tombstones', 'u-3.json');
@@ -65,7 +65,7 @@ describe('tombstone', () => {
   });
 
   it('falls back to the legacy users/{id}/.deleted path on read', async () => {
-    // Simulate a tombstone written by a pre-Phase-5 build by writing
+    // Simulate a tombstone written by an older build by writing
     // directly to the legacy location.
     const legacyDir = path.join(tmpDir, 'users', 'legacy-user');
     await fs.mkdir(legacyDir, { recursive: true });

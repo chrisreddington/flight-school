@@ -1,7 +1,7 @@
 /**
  * Proxy gating suite.
  *
- * Verifies the Auth.js-backed Next.js 16 proxy (formerly `middleware`):
+ * Verifies the Auth.js-backed Next.js 16 proxy:
  * - Returns 401 JSON for unauthenticated `/api/*` requests
  * - Redirects unauthenticated UI requests to `/sign-in` with a callbackUrl
  * - Lets public paths (`/api/health`, `/api/auth/*`, `/_next`, assets) through

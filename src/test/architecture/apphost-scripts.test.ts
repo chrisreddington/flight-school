@@ -39,9 +39,10 @@ describe('AppHost npm scripts', () => {
   });
 
   it('does not set obsolete worker env vars on the worker resource', () => {
-    // COPILOT_WORKER_MODE branching was removed when the worker became a
-    // standalone Hono process; COPILOT_WORKER_ENABLED has no consumer in
-    // src/. Both must stay off the worker resource.
+    // The AppHost spawns the worker unconditionally; no env var gates
+    // this behaviour. `COPILOT_WORKER_MODE` and `COPILOT_WORKER_ENABLED`
+    // have no consumer in src/ and must stay off the worker resource so
+    // a future edit cannot reintroduce mode-switching by accident.
     expect(apphostSource).not.toContain('COPILOT_WORKER_MODE');
     expect(apphostSource).not.toContain('COPILOT_WORKER_ENABLED');
     // NEXT_OTEL_FETCH_DISABLED must appear EXACTLY once — on the web

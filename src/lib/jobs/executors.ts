@@ -52,7 +52,7 @@ export interface ChatResponseInput {
    *
    * Validated by the server as RFC4122 v4 shape. The server falls back
    * to `generateMessageId()` only for backwards compatibility with
-   * pre-Phase-D clients that haven't started sending the field yet.
+   * older clients that haven't started sending the field yet.
    */
   assistantMessageId?: string;
   /** Repository full names (e.g., 'owner/repo') to focus MCP tools on */

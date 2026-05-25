@@ -12,7 +12,7 @@
  *
  * Cross-process write races (web + worker writing the same `background-jobs`
  * file) are NOT solved here — that requires the worker to become the sole
- * writer (Phase 2B of the streaming architecture plan).
+ * writer.
  */
 
 import { deleteStorage } from '@/lib/storage/utils';
@@ -319,9 +319,9 @@ export const jobStorage = {
   },
 
   /**
-   * @deprecated The module-level cache was removed in Phase 1 of the storage
-   * refactor; reads always hit disk. Kept as a no-op for call-site
-   * compatibility until defensive `invalidateCache()` calls are cleaned up.
+   * @deprecated Reads always hit disk; there is no in-memory cache to
+   * invalidate. Kept as a no-op for call-site compatibility until
+   * defensive `invalidateCache()` calls are cleaned up.
    */
   invalidateCache(): void {
     // intentionally empty

@@ -80,9 +80,9 @@ function validateSchema(data: unknown): data is JobsStorageSchema {
 }
 
 /**
- * Always reads from disk. The module-level cache was removed in Phase 1 of
- * the streaming architecture refactor — it caused cross-process stale reads
- * that surfaced as "worker dispatch failed" after the first job.
+ * Always reads from disk. A module-level cache would cause cross-process
+ * stale reads — the worker and web processes both load and mutate this
+ * file, so each call must see the latest committed state.
  */
 export async function loadJobs(): Promise<JobsStorageSchema> {
   try {

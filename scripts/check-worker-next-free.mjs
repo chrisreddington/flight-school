@@ -7,28 +7,20 @@
  * process never accidentally pulls in Next.js framework code, which
  * would (a) bloat the worker image, (b) reintroduce request-bound
  * state that doesn't belong in a long-lived job runner, and (c)
- * defeat the whole point of extracting the worker out of Next.
+ * defeat the whole point of running the worker outside Next.
  *
- * Lifecycle:
- *   - **Pre-B.7-3** (this commit): `src/worker/bootstrap.ts` does not
- *     yet exist. The script prints a notice and exits 0. Adding it
- *     here is intentional — it lands in the same commit as the
- *     `src/lib/**` Next-detangling refactor (B.1) so subsequent
- *     commits can rely on the gate being wired into
- *     `check:guardrails`.
- *   - **From B.7-3 onward**: the script imports the shared esbuild
- *     options module, runs an in-memory bundle of the worker entry
- *     with `metafile: true`, and asserts that:
+ * Behaviour:
+ *   - Imports the shared esbuild options module, runs an in-memory
+ *     bundle of the worker entry with `metafile: true`, and asserts:
  *       (a) no input file lives under `node_modules/next/`,
  *       (b) no output `imports[*].path` matches `^next($|/)`, and
  *       (c) no input or output references the `server-only` marker
- *           package (which is purely a Next-compiler signal and a
- *           runtime no-op in plain Node — see plan B.1).
+ *           package (a Next-compiler signal that is a runtime no-op
+ *           in plain Node).
  *
- * The IDENTICAL bundler config used in production must be reused
- * here (same entryPoints, externals, platform, target, conditions,
- * aliases). Otherwise the gate can pass while production fails —
- * see plan R6: codex-dev MED-2.
+ * Uses the IDENTICAL bundler config as production (same entryPoints,
+ * externals, platform, target, conditions, aliases). Otherwise the
+ * gate could pass while production fails.
  */
 
 import { access } from 'node:fs/promises';
@@ -96,11 +88,10 @@ async function runMetafileScan() {
 
 async function main() {
   if (!(await fileExists(BOOTSTRAP_ENTRY))) {
-    console.log(
-      'check-worker-next-free: src/worker/bootstrap.ts not yet present; gate is dormant ' +
-        'until the worker extraction lands (plan B.7-3). Exiting 0.',
+    console.error(
+      `check-worker-next-free: worker entry not found at ${BOOTSTRAP_ENTRY}.`,
     );
-    return;
+    process.exit(1);
   }
 
   const leaks = await runMetafileScan();

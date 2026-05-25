@@ -2,10 +2,10 @@
  * Worker-side job-record retention sweepers.
  *
  * These three sweepers operate exclusively on `BackgroundJob` records
- * via `jobStorage`. They are kept in the worker tree (and away from
- * `@/lib/storage/user-retention`) because once the dispatch flip in
- * Phase 2B.2 lands, the worker becomes the sole writer of the jobs
- * store and these sweeps must run inside the worker process.
+ * via `jobStorage`. They live in the worker tree (and away from
+ * `@/lib/storage/user-retention`) because the worker is the sole
+ * writer of the jobs store, so these sweeps must run inside the
+ * worker process.
  *
  * Each function accepts an explicit `nowMs` where applicable and
  * returns aggregate counts so the cron handler never inspects raw
@@ -26,10 +26,10 @@ export interface SweepResult {
   deleted: number;
   inspected: number;
   /**
-   * IDs of jobs that transitioned to `failed` (Phase 5 added so the
-   * sweep route can annotate the durable chat thread with a
+   * IDs of jobs that transitioned to `failed`. The sweep route uses
+   * these to annotate the durable chat thread with a
    * `*(Response interrupted)*` marker for any chat-response job that
-   * was streaming when the worker stalled).
+   * was streaming when the worker stalled.
    */
   sweptIds?: string[];
 }

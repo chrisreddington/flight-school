@@ -18,7 +18,7 @@ reference environment for Flight School on **Azure Container Apps (ACA)**.
 | Container Apps managed environment `cae-<appName>` | Consumption workload profile |
 | Cosmos DB (NoSQL, **serverless**) | DB `flightschool`, container `sessions` (partition key `/userId`, 30-day TTL) for future server-side session/token store |
 | Key Vault `kv-<appName>-<hash>` | RBAC-enabled; holds Auth.js, GitHub App, Cosmos, and App Insights secrets |
-| Container App `<appName>` | Public Next.js web app — browser traffic, OAuth, Octokit, and SSE proxy to the worker (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<imageTag>` (built from `Dockerfile`). The web image does not execute the Copilot SDK or CLI; the `@github/copilot*` packages may still be installed transitively until trimming lands. |
+| Container App `<appName>` | Public Next.js web app — browser traffic, OAuth, Octokit, and SSE proxy to the worker (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<imageTag>` (built from `Dockerfile`). The web image does not execute the Copilot SDK or CLI and ships zero `@github/*` packages, enforced by `npm run check:web-image`. |
 | Container App `<appName>-worker` | Private internal Copilot worker — owns the Copilot SDK, the CLI subprocesses, the per-user runtime pool, and `/api/internal/*` (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<imageTag>` (built from `Dockerfile.worker`) |
 
 The Container App runs with a **system-assigned managed identity** that is

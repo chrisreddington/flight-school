@@ -9,9 +9,9 @@
  * read. Mismatched ownership returns `404 Not Found` to avoid leaking
  * job-id existence across tenants.
  *
- * NOTE: After Phase 2B.2 the DELETE no longer hard-deletes — the worker
- * marks the record cancelled and retention sweeps clear it later. This
- * preserves the synthesized-terminal SSE path for late reconnects.
+ * DELETE marks the record cancelled rather than hard-deleting; retention
+ * sweeps clear it later. This preserves the synthesized-terminal SSE
+ * path for late reconnects.
  */
 
 import { logger } from '@/lib/logger';
