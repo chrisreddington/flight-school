@@ -52,10 +52,12 @@ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 # Copy `@github/*` packages into the runtime layer. The web container does
 # NOT spawn the Copilot CLI any more — that responsibility moved to the
 # worker image — but the Next.js standalone tracer still wants these
-# packages on disk because shared code in the Next.js bundle imports
-# their types/entry points. Dropping them is a follow-up optimisation
-# guarded by `scripts/check-copilot-sdk-boundary.mjs` (which enforces
-# that SDK *execution* stays worker-only).
+# packages on disk because at least one shared module in the Next.js
+# bundle imports a value from the SDK (type-only imports are erased
+# before the tracer runs, so they would not cause inclusion). Dropping
+# them is a follow-up optimisation guarded by
+# `scripts/check-copilot-sdk-boundary.mjs` (which enforces that SDK
+# *execution* stays worker-only).
 COPY --from=builder --chown=node:node /app/node_modules/@github ./node_modules/@github
 
 USER node
