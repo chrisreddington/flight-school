@@ -95,8 +95,10 @@ worker image. The runner stage ships zero `@github/*` packages.
 > 1. [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
 >    bans SDK imports outside worker scopes at the source level.
 > 2. `scripts/check-web-image-copilot-free.mjs` Assertion A lints the
->    `Dockerfile` for any `COPY ... @github` instruction and any
->    `COPY ... /app/node_modules` in the runner stage.
+>    `Dockerfile`: it bans any `COPY ... @github` anywhere in the file
+>    and applies a positive allowlist to every runner-stage COPY source
+>    (only `/app/.next/**` and `/app/public[/**]` are admitted; relative,
+>    glob, variable, traversal, and broad-tree sources all fail).
 > 3. Assertion B walks `.next/standalone/**` after build and fails if any
 >    `node_modules/@github/*` directory exists.
 > 4. Assertion C scans every built `.js`/`.mjs`/`.cjs` for runtime
