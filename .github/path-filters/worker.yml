@@ -15,3 +15,5 @@ worker:
   - 'tsconfig.json'
   - '.github/workflows/deploy-worker.yml'
   - '.github/path-filters/worker.yml'
+  # `infra/**` is in both filters — see comment in web.yml.
+  - 'infra/**'

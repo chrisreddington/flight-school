@@ -286,6 +286,13 @@ describe('path-filter scopes — representative mapping', () => {
     'src/lib/copilot/execution/index.ts',
     'package.json',
     'tsconfig.json',
+    // Bicep / infra changes (env-var wiring, scaling, resource
+    // properties) must roll out via the next deploy on either side —
+    // included in BOTH filters so the deploy that fires re-converges
+    // both apps.
+    'infra/main.bicep',
+    'infra/main.parameters.json',
+    'infra/modules/container-app.bicep',
   ];
   const neither = ['README.md', 'docs/architecture.md', 'CONTRIBUTING.md'];
 
@@ -297,13 +304,18 @@ describe('path-filter scopes — representative mapping', () => {
     });
   }
   function parseFilterPatterns(yamlText: string, key: 'web' | 'worker'): string[] {
-    const sectionPattern = new RegExp(`^${key}:\\s*\\n((?:\\s*-[^\\n]*\\n)+)`, 'm');
+    // Capture from the key line until the next top-level key (or EOF).
+    // Tolerate interspersed comments (lines starting with `#`) so we
+    // can document scope decisions inline in the YAML.
+    const sectionPattern = new RegExp(`^${key}:\\s*\\n((?:\\s+(?:-[^\\n]*|#[^\\n]*)\\n)+)`, 'm');
     const section = yamlText.match(sectionPattern);
     if (!section) return [];
     return section[1]
       .split('\n')
-      .map((l) => l.trim().replace(/^-\s*['"]?/, '').replace(/['"]$/, ''))
-      .filter((l) => l && !l.startsWith('#'));
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith('-'))
+      .map((l) => l.replace(/^-\s*['"]?/, '').replace(/['"]$/, ''))
+      .filter(Boolean);
   }
 
   const webPatterns = parseFilterPatterns(webFilter, 'web');
@@ -351,6 +363,15 @@ describe('Bicep param model', () => {
     // explicitly so production never silently rolls out a stale tag.
     expect(mainBicep).not.toMatch(/param webImageTag string\s*=/);
     expect(mainBicep).not.toMatch(/param workerImageTag string\s*=/);
+  });
+
+  it('parameters.json passes the workflow\'s Validate parameters.json placeholder guard', () => {
+    // Mirror the exact regex used by the "Validate parameters.json"
+    // step in both deploy workflows. A placeholder left in the
+    // committed file would make every automated deploy fail at the
+    // guard step — converts deploy-time fail-fast into test-time
+    // fail-fast.
+    expect(params).not.toMatch(/"<[^"]+>"|REPLACE_ME|your-[a-z0-9-]+|TODO/i);
   });
 
   it('no longer declares the legacy `imageTag` parameter', () => {

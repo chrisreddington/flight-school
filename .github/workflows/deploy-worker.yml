@@ -236,7 +236,10 @@ jobs:
           node-version-file: '.node-version'
       - run: npm ci
       - run: npm run lint && npm run check:guardrails
-      - run: npm run build:worker && npm run check:worker-next-free
+      # `check:worker-next-free` already runs inside `check:guardrails`
+      # — building here only emits the dist bundle the Docker build
+      # consumes via Dockerfile.worker.
+      - run: npm run build:worker
 
       - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474  # v2.3.0
         with:
