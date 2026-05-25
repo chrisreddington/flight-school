@@ -18,13 +18,21 @@
  *
  * Env vars:
  *   NEXT_DIST_DIR          — match next.config.ts; defaults to `.next`.
- *   SKIP_WEB_IMAGE_CHECK=1 — local-only opt-out when standalone is
- *                            missing. CI must never set this.
+ *   SKIP_WEB_IMAGE_CHECK=1 — opt-out for runs where the standalone
+ *                            directory has not been built yet. The
+ *                            pre-build guardrails pass
+ *                            (`check:web-image-local`) intentionally
+ *                            sets this so Assertion A (Dockerfile
+ *                            lint) can run fast before `npm run
+ *                            build`. The post-build CI step
+ *                            (`check:web-image`, step 6 in ci.yml)
+ *                            MUST NOT set this — it is the only run
+ *                            that executes Assertions B and C.
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOCKERFILE = path.join(REPO_ROOT, 'Dockerfile');
@@ -69,7 +77,7 @@ const RUNNER_ALLOWED_RUNNER_PREFIXES = ['/app/.next/', '/app/public/'];
 // both keeps the parser robust to harmless Dockerfile formatting.
 const COPY_VALUE_FLAGS = new Set(['--from', '--chown', '--chmod', '--exclude']);
 
-function isAllowedRunnerSource(rawSrc) {
+export function isAllowedRunnerSource(rawSrc) {
   // Reject relative, glob, and unresolved-variable sources outright —
   // none of them can be safely allowlisted as a specific subtree.
   if (!rawSrc.startsWith('/')) return false;
@@ -106,7 +114,7 @@ function describeAllowlist() {
  * JSON-array form (`COPY [--flag=v]... ["src",...,"dst"]`). Returns
  * sources only — the final element (destination) is dropped.
  */
-function extractCopySources(copyLine) {
+export function extractCopySources(copyLine) {
   const withoutKeyword = copyLine.replace(/^\s*COPY\b/i, '').trim();
 
   // JSON-array form: flags are space-separated tokens before the
@@ -334,20 +342,27 @@ async function assertionC() {
 }
 
 // ---------- Main ----------------------------------------------------------
-(async () => {
-  await assertionA();
-  await assertionB();
-  await assertionC();
+// Gate the IIFE on direct CLI invocation so unit tests can import the
+// exported helpers (`extractCopySources`, `isAllowedRunnerSource`)
+// without triggering Assertions A–C and a `process.exit(1)`.
+const invokedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  (async () => {
+    await assertionA();
+    await assertionB();
+    await assertionC();
 
-  if (failures.length > 0) {
-    console.error(`${RED}✗ Web image SDK-free check FAILED${RESET}\n`);
-    for (const f of failures) {
-      console.error(`${RED}  ${f}${RESET}\n`);
+    if (failures.length > 0) {
+      console.error(`${RED}✗ Web image SDK-free check FAILED${RESET}\n`);
+      for (const f of failures) {
+        console.error(`${RED}  ${f}${RESET}\n`);
+      }
+      process.exit(1);
     }
+    console.log(`${GREEN}✓ Web image is Copilot SDK-free${RESET}`);
+  })().catch((err) => {
+    console.error(`${RED}✗ check-web-image-copilot-free crashed:${RESET}`, err);
     process.exit(1);
-  }
-  console.log(`${GREEN}✓ Web image is Copilot SDK-free${RESET}`);
-})().catch((err) => {
-  console.error(`${RED}✗ check-web-image-copilot-free crashed:${RESET}`, err);
-  process.exit(1);
-});
+  });
+}
