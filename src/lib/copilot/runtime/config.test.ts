@@ -11,11 +11,16 @@ describe('getCopilotRuntimeConfig', () => {
   });
 
   it('reads env overrides', () => {
-    expect(getCopilotRuntimeConfig({
-      COPILOT_RUNTIME_IDLE_TTL_MS: '30000',
-      COPILOT_RUNTIME_MAX_ACTIVE: '2',
-      COPILOT_RUNTIME_HOME_ROOT: '/tmp/custom-runtimes',
-    }, '/tmp/flight-school')).toEqual({
+    expect(
+      getCopilotRuntimeConfig(
+        {
+          COPILOT_RUNTIME_IDLE_TTL_MS: '30000',
+          COPILOT_RUNTIME_MAX_ACTIVE: '2',
+          COPILOT_RUNTIME_HOME_ROOT: '/tmp/custom-runtimes',
+        },
+        '/tmp/flight-school',
+      ),
+    ).toEqual({
       idleTtlMs: 30_000,
       maxActiveRuntimes: 2,
       homeRoot: '/tmp/custom-runtimes',
@@ -23,7 +28,8 @@ describe('getCopilotRuntimeConfig', () => {
   });
 
   it('rejects invalid max active runtimes', () => {
-    expect(() => getCopilotRuntimeConfig({ COPILOT_RUNTIME_MAX_ACTIVE: '0' }, '/tmp/root'))
-      .toThrow('COPILOT_RUNTIME_MAX_ACTIVE must be a positive integer');
+    expect(() => getCopilotRuntimeConfig({ COPILOT_RUNTIME_MAX_ACTIVE: '0' }, '/tmp/root')).toThrow(
+      'COPILOT_RUNTIME_MAX_ACTIVE must be a positive integer',
+    );
   });
 });

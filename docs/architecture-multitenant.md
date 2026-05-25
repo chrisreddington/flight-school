@@ -181,7 +181,7 @@ and `/api/workspace/storage` (plus `/api/workspace/storage/list`) — are
 workspace route both resolve the caller's identity via `requireUserContext()`
 and rewrite the storage path to live under a per-user subdirectory:
 
-```
+```text
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/threads.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/focus-storage.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/workspaces/{challengeId}/...

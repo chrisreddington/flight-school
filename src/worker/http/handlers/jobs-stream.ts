@@ -8,16 +8,9 @@
 
 import { jobStorage } from '@/lib/jobs';
 import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
-import {
-  createJobStreamResponse,
-  createSynthesizedTerminalResponse,
-} from '@/worker/jobs/streaming/sse';
+import { createJobStreamResponse, createSynthesizedTerminalResponse } from '@/worker/jobs/streaming/sse';
 
-export async function handleJobStream(
-  request: Request,
-  jobId: string,
-  userId: string,
-): Promise<Response> {
+export async function handleJobStream(request: Request, jobId: string, userId: string): Promise<Response> {
   const job = await jobStorage.get(jobId);
   if (!job || job.userId !== userId) {
     return Response.json({ error: 'Job not found' }, { status: 404 });
@@ -36,8 +29,7 @@ export async function handleJobStream(
     if (Number.isFinite(parsed) && parsed > afterSeq) afterSeq = parsed;
   }
 
-  const isJobTerminal =
-    job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
+  const isJobTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
   if (isJobTerminal && !jobEventBus.hasBuffer(jobId)) {
     if (job.status === 'completed') {
       return createSynthesizedTerminalResponse({ type: 'done' });

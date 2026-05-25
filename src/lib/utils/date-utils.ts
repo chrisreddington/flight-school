@@ -1,15 +1,15 @@
 /**
  * Date/Time Utilities
- * 
+ *
  * Centralized date and time utilities to ensure consistent formatting
  * and reduce duplication across the codebase.
  */
 
 /**
  * Get current timestamp as ISO string.
- * 
+ *
  * @returns ISO 8601 formatted timestamp
- * 
+ *
  * @example
  * ```typescript
  * const createdAt = now();
@@ -22,9 +22,9 @@ export function now(): string {
 
 /**
  * Get current timestamp in milliseconds.
- * 
+ *
  * @returns Milliseconds since Unix epoch
- * 
+ *
  * @example
  * ```typescript
  * const startTime = nowMs();

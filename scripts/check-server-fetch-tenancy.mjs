@@ -80,12 +80,8 @@ function lineNumberFor(source, index) {
 
 function stripComments(source) {
   return source
-    .replace(/\/\*[\s\S]*?\*\//g, (match) =>
-      match.replace(/[^\n]/g, ' '),
-    )
-    .replace(/(^|[^:])\/\/[^\n]*/g, (match, lead) =>
-      lead + match.slice(lead.length).replace(/[^\n]/g, ' '),
-    );
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:])\/\/[^\n]*/g, (match, lead) => lead + match.slice(lead.length).replace(/[^\n]/g, ' '));
 }
 
 function checkFile(absolutePath) {

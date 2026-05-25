@@ -15,10 +15,7 @@ import { withExtractedTraceContext } from '@/lib/observability/context-propagati
 
 import { checkBearer, requireUserId } from './auth';
 import { handleActivityDelete, handleActivityGet } from './handlers/activity';
-import {
-  handleActivityEventCreate,
-  handleActivityEventPatch,
-} from './handlers/activity-event';
+import { handleActivityEventCreate, handleActivityEventPatch } from './handlers/activity-event';
 import { handleActivityStream } from './handlers/activity-stream';
 import { handleCopilotAuthoring } from './handlers/copilot-authoring';
 import { handleCopilotCoach } from './handlers/copilot-coach';
@@ -27,10 +24,7 @@ import { handleJobsCreate, handleJobsList } from './handlers/jobs';
 import { handleJobDelete, handleJobGet } from './handlers/jobs-by-id';
 import { handleJobStream } from './handlers/jobs-stream';
 import { handleJobsSweep } from './handlers/jobs-sweep';
-import {
-  handleJobsUserDataDelete,
-  handleJobsUserDataGet,
-} from './handlers/jobs-user-data';
+import { handleJobsUserDataDelete, handleJobsUserDataGet } from './handlers/jobs-user-data';
 
 type WorkerEnv = { Variables: { userId: string } };
 
@@ -65,22 +59,15 @@ export function createWorkerApp(): Hono<WorkerEnv> {
   app.use('/api/internal/jobs/:id/stream', xUserIdMiddleware);
 
   /** Bridge a (Request, ...args) handler through trace-context extraction. */
-  const traced = <A extends unknown[]>(
-    handler: (req: Request, ...args: A) => Promise<Response> | Response,
-    ...args: A
-  ) => (request: Request) =>
-    withExtractedTraceContext(request.headers, async () => handler(request, ...args));
+  const traced =
+    <A extends unknown[]>(handler: (req: Request, ...args: A) => Promise<Response> | Response, ...args: A) =>
+    (request: Request) =>
+      withExtractedTraceContext(request.headers, async () => handler(request, ...args));
 
   // Copilot execution.
-  app.post('/api/internal/copilot/execute', (c) =>
-    traced(handleCopilotExecute)(c.req.raw),
-  );
-  app.post('/api/internal/copilot/coach', (c) =>
-    traced(handleCopilotCoach)(c.req.raw),
-  );
-  app.post('/api/internal/copilot/authoring', (c) =>
-    traced(handleCopilotAuthoring)(c.req.raw),
-  );
+  app.post('/api/internal/copilot/execute', (c) => traced(handleCopilotExecute)(c.req.raw));
+  app.post('/api/internal/copilot/coach', (c) => traced(handleCopilotCoach)(c.req.raw));
+  app.post('/api/internal/copilot/authoring', (c) => traced(handleCopilotAuthoring)(c.req.raw));
 
   // Jobs collection.
   app.get('/api/internal/jobs', (c) => traced(handleJobsList)(c.req.raw));
@@ -88,12 +75,8 @@ export function createWorkerApp(): Hono<WorkerEnv> {
   app.post('/api/internal/jobs/sweep', (c) => traced(handleJobsSweep)(c.req.raw));
 
   // Jobs user-data export/purge.
-  app.get('/api/internal/jobs/user-data', (c) =>
-    traced(handleJobsUserDataGet)(c.req.raw),
-  );
-  app.delete('/api/internal/jobs/user-data', (c) =>
-    traced(handleJobsUserDataDelete)(c.req.raw),
-  );
+  app.get('/api/internal/jobs/user-data', (c) => traced(handleJobsUserDataGet)(c.req.raw));
+  app.delete('/api/internal/jobs/user-data', (c) => traced(handleJobsUserDataDelete)(c.req.raw));
 
   // Single job.
   app.get('/api/internal/jobs/:id', (c) => {
@@ -106,30 +89,30 @@ export function createWorkerApp(): Hono<WorkerEnv> {
   });
   app.get('/api/internal/jobs/:id/stream', (c) => {
     const id = c.req.param('id');
-    const userId = c.get("userId");
+    const userId = c.get('userId');
     return traced(handleJobStream, id, userId)(c.req.raw);
   });
 
   // AI activity (all require x-user-id).
   app.get('/api/internal/ai-activity', (c) => {
-    const userId = c.get("userId");
+    const userId = c.get('userId');
     return traced(handleActivityGet, userId)(c.req.raw);
   });
   app.delete('/api/internal/ai-activity', (c) => {
-    const userId = c.get("userId");
+    const userId = c.get('userId');
     return traced(handleActivityDelete, userId)(c.req.raw);
   });
   app.post('/api/internal/ai-activity/event', (c) => {
-    const userId = c.get("userId");
+    const userId = c.get('userId');
     return traced(handleActivityEventCreate, userId)(c.req.raw);
   });
   app.patch('/api/internal/ai-activity/event/:id', (c) => {
     const id = c.req.param('id');
-    const userId = c.get("userId");
+    const userId = c.get('userId');
     return traced(handleActivityEventPatch, id, userId)(c.req.raw);
   });
   app.get('/api/internal/ai-activity/stream', (c) => {
-    const userId = c.get("userId");
+    const userId = c.get('userId');
     return traced(handleActivityStream, userId)(c.req.raw);
   });
 

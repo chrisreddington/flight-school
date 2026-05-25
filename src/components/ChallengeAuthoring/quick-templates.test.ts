@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const quickTemplatesSource = readFileSync(
   resolve(process.cwd(), 'src/components/ChallengeAuthoring/quick-templates.tsx'),
-  'utf8'
+  'utf8',
 );
 
 describe('quick templates names', () => {
@@ -17,8 +17,6 @@ describe('quick templates names', () => {
   });
 
   it('uses Debug Challenge as the debug template name', () => {
-    expect(quickTemplatesSource).toMatch(
-      /id:\s*'debug'[\s\S]*?name:\s*'Debug Challenge'/
-    );
+    expect(quickTemplatesSource).toMatch(/id:\s*'debug'[\s\S]*?name:\s*'Debug Challenge'/);
   });
 });

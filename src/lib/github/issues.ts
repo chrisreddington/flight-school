@@ -16,10 +16,7 @@ import type { CreateIssueInput, CreatedIssue, OpenIssueSummary } from './types';
  * @returns Created issue data with URL
  * @throws Error if repository not found or user lacks permission
  */
-export async function createIssue(
-  octokit: Octokit,
-  input: CreateIssueInput
-): Promise<CreatedIssue> {
+export async function createIssue(octokit: Octokit, input: CreateIssueInput): Promise<CreatedIssue> {
   const { data } = await octokit.rest.issues.create({
     owner: input.owner,
     repo: input.repo,
@@ -51,7 +48,7 @@ export async function createLearningGoalIssue(
   owner: string,
   repo: string,
   topic: string,
-  description?: string
+  description?: string,
 ): Promise<CreatedIssue> {
   const body = `## Learning Goal
 
@@ -78,11 +75,7 @@ ${description ? `### Description\n${description}\n` : ''}
 }
 
 /** Fetches the user's recently updated open issues (gracefully returns [] on failure). */
-export async function getOpenIssues(
-  octokit: Octokit,
-  username: string,
-  limit = 8
-): Promise<OpenIssueSummary[]> {
+export async function getOpenIssues(octokit: Octokit, username: string, limit = 8): Promise<OpenIssueSummary[]> {
   try {
     const { data } = await octokit.rest.search.issuesAndPullRequests({
       q: `is:open is:issue author:${username} user:${username}`,

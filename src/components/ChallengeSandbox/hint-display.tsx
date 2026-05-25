@@ -37,13 +37,7 @@ interface HintDisplayProps {
  * Shows hint history with questions and responses,
  * and provides an input for requesting new hints.
  */
-export function HintDisplay({
-  hints,
-  isLoading,
-  error,
-  onRequestHint,
-  onStopHint,
-}: HintDisplayProps) {
+export function HintDisplay({ hints, isLoading, error, onRequestHint, onStopHint }: HintDisplayProps) {
   const [question, setQuestion] = useState('');
 
   const handleSubmit = useCallback(
@@ -54,7 +48,7 @@ export function HintDisplay({
         setQuestion('');
       }
     },
-    [question, isLoading, onRequestHint]
+    [question, isLoading, onRequestHint],
   );
 
   return (
@@ -66,9 +60,7 @@ export function HintDisplay({
             <div className={styles.emptyIcon}>
               <LightBulbIcon size={24} />
             </div>
-            <p className={styles.emptyText}>
-              Stuck? Ask for a hint below
-            </p>
+            <p className={styles.emptyText}>Stuck? Ask for a hint below</p>
           </div>
         ) : (
           hints.map((hint) => (
@@ -112,9 +104,7 @@ export function HintDisplay({
 
         {error && (
           <div className={styles.hintMessage} role="alert" aria-live="assertive">
-            <div className={styles.hintTextError}>
-              {error}
-            </div>
+            <div className={styles.hintTextError}>{error}</div>
           </div>
         )}
       </div>

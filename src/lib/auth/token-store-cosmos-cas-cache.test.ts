@@ -2,11 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  baseCosmosConfig,
-  encryptForTest,
-  FAKE_DEK,
-} from './token-store-cosmos.fixture';
+import { baseCosmosConfig, encryptForTest, FAKE_DEK } from './token-store-cosmos.fixture';
 
 // Hoisted mock state; mirrors token-store-cosmos.test.ts. Duplicated rather
 // than extracted because Vitest hoists `vi.mock` factories per test file.
@@ -181,11 +177,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
   describe('DEK cache', () => {
     it('skips Key Vault unwrapKey on a second read of the same envelope', async () => {
       const store = new CosmosTokenStore(baseCosmosConfig);
-      const doc = encryptForTest(
-        { accessToken: 'ghu_cached', expiresAt: 9999999999 },
-        FAKE_DEK,
-        'user-42',
-      );
+      const doc = encryptForTest({ accessToken: 'ghu_cached', expiresAt: 9999999999 }, FAKE_DEK, 'user-42');
       mocks.itemRead.mockResolvedValue({ resource: doc });
 
       await store.getToken('user-42');
@@ -239,11 +231,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
 
     it.each(invalidationCases)('invalidates the cache on $trigger', async ({ act }) => {
       const store = new CosmosTokenStore(baseCosmosConfig);
-      const doc = encryptForTest(
-        { accessToken: 'ghu_old', expiresAt: 100 },
-        FAKE_DEK,
-        'user-42',
-      );
+      const doc = encryptForTest({ accessToken: 'ghu_old', expiresAt: 100 }, FAKE_DEK, 'user-42');
       mocks.itemRead.mockResolvedValue({ resource: doc, etag: 'etag-1' });
 
       await store.getToken('user-42');
@@ -257,11 +245,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
 
     it('honours dekCacheMaxEntries=0 (cache fully disabled)', async () => {
       const store = new CosmosTokenStore({ ...baseCosmosConfig, dekCacheMaxEntries: 0 });
-      const doc = encryptForTest(
-        { accessToken: 'ghu_a', expiresAt: 9999999999 },
-        FAKE_DEK,
-        'user-42',
-      );
+      const doc = encryptForTest({ accessToken: 'ghu_a', expiresAt: 9999999999 }, FAKE_DEK, 'user-42');
       mocks.itemRead.mockResolvedValue({ resource: doc });
 
       await store.getToken('user-42');
@@ -274,11 +258,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
       vi.useFakeTimers();
       try {
         const store = new CosmosTokenStore({ ...baseCosmosConfig, dekCacheTtlMs: 1000 });
-        const doc = encryptForTest(
-          { accessToken: 'ghu_ttl', expiresAt: 9999999999 },
-          FAKE_DEK,
-          'user-42',
-        );
+        const doc = encryptForTest({ accessToken: 'ghu_ttl', expiresAt: 9999999999 }, FAKE_DEK, 'user-42');
         mocks.itemRead.mockResolvedValue({ resource: doc });
 
         await store.getToken('user-42');
@@ -293,8 +273,7 @@ describe('CosmosTokenStore — concurrency & DEK cache', () => {
 
     it('evicts the oldest entry when the size cap is exceeded', async () => {
       const store = new CosmosTokenStore({ ...baseCosmosConfig, dekCacheMaxEntries: 2 });
-      const make = (uid: string) =>
-        encryptForTest({ accessToken: `ghu_${uid}`, expiresAt: 9999999999 }, FAKE_DEK, uid);
+      const make = (uid: string) => encryptForTest({ accessToken: `ghu_${uid}`, expiresAt: 9999999999 }, FAKE_DEK, uid);
       mocks.itemRead
         .mockResolvedValueOnce({ resource: make('a') })
         .mockResolvedValueOnce({ resource: make('b') })

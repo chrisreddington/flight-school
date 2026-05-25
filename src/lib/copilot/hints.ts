@@ -50,11 +50,7 @@ ${challenge.expectedPatterns.join(', ')}`;
  * @param challengeContext - Pre-built challenge context
  * @returns Formatted prompt string
  */
-function buildHintPrompt(
-  question: string,
-  currentCode: string,
-  challengeContext: string
-): string {
+function buildHintPrompt(question: string, currentCode: string, challengeContext: string): string {
   return `${challengeContext}
 
 ## Current Code
@@ -139,7 +135,7 @@ export async function getHint(
   identity: SessionIdentity,
   challenge: ChallengeDef,
   question: string,
-  currentCode: string
+  currentCode: string,
 ): Promise<HintResult> {
   const challengeContext = buildChallengeContext(challenge);
   const prompt = buildHintPrompt(question, currentCode, challengeContext);

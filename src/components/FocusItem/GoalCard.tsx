@@ -1,6 +1,6 @@
 /**
  * Shared Goal Card Component
- * 
+ *
  * Displays a goal with consistent styling and actions across Dashboard and History.
  * Automatically detects state from storage.
  */
@@ -58,7 +58,7 @@ export function GoalCard({
         const history = await focusStore.getHistory();
         const record = history[dateKey];
         if (record?.goals) {
-          const item = record.goals.find(g => g.data.id === goal.id);
+          const item = record.goals.find((g) => g.data.id === goal.id);
           if (item && item.stateHistory.length > 0) {
             setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
           }
@@ -89,7 +89,7 @@ export function GoalCard({
       onSkipAndReplace(goal.id, [goal.title]);
       return;
     }
-    
+
     // Fallback: just mark as skipped and refresh
     try {
       await focusStore.transitionGoal(dateKey, goal.id, 'skipped', 'dashboard');
@@ -121,13 +121,13 @@ export function GoalCard({
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Label size="small" variant="accent">
-            <span className={styles.iconInline}><CheckIcon size={12} /></span>
+            <span className={styles.iconInline}>
+              <CheckIcon size={12} />
+            </span>
             Goal
           </Label>
           {(isCompleted || isSkipped) && showHistoryActions && (
-            <Label variant={isCompleted ? 'success' : 'secondary'}>
-              {isCompleted ? 'Completed' : 'Skipped'}
-            </Label>
+            <Label variant={isCompleted ? 'success' : 'secondary'}>{isCompleted ? 'Completed' : 'Skipped'}</Label>
           )}
         </Stack>
 
@@ -188,7 +188,9 @@ export function GoalCard({
           )}
         </Stack>
         {actionError && (
-          <InlineMessage variant="critical" size="small">{actionError}</InlineMessage>
+          <InlineMessage variant="critical" size="small">
+            {actionError}
+          </InlineMessage>
         )}
       </Stack>
     </div>

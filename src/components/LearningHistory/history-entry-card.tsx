@@ -90,9 +90,16 @@ export function HistoryEntryCard({
                 onStopSkipChallenge={onStopSkipChallenge}
                 onStopSkipGoal={onStopSkipGoal}
                 onExploreTopic={onExploreTopic}
-                isSkippingTopic={item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))}
-                isSkippingChallenge={item.type === 'challenge' && (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))}
-                isSkippingGoal={item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))}
+                isSkippingTopic={
+                  item.type === 'topic' && (skippingTopicIds.has(item.data.id) || activeTopicIds.has(item.data.id))
+                }
+                isSkippingChallenge={
+                  item.type === 'challenge' &&
+                  (skippingChallengeIds.has(item.data.id) || activeChallengeIds.has(item.data.id))
+                }
+                isSkippingGoal={
+                  item.type === 'goal' && (skippingGoalIds.has(item.data.id) || activeGoalIds.has(item.data.id))
+                }
               />
               {item.type === 'challenge' && item.data.selfExplanation && (
                 <details className={styles.selfExplanationDetails}>

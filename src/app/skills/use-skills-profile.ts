@@ -62,10 +62,7 @@ export function useSkillsProfile(options?: { initialProfile?: SkillProfile }): U
           setCalibrationItems(calibration);
           return;
         }
-        const [loaded, calibration] = await Promise.all([
-          skillsStore.get(),
-          focusStore.getCalibrationNeeded(),
-        ]);
+        const [loaded, calibration] = await Promise.all([skillsStore.get(), focusStore.getCalibrationNeeded()]);
         setProfile(loaded);
         setCalibrationItems(calibration);
       } catch (error) {

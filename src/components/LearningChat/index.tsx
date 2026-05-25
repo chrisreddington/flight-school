@@ -76,12 +76,12 @@ interface LearningChatProps {
 
 /**
  * Composite chat component combining sidebar, messages, and input.
- * 
+ *
  * This is the main learning chat experience, implementing:
  * - Multi-thread sidebar for concurrent conversations (AC1.2)
  * - Message list with smart action indicators (AC3.2)
  * - Learning-focused input with streaming support
- * 
+ *
  * @example
  * ```tsx
  * <LearningChat
@@ -115,20 +115,13 @@ export const LearningChat = memo(function LearningChat({
   const [pendingRepos, setPendingRepos] = useState<RepoReference[]>([]);
 
   // Get active thread's messages
-  const activeThread = useMemo(
-    () => threads.find((t) => t.id === activeThreadId) ?? null,
-    [threads, activeThreadId]
-  );
+  const activeThread = useMemo(() => threads.find((t) => t.id === activeThreadId) ?? null, [threads, activeThreadId]);
 
   const messages = useMemo(() => activeThread?.messages ?? [], [activeThread]);
   // Use pending repos when no thread exists, otherwise use thread repos
   const selectedRepos = activeThread?.context?.repos ?? pendingRepos;
 
-  const titleEditing = useThreadTitleEditing(
-    activeThread,
-    activeThreadId,
-    handlers.renameThread,
-  );
+  const titleEditing = useThreadTitleEditing(activeThread, activeThreadId, handlers.renameThread);
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev);
@@ -144,21 +137,24 @@ export const LearningChat = memo(function LearningChat({
         setPendingRepos(repos);
       }
     },
-    [activeThreadId, handlers]
+    [activeThreadId, handlers],
   );
 
   // Handle sending a message with selected repos
-  const handleSendMessage = useCallback((message: string) => {
-    handlers.sendMessage(message, selectedRepos.length > 0 ? selectedRepos : undefined);
-    // Clear pending repos after sending (they'll be saved to thread)
-    if (!activeThreadId) {
-      setPendingRepos([]);
-    }
-  }, [handlers, selectedRepos, activeThreadId]);
+  const handleSendMessage = useCallback(
+    (message: string) => {
+      handlers.sendMessage(message, selectedRepos.length > 0 ? selectedRepos : undefined);
+      // Clear pending repos after sending (they'll be saved to thread)
+      if (!activeThreadId) {
+        setPendingRepos([]);
+      }
+    },
+    [handlers, selectedRepos, activeThreadId],
+  );
 
   // Detect if active thread is streaming based on thread.isStreaming flag
   // This is set by the background job in storage
-  const isStreamingInActiveThread = (isStreaming === true) || (activeThread?.isStreaming === true);
+  const isStreamingInActiveThread = isStreaming === true || activeThread?.isStreaming === true;
 
   // Decouple bursty token arrival from the visible render cadence so
   // chunks feel like smooth typing instead of stuttering blocks. Keyed
@@ -167,10 +163,7 @@ export const LearningChat = memo(function LearningChat({
   // still key off raw `streamingContent` — we want the typing indicator
   // to hide the instant tokens land, even if the bubble fills in over
   // the next few frames.
-  const smoothedStreamingContent = useSmoothedText(
-    streamingContent,
-    streamingAssistantMessageId,
-  );
+  const smoothedStreamingContent = useSmoothedText(streamingContent, streamingAssistantMessageId);
 
   const displayMessages = useMemo(
     () =>
@@ -230,8 +223,8 @@ export const LearningChat = memo(function LearningChat({
                 Start a learning conversation
               </Heading>
               <p className={styles.emptyDescription}>
-                Ask about code concepts, explore repositories, or get help understanding patterns.
-                Copilot will explain reasoning and suggest follow-up explorations.
+                Ask about code concepts, explore repositories, or get help understanding patterns. Copilot will explain
+                reasoning and suggest follow-up explorations.
               </p>
             </div>
           ) : (
@@ -257,7 +250,11 @@ export const LearningChat = memo(function LearningChat({
           )}
 
           {showTypingIndicator && (
-            <div className={`${typingStyles.typingIndicator} ${styles.typingIndicatorOffset}`} aria-label="Copilot is thinking" role="status">
+            <div
+              className={`${typingStyles.typingIndicator} ${styles.typingIndicatorOffset}`}
+              aria-label="Copilot is thinking"
+              role="status"
+            >
               <span className={typingStyles.typingDot} />
               <span className={typingStyles.typingDot} />
               <span className={typingStyles.typingDot} />
@@ -266,7 +263,7 @@ export const LearningChat = memo(function LearningChat({
 
           {/* Scroll sentinel - auto-scrolled to when messages update */}
           <div ref={messagesEndRef} />
-          
+
           {/* Screen reader announcements for streaming status */}
           <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
             {isStreamingInActiveThread && 'Copilot is responding...'}

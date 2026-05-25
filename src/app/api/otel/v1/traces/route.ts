@@ -14,7 +14,6 @@
 import { requireUserContext, UnauthorizedError } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
 
-
 const log = logger.withTag('OTLP Proxy');
 
 const MAX_PAYLOAD_BYTES = 256 * 1024;

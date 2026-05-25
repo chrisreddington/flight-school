@@ -12,13 +12,9 @@ vi.mock('@/lib/security/guard', () => ({
 vi.mock('@/lib/api', () => ({
   parseJsonBody: async (request: Request) => ({ success: true, data: await request.json() }),
   validateObject: (value: unknown, name: string) =>
-    value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? null
-      : `${name} must be an object`,
+    value !== null && typeof value === 'object' && !Array.isArray(value) ? null : `${name} must be an object`,
   validateRequiredString: (value: unknown, name: string) =>
-    typeof value === 'string' && value.trim().length > 0
-      ? null
-      : `${name} is required`,
+    typeof value === 'string' && value.trim().length > 0 ? null : `${name} is required`,
 }));
 
 vi.mock('@/lib/copilot/execution', () => ({
@@ -46,11 +42,13 @@ function makeRequest(body: unknown) {
 describe('/api/copilot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.withGuardedRoute.mockImplementation(async (_opts, work) => work({
-      userId: '123',
-      login: 'octo',
-      accessToken: 'ghu_user',
-    }));
+    mocks.withGuardedRoute.mockImplementation(async (_opts, work) =>
+      work({
+        userId: '123',
+        login: 'octo',
+        accessToken: 'ghu_user',
+      }),
+    );
     mocks.executeCopilotChat.mockResolvedValue({
       response: 'answer',
       toolCalls: [],

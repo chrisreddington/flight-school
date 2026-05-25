@@ -1,6 +1,6 @@
 /**
  * Habit Tracking Types
- * 
+ *
  * Type definitions for user-created habits with multi-day streak tracking.
  * Habits are distinct from daily goals - they track consistency over time.
  */
@@ -147,7 +147,7 @@ export function createHabit(
   description: string,
   tracking: TrackingConfig,
   totalDays: number,
-  includesWeekends: boolean = false
+  includesWeekends: boolean = false,
 ): Habit {
   return {
     id: `habit-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,

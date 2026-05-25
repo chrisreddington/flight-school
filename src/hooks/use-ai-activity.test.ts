@@ -21,7 +21,9 @@ class MockEventSource {
   emit(data: unknown) {
     this.onmessage?.({ data: typeof data === 'string' ? data : JSON.stringify(data) });
   }
-  fail() { this.onerror?.(); }
+  fail() {
+    this.onerror?.();
+  }
   static latest() {
     const inst = this.instances.at(-1);
     if (!inst) throw new Error('No EventSource instance created yet');
@@ -116,12 +118,7 @@ describe('useAIActivity — SSE lifecycle', () => {
 describe('useAIActivity — event stream handling', () => {
   it('replaces events on init and parses timestamps to Date', () => {
     const { result } = renderHook(() => useAIActivity());
-    act(() =>
-      emitInit([
-        sampleEvent({ id: 'a' }),
-        sampleEvent({ id: 'b', type: 'ask', operation: 'ask' }),
-      ]),
-    );
+    act(() => emitInit([sampleEvent({ id: 'a' }), sampleEvent({ id: 'b', type: 'ask', operation: 'ask' })]));
     expect(result.current.events.map((e) => e.id)).toEqual(['a', 'b']);
     expect(result.current.events[0].timestamp).toBeInstanceOf(Date);
     expect(result.current.hasEvents).toBe(true);
@@ -143,7 +140,10 @@ describe('useAIActivity — event stream handling', () => {
     const { result } = renderHook(() => useAIActivity());
     const es = MockEventSource.latest();
     const emit = (overrides: Partial<AIActivityEvent>, ts: string) =>
-      es.emit({ type: 'event', event: { ...sampleEvent({ id: 'x', ...overrides }), timestamp: ts } });
+      es.emit({
+        type: 'event',
+        event: { ...sampleEvent({ id: 'x', ...overrides }), timestamp: ts },
+      });
     act(() => emit({ status: 'pending', latencyMs: 0 }, '2024-01-01T00:00:00Z'));
     act(() => emit({ status: 'success', latencyMs: 250 }, '2024-01-01T00:00:01Z'));
     expect(result.current.events).toHaveLength(1);
@@ -156,7 +156,14 @@ describe('useAIActivity — event stream handling', () => {
     act(() =>
       MockEventSource.latest().emit({
         type: 'event',
-        event: { id: 'clear', operation: 'clear', type: 'internal', status: 'success', latencyMs: 0, timestamp: '2024-01-01T00:00:02Z' },
+        event: {
+          id: 'clear',
+          operation: 'clear',
+          type: 'internal',
+          status: 'success',
+          latencyMs: 0,
+          timestamp: '2024-01-01T00:00:02Z',
+        },
       }),
     );
     expect(result.current.events).toEqual([]);
@@ -188,7 +195,9 @@ describe('useAIActivity — clear()', () => {
     const { result } = seed([sampleEvent({ id: 'a' })]);
     expect(result.current.events).toHaveLength(1);
     mockFetchOnce({});
-    await act(async () => { await result.current.clear(); });
+    await act(async () => {
+      await result.current.clear();
+    });
     expect(result.current.events).toEqual([]);
     expect(result.current.hasEvents).toBe(false);
   });
@@ -215,8 +224,19 @@ describe('useAIActivity — derived state', () => {
 
   it('aggregates stats (avgLatency rounded, totalTokens, byType)', () => {
     const { result } = seed([
-      sampleEvent({ id: '1', type: 'embed', latencyMs: 100, output: { tokens: { input: 10, output: 20 } } }),
-      sampleEvent({ id: '2', type: 'ask', operation: 'ask', latencyMs: 200, output: { tokens: { input: 30, output: 40 } } }),
+      sampleEvent({
+        id: '1',
+        type: 'embed',
+        latencyMs: 100,
+        output: { tokens: { input: 10, output: 20 } },
+      }),
+      sampleEvent({
+        id: '2',
+        type: 'ask',
+        operation: 'ask',
+        latencyMs: 200,
+        output: { tokens: { input: 30, output: 40 } },
+      }),
       sampleEvent({ id: '3', type: 'embed', latencyMs: 150 }),
     ]);
     expect(result.current.stats).toEqual({
@@ -266,9 +286,7 @@ describe('useAIActivity — exportMarkdown', () => {
   });
 
   it('renders header, time, latency and status for each event', () => {
-    const { result } = seed([
-      sampleEvent({ id: 'e1', operation: 'embed-text', latencyMs: 100, status: 'success' }),
-    ]);
+    const { result } = seed([sampleEvent({ id: 'e1', operation: 'embed-text', latencyMs: 100, status: 'success' })]);
     const md = result.current.exportMarkdown();
     expect(md).toContain('# AI Activity Log');
     expect(md).toContain('## embed-text (embed)');

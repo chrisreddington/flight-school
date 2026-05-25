@@ -53,10 +53,7 @@
 
 import { trace, type Span, type Tracer } from '@opentelemetry/api';
 
-import {
-  INSTRUMENTATION_SCOPE_BROWSER,
-  INSTRUMENTATION_SCOPE_VERSION,
-} from './semconv';
+import { INSTRUMENTATION_SCOPE_BROWSER, INSTRUMENTATION_SCOPE_VERSION } from './semconv';
 
 const PATCH_MARKER = Symbol.for('flight-school.route-tracking.patched');
 
@@ -153,10 +150,7 @@ function patchHistoryMethod(method: 'pushState' | 'replaceState'): void {
   if (method === 'pushState') originalPushState = window.history.pushState;
   else originalReplaceState = window.history.replaceState;
 
-  const patched: Patchable = function patched(
-    this: History,
-    ...args: Parameters<History[typeof method]>
-  ) {
+  const patched: Patchable = function patched(this: History, ...args: Parameters<History[typeof method]>) {
     const result = original.apply(this, args);
     handleNavigation();
     return result;

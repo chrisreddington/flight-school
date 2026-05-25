@@ -19,12 +19,7 @@
  */
 
 import type { DailyChallenge } from '@/lib/focus/types';
-import {
-  CheckIcon,
-  KebabHorizontalIcon,
-  PencilIcon,
-  SkipIcon,
-} from '@primer/octicons-react';
+import { CheckIcon, KebabHorizontalIcon, PencilIcon, SkipIcon } from '@primer/octicons-react';
 import { ActionList, ActionMenu, IconButton } from '@primer/react';
 import { memo } from 'react';
 
@@ -79,7 +74,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
 }: ChallengeActionMenuProps) {
   // _challenge kept for future use (e.g., analytics, logging)
   void _challenge;
-  
+
   // Don't render if no actions are available
   const hasActions =
     onEdit || onSkip || onRefresh || onRequestDebugChallenge || onCreate || onMarkComplete || onCreateRepo;
@@ -88,12 +83,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
   return (
     <ActionMenu>
       <ActionMenu.Anchor>
-        <IconButton
-          icon={KebabHorizontalIcon}
-          variant="invisible"
-          size={size}
-          aria-label="Challenge options"
-        />
+        <IconButton icon={KebabHorizontalIcon} variant="invisible" size={size} aria-label="Challenge options" />
       </ActionMenu.Anchor>
       <ActionMenu.Overlay>
         <ActionList>
@@ -114,16 +104,12 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
               Skip Challenge
             </ActionList.Item>
           )}
-          {isCustom && (onEdit || onSkip) && (onRefresh || onCreate || showHistoryActions) && (
-            <ActionList.Divider />
-          )}
+          {isCustom && (onEdit || onSkip) && (onRefresh || onCreate || showHistoryActions) && <ActionList.Divider />}
 
           {/* AI challenge skip (use onSkip for skip-and-replace behavior) */}
           {/* Only show on dashboard (not history) AND only if NOT completed */}
           {!isCustom && onRequestDebugChallenge && !showHistoryActions && (
-            <ActionList.Item onSelect={onRequestDebugChallenge}>
-              🐛 Request Debug Challenge
-            </ActionList.Item>
+            <ActionList.Item onSelect={onRequestDebugChallenge}>🐛 Request Debug Challenge</ActionList.Item>
           )}
           {!isCustom && onSkip && !showHistoryActions && (
             <ActionList.Item onSelect={onSkip} disabled={refreshDisabled}>
@@ -152,9 +138,7 @@ export const ChallengeActionMenu = memo(function ChallengeActionMenu({
               Skip & Replace
             </ActionList.Item>
           )}
-          {showHistoryActions && (onMarkComplete || onCreateRepo || onSkip) && onCreate && (
-            <ActionList.Divider />
-          )}
+          {showHistoryActions && (onMarkComplete || onCreateRepo || onSkip) && onCreate && <ActionList.Divider />}
 
           {/* Create custom challenge */}
           {onCreate && (

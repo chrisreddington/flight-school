@@ -33,10 +33,7 @@ function captureTraceContext() {
   return Object.keys(traceHeaders).length > 0 ? traceHeaders : undefined;
 }
 
-export async function GET(
-  _request: NextRequest,
-  context: RouteContext,
-) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   let userId: string;
   let id: string;
   try {
@@ -54,17 +51,11 @@ export async function GET(
     return NextResponse.json(job);
   } catch (err) {
     log.error(`[Job ${id}] Failed to fetch from worker`, { err });
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
 }
 
-export async function DELETE(
-  _request: NextRequest,
-  context: RouteContext,
-) {
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   let userId: string;
   let id: string;
   try {
@@ -81,10 +72,7 @@ export async function DELETE(
     result = await cancelWorkerJobRecord(id, userId, captureTraceContext());
   } catch (err) {
     log.error(`[Job ${id}] Failed to cancel on worker`, { err });
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
 
   // Worker reported the job missing (or not owned by this user). Mirror

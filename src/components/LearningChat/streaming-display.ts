@@ -28,10 +28,7 @@ export interface StreamingMessageState {
  * Returns `messages` unchanged whenever there is nothing to synthesise,
  * which keeps the consuming `useMemo` stable.
  */
-export function mergeStreamingMessage(
-  messages: Message[],
-  state: StreamingMessageState,
-): Message[] {
+export function mergeStreamingMessage(messages: Message[], state: StreamingMessageState): Message[] {
   if (!state.isStreaming) return messages;
   if (!state.assistantMessageId) return messages;
 

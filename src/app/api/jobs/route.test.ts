@@ -38,13 +38,14 @@ vi.mock('@opentelemetry/api', () => ({
         recordException: vi.fn(),
         end: vi.fn(),
       }),
-      startActiveSpan: (_n: string, fn: (s: unknown) => unknown) => fn({
-        setAttribute: vi.fn(),
-        setAttributes: vi.fn(),
-        setStatus: vi.fn(),
-        recordException: vi.fn(),
-        end: vi.fn(),
-      }),
+      startActiveSpan: (_n: string, fn: (s: unknown) => unknown) =>
+        fn({
+          setAttribute: vi.fn(),
+          setAttributes: vi.fn(),
+          setStatus: vi.fn(),
+          recordException: vi.fn(),
+          end: vi.fn(),
+        }),
     }),
   },
   metrics: {

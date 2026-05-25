@@ -107,7 +107,7 @@ async function sweepThreadsForUser(
   }
 
   const threads = Array.isArray((parsed as { threads?: unknown }).threads)
-    ? ((parsed as { threads: ThreadShape[] }).threads)
+    ? (parsed as { threads: ThreadShape[] }).threads
     : [];
   const inspected = threads.length;
 
@@ -122,11 +122,7 @@ async function sweepThreadsForUser(
     await deleteFile(`users/${userId}`, 'threads.json');
     log.info(`[retention] swept all ${inspected} threads for user ${userId}`);
   } else {
-    await writeFile(
-      `users/${userId}`,
-      'threads.json',
-      JSON.stringify({ threads: kept }, null, 2),
-    );
+    await writeFile(`users/${userId}`, 'threads.json', JSON.stringify({ threads: kept }, null, 2));
     log.info(`[retention] swept ${deleted}/${inspected} threads for user ${userId}`);
   }
   return { deleted, inspected };
@@ -156,9 +152,7 @@ async function sweepEvaluationsForUser(
   }
 
   const root = parsed as { evaluations?: Record<string, EvaluationShape>; version?: number };
-  const evaluations = root.evaluations && typeof root.evaluations === 'object'
-    ? root.evaluations
-    : {};
+  const evaluations = root.evaluations && typeof root.evaluations === 'object' ? root.evaluations : {};
   const ids = Object.keys(evaluations);
   const inspected = ids.length;
 
@@ -193,9 +187,7 @@ async function sweepEvaluationsForUser(
  * Filters dirnames through {@link SAFE_USER_ID} as defense in depth
  * against unexpected names appearing under the storage root.
  */
-export async function sweepAllUsers(
-  nowMs: number,
-): Promise<Record<UserSweepKey, SweepResult>> {
+export async function sweepAllUsers(nowMs: number): Promise<Record<UserSweepKey, SweepResult>> {
   const userDirs = await listDirs('users');
   const aggregate: Record<UserSweepKey, SweepResult> = {
     threads: { deleted: 0, inspected: 0 },

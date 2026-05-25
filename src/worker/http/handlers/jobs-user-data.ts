@@ -20,9 +20,7 @@ export async function handleJobsUserDataDelete(request: Request): Promise<Respon
   if (!userId) return Response.json({ error: 'userId is required' }, { status: 400 });
 
   const allJobs = await jobStorage.getAll();
-  const ownedRunning = allJobs.filter(
-    (j) => j.userId === userId && (j.status === 'running' || j.status === 'pending'),
-  );
+  const ownedRunning = allJobs.filter((j) => j.userId === userId && (j.status === 'running' || j.status === 'pending'));
   let cancelled = 0;
   for (const job of ownedRunning) {
     try {

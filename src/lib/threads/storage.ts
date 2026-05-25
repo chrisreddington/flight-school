@@ -73,9 +73,7 @@ class ServerThreadStore implements ThreadStore {
     try {
       const schema = await apiGet<ThreadsStorageSchema>('/api/threads/storage');
       // Sort by most recently updated
-      return schema.threads.sort((a, b) => 
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      );
+      return schema.threads.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     } catch (error) {
       log.error('Failed to load threads storage', error);
       return [];
@@ -149,7 +147,7 @@ class ServerThreadStore implements ThreadStore {
   async updateContext(id: string, context: Partial<ThreadContext>): Promise<Thread | null> {
     const thread = await this.getById(id);
     if (!thread) return null;
-    
+
     const updated: Thread = {
       ...thread,
       context: { ...thread.context, ...context },
@@ -161,7 +159,7 @@ class ServerThreadStore implements ThreadStore {
   async rename(id: string, title: string): Promise<Thread | null> {
     const thread = await this.getById(id);
     if (!thread) return null;
-    
+
     const updated: Thread = {
       ...thread,
       title,
@@ -175,7 +173,7 @@ class ServerThreadStore implements ThreadStore {
    */
   async clearAll(): Promise<void> {
     if (typeof window === 'undefined') return;
-    
+
     try {
       await this.setStorage([]);
       log.debug('All threads cleared');

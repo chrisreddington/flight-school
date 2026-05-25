@@ -1,23 +1,8 @@
-import {
-  createStatefulChallenge,
-  createStatefulGoal,
-  createStatefulTopic,
-} from './state-machine';
-import type {
-  CalibrationNeededItem,
-  DailyChallenge,
-  DailyGoal,
-  FocusHistory,
-  LearningTopic,
-} from './types';
+import { createStatefulChallenge, createStatefulGoal, createStatefulTopic } from './state-machine';
+import type { CalibrationNeededItem, DailyChallenge, DailyGoal, FocusHistory, LearningTopic } from './types';
 
 export type AddChallengeResult = 'added' | 'duplicate';
-export type SelfExplanationResult =
-  | 'updated'
-  | 'empty'
-  | 'missing-record'
-  | 'missing-challenge'
-  | 'missing-topic';
+export type SelfExplanationResult = 'updated' | 'empty' | 'missing-record' | 'missing-challenge' | 'missing-topic';
 
 export function saveSelfExplanationInHistory(
   history: FocusHistory,
@@ -50,11 +35,7 @@ export function saveSelfExplanationInHistory(
   return 'missing-topic';
 }
 
-export function getTopicPositionFromHistory(
-  history: FocusHistory,
-  dateKey: string,
-  topicId: string,
-): number | null {
+export function getTopicPositionFromHistory(history: FocusHistory, dateKey: string, topicId: string): number | null {
   const record = history[dateKey];
   if (!record || record.learningTopics.length === 0) return null;
 
@@ -112,11 +93,7 @@ export function markTopicReplacedInHistory(
   return true;
 }
 
-export function removeCalibrationItemFromHistory(
-  history: FocusHistory,
-  todayKey: string,
-  skillId: string,
-): boolean {
+export function removeCalibrationItemFromHistory(history: FocusHistory, todayKey: string, skillId: string): boolean {
   const record = history[todayKey];
   if (!record || !record.calibrationNeeded) return false;
 
@@ -124,10 +101,7 @@ export function removeCalibrationItemFromHistory(
   return true;
 }
 
-export function getCalibrationNeededFromHistory(
-  history: FocusHistory,
-  todayKey: string,
-): CalibrationNeededItem[] {
+export function getCalibrationNeededFromHistory(history: FocusHistory, todayKey: string): CalibrationNeededItem[] {
   return history[todayKey]?.calibrationNeeded || [];
 }
 
@@ -149,11 +123,7 @@ export function addChallengeToHistory(
   return 'added';
 }
 
-export function addGoalToHistory(
-  history: FocusHistory,
-  dateKey: string,
-  newGoal: DailyGoal,
-): boolean {
+export function addGoalToHistory(history: FocusHistory, dateKey: string, newGoal: DailyGoal): boolean {
   const record = history[dateKey];
   if (!record) return false;
 

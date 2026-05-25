@@ -36,7 +36,7 @@ function renderSection(activeHabit: HabitWithHistory): string {
       onStop={noop}
       onDelete={noop}
       onNewHabitClick={noop}
-    />
+    />,
   );
 }
 
@@ -52,16 +52,12 @@ describe('HabitListSection habit metadata', () => {
   });
 
   it('does not show skips badge when state is not-started', () => {
-    const markup = renderSection(
-      createHabit({ state: 'not-started', allowedSkips: 2, skipsUsed: 0 })
-    );
+    const markup = renderSection(createHabit({ state: 'not-started', allowedSkips: 2, skipsUsed: 0 }));
     expect(markup).not.toContain('skips left');
   });
 
   it('shows skips badge when state is active and allowedSkips is greater than 0', () => {
-    const markup = renderSection(
-      createHabit({ state: 'active', allowedSkips: 2, skipsUsed: 0 })
-    );
+    const markup = renderSection(createHabit({ state: 'active', allowedSkips: 2, skipsUsed: 0 }));
     expect(markup).toContain('2 skips left');
   });
 });

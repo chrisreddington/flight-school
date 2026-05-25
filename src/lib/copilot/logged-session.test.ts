@@ -85,16 +85,13 @@ describe('wrapSessionWithLogging', () => {
       'mcp.get_me',
       expect.objectContaining({ metadata: { args: { login: 'octo' } } }),
     );
-    expect(mocks.completeOperationMock).toHaveBeenCalledWith(expect.objectContaining({
-      fullResponse: 'Hello from Copilot',
-      toolsUsed: ['get_me'],
-    }));
-    expect(mocks.recordAiOperationMock).toHaveBeenCalledWith(
-      'sendAndWait',
-      expect.any(Number),
-      'gpt-5-mini',
-      'ok',
+    expect(mocks.completeOperationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fullResponse: 'Hello from Copilot',
+        toolsUsed: ['get_me'],
+      }),
     );
+    expect(mocks.recordAiOperationMock).toHaveBeenCalledWith('sendAndWait', expect.any(Number), 'gpt-5-mini', 'ok');
     expect(destroyMock).toHaveBeenCalled();
   });
 });

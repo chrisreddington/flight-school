@@ -1,8 +1,4 @@
-import {
-  buildSingleChallengePrompt,
-  buildSingleGoalPrompt,
-  buildSingleTopicPrompt,
-} from '@/lib/copilot/prompts';
+import { buildSingleChallengePrompt, buildSingleGoalPrompt, buildSingleTopicPrompt } from '@/lib/copilot/prompts';
 import { createLoggedCoachSession } from '@/lib/copilot/server';
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
 import { getOctokitForToken } from '@/lib/github/octokit-factory';
@@ -45,27 +41,18 @@ export async function executeTopicRegeneration(
   await jobStorage.markRunning(jobId);
 
   try {
-    if (!await isJobStillValid(jobId)) return;
+    if (!(await isJobStillValid(jobId))) return;
 
     const identity = await resolveJobIdentity(jobId, userId);
     if (!identity) return;
 
     const serializedContext = await buildSerializedContext(identity.gitHubToken);
 
-    if (!await isJobStillValid(jobId)) return;
+    if (!(await isJobStillValid(jobId))) return;
 
-    const prompt = buildSingleTopicPrompt(
-      serializedContext,
-      input.existingTopicTitles,
-      input.skillProfile,
-    );
+    const prompt = buildSingleTopicPrompt(serializedContext, input.existingTopicTitles, input.skillProfile);
 
-    const loggedSession = await createLoggedCoachSession(
-      identity,
-      'Job: topic-regeneration',
-      prompt.slice(0, 50),
-      [],
-    );
+    const loggedSession = await createLoggedCoachSession(identity, 'Job: topic-regeneration', prompt.slice(0, 50), []);
 
     registerSession(jobId, loggedSession);
 
@@ -74,7 +61,7 @@ export async function executeTopicRegeneration(
 
     unregisterSession(jobId);
 
-    if (!await isJobStillValid(jobId)) {
+    if (!(await isJobStillValid(jobId))) {
       await loggedSession.destroy();
       return;
     }
@@ -83,10 +70,11 @@ export async function executeTopicRegeneration(
 
     log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
 
-    const learningTopic = parseRegenerationResponse<
-      { learningTopic: LearningTopic },
-      LearningTopic
-    >(result.responseText, 'learningTopic', 'topic');
+    const learningTopic = parseRegenerationResponse<{ learningTopic: LearningTopic }, LearningTopic>(
+      result.responseText,
+      'learningTopic',
+      'topic',
+    );
 
     if (!learningTopic.id) {
       learningTopic.id = crypto.randomUUID();
@@ -115,20 +103,16 @@ export async function executeChallengeRegeneration(
   await jobStorage.markRunning(jobId);
 
   try {
-    if (!await isJobStillValid(jobId)) return;
+    if (!(await isJobStillValid(jobId))) return;
 
     const identity = await resolveJobIdentity(jobId, userId);
     if (!identity) return;
 
     const serializedContext = await buildSerializedContext(identity.gitHubToken);
 
-    if (!await isJobStillValid(jobId)) return;
+    if (!(await isJobStillValid(jobId))) return;
 
-    const prompt = buildSingleChallengePrompt(
-      serializedContext,
-      input.existingChallengeTitles,
-      input.skillProfile,
-    );
+    const prompt = buildSingleChallengePrompt(serializedContext, input.existingChallengeTitles, input.skillProfile);
 
     const loggedSession = await createLoggedCoachSession(
       identity,
@@ -144,7 +128,7 @@ export async function executeChallengeRegeneration(
 
     unregisterSession(jobId);
 
-    if (!await isJobStillValid(jobId)) {
+    if (!(await isJobStillValid(jobId))) {
       await loggedSession.destroy();
       return;
     }
@@ -153,10 +137,11 @@ export async function executeChallengeRegeneration(
 
     log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
 
-    const challenge = parseRegenerationResponse<
-      { challenge: DailyChallenge },
-      DailyChallenge
-    >(result.responseText, 'challenge', 'challenge');
+    const challenge = parseRegenerationResponse<{ challenge: DailyChallenge }, DailyChallenge>(
+      result.responseText,
+      'challenge',
+      'challenge',
+    );
 
     if (!challenge.id) {
       challenge.id = crypto.randomUUID();
@@ -185,27 +170,18 @@ export async function executeGoalRegeneration(
   await jobStorage.markRunning(jobId);
 
   try {
-    if (!await isJobStillValid(jobId)) return;
+    if (!(await isJobStillValid(jobId))) return;
 
     const identity = await resolveJobIdentity(jobId, userId);
     if (!identity) return;
 
     const serializedContext = await buildSerializedContext(identity.gitHubToken);
 
-    if (!await isJobStillValid(jobId)) return;
+    if (!(await isJobStillValid(jobId))) return;
 
-    const prompt = buildSingleGoalPrompt(
-      serializedContext,
-      input.existingGoalTitles,
-      input.skillProfile,
-    );
+    const prompt = buildSingleGoalPrompt(serializedContext, input.existingGoalTitles, input.skillProfile);
 
-    const loggedSession = await createLoggedCoachSession(
-      identity,
-      'Job: goal-regeneration',
-      prompt.slice(0, 50),
-      [],
-    );
+    const loggedSession = await createLoggedCoachSession(identity, 'Job: goal-regeneration', prompt.slice(0, 50), []);
 
     registerSession(jobId, loggedSession);
 
@@ -214,7 +190,7 @@ export async function executeGoalRegeneration(
 
     unregisterSession(jobId);
 
-    if (!await isJobStillValid(jobId)) {
+    if (!(await isJobStillValid(jobId))) {
       await loggedSession.destroy();
       return;
     }
@@ -223,11 +199,7 @@ export async function executeGoalRegeneration(
 
     log.info(`[Job ${jobId}] Complete: ${result.totalTimeMs}ms`);
 
-    const goal = parseRegenerationResponse<{ goal: DailyGoal }, DailyGoal>(
-      result.responseText,
-      'goal',
-      'goal',
-    );
+    const goal = parseRegenerationResponse<{ goal: DailyGoal }, DailyGoal>(result.responseText, 'goal', 'goal');
 
     if (!goal.id) {
       goal.id = crypto.randomUUID();

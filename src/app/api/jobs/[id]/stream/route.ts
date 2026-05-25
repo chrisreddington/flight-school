@@ -14,10 +14,7 @@
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import {
-  captureTracePropagationHeaders,
-  mergeTracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
+import { captureTracePropagationHeaders, mergeTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getWorkerJob } from '../../worker-client';
@@ -65,10 +62,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   try {
     job = await getWorkerJob(id, userId, traceCtx);
   } catch {
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
   if (!job) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 });

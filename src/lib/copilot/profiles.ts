@@ -24,16 +24,8 @@
  * Worker-internal: imports the SDK transitively via `./capabilities`.
  */
 
-import {
-  CHAT_BASE_PROMPT,
-  COACH_BASE_PROMPT,
-  COACH_GITHUB_PROMPT_ADDENDUM,
-  LEARNING_LENS_PROMPT,
-} from './prompts';
-import {
-  CAPABILITIES,
-  type CapabilitySelection,
-} from './capabilities';
+import { CHAT_BASE_PROMPT, COACH_BASE_PROMPT, COACH_GITHUB_PROMPT_ADDENDUM, LEARNING_LENS_PROMPT } from './prompts';
+import { CAPABILITIES, type CapabilitySelection } from './capabilities';
 import { type CapabilityId } from './capability-ids';
 import { composeCapabilityFingerprint } from './fingerprint';
 import {
@@ -140,10 +132,11 @@ export interface ResolveProfileContext {
 
 /** Thrown when an explicit capability id is not in the profile's allowlist. */
 export class InvalidCapabilityError extends Error {
-  constructor(public readonly profileId: BaseProfileId, public readonly capabilityId: string) {
-    super(
-      `Capability '${capabilityId}' is not allowed by profile '${profileId}'.`,
-    );
+  constructor(
+    public readonly profileId: BaseProfileId,
+    public readonly capabilityId: string,
+  ) {
+    super(`Capability '${capabilityId}' is not allowed by profile '${profileId}'.`);
     this.name = 'InvalidCapabilityError';
   }
 }
@@ -219,9 +212,7 @@ export const PROFILES = {
 } as const satisfies Record<BaseProfileId, ChatProfile>;
 
 // Sanity: every BaseProfileId must have a registry entry.
-type _ProfilesCoverIds = (typeof BASE_PROFILE_IDS)[number] extends keyof typeof PROFILES
-  ? true
-  : false;
+type _ProfilesCoverIds = (typeof BASE_PROFILE_IDS)[number] extends keyof typeof PROFILES ? true : false;
 const _ASSERT_PROFILES_COVER_IDS: _ProfilesCoverIds = true;
 void _ASSERT_PROFILES_COVER_IDS;
 
@@ -247,10 +238,7 @@ void _ASSERT_PROFILES_COVER_IDS;
  *      effective addendum.
  *   9. Compute fingerprint over `{id, tools, addendumOverrideHash?}`.
  */
-export function resolveProfile(
-  profileId: BaseProfileId,
-  ctx?: ResolveProfileContext,
-): ResolvedProfile {
+export function resolveProfile(profileId: BaseProfileId, ctx?: ResolveProfileContext): ResolvedProfile {
   const profile = PROFILES[profileId];
   const selected = new Map<CapabilityId, CapabilitySelection>();
   // Cast: `as const satisfies …` narrows each profile's defaultCapabilities
@@ -327,9 +315,7 @@ export function resolveProfile(
   // considered. Only count it as auto-elevation if the addition wasn't
   // already part of defaults OR carried in.
   if (wasAutoElevated) {
-    const trulyAdded = [...selected.keys()].some(
-      (id) => !inDefaults.has(id) && !carriedAllowedSet.has(id),
-    );
+    const trulyAdded = [...selected.keys()].some((id) => !inDefaults.has(id) && !carriedAllowedSet.has(id));
     if (!trulyAdded) {
       wasAutoElevated = false;
     }
@@ -341,8 +327,7 @@ export function resolveProfile(
     left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
   );
 
-  const requestedForTelemetry: CapabilitiesArg | 'default' =
-    requested === undefined ? 'default' : requested;
+  const requestedForTelemetry: CapabilitiesArg | 'default' = requested === undefined ? 'default' : requested;
 
   const systemMessage = composeSystemMessage(profile.basePrompt, capabilities);
   return {
@@ -367,10 +352,7 @@ export function resolveProfile(
  * (capability id sort) so identical capability sets produce
  * byte-identical prompts.
  */
-export function composeSystemMessage(
-  basePrompt: string,
-  capabilities: readonly CapabilitySelection[],
-): string {
+export function composeSystemMessage(basePrompt: string, capabilities: readonly CapabilitySelection[]): string {
   const addenda = capabilities
     .map((selection) =>
       selection.promptAddendumOverride !== undefined
@@ -392,10 +374,6 @@ export function composeSystemMessage(
  * `ChatProfile` shape so optional fields like `capabilityDefaults` are
  * visible at the call site without sprinkling `as ChatProfile` everywhere.
  */
-function getCapabilityDefaults(
-  profile: (typeof PROFILES)[BaseProfileId],
-): ChatProfile['capabilityDefaults'] {
+function getCapabilityDefaults(profile: (typeof PROFILES)[BaseProfileId]): ChatProfile['capabilityDefaults'] {
   return (profile as ChatProfile).capabilityDefaults;
 }
-
-

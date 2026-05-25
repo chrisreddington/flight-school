@@ -11,12 +11,7 @@ const log = logger.withTag('JobProgress');
  * Writes to both the job record and, for challenge evaluations, to evaluation
  * progress so the sandbox poller sees step narration without a second fetch.
  */
-export async function reportStep(
-  jobId: string,
-  userId: string,
-  step: string,
-  challengeId?: string,
-): Promise<void> {
+export async function reportStep(jobId: string, userId: string, step: string, challengeId?: string): Promise<void> {
   try {
     await jobStorage.setCurrentStep(jobId, step);
     if (challengeId) {
@@ -47,9 +42,7 @@ export async function mirrorCredentialsFailureToEvaluation(
     const job = await jobStorage.get(jobId);
     if (!job || job.type !== 'challenge-evaluation') return;
     const challengeId =
-      typeof job.targetId === 'string'
-        ? job.targetId
-        : (job.input as { challengeId?: string }).challengeId;
+      typeof job.targetId === 'string' ? job.targetId : (job.input as { challengeId?: string }).challengeId;
     if (!challengeId) return;
     const storage = await readEvaluationStorage(userId);
     const previous = storage.evaluations[challengeId];

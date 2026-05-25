@@ -1,6 +1,6 @@
 /**
  * Habit Check-in Row Component
- * 
+ *
  * Compact display of a habit check-in status - used for historical entries
  * and completed today entries.
  */
@@ -43,7 +43,7 @@ export function HabitCheckInRow({ habit, checkIn, isToday, isPending, onUndo }: 
   // Format value display for completed check-ins
   const getValueDisplay = () => {
     if (!checkIn) return null;
-    
+
     if (habit.tracking.mode === 'time' && typeof checkIn.value === 'number') {
       return `${checkIn.value} min`;
     } else if (habit.tracking.mode === 'count' && typeof checkIn.value === 'number') {
@@ -62,9 +62,7 @@ export function HabitCheckInRow({ habit, checkIn, isToday, isPending, onUndo }: 
         <Stack direction="vertical" gap="condensed">
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack direction="horizontal" gap="condensed" align="center">
-              <span className={styles.iconWrapper}>
-                {icon}
-              </span>
+              <span className={styles.iconWrapper}>{icon}</span>
               <div>
                 <strong>{habit.title}</strong>
                 {showProgress && valueDisplay && (

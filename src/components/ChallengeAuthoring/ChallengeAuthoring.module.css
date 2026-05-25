@@ -232,7 +232,9 @@
   border-radius: var(--borderRadius-medium);
   background-color: var(--bgColor-default);
   cursor: pointer;
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  transition:
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
   text-align: left;
   width: 100%;
 }

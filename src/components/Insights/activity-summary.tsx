@@ -1,6 +1,6 @@
 /**
  * Activity Summary Component
- * 
+ *
  * Displays total counts of completed challenges, explored topics, and completed goals.
  * Uses icons to make metrics scannable.
  */

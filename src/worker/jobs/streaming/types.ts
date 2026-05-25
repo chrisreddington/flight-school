@@ -88,7 +88,12 @@ export function isTerminalEvent(event: JobStreamEvent): boolean {
  */
 export function terminalEventFromStatus(
   status: 'completed' | 'cancelled' | 'failed',
-  payload: { content?: string; toolEvents?: import('@/lib/threads').ToolCallEvent[]; hasActionableItem?: boolean; message?: string },
+  payload: {
+    content?: string;
+    toolEvents?: import('@/lib/threads').ToolCallEvent[];
+    hasActionableItem?: boolean;
+    message?: string;
+  },
 ): JobStreamEvent {
   switch (status) {
     case 'completed':

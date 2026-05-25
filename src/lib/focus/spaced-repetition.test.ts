@@ -82,19 +82,21 @@ describe('getSpacedRepCandidates', () => {
       '2024-01-01': {
         challenges: [],
         goals: [],
-        learningTopics: [[
-          {
-            data: {
-              id: 'z',
-              title: 'Unexplored',
-              description: 'desc',
-              type: 'concept' as const,
-              relatedTo: 'test',
-              // explored is undefined / false
+        learningTopics: [
+          [
+            {
+              data: {
+                id: 'z',
+                title: 'Unexplored',
+                description: 'desc',
+                type: 'concept' as const,
+                relatedTo: 'test',
+                // explored is undefined / false
+              },
+              stateHistory: [],
             },
-            stateHistory: [],
-          },
-        ]],
+          ],
+        ],
       },
     };
     expect(getSpacedRepCandidates(history)).toEqual([]);
@@ -103,22 +105,46 @@ describe('getSpacedRepCandidates', () => {
 
 describe('formatReviewLabel', () => {
   it('returns "Review overdue" for forgotten topics', () => {
-    const candidate = { topicId: 'a', title: 'T', daysSinceSeen: 25, isForgotten: true, priority: 100 };
+    const candidate = {
+      topicId: 'a',
+      title: 'T',
+      daysSinceSeen: 25,
+      isForgotten: true,
+      priority: 100,
+    };
     expect(formatReviewLabel(candidate)).toBe('Review overdue');
   });
 
   it('returns "Review due" for 7–20 day topics', () => {
-    const candidate = { topicId: 'a', title: 'T', daysSinceSeen: 10, isForgotten: false, priority: 75 };
+    const candidate = {
+      topicId: 'a',
+      title: 'T',
+      daysSinceSeen: 10,
+      isForgotten: false,
+      priority: 75,
+    };
     expect(formatReviewLabel(candidate)).toBe('Review due');
   });
 
   it('returns "Due for review" for 3–6 day topics', () => {
-    const candidate = { topicId: 'a', title: 'T', daysSinceSeen: 4, isForgotten: false, priority: 50 };
+    const candidate = {
+      topicId: 'a',
+      title: 'T',
+      daysSinceSeen: 4,
+      isForgotten: false,
+      priority: 50,
+    };
     expect(formatReviewLabel(candidate)).toBe('Due for review');
   });
 
   it('returns "Quick review" for 1–2 day topics', () => {
-    const candidate = { topicId: 'a', title: 'T', daysSinceSeen: 1, isForgotten: false, priority: 25 };
+    const candidate = {
+      topicId: 'a',
+      title: 'T',
+      daysSinceSeen: 1,
+      isForgotten: false,
+      priority: 25,
+    };
     expect(formatReviewLabel(candidate)).toBe('Quick review');
   });
 });

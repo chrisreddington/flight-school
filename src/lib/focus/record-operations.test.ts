@@ -44,14 +44,30 @@ describe('focus record operations', () => {
   it('should save trimmed self-explanations for challenges and topics', () => {
     const history: FocusHistory = {
       '2024-01-15': {
-        challenges: [{ data: challenge, stateHistory: [{ state: 'completed', timestamp: '2024-01-15T12:00:00.000Z' }] }],
+        challenges: [
+          {
+            data: challenge,
+            stateHistory: [{ state: 'completed', timestamp: '2024-01-15T12:00:00.000Z' }],
+          },
+        ],
         goals: [],
-        learningTopics: [[{ data: topic, stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }] }]],
+        learningTopics: [
+          [
+            {
+              data: topic,
+              stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+          ],
+        ],
       },
     };
 
-    expect(saveSelfExplanationInHistory(history, '2024-01-15', 'challenge', 'challenge-1', '  I learned CI.  ')).toBe('updated');
-    expect(saveSelfExplanationInHistory(history, '2024-01-15', 'topic', 'topic-1', 'Actions are workflows.')).toBe('updated');
+    expect(saveSelfExplanationInHistory(history, '2024-01-15', 'challenge', 'challenge-1', '  I learned CI.  ')).toBe(
+      'updated',
+    );
+    expect(saveSelfExplanationInHistory(history, '2024-01-15', 'topic', 'topic-1', 'Actions are workflows.')).toBe(
+      'updated',
+    );
     expect(saveSelfExplanationInHistory(history, '2024-01-15', 'topic', 'topic-1', '   ')).toBe('empty');
 
     expect(history['2024-01-15'].challenges[0].data.selfExplanation).toBe('I learned CI.');
@@ -64,11 +80,22 @@ describe('focus record operations', () => {
       '2024-01-15': {
         challenges: [],
         goals: [],
-        learningTopics: [[
-          { data: { ...topic, id: 'topic-0' }, stateHistory: [{ state: 'skipped', timestamp: '2024-01-15T12:00:00.000Z' }] },
-          { data: topic, stateHistory: [{ state: 'not-explored', timestamp: '2024-01-15T12:00:00.000Z' }] },
-          { data: { ...topic, id: 'topic-2' }, stateHistory: [{ state: 'not-explored', timestamp: '2024-01-15T12:00:00.000Z' }] },
-        ]],
+        learningTopics: [
+          [
+            {
+              data: { ...topic, id: 'topic-0' },
+              stateHistory: [{ state: 'skipped', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+            {
+              data: topic,
+              stateHistory: [{ state: 'not-explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+            {
+              data: { ...topic, id: 'topic-2' },
+              stateHistory: [{ state: 'not-explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+          ],
+        ],
       },
     };
 

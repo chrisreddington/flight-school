@@ -76,7 +76,7 @@ function buildFallbackQuestions(topicTitle: string, topicDescription: string): Q
 function normalizeQuestions(
   parsed: RawQuizResponse | null,
   topicTitle: string,
-  topicDescription: string
+  topicDescription: string,
 ): QuizQuestion[] {
   const fallback = buildFallbackQuestions(topicTitle, topicDescription);
   if (!parsed?.questions || parsed.questions.length === 0) {
@@ -98,9 +98,10 @@ function normalizeQuestions(
         ? source.correctIndex
         : fallbackQuestion.correctIndex;
 
-    const explanation = typeof source?.explanation === 'string' && source.explanation.trim().length > 0
-      ? source.explanation.trim()
-      : fallbackQuestion.explanation;
+    const explanation =
+      typeof source?.explanation === 'string' && source.explanation.trim().length > 0
+        ? source.explanation.trim()
+        : fallbackQuestion.explanation;
 
     return {
       id: typeof source?.id === 'string' && source.id.trim().length > 0 ? source.id : fallbackQuestion.id,
@@ -123,7 +124,7 @@ export async function generateTopicQuiz(
   identity: SessionIdentity,
   topicTitle: string,
   topicDescription: string,
-  profileContext: string
+  profileContext: string,
 ): Promise<QuizResult> {
   const prompt = `Topic: ${topicTitle}
 Description: ${topicDescription}
@@ -163,4 +164,3 @@ Return JSON only:
     questions,
   };
 }
-

@@ -29,7 +29,7 @@ export function buildHistoryEntries(
 ): HistoryEntry[] {
   return Object.entries(rawHistory)
     .map(([dateKey, record]) => buildHistoryEntry(dateKey, record, habitsCollection.habits, todayDateKey))
-    .filter(entry => entry.items.length > 0)
+    .filter((entry) => entry.items.length > 0)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 }
 
@@ -126,7 +126,7 @@ export function countCompletedGoals(rawHistory: FocusHistory): number {
   let goalsCount = 0;
   for (const dateKey of Object.keys(rawHistory)) {
     for (const goal of rawHistory[dateKey].goals) {
-      if (goal.stateHistory.some(transition => transition.state === 'completed')) {
+      if (goal.stateHistory.some((transition) => transition.state === 'completed')) {
         goalsCount++;
       }
     }
@@ -158,11 +158,9 @@ export function buildLearningHistoryViewModel({
     activityData: generate52WeekActivity(entries),
     groupedEntries: groupEntriesByMonth(entries),
     stats: calculateHistoryStats(entries, selectedDate),
-    hasNoInsightsHistory: !insights || (
-      insights.totalChallengesCompleted === 0 &&
-      insights.totalTopicsExplored === 0 &&
-      totalGoalsCompleted === 0
-    ),
+    hasNoInsightsHistory:
+      !insights ||
+      (insights.totalChallengesCompleted === 0 && insights.totalTopicsExplored === 0 && totalGoalsCompleted === 0),
   };
 }
 
@@ -186,23 +184,21 @@ function filterHistoryEntries({
   activeTopicCount,
 }: FilterHistoryEntriesInput): HistoryEntry[] {
   return entries
-    .filter(entry => !selectedDate || entry.dateKey === selectedDate)
-    .map(entry => ({
+    .filter((entry) => !selectedDate || entry.dateKey === selectedDate)
+    .map((entry) => ({
       ...entry,
-      items: entry.items.filter(item => {
+      items: entry.items.filter((item) => {
         if (typeFilter !== 'all' && item.type !== typeFilter) return false;
         if (statusFilter !== 'all' && item.status !== statusFilter) return false;
         if (!matchesSearch(item, searchQuery)) return false;
         return true;
       }),
     }))
-    .filter(entry => entry.items.length > 0 || (entry.dateKey === todayDateKey && activeTopicCount > 0));
+    .filter((entry) => entry.items.length > 0 || (entry.dateKey === todayDateKey && activeTopicCount > 0));
 }
 
 function calculateHistoryStats(entries: HistoryEntry[], selectedDate: string | null): Stats {
-  const relevantEntries = selectedDate
-    ? entries.filter(entry => entry.dateKey === selectedDate)
-    : entries;
+  const relevantEntries = selectedDate ? entries.filter((entry) => entry.dateKey === selectedDate) : entries;
 
   const stats: Stats = {
     total: 0,

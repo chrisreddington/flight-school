@@ -20,9 +20,7 @@ import type { CapabilitySelection } from './capabilities';
  * sharing the github capability but with different tool allowlists or
  * different effective addenda are NOT interchangeable for cache reuse.
  */
-export function capabilityFingerprintOf(
-  selections: readonly CapabilitySelection[],
-): string {
+export function capabilityFingerprintOf(selections: readonly CapabilitySelection[]): string {
   if (selections.length === 0) return 'caps=none';
   const parts = [...selections]
     .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))

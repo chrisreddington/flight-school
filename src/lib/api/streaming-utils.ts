@@ -121,7 +121,7 @@ interface CreateSSEResponseOptions<TMeta = Record<string, unknown>> {
  */
 export function createSSEResponse<T extends SSEStreamEvent, TMeta extends SSEStreamEvent = SSEStreamEvent>(
   streamGenerator: () => AsyncGenerator<T, void, undefined>,
-  options?: CreateSSEResponseOptions<TMeta>
+  options?: CreateSSEResponseOptions<TMeta>,
 ): Response {
   const encoder = new TextEncoder();
   const heartbeatMs = options?.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;

@@ -2,21 +2,9 @@
 
 import { parseJsonBody } from '@/lib/api/request-utils';
 import { activityLoggerWorker } from '@/lib/copilot/activity/logger-worker';
-import type {
-  AIActivityInput,
-  AIActivityOutput,
-  AIActivityStatus,
-  AIActivityType,
-} from '@/lib/copilot/activity/types';
+import type { AIActivityInput, AIActivityOutput, AIActivityStatus, AIActivityType } from '@/lib/copilot/activity/types';
 
-const ALLOWED_TYPES: readonly AIActivityType[] = [
-  'embed',
-  'ask',
-  'session',
-  'tool',
-  'error',
-  'internal',
-];
+const ALLOWED_TYPES: readonly AIActivityType[] = ['embed', 'ask', 'session', 'tool', 'error', 'internal'];
 const ALLOWED_STATUSES: readonly AIActivityStatus[] = ['pending', 'success', 'error'];
 
 interface CreateEventBody {
@@ -39,9 +27,7 @@ interface PatchEventBody {
 
 function pickStatus(value: unknown): AIActivityStatus | undefined {
   if (typeof value !== 'string') return undefined;
-  return ALLOWED_STATUSES.includes(value as AIActivityStatus)
-    ? (value as AIActivityStatus)
-    : undefined;
+  return ALLOWED_STATUSES.includes(value as AIActivityStatus) ? (value as AIActivityStatus) : undefined;
 }
 
 function pickMetrics(value: unknown): { firstTokenMs?: number; totalMs?: number } | undefined {
@@ -53,9 +39,7 @@ function pickMetrics(value: unknown): { firstTokenMs?: number; totalMs?: number 
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-function pickServerMetrics(
-  value: unknown,
-): { firstTokenMs?: number | null; totalMs?: number } | undefined {
+function pickServerMetrics(value: unknown): { firstTokenMs?: number | null; totalMs?: number } | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const raw = value as { firstTokenMs?: unknown; totalMs?: unknown };
   const out: { firstTokenMs?: number | null; totalMs?: number } = {};
@@ -66,10 +50,7 @@ function pickServerMetrics(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-export async function handleActivityEventCreate(
-  request: Request,
-  userId: string,
-): Promise<Response> {
+export async function handleActivityEventCreate(request: Request, userId: string): Promise<Response> {
   const parsed = await parseJsonBody<CreateEventBody>(request);
   if (!parsed.success) {
     return Response.json({ error: parsed.error }, { status: 400 });
@@ -113,11 +94,7 @@ export async function handleActivityEventCreate(
   return Response.json({ id: eventId });
 }
 
-export async function handleActivityEventPatch(
-  request: Request,
-  eventId: string,
-  userId: string,
-): Promise<Response> {
+export async function handleActivityEventPatch(request: Request, eventId: string, userId: string): Promise<Response> {
   const parsed = await parseJsonBody<PatchEventBody>(request);
   if (!parsed.success) {
     return Response.json({ error: parsed.error }, { status: 400 });

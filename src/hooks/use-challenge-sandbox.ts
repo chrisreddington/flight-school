@@ -49,26 +49,20 @@ interface UseChallengeSandboxReturn {
  * @param challengeId - Storage key for the workspace
  * @param challenge - Challenge definition driving evaluation and hints
  */
-export function useChallengeSandbox(
-  challengeId: string,
-  challenge: ChallengeDef
-): UseChallengeSandboxReturn {
+export function useChallengeSandbox(challengeId: string, challenge: ChallengeDef): UseChallengeSandboxReturn {
   const workspace = useWorkspace(challengeId, challenge);
 
   const evaluationHook = useEvaluation({
     challengeId,
     challenge,
-    getFiles: useCallback(
-      () => workspace.files.map((f) => ({ name: f.name, content: f.content })),
-      [workspace.files]
-    ),
+    getFiles: useCallback(() => workspace.files.map((f) => ({ name: f.name, content: f.content })), [workspace.files]),
   });
 
   const hintsHook = useHints({
     challenge,
     getCurrentCode: useCallback(
       () => workspace.files.find((f) => f.id === workspace.activeFileId)?.content ?? '',
-      [workspace.files, workspace.activeFileId]
+      [workspace.files, workspace.activeFileId],
     ),
   });
 

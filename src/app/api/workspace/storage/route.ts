@@ -22,22 +22,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  readFile,
-  writeFile,
-  deleteFile,
-  deleteDir,
-  listFiles,
-  ensureDir,
-  safeChildPath
-} from '@/lib/storage/utils';
+import { readFile, writeFile, deleteFile, deleteDir, listFiles, ensureDir, safeChildPath } from '@/lib/storage/utils';
 import type { ChallengeWorkspace, WorkspaceFile, WorkspaceMetadata } from '@/lib/workspace/types';
-import {
-  WORKSPACES_DIR,
-  METADATA_FILENAME,
-  toFileMetadata,
-  toWorkspaceFile
-} from '@/lib/workspace/storage';
+import { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile } from '@/lib/workspace/storage';
 import { requireUserContext } from '@/lib/auth/context';
 import { authErrorResponse, validationErrorResponse } from '@/lib/api';
 import { logger } from '@/lib/logger';
@@ -161,9 +148,9 @@ export async function GET(request: NextRequest) {
           });
           return toWorkspaceFile(fileMeta, '');
         }
-        const content = await readFile(workspaceDir, fileMeta.name) ?? '';
+        const content = (await readFile(workspaceDir, fileMeta.name)) ?? '';
         return toWorkspaceFile(fileMeta, content);
-      })
+      }),
     );
 
     const workspace: ChallengeWorkspace = {
@@ -219,7 +206,7 @@ export async function POST(request: NextRequest) {
     await ensureDir(workspaceDir);
 
     const existingFiles = await listFiles(workspaceDir);
-    const newFileNames = new Set(workspace.files.map(f => f.name));
+    const newFileNames = new Set(workspace.files.map((f) => f.name));
     newFileNames.add(METADATA_FILENAME);
 
     for (const existingFile of existingFiles) {
@@ -228,9 +215,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await Promise.all(
-      workspace.files.map(file => writeFile(workspaceDir, file.name, file.content))
-    );
+    await Promise.all(workspace.files.map((file) => writeFile(workspaceDir, file.name, file.content)));
 
     const metadata: WorkspaceMetadata = {
       version: workspace.version,

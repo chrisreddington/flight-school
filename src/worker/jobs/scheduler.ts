@@ -1,19 +1,10 @@
 import type { DispatchJobExecutionRequest } from '@/lib/jobs/dispatch';
 import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
-import {
-  buildSpanLinksFromTraceContext,
-  type TracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
-import {
-  toClientTriggerSpanAttributes,
-  type ClientTriggerMetadata,
-} from '@/lib/observability/trigger-metadata';
+import { buildSpanLinksFromTraceContext, type TracePropagationHeaders } from '@/lib/observability/context-propagation';
+import { toClientTriggerSpanAttributes, type ClientTriggerMetadata } from '@/lib/observability/trigger-metadata';
 import { recordJobQueueWait } from '@/lib/observability/telemetry';
-import {
-  INSTRUMENTATION_SCOPE_SERVER,
-  INSTRUMENTATION_SCOPE_VERSION,
-} from '@/lib/observability/semconv';
+import { INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION } from '@/lib/observability/semconv';
 import { context, trace } from '@opentelemetry/api';
 import { executeWorkerJob } from '@/worker/jobs/executor-dispatcher';
 
@@ -26,9 +17,7 @@ export function scheduleWorkerJobExecution(
 ): void {
   setImmediate(() => {
     const links = buildSpanLinksFromTraceContext(causality ?? {});
-    const triggerAttributes = causality?.trigger
-      ? toClientTriggerSpanAttributes(causality.trigger)
-      : {};
+    const triggerAttributes = causality?.trigger ? toClientTriggerSpanAttributes(causality.trigger) : {};
     const queueWaitMs = getQueueWaitMs(causality?.capturedAt);
     if (queueWaitMs !== undefined) {
       recordJobQueueWait(queueWaitMs, request.type);

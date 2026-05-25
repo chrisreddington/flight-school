@@ -12,10 +12,7 @@
 import { parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
-import {
-  type IssueRequest,
-  validateIssueRequest,
-} from '@/lib/github/api-requests';
+import { type IssueRequest, validateIssueRequest } from '@/lib/github/api-requests';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { createIssue, createLearningGoalIssue } from '@/lib/github/issues';
 import { logger } from '@/lib/logger';
@@ -37,13 +34,6 @@ interface IssueResponse {
     createdAt: string;
     totalTimeMs: number;
   };
-}
-
-/** Response for failed issue creation */
-interface ErrorResponse {
-  success: false;
-  error: string;
-  meta?: Record<string, unknown>;
 }
 
 /**
@@ -81,9 +71,7 @@ interface ErrorResponse {
  * });
  * ```
  */
-export async function POST(
-  request: NextRequest
-): Promise<Response> {
+export async function POST(request: NextRequest): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 
@@ -104,7 +92,11 @@ export async function POST(
   const req = parseResult.data;
 
   return withGuardedRoute(
-    { ...ISSUES_GUARD, eventType: 'issues.create', auditMetadata: { route: '/api/issues', type: req.type } },
+    {
+      ...ISSUES_GUARD,
+      eventType: 'issues.create',
+      auditMetadata: { route: '/api/issues', type: req.type },
+    },
     async () => {
       try {
         const octokit = await getOctokitForRequest();
@@ -117,13 +109,7 @@ export async function POST(
                 body: req.body,
                 labels: req.labels,
               })
-            : await createLearningGoalIssue(
-                octokit,
-                req.owner,
-                req.repo,
-                req.topic,
-                req.description,
-              );
+            : await createLearningGoalIssue(octokit, req.owner, req.repo, req.topic, req.description);
 
         const totalTime = nowMs() - startTime;
         log.info(`Issue #${result.number} created in ${totalTime}ms`);

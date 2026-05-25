@@ -74,13 +74,10 @@ describe('getDateKey', () => {
     { year: 2026, month: 0, day: 1, expected: '2026-01-01' },
     { year: 2026, month: 5, day: 15, expected: '2026-06-15' },
     { year: 2026, month: 11, day: 31, expected: '2026-12-31' },
-  ])(
-    'should format $year-$month-$day as $expected',
-    ({ year, month, day, expected }) => {
-      const date = new Date(year, month, day);
-      expect(getDateKey(date)).toBe(expected);
-    }
-  );
+  ])('should format $year-$month-$day as $expected', ({ year, month, day, expected }) => {
+    const date = new Date(year, month, day);
+    expect(getDateKey(date)).toBe(expected);
+  });
 });
 
 describe('formatTimestamp', () => {

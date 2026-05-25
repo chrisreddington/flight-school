@@ -83,11 +83,7 @@ describe('check-web-image-copilot-free.mjs — Assertion A orchestration', () =>
   it('fails when the runner stage copies a broad source not on the allowlist', async () => {
     await writeFile(
       path.join(repoRoot, 'Dockerfile'),
-      [
-        'FROM node:20-slim AS runner',
-        'COPY --from=builder /app /app',
-        'CMD ["node", "server.js"]',
-      ].join('\n'),
+      ['FROM node:20-slim AS runner', 'COPY --from=builder /app /app', 'CMD ["node", "server.js"]'].join('\n'),
     );
     await expect(runGate(repoRoot)).rejects.toMatchObject({ code: 1 });
   });
@@ -128,11 +124,7 @@ describe('check-web-image-copilot-free.mjs — Assertion A orchestration', () =>
     // A renamed runner stage would otherwise silently disable r2/r3.
     await writeFile(
       path.join(repoRoot, 'Dockerfile'),
-      [
-        'FROM node:20-slim AS final',
-        'COPY --from=builder /app /app',
-        'CMD ["node", "server.js"]',
-      ].join('\n'),
+      ['FROM node:20-slim AS final', 'COPY --from=builder /app /app', 'CMD ["node", "server.js"]'].join('\n'),
     );
     await expect(runGate(repoRoot)).rejects.toMatchObject({ code: 1 });
   });

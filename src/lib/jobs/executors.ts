@@ -1,6 +1,6 @@
 /**
  * Job Executors
- * 
+ *
  * Contains the actual logic for executing different job types.
  * Each executor is responsible for running the AI operation and
  * returning the result.

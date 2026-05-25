@@ -48,9 +48,7 @@ let cached: CachedJwks | null = null;
 
 function getJwks(tenantId: string): ReturnType<typeof createRemoteJWKSet> {
   if (cached && cached.tenantId === tenantId) return cached.jwks;
-  const jwksUrl = new URL(
-    `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/discovery/v2.0/keys`,
-  );
+  const jwksUrl = new URL(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/discovery/v2.0/keys`);
   const jwks = createRemoteJWKSet(jwksUrl);
   cached = { tenantId, jwks };
   return jwks;
@@ -115,18 +113,14 @@ export async function verifyCronRequest(request: Request): Promise<JWTPayload> {
       issuer: expectedIssuers,
     });
     const appid =
-      (typeof payload.appid === 'string' && payload.appid) ||
-      (typeof payload.azp === 'string' && payload.azp) ||
-      '';
+      (typeof payload.appid === 'string' && payload.appid) || (typeof payload.azp === 'string' && payload.azp) || '';
     if (!appid || !allowedAppids.includes(appid)) {
       throw new CronAuthError('Caller appid not in allowlist');
     }
     return payload;
   } catch (err) {
     if (err instanceof CronAuthError) throw err;
-    throw new CronAuthError(
-      `JWT verification failed: ${err instanceof Error ? err.message : 'unknown'}`,
-    );
+    throw new CronAuthError(`JWT verification failed: ${err instanceof Error ? err.message : 'unknown'}`);
   }
 }
 

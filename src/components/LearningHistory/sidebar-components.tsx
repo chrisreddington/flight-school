@@ -6,13 +6,7 @@
 
 'use client';
 
-import {
-  CalendarIcon,
-  CheckCircleIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  SkipIcon,
-} from '@primer/octicons-react';
+import { CalendarIcon, CheckCircleIcon, ChevronDownIcon, ChevronRightIcon, SkipIcon } from '@primer/octicons-react';
 import { memo } from 'react';
 import type { HistoryEntry, Stats } from './types';
 import styles from './LearningHistory.module.css';
@@ -66,7 +60,7 @@ export const DateNavigation = memo(function DateNavigation({
         {Array.from(groupedEntries.entries()).map(([month, entries]) => {
           const isExpanded = expandedMonths.has(month);
           const totalItems = entries.reduce((sum, e) => sum + e.items.length, 0);
-          
+
           return (
             <div key={month} className={styles.dateNavMonth}>
               <button
@@ -79,10 +73,10 @@ export const DateNavigation = memo(function DateNavigation({
                 <span>{month}</span>
                 <span className={styles.dateNavCount}>{totalItems}</span>
               </button>
-              
+
               {isExpanded && (
                 <div className={styles.dateNavDays}>
-                  {entries.map(entry => (
+                  {entries.map((entry) => (
                     <button
                       key={entry.dateKey}
                       type="button"

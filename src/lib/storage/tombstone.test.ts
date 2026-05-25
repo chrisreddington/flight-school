@@ -30,7 +30,7 @@ beforeEach(async () => {
   // Tombstone module caches markers in-process; bust the cache between tests.
   const mod = await import('./tombstone');
   // @ts-expect-error - test-only access via module reload
-  (await import('./tombstone'));
+  await import('./tombstone');
   void mod;
 });
 
@@ -69,11 +69,7 @@ describe('tombstone', () => {
     // directly to the legacy location.
     const legacyDir = path.join(tmpDir, 'users', 'legacy-user');
     await fs.mkdir(legacyDir, { recursive: true });
-    await fs.writeFile(
-      path.join(legacyDir, '.deleted'),
-      '"2024-01-01T00:00:00.000Z"',
-      'utf8',
-    );
+    await fs.writeFile(path.join(legacyDir, '.deleted'), '"2024-01-01T00:00:00.000Z"', 'utf8');
     const { isUserDeleted } = await import('./tombstone');
     expect(await isUserDeleted('legacy-user')).toBe(true);
   });

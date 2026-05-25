@@ -14,13 +14,7 @@ import { getRepoReadmeSummary } from './readme';
 import { getRepoLanguageBytes, getUserRepositories } from './repos';
 import { getStarredInterests } from './starred';
 import { analyzeWorkPatterns } from './work-patterns';
-import type {
-    ActivitySummary,
-    CompactDeveloperProfile,
-    GitHubEvent,
-    GitHubRepo,
-    LanguageProficiency,
-} from './types';
+import type { ActivitySummary, CompactDeveloperProfile, GitHubEvent, GitHubRepo, LanguageProficiency } from './types';
 import { getAuthenticatedUser } from './user';
 
 // =============================================================================
@@ -65,7 +59,7 @@ const ARRAY_DELIMITER = ',';
  */
 export async function buildCompactContext(
   octokit: Octokit,
-  timeout = CONTEXT_TIMEOUT_MS
+  timeout = CONTEXT_TIMEOUT_MS,
 ): Promise<CompactDeveloperProfile> {
   // Create abort signal for timeout
   const controller = new AbortController();
@@ -100,7 +94,8 @@ export async function buildCompactContext(
     void workPatternsResult;
 
     const starredInterests = starredResult2.status === 'fulfilled' ? starredResult2.value : [];
-    const workPatterns = workPatternsResult2.status === 'fulfilled' ? workPatternsResult2.value : { patterns: [], bugRatio: 0 };
+    const workPatterns =
+      workPatternsResult2.status === 'fulfilled' ? workPatternsResult2.value : { patterns: [], bugRatio: 0 };
     const openIssues = openIssuesResult.status === 'fulfilled' ? openIssuesResult.value.slice(0, 5) : [];
 
     // Calculate metrics from base data
@@ -194,9 +189,7 @@ export function serializeContext(profile: CompactDeveloperProfile): string {
 
   // Language proficiencies
   if (profile.lp.length > 0) {
-    const lpParts = profile.lp.map((lp) =>
-      `${escapeDelimiters(lp.n)}:${lp.b}:${lp.p}`
-    );
+    const lpParts = profile.lp.map((lp) => `${escapeDelimiters(lp.n)}:${lp.b}:${lp.p}`);
     parts.push(`lp:${lpParts.join(ARRAY_DELIMITER)}`);
   }
 
@@ -207,15 +200,13 @@ export function serializeContext(profile: CompactDeveloperProfile): string {
 
   // Open issues (title-only context)
   if (profile.openIssues && profile.openIssues.length > 0) {
-    const issueTitles = profile.openIssues
-      .map((issue) => escapeDelimiters(issue.title))
-      .join(FIELD_DELIMITER);
+    const issueTitles = profile.openIssues.map((issue) => escapeDelimiters(issue.title)).join(FIELD_DELIMITER);
     parts.push(`issues:[${issueTitles}]`);
   }
 
   // Activity
   parts.push(
-    `a:${profile.a.c}:${profile.a.pr}:${profile.a.d}:${profile.a.r.map(escapeDelimiters).join(ARRAY_DELIMITER)}`
+    `a:${profile.a.c}:${profile.a.pr}:${profile.a.d}:${profile.a.r.map(escapeDelimiters).join(ARRAY_DELIMITER)}`,
   );
 
   // Skill gaps
@@ -253,11 +244,7 @@ export function serializeContext(profile: CompactDeveloperProfile): string {
 /** Escapes delimiter characters in a string (internal). */
 function escapeDelimiters(value: string): string {
   // Order matters: escape backslashes first, then other delimiters
-  return value
-    .replace(/\\/g, '\\B')
-    .replace(/\|/g, '\\P')
-    .replace(/,/g, '\\C')
-    .replace(/:/g, '\\D');
+  return value.replace(/\\/g, '\\B').replace(/\|/g, '\\P').replace(/,/g, '\\C').replace(/:/g, '\\D');
 }
 
 // =============================================================================
@@ -293,7 +280,7 @@ function aggregateTopics(repos: GitHubRepo[]): string[] {
 /** Aggregates language bytes from repo data and deep inspection. */
 function aggregateLanguageBytes(
   repos: GitHubRepo[],
-  deepData: Array<{ languages: Record<string, number> }>
+  deepData: Array<{ languages: Record<string, number> }>,
 ): LanguageProficiency[] {
   const languageTotals = new Map<string, number>();
 
@@ -309,10 +296,7 @@ function aggregateLanguageBytes(
     for (const repo of repos) {
       if (repo.language) {
         // Estimate 10KB per repo as rough approximation
-        languageTotals.set(
-          repo.language,
-          (languageTotals.get(repo.language) || 0) + 10000
-        );
+        languageTotals.set(repo.language, (languageTotals.get(repo.language) || 0) + 10000);
       }
     }
   }
@@ -330,9 +314,7 @@ function aggregateLanguageBytes(
 }
 
 /** Extracts unique keywords from README summaries. */
-function extractReadmeKeywords(
-  deepData: Array<{ readme: { keywords: string[] } | null }>
-): string[] {
+function extractReadmeKeywords(deepData: Array<{ readme: { keywords: string[] } | null }>): string[] {
   const keywords = new Set<string>();
 
   for (const data of deepData) {
@@ -353,9 +335,7 @@ function shortenRepoName(repoName: string): string {
 }
 
 /** Aggregates unique dependencies across all deep-inspected repos. */
-function aggregateDeps(
-  deepData: Array<{ deps: string[] }>
-): string[] {
+function aggregateDeps(deepData: Array<{ deps: string[] }>): string[] {
   const seen = new Set<string>();
   for (const data of deepData) {
     for (const dep of data.deps) {

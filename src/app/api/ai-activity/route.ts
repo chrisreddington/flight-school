@@ -11,12 +11,8 @@
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import {
-  captureTracePropagationHeaders,
-  mergeTracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
+import { captureTracePropagationHeaders, mergeTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
-
 
 function buildProxyHeaders(userId: string, secret: string) {
   return mergeTracePropagationHeaders(

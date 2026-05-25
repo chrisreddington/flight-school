@@ -28,10 +28,10 @@ const DEFAULT_QUEUE: CustomChallengeQueue = {
 function validateSchema(data: unknown): data is CustomChallengeQueue {
   if (typeof data !== 'object' || data === null) return false;
   const schema = data as Record<string, unknown>;
-  
+
   if (!Array.isArray(schema.challenges)) return false;
   if (typeof schema.lastUpdated !== 'string') return false;
-  
+
   // Validate each challenge has required fields
   for (const challenge of schema.challenges) {
     if (typeof challenge !== 'object' || challenge === null) return false;
@@ -42,7 +42,7 @@ function validateSchema(data: unknown): data is CustomChallengeQueue {
     if (typeof c.language !== 'string') return false;
     if (!['beginner', 'intermediate', 'advanced'].includes(c.difficulty as string)) return false;
   }
-  
+
   return true;
 }
 

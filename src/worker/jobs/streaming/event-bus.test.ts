@@ -320,9 +320,7 @@ describe('JobEventBus.appendTerminalIfNotTerminated', () => {
 
   it('throws when called with a non-terminal event', () => {
     const bus = new JobEventBus();
-    expect(() =>
-      bus.appendTerminalIfNotTerminated('j1', { type: 'delta', content: 'x' }),
-    ).toThrow();
+    expect(() => bus.appendTerminalIfNotTerminated('j1', { type: 'delta', content: 'x' })).toThrow();
   });
 
   it('emits a single terminal frame under concurrent calls', () => {
@@ -341,9 +339,7 @@ describe('JobEventBus.appendTerminalIfNotTerminated', () => {
     expect(a).not.toBeNull();
     expect(b).toBeNull();
     const replay = bus.replay('j1');
-    const terminals = replay.filter((e) =>
-      ['done', 'cancelled', 'failed'].includes(e.event.type),
-    );
+    const terminals = replay.filter((e) => ['done', 'cancelled', 'failed'].includes(e.event.type));
     expect(terminals).toHaveLength(1);
   });
 });

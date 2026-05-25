@@ -15,8 +15,16 @@ describe('toolSummary', () => {
   });
 
   it('strips github./mcp. namespace prefixes', () => {
-    const a = toolSummary('github.get_file_contents', { owner: 'foo', repo: 'bar', path: 'src/index.ts' });
-    const b = toolSummary('mcp.get_file_contents', { owner: 'foo', repo: 'bar', path: 'src/index.ts' });
+    const a = toolSummary('github.get_file_contents', {
+      owner: 'foo',
+      repo: 'bar',
+      path: 'src/index.ts',
+    });
+    const b = toolSummary('mcp.get_file_contents', {
+      owner: 'foo',
+      repo: 'bar',
+      path: 'src/index.ts',
+    });
     expect(a.summary).toBe(b.summary);
     expect(a.summary).toBe('Reading `src/index.ts` from `foo/bar`');
   });
@@ -38,7 +46,11 @@ describe('toolSummary', () => {
   });
 
   it('summarises get_pull_request with repo + number', () => {
-    const result = toolSummary('get_pull_request', { owner: 'foo', repo: 'bar', pull_number: '42' });
+    const result = toolSummary('get_pull_request', {
+      owner: 'foo',
+      repo: 'bar',
+      pull_number: '42',
+    });
     expect(result.icon).toBe('🔀');
     expect(result.summary).toBe('Reading PR #42 on `foo/bar`');
   });

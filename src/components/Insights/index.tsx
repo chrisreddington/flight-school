@@ -1,6 +1,6 @@
 /**
  * Insights Components
- * 
+ *
  * Components for displaying learning journey analytics and insights.
  */
 

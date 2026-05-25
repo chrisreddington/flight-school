@@ -22,7 +22,7 @@ function renderBubble(message: Message, opts: { isStreaming?: boolean } = {}) {
   return render(
     <ThemeProvider>
       <MessageBubble message={message} isStreaming={opts.isStreaming ?? false} />
-    </ThemeProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -39,14 +39,19 @@ function buildMessage(toolEvents: ToolCallEvent[], content = 'hello'): Message {
 describe('MessageBubble tool events', () => {
   it('renders the running state with a spinner and human summary outside debug mode', () => {
     isDebugModeRef.current = false;
-    renderBubble(buildMessage([
-      {
-        id: 't-1',
-        name: 'search_code',
-        status: 'running',
-        args: { owner: 'chrisreddington', repo: 'flight-school', q: 'auth' },
-      },
-    ], ''));
+    renderBubble(
+      buildMessage(
+        [
+          {
+            id: 't-1',
+            name: 'search_code',
+            status: 'running',
+            args: { owner: 'chrisreddington', repo: 'flight-school', q: 'auth' },
+          },
+        ],
+        '',
+      ),
+    );
 
     const list = screen.getByTestId('tool-event-list');
     const item = within(list).getByLabelText(/Tool running:/);
@@ -59,16 +64,18 @@ describe('MessageBubble tool events', () => {
 
   it('renders the completed state with a checkmark, summary, and duration', () => {
     isDebugModeRef.current = false;
-    renderBubble(buildMessage([
-      {
-        id: 't-1',
-        name: 'get_file_contents',
-        status: 'complete',
-        args: { owner: 'foo', repo: 'bar', path: 'README.md' },
-        result: '# Hello',
-        durationMs: 1234,
-      },
-    ]));
+    renderBubble(
+      buildMessage([
+        {
+          id: 't-1',
+          name: 'get_file_contents',
+          status: 'complete',
+          args: { owner: 'foo', repo: 'bar', path: 'README.md' },
+          result: '# Hello',
+          durationMs: 1234,
+        },
+      ]),
+    );
 
     const list = screen.getByTestId('tool-event-list');
     const item = within(list).getByLabelText(/Tool completed:/);
@@ -80,16 +87,18 @@ describe('MessageBubble tool events', () => {
 
   it('exposes a "Show details" disclosure with raw args/result when debug mode is on', () => {
     isDebugModeRef.current = true;
-    renderBubble(buildMessage([
-      {
-        id: 't-1',
-        name: 'search_code',
-        status: 'complete',
-        args: { q: 'auth' },
-        result: 'matched 12 files',
-        durationMs: 500,
-      },
-    ]));
+    renderBubble(
+      buildMessage([
+        {
+          id: 't-1',
+          name: 'search_code',
+          status: 'complete',
+          args: { q: 'auth' },
+          result: 'matched 12 files',
+          durationMs: 500,
+        },
+      ]),
+    );
 
     const list = screen.getByTestId('tool-event-list');
     expect(within(list).getByText('Show details')).toBeInTheDocument();
@@ -111,7 +120,7 @@ describe('MessageBubble tool events', () => {
             toolCalls: ['search_code'],
           }}
         />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
     const list = screen.getByTestId('tool-event-list');
     expect(within(list).getByLabelText(/Tool completed:/)).toBeInTheDocument();
@@ -124,11 +133,9 @@ describe('MessageBubble tool events', () => {
     const { rerender } = render(
       <ThemeProvider>
         <MessageBubble
-          message={buildMessage([
-            { id: 't-1', name: 'search_code', status: 'running', args: { q: 'auth' } },
-          ], '')}
+          message={buildMessage([{ id: 't-1', name: 'search_code', status: 'running', args: { q: 'auth' } }], '')}
         />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
     expect(screen.getByLabelText(/Tool running:/)).toBeInTheDocument();
 
@@ -136,18 +143,21 @@ describe('MessageBubble tool events', () => {
     rerender(
       <ThemeProvider>
         <MessageBubble
-          message={buildMessage([
-            {
-              id: 't-1',
-              name: 'search_code',
-              status: 'complete',
-              args: { q: 'auth' },
-              result: '12 matches',
-              durationMs: 800,
-            },
-          ], 'Here are the matches…')}
+          message={buildMessage(
+            [
+              {
+                id: 't-1',
+                name: 'search_code',
+                status: 'complete',
+                args: { q: 'auth' },
+                result: '12 matches',
+                durationMs: 800,
+              },
+            ],
+            'Here are the matches…',
+          )}
         />
-      </ThemeProvider>
+      </ThemeProvider>,
     );
     expect(screen.queryByLabelText(/Tool running:/)).toBeNull();
     expect(screen.getByLabelText(/Tool completed:/)).toBeInTheDocument();

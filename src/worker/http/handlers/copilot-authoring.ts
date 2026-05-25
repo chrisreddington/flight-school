@@ -65,8 +65,7 @@ export async function handleCopilotAuthoring(request: Request): Promise<Response
   const responseStream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
-      const writeEvent = (event: unknown) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      const writeEvent = (event: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       const writeDone = () => controller.enqueue(encoder.encode('data: [DONE]\n\n'));
 
       let fullContent = '';

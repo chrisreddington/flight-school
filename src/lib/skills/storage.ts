@@ -41,7 +41,7 @@ const log = logger.withTag('SkillsStore');
 
 /**
  * API-backed skills profile store.
- * 
+ *
  * @remarks
  * Unlike the old localStorage-based store, all methods are async.
  * This store persists data server-side via the `/api/skills/storage` route.
@@ -93,7 +93,7 @@ class SkillsStore {
    */
   async getSkill(skillId: string): Promise<UserSkill | undefined> {
     const profile = await this.get();
-    return profile.skills.find(s => s.skillId === skillId);
+    return profile.skills.find((s) => s.skillId === skillId);
   }
 
   /**
@@ -101,7 +101,7 @@ class SkillsStore {
    */
   async setSkill(skill: UserSkill): Promise<void> {
     const profile = await this.get();
-    const existingIndex = profile.skills.findIndex(s => s.skillId === skill.skillId);
+    const existingIndex = profile.skills.findIndex((s) => s.skillId === skill.skillId);
 
     let updatedSkills: UserSkill[];
     if (existingIndex >= 0) {
@@ -119,7 +119,7 @@ class SkillsStore {
    */
   async removeSkill(skillId: string): Promise<void> {
     const profile = await this.get();
-    const updatedSkills = profile.skills.filter(s => s.skillId !== skillId);
+    const updatedSkills = profile.skills.filter((s) => s.skillId !== skillId);
 
     if (updatedSkills.length !== profile.skills.length) {
       await this.save({ skills: updatedSkills, lastUpdated: now() });
@@ -148,16 +148,16 @@ class SkillsStore {
 
   /**
    * Gets skills filtered by source.
-   * 
+   *
    * @param source - Source to filter by. Use 'github' to include both 'github' and 'github-confirmed'.
    */
   async getSkillsBySource(source: 'github' | 'manual'): Promise<UserSkill[]> {
     const profile = await this.get();
     if (source === 'github') {
       // Include both direct GitHub detection and GitHub-confirmed skills
-      return profile.skills.filter(s => s.source === 'github' || s.source === 'github-confirmed');
+      return profile.skills.filter((s) => s.source === 'github' || s.source === 'github-confirmed');
     }
-    return profile.skills.filter(s => s.source === source);
+    return profile.skills.filter((s) => s.source === source);
   }
 
   /**
@@ -165,7 +165,7 @@ class SkillsStore {
    */
   async getSkillsByLevel(level: SkillLevel): Promise<UserSkill[]> {
     const profile = await this.get();
-    return profile.skills.filter(s => s.level === level);
+    return profile.skills.filter((s) => s.level === level);
   }
 
   /**
@@ -173,7 +173,7 @@ class SkillsStore {
    */
   async getInterestedSkills(): Promise<UserSkill[]> {
     const profile = await this.get();
-    return profile.skills.filter(s => !s.notInterested);
+    return profile.skills.filter((s) => !s.notInterested);
   }
 
   /**
@@ -181,7 +181,7 @@ class SkillsStore {
    */
   async getExcludedSkills(): Promise<UserSkill[]> {
     const profile = await this.get();
-    return profile.skills.filter(s => s.notInterested === true);
+    return profile.skills.filter((s) => s.notInterested === true);
   }
 
   /**

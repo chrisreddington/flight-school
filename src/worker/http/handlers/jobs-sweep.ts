@@ -6,11 +6,7 @@ import { getThreadById, updateThread } from '@/lib/jobs/storage/threads-storage'
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
 import { RESPONSE_INTERRUPTED_ANNOTATION } from '@/worker/jobs/executors/chat';
-import {
-  redactTerminalJobs,
-  sweepOrphanJobs,
-  sweepStaleRunningJobs,
-} from '@/worker/jobs/retention';
+import { redactTerminalJobs, sweepOrphanJobs, sweepStaleRunningJobs } from '@/worker/jobs/retention';
 import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
 
 const log = logger.withTag('JobsSweepRoute');

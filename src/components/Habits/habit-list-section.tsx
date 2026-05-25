@@ -19,22 +19,9 @@ import {
   TrashIcon,
   UndoIcon,
 } from '@primer/octicons-react';
-import {
-  ActionList,
-  ActionMenu,
-  Button,
-  CounterLabel,
-  Heading,
-  IconButton,
-  Label,
-  Stack,
-  Text,
-} from '@primer/react';
+import { ActionList, ActionMenu, Button, CounterLabel, Heading, IconButton, Label, Stack, Text } from '@primer/react';
 import styles from '@/app/habits/habits.module.css';
-import {
-  isPendingToday,
-  getRemainingSkips,
-} from '@/lib/habits/state-machine';
+import { isPendingToday, getRemainingSkips } from '@/lib/habits/state-machine';
 
 interface HabitListSectionProps {
   activeHabits: HabitWithHistory[];
@@ -90,16 +77,7 @@ interface HabitCardProps {
   onDelete: (habit: HabitWithHistory) => void;
 }
 
-function HabitCard({
-  habit,
-  showActions = true,
-  onCheckIn,
-  onSkip,
-  onUndo,
-  onEdit,
-  onStop,
-  onDelete,
-}: HabitCardProps) {
+function HabitCard({ habit, showActions = true, onCheckIn, onSkip, onUndo, onEdit, onStop, onDelete }: HabitCardProps) {
   const isPending = isPendingToday(habit);
   const hasCheckedIn = !isPending && habit.currentDay > 0;
   const progress = (habit.currentDay / habit.totalDays) * 100;
@@ -110,9 +88,7 @@ function HabitCard({
       <div className={styles.habitCardHeader}>
         <div className={styles.habitCardInfo}>
           <div className={styles.habitTitle}>{habit.title}</div>
-          {habit.description && (
-            <div className={styles.habitDescription}>{habit.description}</div>
-          )}
+          {habit.description && <div className={styles.habitDescription}>{habit.description}</div>}
         </div>
 
         <Stack direction="horizontal" gap="condensed" align="center">
@@ -121,12 +97,7 @@ function HabitCard({
           {showActions && (
             <ActionMenu>
               <ActionMenu.Anchor>
-                <IconButton
-                  icon={KebabHorizontalIcon}
-                  variant="invisible"
-                  aria-label="Habit options"
-                  size="small"
-                />
+                <IconButton icon={KebabHorizontalIcon} variant="invisible" aria-label="Habit options" size="small" />
               </ActionMenu.Anchor>
               <ActionMenu.Overlay>
                 <ActionList>
@@ -192,12 +163,7 @@ function HabitCard({
                 Complete Today
               </Button>
               {remainingSkips > 0 && (
-                <Button
-                  size="small"
-                  variant="invisible"
-                  leadingVisual={SkipIcon}
-                  onClick={() => onSkip(habit)}
-                >
+                <Button size="small" variant="invisible" leadingVisual={SkipIcon} onClick={() => onSkip(habit)}>
                   Skip
                 </Button>
               )}
@@ -208,12 +174,7 @@ function HabitCard({
               <Label variant="success">
                 <CheckCircleIcon size={12} /> Checked in today
               </Label>
-              <Button
-                size="small"
-                variant="invisible"
-                leadingVisual={UndoIcon}
-                onClick={() => onUndo(habit)}
-              >
+              <Button size="small" variant="invisible" leadingVisual={UndoIcon} onClick={() => onUndo(habit)}>
                 Undo
               </Button>
             </>
@@ -248,12 +209,7 @@ export function HabitListSection({
             </Heading>
             <CounterLabel>{activeHabits.length}</CounterLabel>
           </Stack>
-          <Button
-            variant="primary"
-            size="small"
-            leadingVisual={PlusIcon}
-            onClick={onNewHabitClick}
-          >
+          <Button variant="primary" size="small" leadingVisual={PlusIcon} onClick={onNewHabitClick}>
             New Habit
           </Button>
         </div>

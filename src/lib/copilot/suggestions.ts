@@ -27,16 +27,14 @@ function normalizeDifficulty(value: string | undefined, fallback: Difficulty): D
   return fallback;
 }
 
-function getStaticSuggestions(
-  completedChallenge: { title: string; language: string; difficulty: string }
-): RelatedSuggestion[] {
+function getStaticSuggestions(completedChallenge: {
+  title: string;
+  language: string;
+  difficulty: string;
+}): RelatedSuggestion[] {
   const currentDifficulty = normalizeDifficulty(completedChallenge.difficulty, 'beginner');
   const nextDifficulty: Difficulty =
-    currentDifficulty === 'beginner'
-      ? 'intermediate'
-      : currentDifficulty === 'intermediate'
-        ? 'advanced'
-        : 'advanced';
+    currentDifficulty === 'beginner' ? 'intermediate' : currentDifficulty === 'intermediate' ? 'advanced' : 'advanced';
 
   return [
     {
@@ -58,7 +56,7 @@ function getStaticSuggestions(
 
 function normalizeSuggestions(
   parsed: RawWhatsNextResult | null,
-  completedChallenge: { title: string; language: string; difficulty: string }
+  completedChallenge: { title: string; language: string; difficulty: string },
 ): RelatedSuggestion[] {
   const fallback = getStaticSuggestions(completedChallenge);
   if (!parsed?.suggestions || parsed.suggestions.length === 0) {
@@ -71,23 +69,16 @@ function normalizeSuggestions(
     .map((item, index) => {
       const fallbackItem = fallback[index] ?? fallback[fallback.length - 1];
       const title =
-        typeof item.title === 'string' && item.title.trim().length > 0
-          ? item.title.trim()
-          : fallbackItem.title;
+        typeof item.title === 'string' && item.title.trim().length > 0 ? item.title.trim() : fallbackItem.title;
       const reason =
-        typeof item.reason === 'string' && item.reason.trim().length > 0
-          ? item.reason.trim()
-          : fallbackItem.reason;
+        typeof item.reason === 'string' && item.reason.trim().length > 0 ? item.reason.trim() : fallbackItem.reason;
       const language =
         typeof item.language === 'string' && item.language.trim().length > 0
           ? item.language.trim()
           : completedChallenge.language;
 
       return {
-        id:
-          typeof item.id === 'string' && item.id.trim().length > 0
-            ? item.id.trim()
-            : `suggestion-${index + 1}`,
+        id: typeof item.id === 'string' && item.id.trim().length > 0 ? item.id.trim() : `suggestion-${index + 1}`,
         title,
         reason,
         difficulty: normalizeDifficulty(item.difficulty, currentDifficulty),
@@ -103,16 +94,18 @@ function normalizeSuggestions(
   return fallback;
 }
 
-export function getWhatsNextFallback(
-  completedChallenge: { title: string; language: string; difficulty: string }
-): WhatsNextResult {
+export function getWhatsNextFallback(completedChallenge: {
+  title: string;
+  language: string;
+  difficulty: string;
+}): WhatsNextResult {
   return { suggestions: getStaticSuggestions(completedChallenge) };
 }
 
 export async function generateWhatsNext(
   identity: SessionIdentity,
   completedChallenge: { title: string; language: string; difficulty: string },
-  profileContext: string
+  profileContext: string,
 ): Promise<WhatsNextResult> {
   const prompt = `Completed challenge: ${completedChallenge.title} (${completedChallenge.language}, ${completedChallenge.difficulty})
 Profile: ${profileContext}

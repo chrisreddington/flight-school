@@ -34,129 +34,125 @@ function encodeFrame(encoder: TextEncoder, sequenced: SequencedJobStreamEvent): 
  * `afterSeq` then subscribes for live events until either a terminal
  * event arrives or `abortSignal` fires.
  */
-export function createJobStreamResponse(
-  jobId: string,
-  afterSeq: number,
-  abortSignal: AbortSignal,
-): Response {
+export function createJobStreamResponse(jobId: string, afterSeq: number, abortSignal: AbortSignal): Response {
   const encoder = new TextEncoder();
   let closer: ((reason?: string) => void) | null = null;
 
   const stream = new ReadableStream(
     {
       async start(controller) {
-      let heartbeat: ReturnType<typeof setInterval> | null = null;
-      const subscription = jobEventBus.subscribe(jobId);
-      let closed = false;
+        let heartbeat: ReturnType<typeof setInterval> | null = null;
+        const subscription = jobEventBus.subscribe(jobId);
+        let closed = false;
 
-      const close = (reason?: string): void => {
-        if (closed) return;
-        closed = true;
-        if (heartbeat !== null) clearInterval(heartbeat);
-        subscription.unsubscribe();
-        try {
-          controller.close();
-        } catch {
-          // already closed
-        }
-        if (reason) log.debug(`[stream ${jobId}] closed: ${reason}`);
-      };
-
-      // Expose the close function to the outer ReadableStream so cancel()
-      // (which fires when the consumer drops the response, e.g. proxy hop
-      // or browser tab close) cleans up the bus subscription. Without this
-      // the subscriber slot would leak until the worker process restarts.
-      closer = close;
-
-      abortSignal.addEventListener('abort', () => close('client-abort'), { once: true });
-
-      // With a ByteLengthQueuingStrategy of 1 MiB highWaterMark, desiredSize
-      // starts at 1_048_576 and ticks down as frames buffer up in the stream
-      // controller. We close the stream only when:
-      //   - desiredSize is null (controller errored), or
-      //   - desiredSize is significantly negative (backlog > 256 KiB beyond
-      //     the high-water mark) — a real consumer stall.
-      //
-      // We deliberately do NOT close on `desiredSize === 0`, because that is
-      // the normal "queue is full right now, please slow down" signal that
-      // the runtime resolves as soon as the consumer reads a chunk.
-      const STALL_THRESHOLD_BYTES = -256 * 1024;
-      const consumerStalled = (): boolean => {
-        const ds = controller.desiredSize;
-        return ds === null || ds < STALL_THRESHOLD_BYTES;
-      };
-
-      try {
-        controller.enqueue(encoder.encode(`: connected\n\n`));
-
-        heartbeat = setInterval(() => {
-          if (consumerStalled()) {
-            close('backpressure-heartbeat');
-            return;
-          }
+        const close = (reason?: string): void => {
+          if (closed) return;
+          closed = true;
+          if (heartbeat !== null) clearInterval(heartbeat);
+          subscription.unsubscribe();
           try {
-            controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+            controller.close();
           } catch {
-            close('heartbeat-enqueue-failed');
+            // already closed
           }
-        }, HEARTBEAT_MS);
+          if (reason) log.debug(`[stream ${jobId}] closed: ${reason}`);
+        };
 
-        const replay = jobEventBus.replay(jobId, afterSeq);
-        let lastSentSeq = afterSeq;
-        let terminalSeen = false;
+        // Expose the close function to the outer ReadableStream so cancel()
+        // (which fires when the consumer drops the response, e.g. proxy hop
+        // or browser tab close) cleans up the bus subscription. Without this
+        // the subscriber slot would leak until the worker process restarts.
+        closer = close;
 
-        for (const sequenced of replay) {
-          if (closed) return;
-          if (consumerStalled()) {
-            close('backpressure-during-replay');
-            return;
-          }
-          controller.enqueue(encodeFrame(encoder, sequenced));
-          lastSentSeq = sequenced.seq;
-          if (isTerminalEvent(sequenced.event)) terminalSeen = true;
-        }
+        abortSignal.addEventListener('abort', () => close('client-abort'), { once: true });
 
-        if (terminalSeen) {
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          close('terminal-in-replay');
-          return;
-        }
+        // With a ByteLengthQueuingStrategy of 1 MiB highWaterMark, desiredSize
+        // starts at 1_048_576 and ticks down as frames buffer up in the stream
+        // controller. We close the stream only when:
+        //   - desiredSize is null (controller errored), or
+        //   - desiredSize is significantly negative (backlog > 256 KiB beyond
+        //     the high-water mark) — a real consumer stall.
+        //
+        // We deliberately do NOT close on `desiredSize === 0`, because that is
+        // the normal "queue is full right now, please slow down" signal that
+        // the runtime resolves as soon as the consumer reads a chunk.
+        const STALL_THRESHOLD_BYTES = -256 * 1024;
+        const consumerStalled = (): boolean => {
+          const ds = controller.desiredSize;
+          return ds === null || ds < STALL_THRESHOLD_BYTES;
+        };
 
-        if (jobEventBus.isTerminated(jobId)) {
-          const tail = jobEventBus.replay(jobId, lastSentSeq);
-          for (const sequenced of tail) {
+        try {
+          controller.enqueue(encoder.encode(`: connected\n\n`));
+
+          heartbeat = setInterval(() => {
+            if (consumerStalled()) {
+              close('backpressure-heartbeat');
+              return;
+            }
+            try {
+              controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+            } catch {
+              close('heartbeat-enqueue-failed');
+            }
+          }, HEARTBEAT_MS);
+
+          const replay = jobEventBus.replay(jobId, afterSeq);
+          let lastSentSeq = afterSeq;
+          let terminalSeen = false;
+
+          for (const sequenced of replay) {
+            if (closed) return;
+            if (consumerStalled()) {
+              close('backpressure-during-replay');
+              return;
+            }
             controller.enqueue(encodeFrame(encoder, sequenced));
+            lastSentSeq = sequenced.seq;
+            if (isTerminalEvent(sequenced.event)) terminalSeen = true;
           }
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          close('already-terminated');
-          return;
-        }
 
-        for await (const sequenced of subscription.iterator) {
-          if (closed) return;
-          if (sequenced.seq <= lastSentSeq) continue;
-          if (consumerStalled()) {
-            close('backpressure');
-            return;
-          }
-          controller.enqueue(encodeFrame(encoder, sequenced));
-          lastSentSeq = sequenced.seq;
-          if (isTerminalEvent(sequenced.event)) {
+          if (terminalSeen) {
             controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-            close('terminal');
+            close('terminal-in-replay');
             return;
           }
+
+          if (jobEventBus.isTerminated(jobId)) {
+            const tail = jobEventBus.replay(jobId, lastSentSeq);
+            for (const sequenced of tail) {
+              controller.enqueue(encodeFrame(encoder, sequenced));
+            }
+            controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+            close('already-terminated');
+            return;
+          }
+
+          for await (const sequenced of subscription.iterator) {
+            if (closed) return;
+            if (sequenced.seq <= lastSentSeq) continue;
+            if (consumerStalled()) {
+              close('backpressure');
+              return;
+            }
+            controller.enqueue(encodeFrame(encoder, sequenced));
+            lastSentSeq = sequenced.seq;
+            if (isTerminalEvent(sequenced.event)) {
+              controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+              close('terminal');
+              return;
+            }
+          }
+        } catch (err) {
+          log.warn(`[stream ${jobId}] producer error:`, err);
+          close('producer-error');
         }
-      } catch (err) {
-        log.warn(`[stream ${jobId}] producer error:`, err);
-        close('producer-error');
-      }
-    },
-    cancel() {
-      // Consumer (proxy hop) dropped the response. Run the same close
-      // path used by abort so we tear down heartbeat + bus subscription.
-      closer?.('consumer-cancel');
-    },
+      },
+      cancel() {
+        // Consumer (proxy hop) dropped the response. Run the same close
+        // path used by abort so we tear down heartbeat + bus subscription.
+        closer?.('consumer-cancel');
+      },
     },
     // Byte-aware queuing: each enqueued Uint8Array counts its byteLength
     // toward the high-water mark. desiredSize starts at 1 MiB and decrements

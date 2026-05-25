@@ -65,11 +65,7 @@ function validateSchema(data: unknown): data is EvaluationStorageSchema {
 
 /** Read evaluation storage for a specific user. */
 export async function readEvaluationStorage(userId: string): Promise<EvaluationStorageSchema> {
-  return readStorage<EvaluationStorageSchema>(
-    userScopedFilename(userId, STORAGE_KEY),
-    DEFAULT_SCHEMA,
-    validateSchema
-  );
+  return readStorage<EvaluationStorageSchema>(userScopedFilename(userId, STORAGE_KEY), DEFAULT_SCHEMA, validateSchema);
 }
 
 /** Write evaluation storage for a specific user. */

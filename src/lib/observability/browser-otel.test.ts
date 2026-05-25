@@ -173,10 +173,7 @@ describe('initBrowserOtel', () => {
     });
 
     expect(span.updateName).toHaveBeenCalledWith('POST /api/profile');
-    expect(span.setAttribute).toHaveBeenCalledWith(
-      'http.url',
-      'https://example.com/api/profile',
-    );
+    expect(span.setAttribute).toHaveBeenCalledWith('http.url', 'https://example.com/api/profile');
   });
 
   it('starts the initial page.view span synchronously', async () => {

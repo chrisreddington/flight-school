@@ -28,9 +28,7 @@ const DIST_DIR = resolve(REPO_ROOT, 'dist-worker');
 async function main() {
   mkdirSync(DIST_DIR, { recursive: true });
 
-  const result = await build(
-    buildWorkerEsbuildOptions({ write: true, metafile: true }),
-  );
+  const result = await build(buildWorkerEsbuildOptions({ write: true, metafile: true }));
   const metafile = result.metafile;
   if (!metafile) throw new Error('esbuild returned no metafile');
 
@@ -43,9 +41,7 @@ async function main() {
     }
   }
 
-  const lockfile = JSON.parse(
-    readFileSync(resolve(REPO_ROOT, 'package-lock.json'), 'utf8'),
-  );
+  const lockfile = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package-lock.json'), 'utf8'));
   const lockPackages = lockfile.packages ?? {};
 
   function resolveSpec(spec) {
@@ -75,10 +71,7 @@ async function main() {
     main: 'bootstrap.mjs',
     dependencies,
   };
-  writeFileSync(
-    resolve(DIST_DIR, 'package.json'),
-    JSON.stringify(pkg, null, 2) + '\n',
-  );
+  writeFileSync(resolve(DIST_DIR, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
 
   console.log(
     `build-worker: bundled ${Object.keys(metafile.outputs).length} outputs; ` +

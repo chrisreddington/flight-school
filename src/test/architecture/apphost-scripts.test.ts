@@ -3,9 +3,9 @@ import path from 'path';
 import { describe, expect, it } from 'vitest';
 
 const apphostSource = readFileSync(path.join(process.cwd(), 'apphost.ts'), 'utf8');
-const packageJson = JSON.parse(
-  readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
-) as { scripts?: Record<string, string> };
+const packageJson = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')) as {
+  scripts?: Record<string, string>;
+};
 const nextConfigSource = readFileSync(path.join(process.cwd(), 'next.config.ts'), 'utf8');
 
 describe('AppHost npm scripts', () => {
@@ -33,9 +33,7 @@ describe('AppHost npm scripts', () => {
     expect(apphostSource).toMatch(
       /\.addExecutable\(\s*['"]copilot-worker['"]\s*,\s*['"]npm['"]\s*,\s*['"]\.['"]\s*,\s*\[\s*['"]run['"]\s*,\s*['"]dev:worker['"]\s*\]/,
     );
-    expect(apphostSource).not.toMatch(
-      /\.addNextJsApp\(\s*['"]copilot-worker['"]/,
-    );
+    expect(apphostSource).not.toMatch(/\.addNextJsApp\(\s*['"]copilot-worker['"]/);
   });
 
   it('does not set obsolete worker env vars on the worker resource', () => {

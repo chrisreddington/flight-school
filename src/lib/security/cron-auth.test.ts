@@ -61,9 +61,7 @@ describe('verifyCronRequest', () => {
   it('rejects when env vars are missing', async () => {
     process.env.NODE_ENV = 'production';
 
-    await expect(verifyCronRequest(mkRequest({ authorization: 'Bearer x' }))).rejects.toThrow(
-      /misconfigured/i,
-    );
+    await expect(verifyCronRequest(mkRequest({ authorization: 'Bearer x' }))).rejects.toThrow(/misconfigured/i);
   });
 
   it('rejects when authorization header is missing', async () => {
@@ -81,9 +79,7 @@ describe('verifyCronRequest', () => {
     process.env.CRON_AUDIENCE = 'api://cron';
     process.env.CRON_ALLOWED_APPIDS = 'app-a';
 
-    await expect(
-      verifyCronRequest(mkRequest({ authorization: 'Bearer ' })),
-    ).rejects.toBeInstanceOf(CronAuthError);
+    await expect(verifyCronRequest(mkRequest({ authorization: 'Bearer ' }))).rejects.toBeInstanceOf(CronAuthError);
   });
 
   it('wraps jose verification failures as CronAuthError', async () => {
@@ -92,8 +88,8 @@ describe('verifyCronRequest', () => {
     process.env.CRON_AUDIENCE = 'api://cron';
     process.env.CRON_ALLOWED_APPIDS = 'app-a';
 
-    await expect(
-      verifyCronRequest(mkRequest({ authorization: 'Bearer not-a-jwt' })),
-    ).rejects.toBeInstanceOf(CronAuthError);
+    await expect(verifyCronRequest(mkRequest({ authorization: 'Bearer not-a-jwt' }))).rejects.toBeInstanceOf(
+      CronAuthError,
+    );
   });
 });

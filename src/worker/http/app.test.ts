@@ -17,9 +17,7 @@ describe('createWorkerApp', () => {
 
   it('rejects /api/internal/* without bearer token', async () => {
     const app = createWorkerApp();
-    const res = await app.request(
-      new Request('http://localhost/api/internal/jobs?userId=u1'),
-    );
+    const res = await app.request(new Request('http://localhost/api/internal/jobs?userId=u1'));
     expect(res.status).toBe(401);
   });
 });

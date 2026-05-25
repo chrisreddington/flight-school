@@ -80,7 +80,7 @@ export function SkillSlider({
   const sliderId = `skill-slider-${uniqueId}`;
   const labelId = `skill-label-${uniqueId}`;
   const checkboxId = `skill-checkbox-${uniqueId}`;
-  
+
   const [notInterested, setNotInterested] = useState(initialNotInterested);
 
   // Level index for slider value
@@ -96,7 +96,7 @@ export function SkillSlider({
       const newLevel = LEVELS[newIndex];
       onChange(newLevel, notInterested);
     },
-    [onChange, notInterested]
+    [onChange, notInterested],
   );
 
   /**
@@ -108,7 +108,7 @@ export function SkillSlider({
       setNotInterested(checked);
       onChange(value, checked);
     },
-    [onChange, value]
+    [onChange, value],
   );
 
   /**
@@ -125,7 +125,7 @@ export function SkillSlider({
         onChange('advanced', notInterested);
       }
     },
-    [onChange, notInterested]
+    [onChange, notInterested],
   );
 
   // Calculate filled percentage for gradient
@@ -136,7 +136,7 @@ export function SkillSlider({
       <label id={labelId} htmlFor={sliderId} className="sr-only">
         {skillName} skill level
       </label>
-      
+
       <div className={styles.sliderWrapper}>
         <input
           id={sliderId}
@@ -152,12 +152,12 @@ export function SkillSlider({
           disabled={disabled || notInterested}
           className={styles.slider}
           style={{
-            background: notInterested 
+            background: notInterested
               ? 'var(--bgColor-muted, #f6f8fa)'
               : `linear-gradient(to right, var(--bgColor-accent-emphasis, #0969da) 0%, var(--bgColor-accent-emphasis, #0969da) ${filledPercent}%, var(--borderColor-default, #d0d7de) ${filledPercent}%, var(--borderColor-default, #d0d7de) 100%)`,
           }}
         />
-        
+
         <div className={styles.levelLabels}>
           {LEVELS.map((level) => (
             <button
@@ -176,15 +176,8 @@ export function SkillSlider({
 
       <div className={styles.notInterestedRow}>
         <FormControl>
-          <Checkbox
-            id={checkboxId}
-            checked={notInterested}
-            onChange={handleNotInterestedChange}
-            disabled={disabled}
-          />
-          <FormControl.Label htmlFor={checkboxId}>
-            Not interested
-          </FormControl.Label>
+          <Checkbox id={checkboxId} checked={notInterested} onChange={handleNotInterestedChange} disabled={disabled} />
+          <FormControl.Label htmlFor={checkboxId}>Not interested</FormControl.Label>
         </FormControl>
       </div>
     </div>

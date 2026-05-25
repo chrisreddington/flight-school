@@ -40,10 +40,7 @@ export class TooManyConcurrentSessionsError extends Error {
  * @throws {@link TooManyConcurrentSessionsError} when the user already
  *   holds `max` slots in flight.
  */
-export async function acquireSlot(
-  userId: string,
-  max: number,
-): Promise<() => void> {
+export async function acquireSlot(userId: string, max: number): Promise<() => void> {
   const current = inflight.get(userId) ?? 0;
   if (current >= max) {
     throw new TooManyConcurrentSessionsError(max);

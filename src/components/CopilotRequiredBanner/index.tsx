@@ -17,10 +17,7 @@ import { Banner } from '@primer/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import {
-  COPILOT_REQUIRED_EVENT,
-  type CopilotRequiredEventDetail,
-} from '@/lib/copilot/required-event';
+import { COPILOT_REQUIRED_EVENT, type CopilotRequiredEventDetail } from '@/lib/copilot/required-event';
 
 const COPILOT_SIGN_UP_URL = 'https://github.com/features/copilot';
 

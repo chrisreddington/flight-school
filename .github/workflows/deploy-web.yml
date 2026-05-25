@@ -60,13 +60,13 @@ jobs:
     steps:
       - name: Validate required vars
         env:
-          AZURE_CLIENT_ID:        ${{ vars.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID:        ${{ vars.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID:  ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          ACR_LOGIN_SERVER:       ${{ vars.ACR_LOGIN_SERVER }}
-          ACR_NAME:               ${{ vars.ACR_NAME }}
-          APP_NAME:               ${{ vars.APP_NAME }}
-          RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
         run: |
           set -euo pipefail
           missing=()
@@ -83,8 +83,8 @@ jobs:
         id: sha
         env:
           GH_EVENT_NAME: ${{ github.event_name }}
-          WR_HEAD_SHA:   ${{ github.event.workflow_run.head_sha }}
-          INPUT_SHA:     ${{ inputs.sha }}
+          WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           case "$GH_EVENT_NAME" in
@@ -103,7 +103,7 @@ jobs:
           echo "value=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout deploy SHA
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.sha.outputs.value }}
           fetch-depth: 0
@@ -116,8 +116,8 @@ jobs:
         # rollback SHAs work without a deep local clone.
         if: github.event_name == 'workflow_dispatch'
         env:
-          SHA:      ${{ steps.sha.outputs.value }}
-          GH_REPO:  ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -139,8 +139,8 @@ jobs:
         if: github.event_name == 'workflow_run'
         id: stale
         env:
-          SHA:      ${{ steps.sha.outputs.value }}
-          GH_REPO:  ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -160,7 +160,7 @@ jobs:
         # display-name rename does not silently break the check.
         if: github.event_name == 'workflow_dispatch'
         env:
-          SHA:     ${{ steps.sha.outputs.value }}
+          SHA: ${{ steps.sha.outputs.value }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -182,9 +182,9 @@ jobs:
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
         id: filter-base
         env:
-          SHA:            ${{ steps.sha.outputs.value }}
-          GH_REPO:        ${{ github.repository }}
-          GH_TOKEN:       ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
           CURRENT_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
@@ -210,9 +210,9 @@ jobs:
       - name: Paths filter (workflow_run only)
         id: filter
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false' && steps.filter-base.outputs.first_deploy == 'false'
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36  # v3.0.2
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
-          ref:  ${{ steps.sha.outputs.value }}
+          ref: ${{ steps.sha.outputs.value }}
           base: ${{ steps.filter-base.outputs.value }}
           # Inline scope. Anything that affects the web runtime
           # image: app code, shared libs the web app pulls in, the
@@ -237,9 +237,9 @@ jobs:
         id: gate
         env:
           GH_EVENT_NAME: ${{ github.event_name }}
-          FILTER_HIT:    ${{ steps.filter.outputs.web }}
-          SUPERSEDED:    ${{ steps.stale.outputs.superseded }}
-          FIRST_DEPLOY:  ${{ steps.filter-base.outputs.first_deploy }}
+          FILTER_HIT: ${{ steps.filter.outputs.web }}
+          SUPERSEDED: ${{ steps.stale.outputs.superseded }}
+          FIRST_DEPLOY: ${{ steps.filter-base.outputs.first_deploy }}
         run: |
           set -euo pipefail
           if [[ "$SUPERSEDED" == 'true' ]]; then
@@ -265,7 +265,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.should-deploy.outputs.sha }}
           fetch-depth: 1
@@ -280,8 +280,8 @@ jobs:
         # path) bypasses this guard.
         if: github.event_name == 'workflow_run'
         env:
-          SHA:      ${{ needs.should-deploy.outputs.sha }}
-          GH_REPO:  ${{ github.repository }}
+          SHA: ${{ needs.should-deploy.outputs.sha }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -289,17 +289,19 @@ jobs:
           [[ "$tip" == "$SHA" ]] || \
             { echo "::error::superseded — main HEAD is $tip, refusing to deploy $SHA"; exit 1; }
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: '.node-version'
       - run: npm ci
+        env:
+          HUSKY: '0'
       - run: npm run lint && npm run check:guardrails
       - run: npm run build && npm run check:web-image
 
-      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474  # v2.3.0
+      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
         with:
-          client-id:       ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id:       ${{ vars.AZURE_TENANT_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - env:
@@ -308,9 +310,9 @@ jobs:
 
       - name: Build + push image
         env:
-          SHA:              ${{ needs.should-deploy.outputs.sha }}
+          SHA: ${{ needs.should-deploy.outputs.sha }}
           ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
-          APP_NAME:         ${{ vars.APP_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
         run: |
           set -euo pipefail
           IMAGE_TAG="sha-$SHA"
@@ -327,7 +329,7 @@ jobs:
         # `deploy-infra.yml`. Container App resource name == APP_NAME
         # for the web app (worker uses `${APP_NAME}-worker`).
         env:
-          APP_NAME:            ${{ vars.APP_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
         run: |
           set -euo pipefail
@@ -345,7 +347,7 @@ jobs:
         # latest revision until it reports `runningState=Running`
         # and `provisioningState=Provisioned`, or fail loudly.
         env:
-          APP_NAME:            ${{ vars.APP_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
         run: |
           set -euo pipefail

@@ -99,11 +99,7 @@ describe('API route auth inventory', () => {
           for (const fromClause of handlerMatch) {
             const importPath = fromClause.match(/@\/lib\/[^'"]+/)?.[0];
             if (!importPath) continue;
-            const handlerPath = path.join(
-              process.cwd(),
-              'src',
-              importPath.replace('@/', ''),
-            ) + '.ts';
+            const handlerPath = path.join(process.cwd(), 'src', importPath.replace('@/', '')) + '.ts';
             try {
               const handlerSource = readFileSync(handlerPath, 'utf8');
               if (handlerSource.includes(marker)) return null;

@@ -26,10 +26,7 @@ function pendingGenerator(): {
   };
 }
 
-async function readNextFrame(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  decoder: TextDecoder
-): Promise<string> {
+async function readNextFrame(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): Promise<string> {
   const { value, done } = await reader.read();
   if (done) return '';
   return decoder.decode(value);

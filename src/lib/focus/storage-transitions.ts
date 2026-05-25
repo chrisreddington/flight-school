@@ -63,11 +63,20 @@ export function applyChallengeTransition(
   const currentState = getCurrentChallengeState(currentChallenge);
 
   if (currentState === newState) {
-    log.debug('Challenge already in target state (idempotent)', { dateKey, challengeId, state: currentState });
+    log.debug('Challenge already in target state (idempotent)', {
+      dateKey,
+      challengeId,
+      state: currentState,
+    });
     return false;
   }
   if (isTerminalChallengeState(currentState)) {
-    log.debug('Challenge in terminal state, cannot transition', { dateKey, challengeId, currentState, newState });
+    log.debug('Challenge in terminal state, cannot transition', {
+      dateKey,
+      challengeId,
+      currentState,
+      newState,
+    });
     return false;
   }
   if (currentState === 'completed' && newState === 'skipped') {
@@ -77,10 +86,22 @@ export function applyChallengeTransition(
 
   try {
     record.challenges[index] = transitionChallengeState(currentChallenge, newState, source);
-    log.debug('Challenge state transitioned', { dateKey, challengeId, from: currentState, to: newState, source });
+    log.debug('Challenge state transitioned', {
+      dateKey,
+      challengeId,
+      from: currentState,
+      to: newState,
+      source,
+    });
     return true;
   } catch (error) {
-    log.error('Challenge state transition failed', { dateKey, challengeId, currentState, newState, error });
+    log.error('Challenge state transition failed', {
+      dateKey,
+      challengeId,
+      currentState,
+      newState,
+      error,
+    });
     return false;
   }
 }
@@ -116,11 +137,20 @@ export function applyGoalTransition(
   const currentState = getCurrentGoalState(currentGoal);
 
   if (currentState === newState) {
-    log.debug('Goal already in target state (idempotent)', { dateKey, goalId, state: currentState });
+    log.debug('Goal already in target state (idempotent)', {
+      dateKey,
+      goalId,
+      state: currentState,
+    });
     return false;
   }
   if (isTerminalGoalState(currentState)) {
-    log.debug('Goal in terminal state, cannot transition', { dateKey, goalId, currentState, newState });
+    log.debug('Goal in terminal state, cannot transition', {
+      dateKey,
+      goalId,
+      currentState,
+      newState,
+    });
     return false;
   }
   if (currentState === 'completed' && newState === 'skipped') {
@@ -130,7 +160,13 @@ export function applyGoalTransition(
 
   try {
     record.goals[index] = transitionGoalState(currentGoal, newState, source);
-    log.debug('Goal state transitioned', { dateKey, goalId, from: currentState, to: newState, source });
+    log.debug('Goal state transitioned', {
+      dateKey,
+      goalId,
+      from: currentState,
+      to: newState,
+      source,
+    });
     return true;
   } catch (error) {
     log.error('Goal state transition failed', {
@@ -175,17 +211,32 @@ export function applyTopicTransition(
     const currentState = getCurrentTopicState(currentTopic);
 
     if (currentState === newState) {
-      log.debug('Topic already in target state (idempotent)', { dateKey, topicId, state: currentState });
+      log.debug('Topic already in target state (idempotent)', {
+        dateKey,
+        topicId,
+        state: currentState,
+      });
       return false;
     }
     if (isTerminalTopicState(currentState)) {
-      log.debug('Topic in terminal state, cannot transition', { dateKey, topicId, currentState, newState });
+      log.debug('Topic in terminal state, cannot transition', {
+        dateKey,
+        topicId,
+        currentState,
+        newState,
+      });
       return false;
     }
 
     try {
       record.learningTopics[i][topicIndex] = transitionTopicState(currentTopic, newState, source);
-      log.debug('Topic transitioned', { dateKey, topicId, from: currentState, to: newState, source });
+      log.debug('Topic transitioned', {
+        dateKey,
+        topicId,
+        from: currentState,
+        to: newState,
+        source,
+      });
       return true;
     } catch (error) {
       log.error('Topic state transition failed', {
@@ -203,11 +254,7 @@ export function applyTopicTransition(
   return false;
 }
 
-export function applyTopicReviewed(
-  schema: FocusStorageSchema,
-  dateKey: string,
-  topicId: string,
-): boolean {
+export function applyTopicReviewed(schema: FocusStorageSchema, dateKey: string, topicId: string): boolean {
   const recordExists = Boolean(schema.history[dateKey]);
   if (!recordExists) {
     log.warn('Attempted to mark topic reviewed for non-existent date', { dateKey, topicId });
@@ -247,7 +294,11 @@ export function applySelfExplanation(
   const result = saveSelfExplanationInHistory(schema.history, dateKey, itemType, itemId, text);
   if (result === 'empty') return false;
   if (result === 'missing-record') {
-    log.warn('Attempted to save self-explanation for non-existent date', { dateKey, itemType, itemId });
+    log.warn('Attempted to save self-explanation for non-existent date', {
+      dateKey,
+      itemType,
+      itemId,
+    });
     return false;
   }
   if (result === 'missing-challenge') {

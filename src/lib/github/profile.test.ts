@@ -141,13 +141,13 @@ describe('serializeContext', () => {
     const parts = result.split('|');
 
     // Should have all fields
-    expect(parts.some(p => p.startsWith('u:'))).toBe(true);
-    expect(parts.some(p => p.startsWith('lp:'))).toBe(true);
-    expect(parts.some(p => p.startsWith('t:'))).toBe(true);
-    expect(parts.some(p => p.startsWith('a:'))).toBe(true);
-    expect(parts.some(p => p.startsWith('g:'))).toBe(true);
-    expect(parts.some(p => p.startsWith('rd:'))).toBe(true);
-    expect(parts.some(p => p.startsWith('cp:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('u:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('lp:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('t:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('a:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('g:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('rd:'))).toBe(true);
+    expect(parts.some((p) => p.startsWith('cp:'))).toBe(true);
   });
 
   it('should omit empty arrays from output', () => {

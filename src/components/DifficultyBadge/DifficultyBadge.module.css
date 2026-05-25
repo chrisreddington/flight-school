@@ -16,17 +16,17 @@
   text-transform: capitalize;
 }
 
-.badge[data-difficulty="beginner"] {
+.badge[data-difficulty='beginner'] {
   background-color: var(--bgColor-success-muted);
   color: var(--fgColor-success);
 }
 
-.badge[data-difficulty="intermediate"] {
+.badge[data-difficulty='intermediate'] {
   background-color: var(--bgColor-attention-muted);
   color: var(--fgColor-attention);
 }
 
-.badge[data-difficulty="advanced"] {
+.badge[data-difficulty='advanced'] {
   background-color: var(--bgColor-danger-muted);
   color: var(--fgColor-danger);
 }

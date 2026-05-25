@@ -21,14 +21,11 @@ import {
 } from './profiles';
 
 describe('PROFILES registry', () => {
-  it.each(Object.keys(PROFILES) as BaseProfileId[])(
-    'profile %s declares an id matching its key and a model',
-    (id) => {
-      const profile = PROFILES[id];
-      expect(profile.id).toBe(id);
-      expect(profile.model.length).toBeGreaterThan(0);
-    },
-  );
+  it.each(Object.keys(PROFILES) as BaseProfileId[])('profile %s declares an id matching its key and a model', (id) => {
+    const profile = PROFILES[id];
+    expect(profile.id).toBe(id);
+    expect(profile.model.length).toBeGreaterThan(0);
+  });
 
   it('declares non-empty autoCapabilities only for chat and learning', () => {
     expect(PROFILES.chat.autoCapabilities).toEqual(['github']);
@@ -70,20 +67,41 @@ describe('resolveProfile', () => {
     expectedElevated: boolean;
   }>([
     { profile: 'chat', prompt: 'hello', expectedCapabilityIds: [], expectedElevated: false },
-    { profile: 'chat', prompt: 'list my repos', auto: true, expectedCapabilityIds: ['github'], expectedElevated: true },
-    { profile: 'learning', prompt: 'explain closures', expectedCapabilityIds: [], expectedElevated: false },
-    { profile: 'learning', prompt: 'what is in my repo', auto: true, expectedCapabilityIds: ['github'], expectedElevated: true },
+    {
+      profile: 'chat',
+      prompt: 'list my repos',
+      auto: true,
+      expectedCapabilityIds: ['github'],
+      expectedElevated: true,
+    },
+    {
+      profile: 'learning',
+      prompt: 'explain closures',
+      expectedCapabilityIds: [],
+      expectedElevated: false,
+    },
+    {
+      profile: 'learning',
+      prompt: 'what is in my repo',
+      auto: true,
+      expectedCapabilityIds: ['github'],
+      expectedElevated: true,
+    },
     // Coach is lightweight by default — capability selection is orthogonal,
     // callers opt in to MCP grounding with capabilities: ['github'].
     { profile: 'coach', expectedCapabilityIds: [], expectedElevated: false },
     { profile: 'evaluation', expectedCapabilityIds: [], expectedElevated: false },
     { profile: 'authoring', expectedCapabilityIds: [], expectedElevated: false },
   ])(
-    "profile=$profile prompt=$prompt → capabilities=$expectedCapabilityIds wasAutoElevated=$expectedElevated",
+    'profile=$profile prompt=$prompt → capabilities=$expectedCapabilityIds wasAutoElevated=$expectedElevated',
     ({ profile, prompt, auto, expectedCapabilityIds, expectedElevated }) => {
-      const ctx = prompt === undefined && !auto
-        ? undefined
-        : { ...(prompt !== undefined ? { prompt } : {}), ...(auto ? { capabilities: 'auto' as const } : {}) };
+      const ctx =
+        prompt === undefined && !auto
+          ? undefined
+          : {
+              ...(prompt !== undefined ? { prompt } : {}),
+              ...(auto ? { capabilities: 'auto' as const } : {}),
+            };
       const resolved = resolveProfile(profile, ctx);
       expect(resolved.capabilities.map((cap) => cap.id)).toEqual(expectedCapabilityIds);
       expect(resolved.wasAutoElevated).toBe(expectedElevated);
@@ -97,14 +115,15 @@ describe('resolveProfile', () => {
   });
 
   it('throws InvalidCapabilityError when an explicit capability is not in the profile allowlist', () => {
-    expect(() => resolveProfile('evaluation', { capabilities: ['github'] })).toThrow(
-      InvalidCapabilityError,
-    );
+    expect(() => resolveProfile('evaluation', { capabilities: ['github'] })).toThrow(InvalidCapabilityError);
   });
 
   it("rejects 'auto' that would elevate beyond allowedCapabilities by simply not elevating", () => {
     // evaluation has no autoCapabilities, so 'auto' is a no-op.
-    const resolved = resolveProfile('evaluation', { capabilities: 'auto', prompt: 'list my repos' });
+    const resolved = resolveProfile('evaluation', {
+      capabilities: 'auto',
+      prompt: 'list my repos',
+    });
     expect(resolved.capabilities).toEqual([]);
   });
 
@@ -128,7 +147,9 @@ describe('resolveProfile', () => {
   });
 
   it('coach with capabilities=["github"] and chat+github do not collide on fingerprint', () => {
-    const coachWithGithub = resolveProfile('coach', { capabilities: ['github'] }).capabilityFingerprint;
+    const coachWithGithub = resolveProfile('coach', {
+      capabilities: ['github'],
+    }).capabilityFingerprint;
     const chatGithub = resolveProfile('chat', { capabilities: ['github'] }).capabilityFingerprint;
     expect(coachWithGithub).not.toBe(chatGithub);
   });
@@ -209,15 +230,11 @@ describe('capabilityFingerprintOf', () => {
 
   it('encodes tool overrides so different surfaces do not collide', () => {
     expect(capabilityFingerprintOf([{ id: 'github' }])).toBe('caps=github');
-    expect(capabilityFingerprintOf([{ id: 'github', tools: ['get_me'] }])).toBe(
-      'caps=github@tools=get_me',
-    );
+    expect(capabilityFingerprintOf([{ id: 'github', tools: ['get_me'] }])).toBe('caps=github@tools=get_me');
   });
 
   it('encodes prompt addendum overrides via a short hash', () => {
-    const fp = capabilityFingerprintOf([
-      { id: 'github', promptAddendumOverride: 'custom coach addendum' },
-    ]);
+    const fp = capabilityFingerprintOf([{ id: 'github', promptAddendumOverride: 'custom coach addendum' }]);
     expect(fp.startsWith('caps=github@addH=')).toBe(true);
   });
 });

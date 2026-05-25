@@ -20,15 +20,8 @@ vi.mock('@/lib/auth/context', () => ({
 
 import { __resetAuditState } from '@/lib/security/audit';
 import { withUserGuards } from '@/lib/security/guard';
-import {
-  RateLimitedError,
-  __resetRateLimitState,
-} from '@/lib/security/rate-limit';
-import {
-  TooManyConcurrentSessionsError,
-  __getSlotCount,
-  __resetSessionCapState,
-} from '@/lib/security/session-cap';
+import { RateLimitedError, __resetRateLimitState } from '@/lib/security/rate-limit';
+import { TooManyConcurrentSessionsError, __getSlotCount, __resetSessionCapState } from '@/lib/security/session-cap';
 
 const userA = { userId: 'A', login: 'alice', accessToken: 'ghu_a' };
 const userB = { userId: 'B', login: 'bob', accessToken: 'ghu_b' };
@@ -61,9 +54,7 @@ describe('abuse controls integration', () => {
       for (let i = 0; i < 10; i++) {
         await expect(withUserGuards(opts, async () => i)).resolves.toBe(i);
       }
-      await expect(withUserGuards(opts, async () => 'eleven')).rejects.toBeInstanceOf(
-        RateLimitedError,
-      );
+      await expect(withUserGuards(opts, async () => 'eleven')).rejects.toBeInstanceOf(RateLimitedError);
     });
 
     it('includes a positive retryAfterMs on the RateLimitedError', async () => {
@@ -86,9 +77,7 @@ describe('abuse controls integration', () => {
 
       requireUserContextMock.mockResolvedValue(userA);
       await withUserGuards(opts, async () => 'a1');
-      await expect(withUserGuards(opts, async () => 'a2')).rejects.toBeInstanceOf(
-        RateLimitedError,
-      );
+      await expect(withUserGuards(opts, async () => 'a2')).rejects.toBeInstanceOf(RateLimitedError);
 
       requireUserContextMock.mockResolvedValue(userB);
       await expect(withUserGuards(opts, async () => 'b1')).resolves.toBe('b1');
@@ -118,9 +107,7 @@ describe('abuse controls integration', () => {
       await new Promise((r) => setImmediate(r));
       expect(__getSlotCount('A')).toBe(2);
 
-      await expect(withUserGuards(opts, async () => 'third')).rejects.toBeInstanceOf(
-        TooManyConcurrentSessionsError,
-      );
+      await expect(withUserGuards(opts, async () => 'third')).rejects.toBeInstanceOf(TooManyConcurrentSessionsError);
 
       // Drain the held work and confirm slots release.
       releasers.forEach((r) => r());

@@ -9,10 +9,7 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import {
-  AggregationType,
-  PeriodicExportingMetricReader,
-} from '@opentelemetry/sdk-metrics';
+import { AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { registerOTel } from '@vercel/otel';
 
@@ -47,8 +44,7 @@ export async function register(): Promise<void> {
       attributes: {
         'service.version': INSTRUMENTATION_SCOPE_VERSION,
         // Note: the spec renamed `deployment.environment` to `deployment.environment.name`.
-        'deployment.environment.name':
-          process.env.NODE_ENV === 'production' ? 'production' : 'development',
+        'deployment.environment.name': process.env.NODE_ENV === 'production' ? 'production' : 'development',
       },
       // Drop high-noise spans before they reach the exporter:
       //   - **Sampler (head-time):** server-side spans for the
@@ -79,11 +75,7 @@ export async function register(): Promise<void> {
       // processor that injects `operation.name` still wraps every
       // user-supplied processor, so `onEnd` ordering is preserved.
       traceSampler: createTelemetryHygieneSampler(),
-      spanProcessors: [
-        new BatchSpanProcessor(
-          new BubbleFilteringSpanExporter(new OTLPTraceExporter()),
-        ),
-      ],
+      spanProcessors: [new BatchSpanProcessor(new BubbleFilteringSpanExporter(new OTLPTraceExporter()))],
       metricReaders: [
         new PeriodicExportingMetricReader({
           exporter: new OTLPMetricExporter(),
@@ -116,9 +108,7 @@ export async function register(): Promise<void> {
           },
         },
       ],
-      logRecordProcessors: [
-        new BatchLogRecordProcessor(new OTLPLogExporter()),
-      ],
+      logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
     });
 
     log.info('Server starting...');

@@ -463,7 +463,11 @@ describe('Workspace Templates', () => {
     });
 
     it('should handle empty description', () => {
-      const files = getWorkspaceTemplate({ ...baseChallenge, description: '', language: 'TypeScript' });
+      const files = getWorkspaceTemplate({
+        ...baseChallenge,
+        description: '',
+        language: 'TypeScript',
+      });
 
       expect(files).toHaveLength(1);
       expect(files[0].content).toBeDefined();

@@ -157,10 +157,7 @@ export class ActivityBus {
    *  - `init`: the full retained set when the cursor was evicted/unknown
    *    (signals replace semantics to the subscriber).
    */
-  resolveCursor(
-    userId: string,
-    cursor: string | null,
-  ): { mode: 'replay' | 'init'; events: AIActivityEvent[] } {
+  resolveCursor(userId: string, cursor: string | null): { mode: 'replay' | 'init'; events: AIActivityEvent[] } {
     const buf = this.buffers.get(userId);
     const events = buf ? [...buf.events] : [];
     if (!cursor) return { mode: 'init', events };

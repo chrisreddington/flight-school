@@ -52,11 +52,7 @@ export class RateLimitedError extends Error {
  *   `allowed: false` with `retryAfterMs` indicating how long the caller
  *   must wait before the oldest in-window request ages out.
  */
-export function checkRateLimit(
-  userId: string,
-  limit: number,
-  windowMs: number,
-): RateLimitResult {
+export function checkRateLimit(userId: string, limit: number, windowMs: number): RateLimitResult {
   const nowTs = Date.now();
   const cutoff = nowTs - windowMs;
 

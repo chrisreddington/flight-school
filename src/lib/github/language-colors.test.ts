@@ -32,12 +32,9 @@ describe('getLanguageColor', () => {
       { language: 'Markdown', expected: '#083fa1' },
       { language: 'HCL', expected: '#844FBA' },
       { language: 'Bicep', expected: '#519aba' },
-    ])(
-      'should return $expected for $language',
-      ({ language, expected }) => {
-        expect(getLanguageColor(language)).toBe(expected);
-      }
-    );
+    ])('should return $expected for $language', ({ language, expected }) => {
+      expect(getLanguageColor(language)).toBe(expected);
+    });
   });
 
   describe('unknown languages', () => {
@@ -49,12 +46,9 @@ describe('getLanguageColor', () => {
       '',
       'typescript', // Case-sensitive check
       'TYPESCRIPT',
-    ])(
-      'should return default color for "%s"',
-      (language) => {
-        expect(getLanguageColor(language)).toBe('#6e7681');
-      }
-    );
+    ])('should return default color for "%s"', (language) => {
+      expect(getLanguageColor(language)).toBe('#6e7681');
+    });
   });
 
   describe('edge cases', () => {

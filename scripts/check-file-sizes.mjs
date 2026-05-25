@@ -64,8 +64,7 @@ for (const relativePath of files) {
   if (baselined !== undefined) {
     if (current > baselined) {
       failures.push(
-        `${relativePath} grew from baseline ${baselined} → ${current} LOC. ` +
-        `Shrink it (do not raise the baseline).`,
+        `${relativePath} grew from baseline ${baselined} → ${current} LOC. ` + `Shrink it (do not raise the baseline).`,
       );
     }
     continue;
@@ -74,8 +73,8 @@ for (const relativePath of files) {
   if (current > cap) {
     failures.push(
       `${relativePath} has ${current} LOC, ${kind} cap is ${cap}. ` +
-      `Split the module or, if unavoidable, add it to .size-budget-baseline.json ` +
-      `(every baseline entry must shrink toward the cap).`,
+        `Split the module or, if unavoidable, add it to .size-budget-baseline.json ` +
+        `(every baseline entry must shrink toward the cap).`,
     );
   }
 }
@@ -88,6 +87,6 @@ if (failures.length > 0) {
 
 console.log(
   `File-size guardrail passed (${files.length} src files scanned, ` +
-  `${Object.keys(baseline.production).length} production + ` +
-  `${Object.keys(baseline.test).length} test baselined).`,
+    `${Object.keys(baseline.production).length} production + ` +
+    `${Object.keys(baseline.test).length} test baselined).`,
 );

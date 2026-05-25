@@ -51,19 +51,14 @@ export function RepoSelector({
     const selectedFullNames = new Set(selectedRepos.map((r) => r.fullName));
     return availableRepos
       .filter((repo) => !selectedFullNames.has(repo.fullName))
-      .filter((repo) =>
-        repo.fullName.toLowerCase().includes(searchValue.toLowerCase())
-      )
+      .filter((repo) => repo.fullName.toLowerCase().includes(searchValue.toLowerCase()))
       .slice(0, 10); // Limit dropdown options
   }, [availableRepos, selectedRepos, searchValue]);
 
   // Handle clicking outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         setHighlightedIndex(-1);
         if (inline) setIsExpanded(false);
@@ -93,7 +88,7 @@ export function RepoSelector({
       setHighlightedIndex(-1);
       inputRef.current?.focus();
     },
-    [selectedRepos, maxSelections, onSelectionChange]
+    [selectedRepos, maxSelections, onSelectionChange],
   );
 
   const handleRemoveRepo = useCallback(
@@ -101,7 +96,7 @@ export function RepoSelector({
       onSelectionChange(selectedRepos.filter((r) => r.fullName !== fullName));
       inputRef.current?.focus();
     },
-    [selectedRepos, onSelectionChange]
+    [selectedRepos, onSelectionChange],
   );
 
   const handleKeyDown = useCallback(
@@ -117,9 +112,7 @@ export function RepoSelector({
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev < filteredOptions.length - 1 ? prev + 1 : prev
-          );
+          setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -144,15 +137,7 @@ export function RepoSelector({
           break;
       }
     },
-    [
-      isOpen,
-      filteredOptions,
-      highlightedIndex,
-      handleSelectRepo,
-      searchValue,
-      selectedRepos,
-      handleRemoveRepo,
-    ]
+    [isOpen, filteredOptions, highlightedIndex, handleSelectRepo, searchValue, selectedRepos, handleRemoveRepo],
   );
 
   const handleInputChange = useCallback(
@@ -160,7 +145,7 @@ export function RepoSelector({
       setSearchValue(e.target.value);
       if (!isOpen) setIsOpen(true);
     },
-    [isOpen]
+    [isOpen],
   );
 
   const handleInputFocus = useCallback(() => {
@@ -178,10 +163,11 @@ export function RepoSelector({
 
   // Inline mode: compact trigger with expandable panel
   if (inline) {
-    const contextLabel = selectedRepos.length === 0 
-      ? 'No repositories selected for context' 
-      : `Context: ${selectedRepos.length} ${selectedRepos.length === 1 ? 'repository' : 'repositories'} selected - ${selectedRepos.map(r => r.name).join(', ')}`;
-    
+    const contextLabel =
+      selectedRepos.length === 0
+        ? 'No repositories selected for context'
+        : `Context: ${selectedRepos.length} ${selectedRepos.length === 1 ? 'repository' : 'repositories'} selected - ${selectedRepos.map((r) => r.name).join(', ')}`;
+
     return (
       <div ref={containerRef} className={styles.inlineContainer}>
         {/* Trigger button */}
@@ -195,9 +181,15 @@ export function RepoSelector({
         >
           <RepoIcon size={14} className={styles.inlineTriggerIcon} aria-hidden="true" />
           {selectedRepos.length > 0 && (
-            <span className={styles.inlineBadge} aria-hidden="true">{selectedRepos.length}</span>
+            <span className={styles.inlineBadge} aria-hidden="true">
+              {selectedRepos.length}
+            </span>
           )}
-          {isExpanded ? <ChevronDownIcon size={12} aria-hidden="true" /> : <ChevronRightIcon size={12} aria-hidden="true" />}
+          {isExpanded ? (
+            <ChevronDownIcon size={12} aria-hidden="true" />
+          ) : (
+            <ChevronRightIcon size={12} aria-hidden="true" />
+          )}
         </button>
 
         {/* Expanded panel */}
@@ -237,9 +229,7 @@ export function RepoSelector({
                   aria-expanded={isOpen}
                   aria-haspopup="listbox"
                   aria-controls={listboxId}
-                  aria-activedescendant={
-                    safeHighlightedIndex >= 0 ? `repo-option-${safeHighlightedIndex}` : undefined
-                  }
+                  aria-activedescendant={safeHighlightedIndex >= 0 ? `repo-option-${safeHighlightedIndex}` : undefined}
                   role="combobox"
                   autoComplete="off"
                   className={styles.inlineSearchInput}
@@ -260,9 +250,7 @@ export function RepoSelector({
                         id={`repo-option-${index}`}
                         role="option"
                         aria-selected={index === safeHighlightedIndex}
-                        className={`${styles.option} ${
-                          index === safeHighlightedIndex ? styles.optionHighlighted : ''
-                        }`}
+                        className={`${styles.option} ${index === safeHighlightedIndex ? styles.optionHighlighted : ''}`}
                         onClick={() => handleSelectRepo(repo)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                         aria-label={`${repo.fullName}${repo.language ? `, ${repo.language}` : ''}`}
@@ -273,7 +261,9 @@ export function RepoSelector({
                           <span className={styles.optionName}>{repo.name}</span>
                         </span>
                         {repo.language && (
-                          <span className={styles.optionLanguage} aria-hidden="true">{repo.language}</span>
+                          <span className={styles.optionLanguage} aria-hidden="true">
+                            {repo.language}
+                          </span>
                         )}
                       </li>
                     ))}
@@ -325,9 +315,7 @@ export function RepoSelector({
             aria-expanded={isOpen}
             aria-haspopup="listbox"
             aria-controls={listboxId}
-            aria-activedescendant={
-              safeHighlightedIndex >= 0 ? `repo-option-${safeHighlightedIndex}` : undefined
-            }
+            aria-activedescendant={safeHighlightedIndex >= 0 ? `repo-option-${safeHighlightedIndex}` : undefined}
             role="combobox"
             autoComplete="off"
             className={`${styles.searchInput} ${compact ? styles.searchInputCompact : ''}`}
@@ -348,9 +336,7 @@ export function RepoSelector({
                   id={`repo-option-${index}`}
                   role="option"
                   aria-selected={index === safeHighlightedIndex}
-                  className={`${styles.option} ${
-                    index === safeHighlightedIndex ? styles.optionHighlighted : ''
-                  }`}
+                  className={`${styles.option} ${index === safeHighlightedIndex ? styles.optionHighlighted : ''}`}
                   onClick={() => handleSelectRepo(repo)}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   aria-label={`${repo.fullName}${repo.language ? `, ${repo.language}` : ''}`}
@@ -361,7 +347,9 @@ export function RepoSelector({
                     <span className={styles.optionName}>{repo.name}</span>
                   </span>
                   {repo.language && (
-                    <span className={styles.optionLanguage} aria-hidden="true">{repo.language}</span>
+                    <span className={styles.optionLanguage} aria-hidden="true">
+                      {repo.language}
+                    </span>
                   )}
                 </li>
               ))}
@@ -370,18 +358,14 @@ export function RepoSelector({
 
           {/* Empty state */}
           {isOpen && searchValue && filteredOptions.length === 0 && !isLoading && (
-            <div className={styles.emptyState}>
-              No repositories found matching &quot;{searchValue}&quot;
-            </div>
+            <div className={styles.emptyState}>No repositories found matching &quot;{searchValue}&quot;</div>
           )}
         </div>
       </div>
 
       {/* Help text - hidden in compact mode */}
       {!compact && selectedRepos.length === 0 && (
-        <p className={styles.helpText}>
-          Add repos to scope Copilot&apos;s context for this thread
-        </p>
+        <p className={styles.helpText}>Add repos to scope Copilot&apos;s context for this thread</p>
       )}
     </div>
   );

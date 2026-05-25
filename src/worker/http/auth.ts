@@ -21,19 +21,14 @@ function getConfiguredSecret(): string | null {
 
 export function assertWorkerSecretConfigured(): void {
   if (!getConfiguredSecret()) {
-    throw new Error(
-      'COPILOT_WORKER_SECRET is not configured — worker refuses to start.',
-    );
+    throw new Error('COPILOT_WORKER_SECRET is not configured — worker refuses to start.');
   }
 }
 
 export function checkBearer(request: Request): Response | null {
   const secret = getConfiguredSecret();
   if (!secret) {
-    return Response.json(
-      { error: 'COPILOT_WORKER_SECRET is not configured' },
-      { status: 500 },
-    );
+    return Response.json({ error: 'COPILOT_WORKER_SECRET is not configured' }, { status: 500 });
   }
   if (request.headers.get('authorization') !== `Bearer ${secret}`) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,17 +36,12 @@ export function checkBearer(request: Request): Response | null {
   return null;
 }
 
-export function requireUserId(
-  request: Request,
-): { ok: true; userId: string } | { ok: false; response: Response } {
+export function requireUserId(request: Request): { ok: true; userId: string } | { ok: false; response: Response } {
   const userId = request.headers.get('x-user-id')?.trim();
   if (!userId) {
     return {
       ok: false,
-      response: Response.json(
-        { error: 'x-user-id header is required' },
-        { status: 400 },
-      ),
+      response: Response.json({ error: 'x-user-id header is required' }, { status: 400 }),
     };
   }
   return { ok: true, userId };

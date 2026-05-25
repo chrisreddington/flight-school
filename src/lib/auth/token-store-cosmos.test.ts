@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  baseCosmosConfig,
-  encryptForTest,
-  FAKE_DEK,
-  type EncryptedDoc,
-} from './token-store-cosmos.fixture';
+import { baseCosmosConfig, encryptForTest, FAKE_DEK, type EncryptedDoc } from './token-store-cosmos.fixture';
 
 // Hoisted mock state. `vi.mock` factories run before module-level `let`s, so
 // we lift everything into a `vi.hoisted` block that the factories can read.
@@ -140,11 +135,7 @@ describe('CosmosTokenStore — envelope encryption', () => {
 
     it('returns null when the stored document is for a different userId (no decrypt attempt)', async () => {
       const store = new CosmosTokenStore(baseCosmosConfig);
-      const other = encryptForTest(
-        { accessToken: 'ghu_other', expiresAt: 9999999999 },
-        FAKE_DEK,
-        'attacker',
-      );
+      const other = encryptForTest({ accessToken: 'ghu_other', expiresAt: 9999999999 }, FAKE_DEK, 'attacker');
       mocks.itemRead.mockResolvedValue({ resource: other });
 
       await expect(store.getToken('victim')).resolves.toBeNull();
@@ -165,11 +156,7 @@ describe('CosmosTokenStore — envelope encryption', () => {
         name: 'tampered authTag (bit flip)',
         userId: 'user-42',
         build: () => {
-          const doc = encryptForTest(
-            { accessToken: 'ghu_x', expiresAt: 9999999999 },
-            FAKE_DEK,
-            'user-42',
-          );
+          const doc = encryptForTest({ accessToken: 'ghu_x', expiresAt: 9999999999 }, FAKE_DEK, 'user-42');
           const tag = Buffer.from(doc.authTag, 'base64');
           tag[0] ^= 0x01;
           doc.authTag = tag.toString('base64');
@@ -180,11 +167,7 @@ describe('CosmosTokenStore — envelope encryption', () => {
         name: 'tampered expiresAt (AAD mismatch)',
         userId: 'user-42',
         build: () => {
-          const doc = encryptForTest(
-            { accessToken: 'ghu_x', expiresAt: 9999999999 },
-            FAKE_DEK,
-            'user-42',
-          );
+          const doc = encryptForTest({ accessToken: 'ghu_x', expiresAt: 9999999999 }, FAKE_DEK, 'user-42');
           doc.expiresAt += 1;
           return doc;
         },
@@ -193,11 +176,7 @@ describe('CosmosTokenStore — envelope encryption', () => {
         name: 'tampered kekId (AAD mismatch)',
         userId: 'user-42',
         build: () => {
-          const doc = encryptForTest(
-            { accessToken: 'ghu_x', expiresAt: 9999999999 },
-            FAKE_DEK,
-            'user-42',
-          );
+          const doc = encryptForTest({ accessToken: 'ghu_x', expiresAt: 9999999999 }, FAKE_DEK, 'user-42');
           doc.kekId = 'https://example.vault.azure.net/keys/some-other-key';
           return doc;
         },
@@ -206,11 +185,7 @@ describe('CosmosTokenStore — envelope encryption', () => {
         name: 'cross-user replay (envelope AAD-bound to attacker, re-labelled as victim)',
         userId: 'victim',
         build: () => {
-          const envelope = encryptForTest(
-            { accessToken: 'ghu_attacker', expiresAt: 9999999999 },
-            FAKE_DEK,
-            'attacker',
-          );
+          const envelope = encryptForTest({ accessToken: 'ghu_attacker', expiresAt: 9999999999 }, FAKE_DEK, 'attacker');
           return { ...envelope, id: 'victim', userId: 'victim' };
         },
       },

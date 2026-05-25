@@ -1,6 +1,6 @@
 export { jobStorage } from './storage';
-export type { 
-  TopicRegenerationInput, 
+export type {
+  TopicRegenerationInput,
   TopicRegenerationResult,
   ChallengeRegenerationInput,
   ChallengeRegenerationResult,

@@ -3,12 +3,14 @@ import { createNewSessionMetrics, createReusedSessionMetrics } from './session-m
 
 describe('Copilot session metrics helpers', () => {
   it('should create metrics for a newly created SDK session', () => {
-    expect(createNewSessionMetrics({
-      poolKey: 'chat:mcp',
-      sessionCreateMs: 123,
-      mcpEnabled: true,
-      model: 'gpt-5-mini',
-    })).toEqual({
+    expect(
+      createNewSessionMetrics({
+        poolKey: 'chat:mcp',
+        sessionCreateMs: 123,
+        mcpEnabled: true,
+        model: 'gpt-5-mini',
+      }),
+    ).toEqual({
       poolKey: 'chat:mcp',
       createdNew: true,
       sessionCreateMs: 123,
@@ -19,14 +21,16 @@ describe('Copilot session metrics helpers', () => {
   });
 
   it('should derive metrics for a reused conversation session', () => {
-    expect(createReusedSessionMetrics({
-      poolKey: 'chat:mcp',
-      createdNew: true,
-      sessionCreateMs: 123,
-      mcpEnabled: true,
-      model: 'gpt-5-mini',
-      reusedConversation: false,
-    })).toEqual({
+    expect(
+      createReusedSessionMetrics({
+        poolKey: 'chat:mcp',
+        createdNew: true,
+        sessionCreateMs: 123,
+        mcpEnabled: true,
+        model: 'gpt-5-mini',
+        reusedConversation: false,
+      }),
+    ).toEqual({
       poolKey: 'chat:mcp',
       createdNew: false,
       sessionCreateMs: 0,

@@ -32,9 +32,7 @@ export function SkippingCard({ id, itemType, skeletonLines, onStop }: SkippingCa
         </Stack>
         <SkeletonBox data-testid="skipping-card-skeleton" height="24px" width="70%" />
         <SkeletonBox data-testid="skipping-card-skeleton" height="16px" width="100%" />
-        {skeletonLines === 3 && (
-          <SkeletonBox data-testid="skipping-card-skeleton" height="16px" width="90%" />
-        )}
+        {skeletonLines === 3 && <SkeletonBox data-testid="skipping-card-skeleton" height="16px" width="90%" />}
       </Stack>
     </div>
   );

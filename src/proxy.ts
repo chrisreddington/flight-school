@@ -20,19 +20,13 @@ if (!process.env.AUTH_SECRET) {
   throw new Error(
     'AUTH_SECRET is not set. Generate one with `openssl rand -base64 32` and ' +
       'add it (plus AUTH_GITHUB_ID and AUTH_GITHUB_SECRET) to .env.local. See ' +
-      'docs/migrations/2025-multitenant-auth.md.'
+      'docs/migrations/2025-multitenant-auth.md.',
   );
 }
 
 const { auth } = NextAuth(edgeAuthConfig);
 
-const PUBLIC_PREFIXES = [
-  '/api/auth',
-  '/api/health',
-  '/sign-in',
-  '/_next',
-  '/favicon.ico',
-];
+const PUBLIC_PREFIXES = ['/api/auth', '/api/health', '/sign-in', '/_next', '/favicon.ico'];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
@@ -55,10 +49,7 @@ const authProxy = auth((req) => {
   }
 
   if (pathname.startsWith('/api/')) {
-    return NextResponse.json(
-      { error: 'Authentication required' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
   const signInUrl = new URL('/sign-in', nextUrl.origin);
@@ -75,5 +66,7 @@ export default function proxy(...args: Parameters<typeof authProxy>) {
 
 export const config = {
   // Match everything except Next internals and obvious static asset files.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff2?|ttf)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff2?|ttf)$).*)',
+  ],
 };

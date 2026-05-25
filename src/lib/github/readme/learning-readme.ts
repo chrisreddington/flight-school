@@ -111,12 +111,11 @@ ${description || `A repository for learning and practicing ${topic}.`}
  */
 export async function generateLearningReadme(
   identity: SessionIdentity,
-  options: ReadmeGenerationOptions
+  options: ReadmeGenerationOptions,
 ): Promise<string> {
   const { repoName, topic, description } = options;
 
-  const prompt = README_GENERATION_PROMPT
-    .replace('{{repoName}}', repoName)
+  const prompt = README_GENERATION_PROMPT.replace('{{repoName}}', repoName)
     .replace('{{topic}}', topic)
     .replace('{{topic}}', topic)
     .replace('{{description}}', description ? `**Description**: ${description}` : '');

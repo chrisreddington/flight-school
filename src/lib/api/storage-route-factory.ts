@@ -19,10 +19,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  resolveUserScopedPath,
-  type SchemaGuard,
-} from '@/lib/storage/user-storage';
+import { resolveUserScopedPath, type SchemaGuard } from '@/lib/storage/user-storage';
 import { readStorage, writeStorage, deleteStorage } from '@/lib/storage/utils';
 import { apiSuccess, validationErrorResponse } from './response-utils';
 import { authErrorResponse } from './auth-errors';
@@ -35,7 +32,7 @@ type LoggerInstance = ReturnType<typeof logger.withTag>;
 
 /**
  * Configuration for a storage route.
- * 
+ *
  * @template T - Type of storage schema
  */
 interface StorageRouteConfig<T> {
@@ -58,11 +55,11 @@ interface StorageRouteConfig<T> {
 
 /**
  * Creates standardized GET/POST/DELETE handlers for a storage route.
- * 
+ *
  * @template T - Type of storage schema
  * @param config - Storage route configuration
  * @returns Object with GET, POST, DELETE handler functions
- * 
+ *
  * @example
  * ```typescript
  * const { GET, POST, DELETE } = createStorageRoute({
@@ -113,11 +110,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
     if (!scoped.ok) return scoped.response;
 
     try {
-      let storage = await readStorage<T>(
-        scoped.path,
-        defaultSchema,
-        validateSchema
-      );
+      let storage = await readStorage<T>(scoped.path, defaultSchema, validateSchema);
       if (transformRead) {
         try {
           storage = await transformRead(scoped.userId, storage);
@@ -128,10 +121,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
       return NextResponse.json(storage);
     } catch (error) {
       logger.error(`GET failed`, { error });
-      return NextResponse.json(
-        { error: 'Failed to read storage' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to read storage' }, { status: 500 });
     }
   }
 
@@ -154,10 +144,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
       return apiSuccess(null);
     } catch (error) {
       logger.error(`POST failed`, { error });
-      return NextResponse.json(
-        { error: 'Failed to write storage' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to write storage' }, { status: 500 });
     }
   }
 
@@ -173,10 +160,7 @@ export function createStorageRoute<T>(config: StorageRouteConfig<T>) {
       return apiSuccess(null);
     } catch (error) {
       logger.error(`DELETE failed`, { error });
-      return NextResponse.json(
-        { error: 'Failed to delete storage' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to delete storage' }, { status: 500 });
     }
   }
 

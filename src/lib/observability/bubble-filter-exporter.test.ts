@@ -9,10 +9,7 @@ import {
   isNextjsBubbleReadableSpan,
 } from './bubble-filter-exporter';
 
-function makeSpan(overrides: {
-  kind?: SpanKind;
-  attributes?: Record<string, unknown>;
-}): ReadableSpan {
+function makeSpan(overrides: { kind?: SpanKind; attributes?: Record<string, unknown> }): ReadableSpan {
   // ReadableSpan has many fields; for filter logic we only need
   // `kind` and `attributes`. Cast to satisfy the interface.
   return {
@@ -44,19 +41,15 @@ class StubExporter implements SpanExporter {
 
 describe('isNextjsBubbleReadableSpan', () => {
   it('matches a SERVER span with next.bubble === true (boolean)', () => {
-    expect(
-      isNextjsBubbleReadableSpan(
-        makeSpan({ kind: SpanKind.SERVER, attributes: { 'next.bubble': true } }),
-      ),
-    ).toBe(true);
+    expect(isNextjsBubbleReadableSpan(makeSpan({ kind: SpanKind.SERVER, attributes: { 'next.bubble': true } }))).toBe(
+      true,
+    );
   });
 
   it('matches a SERVER span with next.bubble === "true" (string)', () => {
-    expect(
-      isNextjsBubbleReadableSpan(
-        makeSpan({ kind: SpanKind.SERVER, attributes: { 'next.bubble': 'true' } }),
-      ),
-    ).toBe(true);
+    expect(isNextjsBubbleReadableSpan(makeSpan({ kind: SpanKind.SERVER, attributes: { 'next.bubble': 'true' } }))).toBe(
+      true,
+    );
   });
 
   it('does NOT match a SERVER span with operation.name = "next_js.BaseServer.handleRequest" alone', () => {
@@ -95,11 +88,9 @@ describe('isNextjsBubbleReadableSpan', () => {
   });
 
   it('does NOT match CLIENT spans even if next.bubble is somehow set', () => {
-    expect(
-      isNextjsBubbleReadableSpan(
-        makeSpan({ kind: SpanKind.CLIENT, attributes: { 'next.bubble': true } }),
-      ),
-    ).toBe(false);
+    expect(isNextjsBubbleReadableSpan(makeSpan({ kind: SpanKind.CLIENT, attributes: { 'next.bubble': true } }))).toBe(
+      false,
+    );
   });
 
   it('does NOT match INTERNAL spans', () => {
@@ -167,11 +158,7 @@ describe('isFrameworkUpdateCheckSpan', () => {
   });
 
   it('does NOT match CLIENT spans with no http.url', () => {
-    expect(
-      isFrameworkUpdateCheckSpan(
-        makeSpan({ kind: SpanKind.CLIENT, attributes: {} }),
-      ),
-    ).toBe(false);
+    expect(isFrameworkUpdateCheckSpan(makeSpan({ kind: SpanKind.CLIENT, attributes: {} }))).toBe(false);
   });
 });
 

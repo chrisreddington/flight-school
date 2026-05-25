@@ -44,29 +44,25 @@ async function main(): Promise<void> {
     .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-web')
     .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
 
-  await flightSchool.withCommand(
-    'sweep-retention',
-    'Run retention sweep',
-    async (commandContext) => {
-      const endpoint = await flightSchool.getEndpoint('http');
-      const url = await endpoint.url();
-      try {
-        const res = await fetch(`${url}/api/cron/sweep`, { method: 'POST' });
-        const body = await res.text();
-        if (!res.ok) {
-          return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
-        }
-        const commandLogger = await commandContext.logger.get();
-        await commandLogger.logInformation(`Retention sweep complete: ${body}`);
-        return { success: true };
-      } catch (err) {
-        return {
-          success: false,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        };
+  await flightSchool.withCommand('sweep-retention', 'Run retention sweep', async (commandContext) => {
+    const endpoint = await flightSchool.getEndpoint('http');
+    const url = await endpoint.url();
+    try {
+      const res = await fetch(`${url}/api/cron/sweep`, { method: 'POST' });
+      const body = await res.text();
+      if (!res.ok) {
+        return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
       }
-    },
-  );
+      const commandLogger = await commandContext.logger.get();
+      await commandLogger.logInformation(`Retention sweep complete: ${body}`);
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
 
   await builder.build().run();
 }

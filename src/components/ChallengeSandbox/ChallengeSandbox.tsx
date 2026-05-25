@@ -35,11 +35,7 @@ import { getLanguageDisplayName, getMonacoLanguageFromExtension } from '@/lib/ed
 import { logger } from '@/lib/logger';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { BeforeMount, OnMount } from '@monaco-editor/react';
-import {
-    CodeIcon,
-    ScreenFullIcon,
-    ScreenNormalIcon,
-} from '@primer/octicons-react';
+import { CodeIcon, ScreenFullIcon, ScreenNormalIcon } from '@primer/octicons-react';
 import { Banner, ConfirmationDialog, IconButton, useTheme } from '@primer/react';
 import dynamic from 'next/dynamic';
 import React, { useCallback, useState } from 'react';
@@ -48,11 +44,7 @@ import React, { useCallback, useState } from 'react';
 // PERF: Use loading placeholder with exact dimensions to avoid layout shift
 // PERF: Set ssr: false to prevent hydration issues and reduce server bundle
 const Editor = dynamic(() => import('@monaco-editor/react'), {
-  loading: () => (
-    <div className={styles.editorLoadingPlaceholder}>
-      Loading editor...
-    </div>
-  ),
+  loading: () => <div className={styles.editorLoadingPlaceholder}>Loading editor...</div>,
   ssr: false,
 });
 
@@ -89,12 +81,7 @@ initializeMonacoLanguageDefaults();
  * - Progressive hint system
  * - Keyboard shortcuts (Cmd/Ctrl+Enter to run)
  */
-export function ChallengeSandbox({
-  challengeId,
-  challenge,
-  onComplete,
-  autoFocus = false,
-}: ChallengeSandboxProps) {
+export function ChallengeSandbox({ challengeId, challenge, onComplete, autoFocus = false }: ChallengeSandboxProps) {
   const { colorMode } = useTheme();
   const { isDebugMode } = useDebugMode();
   const [isEditorFullscreen, setIsEditorFullscreen] = useState(false);
@@ -109,7 +96,7 @@ export function ChallengeSandbox({
   const [hasPromptedSelfExplanation, setHasPromptedSelfExplanation] = useState(false);
 
   const isEditorReady = useDeferredEditorMount();
-  
+
   const {
     workspace,
     evaluation,
@@ -130,8 +117,7 @@ export function ChallengeSandbox({
 
   // Pre-fetch guided plan in background so it's ready when user opens Guided Mode
   const { plan: guidedPlan, loading: isGuidedPlanLoading } = useGuidedPlan(challengeId, challenge);
-  const { disabled: isRateLimited, retryInSeconds: rateLimitRetryInSeconds } =
-    useRateLimitCountdown();
+  const { disabled: isRateLimited, retryInSeconds: rateLimitRetryInSeconds } = useRateLimitCountdown();
 
   // Get active file for language detection
   const activeFile = workspace.files.find((f) => f.id === workspace.activeFileId);
@@ -146,12 +132,15 @@ export function ChallengeSandbox({
   const showSelfExplanationCard = isChallengeComplete && !hasPromptedSelfExplanation;
 
   // Handle reset confirmation dialog
-  const handleResetDialogClose = useCallback((gesture: 'confirm' | 'close-button' | 'cancel' | 'escape') => {
-    setIsResetDialogOpen(false);
-    if (gesture === 'confirm') {
-      reset();
-    }
-  }, [reset]);
+  const handleResetDialogClose = useCallback(
+    (gesture: 'confirm' | 'close-button' | 'cancel' | 'escape') => {
+      setIsResetDialogOpen(false);
+      if (gesture === 'confirm') {
+        reset();
+      }
+    },
+    [reset],
+  );
 
   // Configure TypeScript compiler options for ES module mode before editor mounts.
   // Without this, Monaco defaults to module:None (script mode) which treats
@@ -167,19 +156,16 @@ export function ChallengeSandbox({
       // re-validation in case the TypeScript worker initialized before beforeMount fired.
       configureMonacoLanguageDefaults(monaco);
       // Add Cmd/Ctrl+Enter keybinding to run evaluation
-      editor.addCommand(
-        MONACO_KEYBINDING_RUN,
-        () => {
-          if (!isEvaluating) {
-            void evaluate();
-          }
+      editor.addCommand(MONACO_KEYBINDING_RUN, () => {
+        if (!isEvaluating) {
+          void evaluate();
         }
-      );
+      });
       if (autoFocus) {
         editor.focus();
       }
     },
-    [evaluate, isEvaluating, autoFocus]
+    [evaluate, isEvaluating, autoFocus],
   );
 
   // Call onComplete when solution is correct
@@ -214,21 +200,17 @@ export function ChallengeSandbox({
         logger.error('Failed to save self-explanation', { error }, 'ChallengeSandbox');
       }
     },
-    [challengeId, dateKey]
+    [challengeId, dateKey],
   );
 
   const handleSkipSelfExplanation = useCallback(() => {
     setHasPromptedSelfExplanation(true);
   }, []);
-  
+
   const monacoTheme = getMonacoTheme(colorMode);
 
   return (
-    <div
-      className={styles.container}
-      role="region"
-      aria-label={`Challenge: ${challenge.title}`}
-    >
+    <div className={styles.container} role="region" aria-label={`Challenge: ${challenge.title}`}>
       {/* Header */}
       <ChallengeHeader
         challenge={challenge}
@@ -245,12 +227,7 @@ export function ChallengeSandbox({
       {/* Solution error message */}
       {solveError && (
         <div className={styles.solveErrorBanner}>
-          <Banner
-            title="Error"
-            description={solveError}
-            variant="critical"
-            hideTitle
-          />
+          <Banner title="Error" description={solveError} variant="critical" hideTitle />
         </div>
       )}
 
@@ -287,9 +264,7 @@ export function ChallengeSandbox({
                 <CodeIcon size={12} />
                 {activeFileLanguageDisplay}
               </span>
-              {workspace.isSaving && (
-                <span className={styles.savingIndicator}>Saving...</span>
-              )}
+              {workspace.isSaving && <span className={styles.savingIndicator}>Saving...</span>}
               <IconButton
                 icon={isEditorFullscreen ? ScreenNormalIcon : ScreenFullIcon}
                 aria-label={isEditorFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
@@ -318,9 +293,7 @@ export function ChallengeSandbox({
                 aria-label={`Code editor for ${activeFileName}`}
               />
             ) : (
-              <div className={styles.editorLoadingPlaceholder}>
-                Loading editor...
-              </div>
+              <div className={styles.editorLoadingPlaceholder}>Loading editor...</div>
             )}
           </div>
           <CodeOutputPanel result={runResult} isRunning={isRunning} language={challenge.language} />

@@ -48,16 +48,12 @@ type ParseResult<T> = ParseSuccess<T> | ParseError;
  * const { data } = result; // typed as MyType
  * ```
  */
-export async function parseJsonBody<T = unknown>(
-  request: Request
-): Promise<ParseResult<T>> {
+export async function parseJsonBody<T = unknown>(request: Request): Promise<ParseResult<T>> {
   try {
     const data = await request.json();
     return { success: true, data: data as T };
   } catch (error) {
-    const errorMessage = error instanceof Error
-      ? error.message
-      : 'Invalid JSON in request body';
+    const errorMessage = error instanceof Error ? error.message : 'Invalid JSON in request body';
     return { success: false, error: errorMessage };
   }
 }
@@ -70,10 +66,7 @@ export async function parseJsonBody<T = unknown>(
  * @param fallback - Value to return on parse error
  * @returns Parsed data or fallback
  */
-export async function parseJsonBodyWithFallback<T>(
-  request: Request,
-  fallback: T
-): Promise<T> {
+export async function parseJsonBodyWithFallback<T>(request: Request, fallback: T): Promise<T> {
   try {
     const data = await request.json();
     return data as T;

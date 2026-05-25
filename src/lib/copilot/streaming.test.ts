@@ -126,11 +126,12 @@ describe('createChatStreamingSession telemetry', () => {
   });
 
   it('records stream metrics and emits lifecycle span events', async () => {
-    const streaming = await createChatStreamingSession(
-      { userId: 'user-1', gitHubToken: 'ghu_token' },
-      'hello',
-      { profile: 'chat', capabilities: ['github'], operationName: 'Chat', conversationId: 'conv-1' },
-    );
+    const streaming = await createChatStreamingSession({ userId: 'user-1', gitHubToken: 'ghu_token' }, 'hello', {
+      profile: 'chat',
+      capabilities: ['github'],
+      operationName: 'Chat',
+      conversationId: 'conv-1',
+    });
 
     const events = [];
     for await (const event of streaming.stream) {
@@ -147,13 +148,9 @@ describe('createChatStreamingSession telemetry', () => {
     );
 
     const lifecycleEvents = mocks.spanAddEvent.mock.calls.map(([name]) => name);
-    expect(lifecycleEvents).toEqual(expect.arrayContaining([
-      'stream.started',
-      'first_token',
-      'tool.start',
-      'tool.complete',
-      'stream.completed',
-    ]));
+    expect(lifecycleEvents).toEqual(
+      expect.arrayContaining(['stream.started', 'first_token', 'tool.start', 'tool.complete', 'stream.completed']),
+    );
 
     expect(mocks.recordAiStreamMetrics).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -169,25 +166,21 @@ describe('createChatStreamingSession telemetry', () => {
 
   it('rejects a mismatched pre-resolved profile as a caller bug', async () => {
     await expect(
-      createChatStreamingSession(
-        { userId: 'user-1', gitHubToken: 'ghu_token' },
-        'hello',
-        {
-          profile: 'chat',
-          capabilities: ['github'],
-          operationName: 'Chat',
-          conversationId: 'conv-1',
-          resolved: {
-            profileId: 'learning',
-            model: 'claude-haiku-4.5',
-            systemMessage: '',
-            capabilities: [],
-            capabilityFingerprint: 'caps=none;sys=0',
-            wasAutoElevated: false,
-            requestedCapabilities: undefined,
-          },
+      createChatStreamingSession({ userId: 'user-1', gitHubToken: 'ghu_token' }, 'hello', {
+        profile: 'chat',
+        capabilities: ['github'],
+        operationName: 'Chat',
+        conversationId: 'conv-1',
+        resolved: {
+          profileId: 'learning',
+          model: 'claude-haiku-4.5',
+          systemMessage: '',
+          capabilities: [],
+          capabilityFingerprint: 'caps=none;sys=0',
+          wasAutoElevated: false,
+          requestedCapabilities: undefined,
         },
-      ),
+      }),
     ).rejects.toThrow('does not match factory profile');
   });
 });

@@ -4,10 +4,7 @@
  * `activeOperationsStore` (in SSR).
  */
 
-import {
-  activeOperationsStore,
-  type ActiveOperationItemType,
-} from './active-operations-store';
+import { activeOperationsStore, type ActiveOperationItemType } from './active-operations-store';
 
 export interface RestoredJobEntry {
   jobId: string;
@@ -42,9 +39,7 @@ interface RawApiJob {
  * "no entries" is always a safe answer (the user simply won't see
  * carry-over operations).
  */
-export async function fetchActiveJobEntries(
-  onApiError: (error: unknown) => void,
-): Promise<RestoredJobEntry[]> {
+export async function fetchActiveJobEntries(onApiError: (error: unknown) => void): Promise<RestoredJobEntry[]> {
   if (typeof window === 'undefined') {
     return activeOperationsStore.getEntries();
   }

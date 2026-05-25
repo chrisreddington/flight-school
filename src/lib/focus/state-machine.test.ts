@@ -143,16 +143,13 @@ describe('transitionChallengeState', () => {
       { from: 'not-started', to: 'completed' },
       { from: 'in-progress', to: 'completed' },
       { from: 'in-progress', to: 'skipped' },
-    ] as const)(
-      'should allow transition from $from to $to',
-      ({ from, to }) => {
-        const challenge = createStatefulChallenge(mockChallenge, from);
-        const result = transitionChallengeState(challenge, to);
+    ] as const)('should allow transition from $from to $to', ({ from, to }) => {
+      const challenge = createStatefulChallenge(mockChallenge, from);
+      const result = transitionChallengeState(challenge, to);
 
-        expect(result.stateHistory).toHaveLength(2);
-        expect(result.stateHistory[1].state).toBe(to);
-      }
-    );
+      expect(result.stateHistory).toHaveLength(2);
+      expect(result.stateHistory[1].state).toBe(to);
+    });
   });
 
   describe('invalid transitions', () => {
@@ -161,13 +158,10 @@ describe('transitionChallengeState', () => {
       { from: 'completed', to: 'not-started' },
       { from: 'skipped', to: 'in-progress' },
       { from: 'skipped', to: 'completed' },
-    ] as const)(
-      'should throw for invalid transition from $from to $to',
-      ({ from, to }) => {
-        const challenge = createStatefulChallenge(mockChallenge, from);
-        expect(() => transitionChallengeState(challenge, to)).toThrow();
-      }
-    );
+    ] as const)('should throw for invalid transition from $from to $to', ({ from, to }) => {
+      const challenge = createStatefulChallenge(mockChallenge, from);
+      expect(() => transitionChallengeState(challenge, to)).toThrow();
+    });
   });
 
   it('should include source and note in transition', () => {
@@ -198,16 +192,13 @@ describe('transitionGoalState', () => {
       { from: 'not-started', to: 'skipped' },
       { from: 'in-progress', to: 'completed' },
       { from: 'in-progress', to: 'skipped' },
-    ] as const)(
-      'should allow transition from $from to $to',
-      ({ from, to }) => {
-        const goal = createStatefulGoal(mockGoal, from);
-        const result = transitionGoalState(goal, to);
+    ] as const)('should allow transition from $from to $to', ({ from, to }) => {
+      const goal = createStatefulGoal(mockGoal, from);
+      const result = transitionGoalState(goal, to);
 
-        expect(result.stateHistory).toHaveLength(2);
-        expect(result.stateHistory[1].state).toBe(to);
-      }
-    );
+      expect(result.stateHistory).toHaveLength(2);
+      expect(result.stateHistory[1].state).toBe(to);
+    });
   });
 
   describe('invalid transitions', () => {
@@ -215,13 +206,10 @@ describe('transitionGoalState', () => {
       { from: 'completed', to: 'in-progress' },
       { from: 'completed', to: 'not-started' },
       { from: 'skipped', to: 'in-progress' },
-    ] as const)(
-      'should throw for invalid transition from $from to $to',
-      ({ from, to }) => {
-        const goal = createStatefulGoal(mockGoal, from);
-        expect(() => transitionGoalState(goal, to)).toThrow();
-      }
-    );
+    ] as const)('should throw for invalid transition from $from to $to', ({ from, to }) => {
+      const goal = createStatefulGoal(mockGoal, from);
+      expect(() => transitionGoalState(goal, to)).toThrow();
+    });
   });
 });
 
@@ -234,16 +222,13 @@ describe('transitionTopicState', () => {
     it.each([
       { from: 'not-explored', to: 'explored' },
       { from: 'not-explored', to: 'skipped' },
-    ] as const)(
-      'should allow transition from $from to $to',
-      ({ from, to }) => {
-        const topic = createStatefulTopic(mockTopic, from);
-        const result = transitionTopicState(topic, to);
+    ] as const)('should allow transition from $from to $to', ({ from, to }) => {
+      const topic = createStatefulTopic(mockTopic, from);
+      const result = transitionTopicState(topic, to);
 
-        expect(result.stateHistory).toHaveLength(2);
-        expect(result.stateHistory[1].state).toBe(to);
-      }
-    );
+      expect(result.stateHistory).toHaveLength(2);
+      expect(result.stateHistory[1].state).toBe(to);
+    });
   });
 
   describe('invalid transitions', () => {
@@ -252,13 +237,10 @@ describe('transitionTopicState', () => {
       { from: 'explored', to: 'skipped' },
       { from: 'skipped', to: 'explored' },
       { from: 'skipped', to: 'not-explored' },
-    ] as const)(
-      'should throw for invalid transition from $from to $to',
-      ({ from, to }) => {
-        const topic = createStatefulTopic(mockTopic, from);
-        expect(() => transitionTopicState(topic, to)).toThrow();
-      }
-    );
+    ] as const)('should throw for invalid transition from $from to $to', ({ from, to }) => {
+      const topic = createStatefulTopic(mockTopic, from);
+      expect(() => transitionTopicState(topic, to)).toThrow();
+    });
   });
 });
 
@@ -273,12 +255,9 @@ describe('isTerminal helpers', () => {
       { state: 'skipped', expected: true },
       { state: 'not-started', expected: false },
       { state: 'in-progress', expected: false },
-    ] as const)(
-      'should return $expected for $state',
-      ({ state, expected }) => {
-        expect(isTerminalChallengeState(state)).toBe(expected);
-      }
-    );
+    ] as const)('should return $expected for $state', ({ state, expected }) => {
+      expect(isTerminalChallengeState(state)).toBe(expected);
+    });
   });
 
   describe('isTerminalGoalState', () => {
@@ -287,12 +266,9 @@ describe('isTerminal helpers', () => {
       { state: 'skipped', expected: true },
       { state: 'not-started', expected: false },
       { state: 'in-progress', expected: false },
-    ] as const)(
-      'should return $expected for $state',
-      ({ state, expected }) => {
-        expect(isTerminalGoalState(state)).toBe(expected);
-      }
-    );
+    ] as const)('should return $expected for $state', ({ state, expected }) => {
+      expect(isTerminalGoalState(state)).toBe(expected);
+    });
   });
 
   describe('isTerminalTopicState', () => {
@@ -300,11 +276,8 @@ describe('isTerminal helpers', () => {
       { state: 'explored', expected: true },
       { state: 'skipped', expected: true },
       { state: 'not-explored', expected: false },
-    ] as const)(
-      'should return $expected for $state',
-      ({ state, expected }) => {
-        expect(isTerminalTopicState(state)).toBe(expected);
-      }
-    );
+    ] as const)('should return $expected for $state', ({ state, expected }) => {
+      expect(isTerminalTopicState(state)).toBe(expected);
+    });
   });
 });

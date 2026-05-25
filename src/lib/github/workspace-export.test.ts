@@ -19,8 +19,8 @@ describe('buildWorkspaceExportFiles', () => {
       ],
     });
 
-    const solutionFile = files.find(f => f.path === 'solution.ts');
-    const testFile = files.find(f => f.path === 'test.ts');
+    const solutionFile = files.find((f) => f.path === 'solution.ts');
+    const testFile = files.find((f) => f.path === 'test.ts');
 
     expect(solutionFile).toBeDefined();
     expect(solutionFile?.content).toBe('const answer = 42;');
@@ -38,7 +38,7 @@ describe('buildWorkspaceExportFiles', () => {
       files: [{ name: 'index.ts', content: '' }],
     });
 
-    const readme = files.find(f => f.path === 'README.md');
+    const readme = files.find((f) => f.path === 'README.md');
 
     expect(readme).toBeDefined();
     expect(readme?.content).toContain('TypeScript Generics');
@@ -56,7 +56,7 @@ describe('buildWorkspaceExportFiles', () => {
       evaluation: 'Great work! Your solution is correct.',
     });
 
-    const readme = files.find(f => f.path === 'README.md');
+    const readme = files.find((f) => f.path === 'README.md');
 
     expect(readme?.content).toContain('Great work! Your solution is correct.');
   });
@@ -72,7 +72,7 @@ describe('buildWorkspaceExportFiles', () => {
       hints: ['Try using a loop', 'Consider edge cases'],
     });
 
-    const hints = files.find(f => f.path === 'HINTS.md');
+    const hints = files.find((f) => f.path === 'HINTS.md');
 
     expect(hints).toBeDefined();
     expect(hints?.content).toContain('Try using a loop');
@@ -90,7 +90,7 @@ describe('buildWorkspaceExportFiles', () => {
       hints: [],
     });
 
-    const hints = files.find(f => f.path === 'HINTS.md');
+    const hints = files.find((f) => f.path === 'HINTS.md');
 
     expect(hints).toBeUndefined();
   });
@@ -105,7 +105,7 @@ describe('buildWorkspaceExportFiles', () => {
       files: [{ name: 'index.ts', content: '' }],
     });
 
-    const hints = files.find(f => f.path === 'HINTS.md');
+    const hints = files.find((f) => f.path === 'HINTS.md');
 
     expect(hints).toBeUndefined();
   });

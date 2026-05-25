@@ -67,7 +67,7 @@ vi.mock('@/components/ChallengeAuthoring', () => ({
         },
         type: 'button',
       },
-      'Save challenge'
+      'Save challenge',
     ),
 }));
 
@@ -127,7 +127,7 @@ describe('CreateChallengePage', () => {
 
     expect(addChallengeMock).not.toHaveBeenCalled();
     expect(container.textContent).toContain(
-      'Queue is full (3 challenges max). Complete or remove some challenges first.'
+      'Queue is full (3 challenges max). Complete or remove some challenges first.',
     );
     expect(alertSpy).not.toHaveBeenCalled();
     alertSpy.mockRestore();

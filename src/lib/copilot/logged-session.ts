@@ -12,11 +12,7 @@ import {
 } from '@/lib/observability/semconv';
 import { activityLogger, type CompleteOperation } from './activity/logger';
 import type { AIActivityOutput } from './activity/types';
-import type {
-  LoggedSessionResult,
-  SessionCreationMetrics,
-  ToolCallRecord,
-} from './types';
+import type { LoggedSessionResult, SessionCreationMetrics, ToolCallRecord } from './types';
 
 const log = logger.withTag('Copilot SDK');
 
@@ -83,9 +79,7 @@ export function wrapSessionWithLogging(
       if (lastCall) {
         lastCall.result = String(toolComplete.result || '').slice(0, 500);
         lastCall.endTime = nowMs();
-        log.debug(
-          `Tool complete: ${lastCall.name} (${lastCall.endTime - lastCall.startTime}ms)`,
-        );
+        log.debug(`Tool complete: ${lastCall.name} (${lastCall.endTime - lastCall.startTime}ms)`);
       }
     }
 
@@ -104,20 +98,20 @@ export function wrapSessionWithLogging(
   return {
     async sendAndWait(prompt: string, timeoutMs = DEFAULT_SEND_TIMEOUT_MS): Promise<LoggedSessionResult> {
       const startTime = nowMs();
-      const metadata = sessionMetrics
-        ? ({ ...sessionMetrics } as Record<string, unknown>)
-        : undefined;
+      const metadata = sessionMetrics ? ({ ...sessionMetrics } as Record<string, unknown>) : undefined;
 
       const started = await activityLogger.startOperation(userId, 'ask', operationName, {
         prompt: inputPrompt.slice(0, 100),
         model,
         metadata,
-        sessionMetrics: sessionMetrics ? {
-          poolHit: !sessionMetrics.createdNew,
-          sessionCreateMs: sessionMetrics.sessionCreateMs,
-          mcpEnabled: sessionMetrics.mcpEnabled,
-          conversationReused: sessionMetrics.reusedConversation,
-        } : undefined,
+        sessionMetrics: sessionMetrics
+          ? {
+              poolHit: !sessionMetrics.createdNew,
+              sessionCreateMs: sessionMetrics.sessionCreateMs,
+              mcpEnabled: sessionMetrics.mcpEnabled,
+              conversationReused: sessionMetrics.reusedConversation,
+            }
+          : undefined,
       });
       complete = started.complete;
 
@@ -141,9 +135,7 @@ export function wrapSessionWithLogging(
           },
         );
 
-        const responseText = response
-          ? (response.data as { content?: string })?.content || ''
-          : '';
+        const responseText = response ? (response.data as { content?: string })?.content || '' : '';
         log.info(`Response: ${responseText.length} chars`);
 
         const totalTimeMs = nowMs() - startTime;

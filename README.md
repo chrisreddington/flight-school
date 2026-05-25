@@ -303,7 +303,7 @@ Flight School stores your data **outside the repository** in your user data dire
 
 ### Storage Structure
 
-```
+```text
 ~/.local/share/flight-school/    # or %LOCALAPPDATA%\flight-school\ on Windows
 ├── profile-cache.json           # GitHub profile cache
 ├── focus-storage.json           # Daily focus content + state

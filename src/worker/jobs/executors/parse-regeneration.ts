@@ -34,9 +34,7 @@ export function parseRegenerationResponse<TWrapper, TEntity>(
   const entity = parsed ? (parsed[wrapperKey] as TEntity | undefined) : undefined;
   if (!entity) {
     const preview =
-      responseText.length > PREVIEW_MAX_CHARS
-        ? `${responseText.slice(0, PREVIEW_MAX_CHARS)}…`
-        : responseText;
+      responseText.length > PREVIEW_MAX_CHARS ? `${responseText.slice(0, PREVIEW_MAX_CHARS)}…` : responseText;
     throw new Error(`Failed to parse ${kind} response (preview: ${preview})`);
   }
   return entity;

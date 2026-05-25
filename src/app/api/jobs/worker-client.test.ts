@@ -30,9 +30,7 @@ describe('worker-client', () => {
   });
 
   it('createWorkerJob throws safe errors without echoing credential values', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ error: 'bad ghu_user' }), { status: 500 }),
-    );
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: 'bad ghu_user' }), { status: 500 }));
 
     await expect(
       createWorkerJob({
@@ -111,7 +109,10 @@ describe('worker-client', () => {
       );
 
       const result = await createWorkerJob({
-        id: 'job-1', type: 'chat-response', userId: 'u-1', input: { prompt: 'hi' },
+        id: 'job-1',
+        type: 'chat-response',
+        userId: 'u-1',
+        input: { prompt: 'hi' },
       });
       expect(result.id).toBe('job-1');
     });
@@ -126,11 +127,13 @@ describe('worker-client', () => {
 
   describe('listWorkerJobs', () => {
     it('passes userId/type/status as query params', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        new Response(JSON.stringify({ jobs: [{ id: 'a' }] }), { status: 200 }),
-      );
+      vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ jobs: [{ id: 'a' }] }), { status: 200 }));
 
-      const result = await listWorkerJobs({ userId: 'u-1', type: 'chat-response', status: 'running' });
+      const result = await listWorkerJobs({
+        userId: 'u-1',
+        type: 'chat-response',
+        status: 'running',
+      });
       expect(result).toEqual([{ id: 'a' }]);
       const url = vi.mocked(fetch).mock.calls[0][0] as string;
       expect(url).toContain('userId=u-1');
@@ -157,9 +160,7 @@ describe('worker-client', () => {
 
   describe('cancelWorkerJobRecord', () => {
     it('DELETEs the job and returns the result body', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        new Response(JSON.stringify({ cancelled: true }), { status: 200 }),
-      );
+      vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ cancelled: true }), { status: 200 }));
       const result = await cancelWorkerJobRecord('job-1', 'u-1');
       expect(result).toEqual({ cancelled: true });
       expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
@@ -196,9 +197,7 @@ describe('worker-client', () => {
     });
 
     it('deleteWorkerJobsForUser returns deleted and cancelled counts', async () => {
-      vi.mocked(fetch).mockResolvedValue(
-        new Response(JSON.stringify({ deleted: 3, cancelled: 1 }), { status: 200 }),
-      );
+      vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ deleted: 3, cancelled: 1 }), { status: 200 }));
       const result = await deleteWorkerJobsForUser('u-1');
       expect(result).toEqual({ deleted: 3, cancelled: 1 });
       expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({ method: 'DELETE' });

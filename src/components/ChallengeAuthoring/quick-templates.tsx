@@ -9,14 +9,7 @@
  * @see SPEC-006 S7 for quick template requirements
  */
 
-import {
-  BeakerIcon,
-  CodeIcon,
-  DatabaseIcon,
-  GitBranchIcon,
-  GlobeIcon,
-  ZapIcon,
-} from '@primer/octicons-react';
+import { BeakerIcon, CodeIcon, DatabaseIcon, GitBranchIcon, GlobeIcon, ZapIcon } from '@primer/octicons-react';
 import { Button, Heading, Stack } from '@primer/react';
 import { useCallback } from 'react';
 import styles from './ChallengeAuthoring.module.css';
@@ -96,7 +89,8 @@ const TEMPLATES: Template[] = [
     name: 'Debug Challenge',
     description: 'Find and fix bugs in existing code',
     icon: CodeIcon,
-    initialPrompt: 'Create a debug challenge with type: "debug". Use a description like "Find and fix the bugs in this TypeScript code" and provide brokenCode with 1-3 intentional bugs.',
+    initialPrompt:
+      'Create a debug challenge with type: "debug". Use a description like "Find and fix the bugs in this TypeScript code" and provide brokenCode with 1-3 intentional bugs.',
     difficulty: 'intermediate',
     language: 'TypeScript',
     type: 'debug',
@@ -148,7 +142,7 @@ export function QuickTemplates({ onSelect, onSkip }: QuickTemplatesProps) {
         type: template.type,
       });
     },
-    [onSelect]
+    [onSelect],
   );
 
   return (
@@ -163,11 +157,7 @@ export function QuickTemplates({ onSelect, onSkip }: QuickTemplatesProps) {
           </p>
         </div>
 
-        <div
-          className={styles.templatesGrid}
-          role="group"
-          aria-label="Challenge templates"
-        >
+        <div className={styles.templatesGrid} role="group" aria-label="Challenge templates">
           {TEMPLATES.map((template) => {
             const IconComponent = template.icon;
             return (
@@ -182,10 +172,7 @@ export function QuickTemplates({ onSelect, onSkip }: QuickTemplatesProps) {
                   <IconComponent size={20} />
                 </div>
                 <h3 className={styles.templateTitle}>{template.name}</h3>
-                <p
-                  id={`template-desc-${template.id}`}
-                  className={styles.templateDescription}
-                >
+                <p id={`template-desc-${template.id}`} className={styles.templateDescription}>
                   {template.description}
                 </p>
               </button>

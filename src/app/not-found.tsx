@@ -1,23 +1,7 @@
 'use client';
 
-import {
-  ActionList,
-  ActionMenu,
-  Avatar,
-  Button,
-  Heading,
-  Label,
-  Stack,
-  Text,
-} from '@primer/react';
-import {
-  CopilotIcon,
-  HomeIcon,
-  PersonIcon,
-  RocketIcon,
-  SearchIcon,
-  StarIcon,
-} from '@primer/octicons-react';
+import { ActionList, ActionMenu, Avatar, Button, Heading, Label, Stack, Text } from '@primer/react';
+import { CopilotIcon, HomeIcon, PersonIcon, RocketIcon, SearchIcon, StarIcon } from '@primer/octicons-react';
 import Link from 'next/link';
 import styles from '@/components/ErrorBoundary/ErrorBoundary.module.css';
 
@@ -31,13 +15,7 @@ export default function NotFound() {
     <div className={styles.errorPage}>
       {/* Simplified header for error state */}
       <header className={styles.header}>
-        <Stack
-          direction="horizontal"
-          align="center"
-          justify="space-between"
-          wrap="wrap"
-          gap="normal"
-        >
+        <Stack direction="horizontal" align="center" justify="space-between" wrap="wrap" gap="normal">
           {/* Left side: Logo */}
           <Stack direction="horizontal" align="center" gap="condensed">
             <Link href="/" className={styles.logoLink}>

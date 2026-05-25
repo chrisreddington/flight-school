@@ -55,62 +55,65 @@ export function InlineCalibration({ items, onItemsChange, showProfileLink = true
   const [processingSkills, setProcessingSkills] = useState<Set<string>>(new Set());
 
   // Handle accepting a suggested skill level
-  const handleAccept = useCallback(async (item: CalibrationNeededItem) => {
-    setProcessingSkills(prev => new Set(prev).add(item.skillId));
+  const handleAccept = useCallback(
+    async (item: CalibrationNeededItem) => {
+      setProcessingSkills((prev) => new Set(prev).add(item.skillId));
 
-    const newSkill: UserSkill = {
-      skillId: item.skillId,
-      displayName: item.displayName,
-      level: item.suggestedLevel as SkillLevel,
-      source: 'github-confirmed', // User confirmed a skill detected from GitHub
-      notInterested: false,
-    };
+      const newSkill: UserSkill = {
+        skillId: item.skillId,
+        displayName: item.displayName,
+        level: item.suggestedLevel as SkillLevel,
+        source: 'github-confirmed', // User confirmed a skill detected from GitHub
+        notInterested: false,
+      };
 
-    try {
-      // Save to skills profile and remove from calibration list
-      await Promise.all([
-        skillsStore.setSkill(newSkill),
-        focusStore.removeCalibrationItem(item.skillId),
-      ]);
-      
-      // Notify parent of the change
-      const updatedItems = items.filter(i => i.skillId !== item.skillId);
-      onItemsChange?.(updatedItems);
-    } catch {
-      // Best effort - item may still be in storage
-    } finally {
-      setProcessingSkills(prev => {
-        const next = new Set(prev);
-        next.delete(item.skillId);
-        return next;
-      });
-    }
-  }, [items, onItemsChange]);
+      try {
+        // Save to skills profile and remove from calibration list
+        await Promise.all([skillsStore.setSkill(newSkill), focusStore.removeCalibrationItem(item.skillId)]);
+
+        // Notify parent of the change
+        const updatedItems = items.filter((i) => i.skillId !== item.skillId);
+        onItemsChange?.(updatedItems);
+      } catch {
+        // Best effort - item may still be in storage
+      } finally {
+        setProcessingSkills((prev) => {
+          const next = new Set(prev);
+          next.delete(item.skillId);
+          return next;
+        });
+      }
+    },
+    [items, onItemsChange],
+  );
 
   // Handle dismissing a skill suggestion
-  const handleDismiss = useCallback(async (skillId: string) => {
-    setProcessingSkills(prev => new Set(prev).add(skillId));
+  const handleDismiss = useCallback(
+    async (skillId: string) => {
+      setProcessingSkills((prev) => new Set(prev).add(skillId));
 
-    try {
-      // Remove from storage
-      await focusStore.removeCalibrationItem(skillId);
-      
-      // Notify parent of the change
-      const updatedItems = items.filter(i => i.skillId !== skillId);
-      onItemsChange?.(updatedItems);
-    } catch {
-      // Best effort
-    } finally {
-      setProcessingSkills(prev => {
-        const next = new Set(prev);
-        next.delete(skillId);
-        return next;
-      });
-    }
-  }, [items, onItemsChange]);
+      try {
+        // Remove from storage
+        await focusStore.removeCalibrationItem(skillId);
+
+        // Notify parent of the change
+        const updatedItems = items.filter((i) => i.skillId !== skillId);
+        onItemsChange?.(updatedItems);
+      } catch {
+        // Best effort
+      } finally {
+        setProcessingSkills((prev) => {
+          const next = new Set(prev);
+          next.delete(skillId);
+          return next;
+        });
+      }
+    },
+    [items, onItemsChange],
+  );
 
   // Filter out items being processed (optimistic removal)
-  const visibleItems = items.filter(item => !processingSkills.has(item.skillId));
+  const visibleItems = items.filter((item) => !processingSkills.has(item.skillId));
 
   if (visibleItems.length === 0) {
     return null;
@@ -124,9 +127,9 @@ export function InlineCalibration({ items, onItemsChange, showProfileLink = true
           We detected some skills - confirm your levels for better recommendations
         </span>
       </Stack>
-      
+
       <Stack direction="vertical" gap="condensed" className={styles.calibrationItems}>
-        {visibleItems.map(item => (
+        {visibleItems.map((item) => (
           <div key={item.skillId} className={styles.calibrationItem}>
             <Stack direction="horizontal" align="center" justify="space-between">
               <Stack direction="horizontal" align="center" gap="condensed">
@@ -159,7 +162,7 @@ export function InlineCalibration({ items, onItemsChange, showProfileLink = true
           </div>
         ))}
       </Stack>
-      
+
       {showProfileLink && (
         <Link href="/skills" className={styles.calibrationLink}>
           Manage all skills →

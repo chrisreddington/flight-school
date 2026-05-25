@@ -31,9 +31,7 @@ const SOLVE_TIMEOUT_MS = 120_000;
 /**
  * Generate workspace solutions for a challenge (debug only).
  */
-export function useSolutionGeneration(
-  options: UseSolutionGenerationOptions
-): UseSolutionGenerationReturn {
+export function useSolutionGeneration(options: UseSolutionGenerationOptions): UseSolutionGenerationReturn {
   const { challenge, workspace } = options;
 
   const [isSolving, setIsSolving] = useState(false);

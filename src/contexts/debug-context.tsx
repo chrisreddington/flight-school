@@ -2,7 +2,7 @@
 
 /**
  * Debug Mode Context
- * 
+ *
  * Provides global debug mode state that controls:
  * - Display of tool names in "Used X tools" messages
  * - Display of performance metrics (First token, Total, Cold start/Pool hit)
@@ -60,11 +60,7 @@ const subscribeToDebugMode = (listener: () => void) => {
 };
 
 export function DebugProvider({ children }: { children: React.ReactNode }) {
-  const isDebugMode = useSyncExternalStore(
-    subscribeToDebugMode,
-    getDebugSnapshot,
-    getDebugServerSnapshot
-  );
+  const isDebugMode = useSyncExternalStore(subscribeToDebugMode, getDebugSnapshot, getDebugServerSnapshot);
 
   const toggleDebugMode = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -80,9 +76,7 @@ export function DebugProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <DebugContext.Provider value={{ isDebugMode, toggleDebugMode, setDebugMode }}>
-      {children}
-    </DebugContext.Provider>
+    <DebugContext.Provider value={{ isDebugMode, toggleDebugMode, setDebugMode }}>{children}</DebugContext.Provider>
   );
 }
 

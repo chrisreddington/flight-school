@@ -70,7 +70,7 @@
 }
 
 /* Show delete button on hover */
-[class*="ActionList"] [class*="Item"]:hover .deleteButton,
-[class*="ActionList"] [class*="Item"]:focus-within .deleteButton {
+[class*='ActionList'] [class*='Item']:hover .deleteButton,
+[class*='ActionList'] [class*='Item']:focus-within .deleteButton {
   opacity: 1;
 }

@@ -36,9 +36,7 @@ const LEVEL_TO_SEVERITY: Record<LogLevel, SeverityNumber> = {
 };
 
 const isServer = typeof window === 'undefined';
-const otelLogger = isServer
-  ? logs.getLogger(INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION)
-  : null;
+const otelLogger = isServer ? logs.getLogger(INSTRUMENTATION_SCOPE_SERVER, INSTRUMENTATION_SCOPE_VERSION) : null;
 
 class Logger {
   private enrichDataWithTraceContext(data: unknown): unknown {
@@ -75,10 +73,7 @@ class Logger {
   private shouldLog(level: LogLevel): boolean {
     if (level === 'debug') {
       // Only debug in development or if explicitly enabled
-      return (
-        process.env.NODE_ENV === 'development' ||
-        process.env.NEXT_PUBLIC_DEBUG === 'true'
-      );
+      return process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG === 'true';
     }
     return true;
   }
@@ -88,7 +83,7 @@ class Logger {
     const tagPrefix = tag ? `[${tag}]` : '';
     // On server, timestamps are useful. On client, browser console handles it.
     const timePrefix = typeof window === 'undefined' ? `${timestamp} ` : '';
-    
+
     return `${timePrefix}${tagPrefix} ${message}`.trim();
   }
 

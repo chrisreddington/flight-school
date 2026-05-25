@@ -29,19 +29,13 @@ interface WorkspaceExportFile {
  * @param options - Export file options
  * @returns Files ready for commit
  */
-export function buildWorkspaceExportFiles(
-  options: WorkspaceExportFilesOptions
-): WorkspaceExportFile[] {
+export function buildWorkspaceExportFiles(options: WorkspaceExportFilesOptions): WorkspaceExportFile[] {
   const filesToCommit: WorkspaceExportFile[] = options.files.map((file) => ({
     path: file.name,
     content: file.content,
   }));
 
-  const readmeContent = generateWorkspaceReadme(
-    options.challenge,
-    options.files,
-    options.evaluation
-  );
+  const readmeContent = generateWorkspaceReadme(options.challenge, options.files, options.evaluation);
   filesToCommit.push({
     path: 'README.md',
     content: readmeContent,

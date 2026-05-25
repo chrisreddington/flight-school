@@ -14,9 +14,7 @@ import type { CapabilitiesArg } from './profile-types';
  * `'default'` pass through; arrays sort and comma-join so identical
  * sets always produce identical telemetry regardless of input order.
  */
-export function formatRequestedCapabilities(
-  value: CapabilitiesArg | 'default' | undefined,
-): string {
+export function formatRequestedCapabilities(value: CapabilitiesArg | 'default' | undefined): string {
   if (value === undefined || value === 'default') return 'default';
   if (value === 'auto') return 'auto';
   return [...value].sort().join(',') || 'none';

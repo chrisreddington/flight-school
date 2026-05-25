@@ -1,6 +1,6 @@
 /**
  * Recent Activity List Component
- * 
+ *
  * Displays the most recent 7 learning activities with date and type.
  * Shows challenges completed, topics explored, and goals completed.
  */
@@ -19,9 +19,7 @@ export function RecentActivityList({ activities }: RecentActivityListProps) {
     return (
       <div className={styles.card}>
         <h2 className={styles.activityHeading}>Recent Activity</h2>
-        <p className={styles.emptyMessage}>
-          No recent activity yet. Start exploring topics and completing challenges!
-        </p>
+        <p className={styles.emptyMessage}>No recent activity yet. Start exploring topics and completing challenges!</p>
       </div>
     );
   }
@@ -46,9 +44,7 @@ function ActivityRow({ activity }: { activity: ActivityItem }) {
 
   return (
     <div className={styles.activityRow}>
-      <div className={styles.activityIconWrapper}>
-        {icon}
-      </div>
+      <div className={styles.activityIconWrapper}>{icon}</div>
 
       <div className={styles.activityContent}>
         <span className={styles.activityTitle}>{activity.title}</span>
@@ -85,7 +81,19 @@ function getTypeLabelForType(type: ActivityItem['type']): string {
   }
 }
 
-function getLabelVariant(type: ActivityItem['type']): 'default' | 'primary' | 'secondary' | 'accent' | 'success' | 'attention' | 'severe' | 'danger' | 'done' | 'sponsors' {
+function getLabelVariant(
+  type: ActivityItem['type'],
+):
+  | 'default'
+  | 'primary'
+  | 'secondary'
+  | 'accent'
+  | 'success'
+  | 'attention'
+  | 'severe'
+  | 'danger'
+  | 'done'
+  | 'sponsors' {
   switch (type) {
     case 'challenge':
       return 'success';

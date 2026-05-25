@@ -12,9 +12,11 @@ import styles from './AIActivityPanel.module.css';
 
 /** Educational notes explaining what each operation type does */
 const EDUCATIONAL_NOTES: Record<AIActivityType, string> = {
-  embed: '💡 Converts text into a 256-dimensional vector. Similar concepts have similar vectors, enabling the Skill Constellation to cluster related skills together.',
+  embed:
+    '💡 Converts text into a 256-dimensional vector. Similar concepts have similar vectors, enabling the Skill Constellation to cluster related skills together.',
   ask: '💡 Single-turn completion. The SDK sends this prompt to Copilot and returns the response. Used for challenge generation and insights.',
-  session: '💡 Multi-turn conversation with memory. Each message builds on previous context. Powers the progressive hint system on hover.',
+  session:
+    '💡 Multi-turn conversation with memory. Each message builds on previous context. Powers the progressive hint system on hover.',
   tool: '💡 Custom tool invocation. The AI decided to call this function to gather information or take action.',
   error: '⚠️ An error occurred during this operation. Check the error message for details.',
   internal: '🔧 Internal operation for tracking or computation (e.g., cosine similarity).',
@@ -56,11 +58,11 @@ function analyzePerformance(event: AIActivityEvent): string[] {
   const sessionMetrics = event.input?.sessionMetrics;
   const clientMetrics = event.input?.clientMetrics;
   const serverMetrics = event.input?.serverMetrics;
-  
+
   // Use client TTFT as primary, fall back to server
   const firstTokenMs = clientMetrics?.firstTokenMs ?? serverMetrics?.firstTokenMs;
   const totalMs = clientMetrics?.totalMs ?? event.latencyMs;
-  
+
   // Conversation creation overhead
   if (sessionMetrics && !sessionMetrics.poolHit && sessionMetrics.sessionCreateMs) {
     if (sessionMetrics.sessionCreateMs > 2000) {
@@ -69,12 +71,12 @@ function analyzePerformance(event: AIActivityEvent): string[] {
       issues.push(`○ New conversation (${sessionMetrics.sessionCreateMs}ms)`);
     }
   }
-  
+
   // MCP overhead
   if (sessionMetrics?.mcpEnabled && sessionMetrics.sessionCreateMs && sessionMetrics.sessionCreateMs > 1000) {
     issues.push('🔧 MCP tools enabled - adds initialization overhead');
   }
-  
+
   // Time to first token
   if (firstTokenMs != null) {
     if (firstTokenMs > 5000) {
@@ -85,18 +87,18 @@ function analyzePerformance(event: AIActivityEvent): string[] {
       issues.push(`⚡ Fast first token (${firstTokenMs}ms) - excellent!`);
     }
   }
-  
+
   // Total latency
   if (totalMs > 30000) {
     issues.push('🐢 Very long operation (>30s) - consider streaming or breaking into smaller requests');
   }
-  
+
   // Tool usage
   const toolsUsed = event.output?.toolsUsed;
   if (toolsUsed && toolsUsed.length > 0) {
     issues.push(`🔨 Used ${toolsUsed.length} tool(s): ${toolsUsed.join(', ')} - adds latency for data fetching`);
   }
-  
+
   return issues;
 }
 
@@ -116,14 +118,14 @@ export function ActivityEvent({ event, showEducational = true }: ActivityEventPr
   const clientMetrics = event.input?.clientMetrics;
   const serverMetrics = event.input?.serverMetrics;
   const sessionMetrics = event.input?.sessionMetrics;
-  
+
   // Display latency: prefer client total (what user experienced), fall back to server latencyMs
   const displayLatencyMs = clientMetrics?.totalMs ?? event.latencyMs;
   const latency = formatLatency(displayLatencyMs);
-  
+
   // TTFT: prefer client TTFT, fall back to server TTFT
   const displayTtftMs = clientMetrics?.firstTokenMs ?? serverMetrics?.firstTokenMs ?? undefined;
-  
+
   const performanceIssues = analyzePerformance(event);
 
   return (
@@ -142,28 +144,21 @@ export function ActivityEvent({ event, showEducational = true }: ActivityEventPr
       <div className={`d-flex gap-1 mt-2 ${styles.badgeRow}`}>
         {/* 1. Conversation state (shows session creation overhead) */}
         {sessionMetrics && (
-          <ConversationBadge 
-            reused={sessionMetrics.poolHit ?? false} 
-            createTimeMs={sessionMetrics.poolHit ? undefined : sessionMetrics.sessionCreateMs} 
+          <ConversationBadge
+            reused={sessionMetrics.poolHit ?? false}
+            createTimeMs={sessionMetrics.poolHit ? undefined : sessionMetrics.sessionCreateMs}
           />
         )}
         {/* 2. TTFT - Server→Client flow (server time INCLUDES session creation) */}
         {displayTtftMs != null && (
-          <TtftBadges 
-            serverMs={serverMetrics?.firstTokenMs ?? undefined}
-            clientMs={clientMetrics?.firstTokenMs}
-          />
+          <TtftBadges serverMs={serverMetrics?.firstTokenMs ?? undefined} clientMs={clientMetrics?.firstTokenMs} />
         )}
         {/* 3. Total time (end-to-end completion) */}
         {displayLatencyMs > 0 && event.status === 'success' && (
-          <StatusBadge variant="info">
-            Total: {displayLatencyMs}ms
-          </StatusBadge>
+          <StatusBadge variant="info">Total: {displayLatencyMs}ms</StatusBadge>
         )}
         {/* 4. Model (metadata) */}
-        {event.input?.model && (
-          <ModelBadge model={event.input.model} />
-        )}
+        {event.input?.model && <ModelBadge model={event.input.model} />}
         {/* 5. MCP tools (feature indicator) */}
         {sessionMetrics?.mcpEnabled && <McpToolsBadge />}
       </div>
@@ -191,11 +186,7 @@ export function ActivityEvent({ event, showEducational = true }: ActivityEventPr
             {isExpanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
             <span>Prompt</span>
           </button>
-          {isExpanded && (
-            <div className={styles.codeBlock}>
-              {event.input?.prompt || event.input?.text}
-            </div>
-          )}
+          {isExpanded && <div className={styles.codeBlock}>{event.input?.prompt || event.input?.text}</div>}
         </div>
       )}
 
@@ -206,22 +197,18 @@ export function ActivityEvent({ event, showEducational = true }: ActivityEventPr
             {showResponse ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
             <span>Response ({event.output.fullResponse.length} chars)</span>
           </button>
-          {showResponse && (
-            <div className={styles.codeBlockResponse}>
-              {event.output.fullResponse}
-            </div>
-          )}
+          {showResponse && <div className={styles.codeBlockResponse}>{event.output.fullResponse}</div>}
         </div>
       )}
 
       {/* Token usage */}
       {event.output?.tokens && (
         <div className={`f6 color-fg-muted ${styles.metaInfo}`}>
-          📊 Tokens: {event.output.tokens.input} in / {event.output.tokens.output} out
-          {' '}({event.output.tokens.input + event.output.tokens.output} total)
+          📊 Tokens: {event.output.tokens.input} in / {event.output.tokens.output} out (
+          {event.output.tokens.input + event.output.tokens.output} total)
         </div>
       )}
-      
+
       {/* Embedding info */}
       {event.output?.embedding && (
         <div className={`f6 color-fg-muted ${styles.metaInfo}`}>

@@ -14,10 +14,7 @@
 
 import 'server-only';
 
-import {
-  mergeTracePropagationHeaders,
-  type TracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
+import { mergeTracePropagationHeaders, type TracePropagationHeaders } from '@/lib/observability/context-propagation';
 
 import { getCopilotWorkerConfig, type CopilotWorkerConfig } from './config';
 
@@ -52,11 +49,7 @@ function getRequiredWorkerConfig(context = 'this operation'): CopilotWorkerConfi
  * with unusual payload shapes — empty bodies, NDJSON, SSE — are not
  * coerced through a single deserializer.
  */
-export async function workerFetch(
-  path: string,
-  init: RequestInit,
-  opts: WorkerFetchOptions,
-): Promise<Response | null> {
+export async function workerFetch(path: string, init: RequestInit, opts: WorkerFetchOptions): Promise<Response | null> {
   const config = getRequiredWorkerConfig(opts.errorContext);
   const headers = mergeTracePropagationHeaders(
     {
@@ -81,11 +74,7 @@ export async function workerFetch(
  * parsed body as `T`. Use {@link workerFetch} directly for endpoints that
  * return empty bodies, NDJSON, or other non-JSON shapes.
  */
-export async function workerFetchJson<T>(
-  path: string,
-  init: RequestInit,
-  opts: WorkerFetchOptions,
-): Promise<T | null> {
+export async function workerFetchJson<T>(path: string, init: RequestInit, opts: WorkerFetchOptions): Promise<T | null> {
   const response = await workerFetch(path, init, opts);
   if (response === null) return null;
   return (await response.json()) as T;

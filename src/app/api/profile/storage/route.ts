@@ -26,9 +26,7 @@ function validateSchema(data: unknown): data is ProfileStorageSchema | null {
   if (data === null) return true;
   if (typeof data !== 'object') return false;
   const schema = data as Record<string, unknown>;
-  return typeof schema.date === 'string' && 
-         typeof schema.profile === 'object' && 
-         schema.profile !== null;
+  return typeof schema.date === 'string' && typeof schema.profile === 'object' && schema.profile !== null;
 }
 
 export const { GET, POST, DELETE } = createStorageRoute({
@@ -37,4 +35,3 @@ export const { GET, POST, DELETE } = createStorageRoute({
   logger: logger.withTag('Profile Storage API'),
   validateSchema,
 });
-

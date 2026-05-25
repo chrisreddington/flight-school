@@ -23,13 +23,12 @@ export const ProTipSection = memo(function ProTipSection() {
         <span className={styles.proTipTitle}>Pro Tip</span>
       </Stack>
       <p className={styles.proTipContent}>
-        Press{' '}
-        <kbd className={styles.kbd}>⌘</kbd>
+        Press <kbd className={styles.kbd}>⌘</kbd>
         {' + '}
         <kbd className={styles.kbd}>Shift</kbd>
         {' + '}
-        <kbd className={styles.kbd}>A</kbd>
-        {' '}to open the AI Activity Panel and see Copilot&apos;s thought process in real-time.
+        <kbd className={styles.kbd}>A</kbd> to open the AI Activity Panel and see Copilot&apos;s thought process in
+        real-time.
       </p>
     </section>
   );

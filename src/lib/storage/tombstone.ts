@@ -55,10 +55,7 @@ export async function isUserDeleted(userId: string): Promise<boolean> {
   // Fall back to the legacy `users/{userId}/.deleted` path so a deploy
   // that interleaves old & new instances doesn't accidentally resurrect
   // a deleted user.
-  const legacy = await readFile(
-    `${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`,
-    LEGACY_TOMBSTONE_FILENAME,
-  );
+  const legacy = await readFile(`${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`, LEGACY_TOMBSTONE_FILENAME);
   if (legacy !== null) {
     tombstoneCache.set(userId, true);
     return true;
@@ -72,8 +69,5 @@ export async function clearUserTombstone(userId: string): Promise<void> {
   await deleteFile(TOMBSTONE_DIR, userId);
   // Clear the legacy location too so a subsequent isUserDeleted lookup
   // doesn't flap back to true via the legacy fallback path.
-  await deleteFile(
-    `${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`,
-    LEGACY_TOMBSTONE_FILENAME,
-  );
+  await deleteFile(`${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`, LEGACY_TOMBSTONE_FILENAME);
 }

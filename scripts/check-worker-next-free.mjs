@@ -88,9 +88,7 @@ async function runMetafileScan() {
 
 async function main() {
   if (!(await fileExists(BOOTSTRAP_ENTRY))) {
-    console.error(
-      `check-worker-next-free: worker entry not found at ${BOOTSTRAP_ENTRY}.`,
-    );
+    console.error(`check-worker-next-free: worker entry not found at ${BOOTSTRAP_ENTRY}.`);
     process.exit(1);
   }
 

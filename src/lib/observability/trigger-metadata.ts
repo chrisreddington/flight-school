@@ -1,8 +1,7 @@
 const CLIENT_TRIGGER_HEADER_SOURCE = 'x-flight-school-trigger-source';
 const CLIENT_TRIGGER_HEADER_ACTION = 'x-flight-school-trigger-action';
 const CLIENT_TRIGGER_HEADER_PAGE_PATH = 'x-flight-school-trigger-page-path';
-const CLIENT_TRIGGER_HEADER_NAVIGATION_ELAPSED_MS =
-  'x-flight-school-trigger-navigation-elapsed-ms';
+const CLIENT_TRIGGER_HEADER_NAVIGATION_ELAPSED_MS = 'x-flight-school-trigger-navigation-elapsed-ms';
 const CLIENT_TRIGGER_HEADER_TARGET_TYPE = 'x-flight-school-trigger-target-type';
 const CLIENT_TRIGGER_HEADER_TARGET_ID = 'x-flight-school-trigger-target-id';
 const CLIENT_TRIGGER_HEADER_CORRELATION_ID = 'x-flight-school-trigger-correlation-id';
@@ -69,9 +68,7 @@ export function encodeClientTriggerHeaders(metadata: ClientTriggerMetadata): Rec
     headers[CLIENT_TRIGGER_HEADER_PAGE_PATH] = metadata.pagePath;
   }
   if (typeof metadata.navigationElapsedMs === 'number') {
-    headers[CLIENT_TRIGGER_HEADER_NAVIGATION_ELAPSED_MS] = Math.round(
-      metadata.navigationElapsedMs,
-    ).toString();
+    headers[CLIENT_TRIGGER_HEADER_NAVIGATION_ELAPSED_MS] = Math.round(metadata.navigationElapsedMs).toString();
   }
   if (metadata.targetType) {
     headers[CLIENT_TRIGGER_HEADER_TARGET_TYPE] = metadata.targetType;
@@ -83,9 +80,7 @@ export function encodeClientTriggerHeaders(metadata: ClientTriggerMetadata): Rec
   return headers;
 }
 
-export function parseClientTriggerFromHeaders(
-  headers: TriggerHeaderCarrier,
-): ClientTriggerMetadata | undefined {
+export function parseClientTriggerFromHeaders(headers: TriggerHeaderCarrier): ClientTriggerMetadata | undefined {
   const source = getHeaderValue(headers, CLIENT_TRIGGER_HEADER_SOURCE);
   const action = getHeaderValue(headers, CLIENT_TRIGGER_HEADER_ACTION);
   const pagePath = getHeaderValue(headers, CLIENT_TRIGGER_HEADER_PAGE_PATH);
@@ -102,17 +97,14 @@ export function parseClientTriggerFromHeaders(
     return undefined;
   }
 
-  const navigationElapsedMs =
-    typeof navigationElapsedMsRaw === 'string' ? Number(navigationElapsedMsRaw) : undefined;
+  const navigationElapsedMs = typeof navigationElapsedMsRaw === 'string' ? Number(navigationElapsedMsRaw) : undefined;
 
   const metadata: ClientTriggerMetadata = {
     source,
     action,
     correlationId,
     ...(pagePath ? { pagePath } : {}),
-    ...(typeof navigationElapsedMs === 'number' && Number.isFinite(navigationElapsedMs)
-      ? { navigationElapsedMs }
-      : {}),
+    ...(typeof navigationElapsedMs === 'number' && Number.isFinite(navigationElapsedMs) ? { navigationElapsedMs } : {}),
     ...(targetType ? { targetType } : {}),
     ...(targetId ? { targetId } : {}),
   };
@@ -120,9 +112,7 @@ export function parseClientTriggerFromHeaders(
   return isValidMetadata(metadata) ? metadata : undefined;
 }
 
-export function toClientTriggerSpanAttributes(
-  metadata: ClientTriggerMetadata,
-): Record<string, string | number> {
+export function toClientTriggerSpanAttributes(metadata: ClientTriggerMetadata): Record<string, string | number> {
   return {
     'app.trigger.source': metadata.source,
     'app.trigger.action': metadata.action,

@@ -29,10 +29,7 @@ export const WORKER_EXTERNALS = [
 
 export function buildWorkerEsbuildOptions(overrides = {}) {
   return {
-    entryPoints: [
-      resolve(REPO_ROOT, 'src/worker/bootstrap.ts'),
-      resolve(REPO_ROOT, 'src/worker/server-main.ts'),
-    ],
+    entryPoints: [resolve(REPO_ROOT, 'src/worker/bootstrap.ts'), resolve(REPO_ROOT, 'src/worker/server-main.ts')],
     outdir: resolve(REPO_ROOT, 'dist-worker'),
     outExtension: { '.js': '.mjs' },
     entryNames: '[name]',

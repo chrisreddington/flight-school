@@ -59,15 +59,11 @@ interface ChallengeAuthoringProps {
  * />
  * ```
  */
-export function ChallengeAuthoring({
-  onSaveChallenge,
-  initialTemplate,
-  userAvatarUrl,
-}: ChallengeAuthoringProps) {
+export function ChallengeAuthoring({ onSaveChallenge, initialTemplate, userAvatarUrl }: ChallengeAuthoringProps) {
   const [mode, setMode] = useState<AuthoringMode>(initialTemplate ? 'chat' : 'templates');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateSelection | null>(
-    initialTemplate ? { name: initialTemplate, description: '' } : null
+    initialTemplate ? { name: initialTemplate, description: '' } : null,
   );
 
   // Refs for focus management (AC10.5)
@@ -94,10 +90,13 @@ export function ChallengeAuthoring({
   /**
    * Handle challenge generated from chat - directly save (no preview step).
    */
-  const handleChallengeGenerated = useCallback((challenge: DailyChallenge) => {
-    // Directly save the challenge - user already trusts it from the conversation
-    onSaveChallenge(challenge);
-  }, [onSaveChallenge]);
+  const handleChallengeGenerated = useCallback(
+    (challenge: DailyChallenge) => {
+      // Directly save the challenge - user already trusts it from the conversation
+      onSaveChallenge(challenge);
+    },
+    [onSaveChallenge],
+  );
 
   /**
    * Handle conversation ID update from chat.
@@ -123,12 +122,7 @@ export function ChallengeAuthoring({
 
       {/* Main Content */}
       <div className={styles.content}>
-        {mode === 'templates' && (
-          <QuickTemplates
-            onSelect={handleTemplateSelect}
-            onSkip={handleSkipTemplates}
-          />
-        )}
+        {mode === 'templates' && <QuickTemplates onSelect={handleTemplateSelect} onSkip={handleSkipTemplates} />}
 
         {mode === 'chat' && (
           <AuthoringChat

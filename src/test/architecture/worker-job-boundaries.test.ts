@@ -19,14 +19,13 @@ function importSpecifiers(source: string): string[] {
 
 describe('worker job architecture boundaries', () => {
   it('keeps worker implementation imports out of web app files', () => {
-    const offenders = sourceFiles(APP_ROOT)
-      .flatMap((filePath) => {
-        const rel = path.relative(process.cwd(), filePath).replaceAll(path.sep, '/');
-        const source = readFileSync(filePath, 'utf8');
-        return importSpecifiers(source)
-          .filter((specifier) => specifier.startsWith('@/worker/'))
-          .map((specifier) => `${rel} imports ${specifier}`);
-      });
+    const offenders = sourceFiles(APP_ROOT).flatMap((filePath) => {
+      const rel = path.relative(process.cwd(), filePath).replaceAll(path.sep, '/');
+      const source = readFileSync(filePath, 'utf8');
+      return importSpecifiers(source)
+        .filter((specifier) => specifier.startsWith('@/worker/'))
+        .map((specifier) => `${rel} imports ${specifier}`);
+    });
 
     expect(offenders).toEqual([]);
   });

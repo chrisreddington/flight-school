@@ -50,13 +50,7 @@ function createThread(overrides: Partial<Thread> = {}): Thread {
 describe('LearningChat typing indicator', () => {
   function renderChat(props: Partial<ComponentProps<typeof LearningChat>> = {}): string {
     return renderToStaticMarkup(
-      <LearningChat
-        threads={[]}
-        activeThreadId={null}
-        handlers={defaultHandlers}
-        isStreaming={false}
-        {...props}
-      />
+      <LearningChat threads={[]} activeThreadId={null} handlers={defaultHandlers} isStreaming={false} {...props} />,
     );
   }
 
@@ -113,12 +107,7 @@ describe('LearningChat auto-scroll', () => {
 
     await act(async () => {
       render(
-        <LearningChat
-          threads={[thread]}
-          activeThreadId="thread-1"
-          handlers={defaultHandlers}
-          isStreaming={false}
-        />
+        <LearningChat threads={[thread]} activeThreadId="thread-1" handlers={defaultHandlers} isStreaming={false} />,
       );
     });
 
@@ -140,17 +129,12 @@ describe('LearningChat auto-scroll', () => {
         activeThreadId="thread-1"
         handlers={defaultHandlers}
         isStreaming={false}
-      />
+      />,
     );
 
     await act(async () => {
       rerender(
-        <LearningChat
-          threads={[thread]}
-          activeThreadId="thread-1"
-          handlers={defaultHandlers}
-          isStreaming={true}
-        />
+        <LearningChat threads={[thread]} activeThreadId="thread-1" handlers={defaultHandlers} isStreaming={true} />,
       );
     });
 
@@ -174,12 +158,7 @@ describe('LearningChat auto-scroll', () => {
     });
 
     const { rerender } = render(
-      <LearningChat
-        threads={[]}
-        activeThreadId={null}
-        handlers={defaultHandlers}
-        isStreaming={false}
-      />
+      <LearningChat threads={[]} activeThreadId={null} handlers={defaultHandlers} isStreaming={false} />,
     );
 
     await act(async () => {
@@ -189,7 +168,7 @@ describe('LearningChat auto-scroll', () => {
           activeThreadId="thread-1"
           handlers={defaultHandlers}
           isStreaming={false}
-        />
+        />,
       );
     });
 

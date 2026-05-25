@@ -23,10 +23,7 @@ function isMainEntry(): boolean {
   const argv1 = process.argv[1];
   if (!argv1) return false;
   try {
-    return (
-      realpathSync(resolve(fileURLToPath(import.meta.url))) ===
-      realpathSync(resolve(argv1))
-    );
+    return realpathSync(resolve(fileURLToPath(import.meta.url))) === realpathSync(resolve(argv1));
   } catch {
     return false;
   }

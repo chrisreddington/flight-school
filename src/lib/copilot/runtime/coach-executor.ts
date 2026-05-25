@@ -14,9 +14,7 @@ import { now } from '@/lib/utils/date-utils';
  * for the fast path. Sessions are always destroyed in `finally` so an
  * SDK error never leaks a live session into the runtime pool.
  */
-export async function executeCoachJobInRuntime(
-  request: CopilotCoachJobRequest,
-): Promise<CopilotCoachJobResult> {
+export async function executeCoachJobInRuntime(request: CopilotCoachJobRequest): Promise<CopilotCoachJobResult> {
   const inputPrompt = request.inputSummary ?? request.prompt;
   const capabilities = request.variant === 'coach' ? (['github'] as const) : ([] as const);
   const loggedSession = await createLoggedCoachSession(

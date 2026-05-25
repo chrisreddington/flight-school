@@ -34,10 +34,7 @@ export interface PollJobCallbacks {
  * for observability and the interval continues until a terminal decision
  * or `stop()`.
  */
-export function pollJobUntilTerminal(
-  options: PollJobOptions,
-  callbacks: PollJobCallbacks,
-): () => void {
+export function pollJobUntilTerminal(options: PollJobOptions, callbacks: PollJobCallbacks): () => void {
   const { jobId, intervalMs, timeoutMs } = options;
   const startTime = Date.now();
   let stopped = false;

@@ -123,7 +123,16 @@
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: var(--borderRadius-medium, 6px);
   font-size: var(--text-body-size-small, 12px);
-  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace);
+  font-family: var(
+    --fontStack-monospace,
+    ui-monospace,
+    SFMono-Regular,
+    'SF Mono',
+    Menlo,
+    Consolas,
+    'Liberation Mono',
+    monospace
+  );
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;

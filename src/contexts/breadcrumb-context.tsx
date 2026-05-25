@@ -20,13 +20,13 @@
 import { usePathname } from 'next/navigation';
 import { nowMs } from '@/lib/utils/date-utils';
 import {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useSyncExternalStore,
-    type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
 } from 'react';
 
 /** Single breadcrumb item */
@@ -58,9 +58,7 @@ interface BreadcrumbContextValue {
   pathname: string;
 }
 
-const BreadcrumbContext = createContext<BreadcrumbContextValue | undefined>(
-  undefined
-);
+const BreadcrumbContext = createContext<BreadcrumbContextValue | undefined>(undefined);
 
 /** Maximum number of pages to track in history */
 const MAX_HISTORY = 10;
@@ -75,7 +73,7 @@ function createBreadcrumbStore() {
 
   return {
     getHistory: () => history,
-    
+
     registerPage: (registration: Omit<PageRegistration, 'timestamp'>) => {
       const timestamp = nowMs();
       const newPage: PageRegistration = { ...registration, timestamp };
@@ -85,9 +83,7 @@ function createBreadcrumbStore() {
 
       if (existingIndex !== -1) {
         // If we're revisiting a page, remove everything after it
-        history = [...history.slice(0, existingIndex + 1)].map((p, i) =>
-          i === existingIndex ? newPage : p
-        );
+        history = [...history.slice(0, existingIndex + 1)].map((p, i) => (i === existingIndex ? newPage : p));
       } else {
         // New page - add to history
         history = [...history, newPage];
@@ -122,32 +118,29 @@ function createBreadcrumbStore() {
  */
 export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  
+
   // Create store once using useMemo with empty deps
   const store = useMemo(() => createBreadcrumbStore(), []);
 
   /**
    * Register a page visit in the navigation history.
    */
-  const registerPage = useCallback((
-    registration: Omit<PageRegistration, 'timestamp'>
-  ) => {
-    store.registerPage(registration);
-  }, [store]);
+  const registerPage = useCallback(
+    (registration: Omit<PageRegistration, 'timestamp'>) => {
+      store.registerPage(registration);
+    },
+    [store],
+  );
 
   /**
    * Subscribe to store changes and compute breadcrumbs.
    */
-  const history = useSyncExternalStore(
-    store.subscribe,
-    store.getHistory,
-    store.getHistory
-  );
+  const history = useSyncExternalStore(store.subscribe, store.getHistory, store.getHistory);
 
   /**
    * Build breadcrumbs from navigation history.
    * Always starts with homepage, followed by intermediate pages, ending with current page.
-   * 
+   *
    * IMPORTANT: Only return breadcrumbs if the last registered page matches current pathname.
    * This prevents flash of stale breadcrumbs during client-side navigation.
    */
@@ -158,13 +151,13 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
 
     // Get the last registered page
     const lastPage = history[history.length - 1];
-    
+
     // Check if the last registered page matches current pathname
     // This prevents showing stale breadcrumbs during navigation
     // We compare base paths (without query params) to handle dynamic routes
     const currentBasePath = pathname.split('?')[0];
     const lastBasePath = lastPage.path.split('?')[0];
-    
+
     // If paths don't match, don't show any breadcrumbs yet
     // The page's useBreadcrumb hook will register and trigger a re-render
     if (currentBasePath !== lastBasePath) {
@@ -201,9 +194,7 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   }, [pathname, history, store]);
 
   return (
-    <BreadcrumbContext.Provider value={{ breadcrumbs, registerPage, pathname }}>
-      {children}
-    </BreadcrumbContext.Provider>
+    <BreadcrumbContext.Provider value={{ breadcrumbs, registerPage, pathname }}>{children}</BreadcrumbContext.Provider>
   );
 }
 
@@ -213,9 +204,7 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
 export function useBreadcrumbContext(): BreadcrumbContextValue {
   const context = useContext(BreadcrumbContext);
   if (!context) {
-    throw new Error(
-      'useBreadcrumbContext must be used within BreadcrumbProvider'
-    );
+    throw new Error('useBreadcrumbContext must be used within BreadcrumbProvider');
   }
   return context;
 }

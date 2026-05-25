@@ -39,10 +39,7 @@ interface ApiErrorResponse {
  * @param meta - Optional metadata (timing, etc.)
  * @returns Web-standard response with standardized envelope.
  */
-export function apiSuccess<T>(
-  data: T,
-  meta?: Record<string, unknown>
-): Response {
+export function apiSuccess<T>(data: T, meta?: Record<string, unknown>): Response {
   const body: ApiSuccessResponse<T> = {
     success: true,
     data,
@@ -54,11 +51,7 @@ export function apiSuccess<T>(
 /**
  * Create a standardized error response.
  */
-function apiError(
-  error: string | Error,
-  meta?: Record<string, unknown>,
-  status = 500
-): Response {
+function apiError(error: string | Error, meta?: Record<string, unknown>, status = 500): Response {
   const errorMessage = error instanceof Error ? error.message : error;
   const body: ApiErrorResponse = {
     success: false,
@@ -75,9 +68,6 @@ function apiError(
  * @param meta - Optional metadata
  * @returns Web-standard response with 400 status.
  */
-export function validationErrorResponse(
-  message: string,
-  meta?: Record<string, unknown>
-): Response {
+export function validationErrorResponse(message: string, meta?: Record<string, unknown>): Response {
   return apiError(message, meta, 400);
 }

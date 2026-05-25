@@ -7,7 +7,6 @@ describe('getCopilotRuntimeHome', () => {
   });
 
   it('rejects path traversal user IDs', () => {
-    expect(() => getCopilotRuntimeHome('/tmp/runtimes', '../123'))
-      .toThrow('Refusing unsafe userId for runtime path');
+    expect(() => getCopilotRuntimeHome('/tmp/runtimes', '../123')).toThrow('Refusing unsafe userId for runtime path');
   });
 });

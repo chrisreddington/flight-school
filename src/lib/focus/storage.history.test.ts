@@ -85,9 +85,7 @@ function dayRecord(): FocusStorageSchema['history'][string] {
   return {
     challenges: [{ data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
     goals: [{ data: mockGoal, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
-    learningTopics: [
-      [{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }],
-    ],
+    learningTopics: [[{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }]],
   };
 }
 
@@ -134,8 +132,9 @@ describe('focusStore.saveTodaysFocus — calibration merge', () => {
 
 describe('focusStore.saveTodaysFocus — history pruning', () => {
   it('prunes oldest entries when history would exceed MAX_HISTORY_ENTRIES', async () => {
-    const dates = Array.from({ length: MAX_HISTORY_ENTRIES + 5 }, (_, i) =>
-      `2024-01-${String(i + 1).padStart(2, '0')}`,
+    const dates = Array.from(
+      { length: MAX_HISTORY_ENTRIES + 5 },
+      (_, i) => `2024-01-${String(i + 1).padStart(2, '0')}`,
     );
     const history: FocusStorageSchema['history'] = {};
     for (const date of dates) {

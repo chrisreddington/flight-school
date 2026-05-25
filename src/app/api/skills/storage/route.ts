@@ -16,10 +16,10 @@ import { logger } from '@/lib/logger';
 function validateSchema(data: unknown): data is SkillProfile {
   if (typeof data !== 'object' || data === null) return false;
   const schema = data as Record<string, unknown>;
-  
+
   if (!Array.isArray(schema.skills)) return false;
   if (typeof schema.lastUpdated !== 'string') return false;
-  
+
   // Validate each skill
   for (const skill of schema.skills) {
     if (typeof skill !== 'object' || skill === null) return false;
@@ -28,7 +28,7 @@ function validateSchema(data: unknown): data is SkillProfile {
     if (!['beginner', 'intermediate', 'advanced'].includes(s.level as string)) return false;
     if (!['github', 'github-confirmed', 'manual'].includes(s.source as string)) return false;
   }
-  
+
   return true;
 }
 

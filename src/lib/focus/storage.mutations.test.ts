@@ -8,12 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type {
-  FocusStorageSchema,
-  DailyChallenge,
-  DailyGoal,
-  LearningTopic,
-} from './types';
+import type { FocusStorageSchema, DailyChallenge, DailyGoal, LearningTopic } from './types';
 
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(),
@@ -118,9 +113,7 @@ describe('focusStore.addChallenge', () => {
     vi.mocked(apiGet).mockResolvedValue({
       history: {
         '2024-01-15': {
-          challenges: [
-            { data: customChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] },
-          ],
+          challenges: [{ data: customChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
           goals: [],
           learningTopics: [],
         },
@@ -144,13 +137,9 @@ describe('focusStore.removeCalibrationItem', () => {
     vi.mocked(apiGet).mockResolvedValue({
       history: {
         '2024-01-15': {
-          challenges: [
-            { data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] },
-          ],
+          challenges: [{ data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
           goals: [{ data: mockGoal, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
-          learningTopics: [
-            [{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }],
-          ],
+          learningTopics: [[{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }]],
           calibrationNeeded: [
             { skillId: 'typescript', displayName: 'TypeScript', suggestedLevel: 'intermediate' },
             { skillId: 'react', displayName: 'React', suggestedLevel: 'advanced' },
@@ -170,13 +159,9 @@ describe('focusStore.removeCalibrationItem', () => {
     vi.mocked(apiGet).mockResolvedValue({
       history: {
         '2024-01-15': {
-          challenges: [
-            { data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] },
-          ],
+          challenges: [{ data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
           goals: [{ data: mockGoal, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
-          learningTopics: [
-            [{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }],
-          ],
+          learningTopics: [[{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }]],
         },
       },
     });

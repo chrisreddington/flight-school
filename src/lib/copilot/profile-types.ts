@@ -13,12 +13,7 @@
 import { isCapabilityId, type CapabilityId } from './capability-ids';
 
 /** Stable identifier for a base chat profile (capability-neutral surface). */
-export type BaseProfileId =
-  | 'chat'
-  | 'learning'
-  | 'coach'
-  | 'evaluation'
-  | 'authoring';
+export type BaseProfileId = 'chat' | 'learning' | 'coach' | 'evaluation' | 'authoring';
 
 /** All base profile ids in declaration order. */
 export const BASE_PROFILE_IDS: readonly BaseProfileId[] = [
@@ -45,13 +40,11 @@ export function isBaseProfileId(value: unknown): value is BaseProfileId {
  */
 export const CHAT_RESPONSE_PROFILES = ['chat', 'learning'] as const;
 export type ChatResponseProfileId = (typeof CHAT_RESPONSE_PROFILES)[number];
-export const CHAT_RESPONSE_PROFILE_SET: ReadonlySet<ChatResponseProfileId> =
-  new Set(CHAT_RESPONSE_PROFILES);
+export const CHAT_RESPONSE_PROFILE_SET: ReadonlySet<ChatResponseProfileId> = new Set(CHAT_RESPONSE_PROFILES);
 
 /** Type guard for `chat-response` profile narrowing. */
 export function isChatResponseProfile(value: unknown): value is ChatResponseProfileId {
-  return typeof value === 'string'
-    && CHAT_RESPONSE_PROFILE_SET.has(value as ChatResponseProfileId);
+  return typeof value === 'string' && CHAT_RESPONSE_PROFILE_SET.has(value as ChatResponseProfileId);
 }
 
 /**
@@ -87,9 +80,7 @@ export function isCapabilitiesArg(value: unknown): value is CapabilitiesArg {
  * `./profiles.ts` — the worker registry imports this map so the two
  * cannot drift.
  */
-export const PROFILE_ALLOWED_CAPABILITIES: Readonly<
-  Record<BaseProfileId, readonly CapabilityId[]>
-> = {
+export const PROFILE_ALLOWED_CAPABILITIES: Readonly<Record<BaseProfileId, readonly CapabilityId[]>> = {
   chat: ['github'],
   learning: ['github'],
   coach: ['github'],

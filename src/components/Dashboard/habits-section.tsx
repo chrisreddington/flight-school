@@ -44,34 +44,21 @@ export function HabitsSection() {
   if (isLoading) {
     return (
       <div className={styles.habitsCard}>
-        <p style={{ color: 'var(--fgColor-muted)', textAlign: 'center', margin: 0 }}>
-          Loading habits...
-        </p>
+        <p style={{ color: 'var(--fgColor-muted)', textAlign: 'center', margin: 0 }}>Loading habits...</p>
       </div>
     );
   }
 
   return (
     <>
-      {loadError && (
-        <Banner
-          title="Failed to load habits"
-          description={loadError}
-          variant="critical"
-        />
-      )}
+      {loadError && <Banner title="Failed to load habits" description={loadError} variant="critical" />}
       {habits.length === 0 ? (
         <div className={styles.habitsCard}>
           <Stack direction="vertical" align="center" gap="normal">
             <p style={{ color: 'var(--fgColor-muted)', textAlign: 'center', margin: 0 }}>
               No active habits. Create one to start tracking your consistency!
             </p>
-            <Button 
-              variant="primary" 
-              size="small"
-              leadingVisual={PlusIcon}
-              onClick={() => setIsDialogOpen(true)}
-            >
+            <Button variant="primary" size="small" leadingVisual={PlusIcon} onClick={() => setIsDialogOpen(true)}>
               Create Habit
             </Button>
           </Stack>
@@ -79,30 +66,17 @@ export function HabitsSection() {
       ) : (
         <Stack direction="vertical" gap="normal">
           <Stack direction="horizontal" justify="end">
-            <Button 
-              variant="primary" 
-              size="small"
-              leadingVisual={PlusIcon}
-              onClick={() => setIsDialogOpen(true)}
-            >
+            <Button variant="primary" size="small" leadingVisual={PlusIcon} onClick={() => setIsDialogOpen(true)}>
               Create Habit
             </Button>
           </Stack>
-          {habits.map(habit => (
-            <HabitCard 
-              key={habit.id} 
-              habit={habit}
-              onUpdate={handleUpdate}
-            />
+          {habits.map((habit) => (
+            <HabitCard key={habit.id} habit={habit} onUpdate={handleUpdate} />
           ))}
         </Stack>
       )}
 
-      <HabitCreationDialog 
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        onCreated={handleCreated}
-      />
+      <HabitCreationDialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} onCreated={handleCreated} />
     </>
   );
 }

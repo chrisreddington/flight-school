@@ -65,14 +65,14 @@ jobs:
     steps:
       - name: Validate required vars
         env:
-          AZURE_CLIENT_ID:        ${{ vars.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID:        ${{ vars.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID:  ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          ACR_LOGIN_SERVER:       ${{ vars.ACR_LOGIN_SERVER }}
-          ACR_NAME:               ${{ vars.ACR_NAME }}
-          APP_NAME:               ${{ vars.APP_NAME }}
-          RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
-          LOCATION:               ${{ vars.LOCATION }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          LOCATION: ${{ vars.LOCATION }}
         run: |
           set -euo pipefail
           missing=()
@@ -89,8 +89,8 @@ jobs:
         id: sha
         env:
           GH_EVENT_NAME: ${{ github.event_name }}
-          WR_HEAD_SHA:   ${{ github.event.workflow_run.head_sha }}
-          INPUT_SHA:     ${{ inputs.sha }}
+          WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           case "$GH_EVENT_NAME" in
@@ -108,7 +108,7 @@ jobs:
           echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout deploy SHA
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.sha.outputs.value }}
           fetch-depth: 0
@@ -116,8 +116,8 @@ jobs:
       - name: Verify SHA is reachable from origin/main
         if: github.event_name == 'workflow_dispatch'
         env:
-          SHA:      ${{ steps.sha.outputs.value }}
-          GH_REPO:  ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -131,8 +131,8 @@ jobs:
         if: github.event_name == 'workflow_run'
         id: stale
         env:
-          SHA:      ${{ steps.sha.outputs.value }}
-          GH_REPO:  ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -147,7 +147,7 @@ jobs:
       - name: Verify CI was green for dispatched SHA
         if: github.event_name == 'workflow_dispatch'
         env:
-          SHA:     ${{ steps.sha.outputs.value }}
+          SHA: ${{ steps.sha.outputs.value }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -161,9 +161,9 @@ jobs:
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
         id: filter-base
         env:
-          SHA:            ${{ steps.sha.outputs.value }}
-          GH_REPO:        ${{ github.repository }}
-          GH_TOKEN:       ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
           CURRENT_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
@@ -181,9 +181,9 @@ jobs:
       - name: Paths filter (workflow_run only)
         id: filter
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false' && steps.filter-base.outputs.first_deploy == 'false'
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36  # v3.0.2
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
-          ref:  ${{ steps.sha.outputs.value }}
+          ref: ${{ steps.sha.outputs.value }}
           base: ${{ steps.filter-base.outputs.value }}
           # Inline scope. Bicep template, runtime parameters, and
           # this workflow file. Infra docs (`infra/README.md`)
@@ -199,9 +199,9 @@ jobs:
         id: gate
         env:
           GH_EVENT_NAME: ${{ github.event_name }}
-          FILTER_HIT:    ${{ steps.filter.outputs.infra }}
-          SUPERSEDED:    ${{ steps.stale.outputs.superseded }}
-          FIRST_DEPLOY:  ${{ steps.filter-base.outputs.first_deploy }}
+          FILTER_HIT: ${{ steps.filter.outputs.infra }}
+          SUPERSEDED: ${{ steps.stale.outputs.superseded }}
+          FIRST_DEPLOY: ${{ steps.filter-base.outputs.first_deploy }}
         run: |
           set -euo pipefail
           if [[ "$SUPERSEDED" == 'true' ]]; then
@@ -232,7 +232,7 @@ jobs:
       # run_id (≤20) + `-` (1) + run_attempt (≤2) = 42 max.
       DEPLOY_NAME: infra-${{ needs.should-deploy.outputs.sha_short }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.should-deploy.outputs.sha }}
           fetch-depth: 1
@@ -244,8 +244,8 @@ jobs:
         # being blocked by a newer main HEAD.
         if: github.event_name == 'workflow_run'
         env:
-          SHA:      ${{ needs.should-deploy.outputs.sha }}
-          GH_REPO:  ${{ github.repository }}
+          SHA: ${{ needs.should-deploy.outputs.sha }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -268,10 +268,10 @@ jobs:
             echo "::error::$f still defines legacy 'imageTag' — remove it (CD passes webImageTag/workerImageTag explicitly)."; exit 1
           fi
 
-      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474  # v2.3.0
+      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
         with:
-          client-id:       ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id:       ${{ vars.AZURE_TENANT_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve image tags (live state or bootstrap inputs)
@@ -287,10 +287,10 @@ jobs:
         # and `workerImageTag` let the operator pass explicit tags
         # for the initial apply.
         env:
-          APP_NAME:               ${{ vars.APP_NAME }}
-          RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
-          ACR_LOGIN_SERVER:       ${{ vars.ACR_LOGIN_SERVER }}
-          INPUT_WEB_IMAGE_TAG:    ${{ inputs.webImageTag }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          INPUT_WEB_IMAGE_TAG: ${{ inputs.webImageTag }}
           INPUT_WORKER_IMAGE_TAG: ${{ inputs.workerImageTag }}
         run: |
           set -euo pipefail
@@ -328,10 +328,10 @@ jobs:
 
       - name: Deploy via Bicep
         env:
-          LOCATION:            ${{ vars.LOCATION }}
-          APP_NAME:            ${{ vars.APP_NAME }}
+          LOCATION: ${{ vars.LOCATION }}
+          APP_NAME: ${{ vars.APP_NAME }}
           RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
-          ACR_LOGIN_SERVER:    ${{ vars.ACR_LOGIN_SERVER }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
         run: |
           set -euo pipefail
           az deployment sub create \

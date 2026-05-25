@@ -206,9 +206,7 @@ export interface CapabilitySelection {
  * token (e.g. a `web-search` API key) the call site extends its
  * resolver instead of growing this function's parameter list.
  */
-export type CapabilityCredentialResolver = (
-  capabilityId: CapabilityId,
-) => string | undefined;
+export type CapabilityCredentialResolver = (capabilityId: CapabilityId) => string | undefined;
 
 /**
  * Build the `mcpServers` map accepted by `client.createSession`.
@@ -254,12 +252,8 @@ export function buildMcpServersForCapabilities(
 // Type-level sanity: the union ALL_CAPABILITY_IDS and the registry must
 // describe exactly the same set of ids — neither side may grow without
 // the other.
-type _IdsCoverRegistry = (typeof ALL_CAPABILITY_IDS)[number] extends keyof typeof CAPABILITIES
-  ? true
-  : false;
-type _RegistryCoveredByIds = keyof typeof CAPABILITIES extends (typeof ALL_CAPABILITY_IDS)[number]
-  ? true
-  : false;
+type _IdsCoverRegistry = (typeof ALL_CAPABILITY_IDS)[number] extends keyof typeof CAPABILITIES ? true : false;
+type _RegistryCoveredByIds = keyof typeof CAPABILITIES extends (typeof ALL_CAPABILITY_IDS)[number] ? true : false;
 const _ASSERT_IDS_COVER_REGISTRY: _IdsCoverRegistry = true;
 const _ASSERT_REGISTRY_COVERED_BY_IDS: _RegistryCoveredByIds = true;
 void _ASSERT_IDS_COVER_REGISTRY;
@@ -270,12 +264,8 @@ void _ASSERT_REGISTRY_COVERED_BY_IDS;
  * Use for `copilot.mcp.*` telemetry attributes so native capabilities
  * don't inflate MCP server counts.
  */
-export function mcpCapabilityIdsOf(
-  selections: readonly CapabilitySelection[],
-): readonly CapabilityId[] {
-  return selections
-    .filter((selection) => CAPABILITIES[selection.id].kind === 'mcp')
-    .map((selection) => selection.id);
+export function mcpCapabilityIdsOf(selections: readonly CapabilitySelection[]): readonly CapabilityId[] {
+  return selections.filter((selection) => CAPABILITIES[selection.id].kind === 'mcp').map((selection) => selection.id);
 }
 
 /**
@@ -294,9 +284,7 @@ export function buildCapabilityContextPrompt(
   ctx: CapabilityPromptContext,
 ): string {
   if (selections.length === 0) return '';
-  const sorted = [...selections].sort((left, right) =>
-    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-  );
+  const sorted = [...selections].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
   const parts: string[] = [];
   for (const selection of sorted) {
     const part = CAPABILITIES[selection.id].buildContextPrompt?.(ctx);

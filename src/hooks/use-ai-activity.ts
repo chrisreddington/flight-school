@@ -121,16 +121,15 @@ export function useAIActivity(options: { enabled?: boolean } = {}): UseAIActivit
 
       const fetchEvents = async () => {
         try {
-          const data = await apiGet<{ events: Array<AIActivityEvent & { timestamp: string }> }>(
-            '/api/ai-activity',
-            { throwOnError: false }
-          );
-          
+          const data = await apiGet<{ events: Array<AIActivityEvent & { timestamp: string }> }>('/api/ai-activity', {
+            throwOnError: false,
+          });
+
           const eventsWithDates: AIActivityEvent[] = data.events.map(
             (event: AIActivityEvent & { timestamp: string }) => ({
               ...event,
               timestamp: new Date(event.timestamp),
-            })
+            }),
           );
           setEvents(eventsWithDates);
           lastEventIdRef.current = eventsWithDates.at(-1)?.id ?? lastEventIdRef.current;

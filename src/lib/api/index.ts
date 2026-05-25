@@ -1,9 +1,9 @@
 /**
  * API Utilities
- * 
+ *
  * Central export point for API utility modules. Provides consistent patterns
  * for API route development.
- * 
+ *
  * @module api
  */
 

@@ -10,10 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  getConversationCapabilities,
-  rememberConversationCapabilities,
-} from './conversation-capabilities';
+import { getConversationCapabilities, rememberConversationCapabilities } from './conversation-capabilities';
 import { clearConversationCapsCache } from '@/test/helpers/conversation-caps';
 
 const ONE_MINUTE_MS = 60 * 1000;

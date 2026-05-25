@@ -12,10 +12,7 @@ const SSE_HEADERS: HeadersInit = {
   'X-Accel-Buffering': 'no',
 };
 
-export async function handleActivityStream(
-  request: Request,
-  userId: string,
-): Promise<Response> {
+export async function handleActivityStream(request: Request, userId: string): Promise<Response> {
   const includeFull = resolveIncludeMode(request) === 'full';
 
   const lastEventId = request.headers.get('last-event-id');
@@ -25,11 +22,8 @@ export async function handleActivityStream(
   await activityLoggerWorker.ensureHydrated(userId);
 
   const { mode, events: initialRaw } = activityBus.resolveCursor(userId, cursor);
-  const initialEvents = initialRaw.map((event) =>
-    toPublicActivityEvent(event, { includeFull }),
-  );
-  const initialCursor =
-    initialRaw.length > 0 ? initialRaw[initialRaw.length - 1].id : null;
+  const initialEvents = initialRaw.map((event) => toPublicActivityEvent(event, { includeFull }));
+  const initialCursor = initialRaw.length > 0 ? initialRaw[initialRaw.length - 1].id : null;
 
   const { iterator, unsubscribe } = activityBus.subscribe(userId);
   const encoder = new TextEncoder();
@@ -49,9 +43,7 @@ export async function handleActivityStream(
         for (const event of initialRaw) {
           const publicEvent = toPublicActivityEvent(event, { includeFull });
           controller.enqueue(encoder.encode(`id: ${event.id}\n`));
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'event', event: publicEvent })}\n\n`),
-          );
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'event', event: publicEvent })}\n\n`));
         }
       }
 
@@ -80,19 +72,13 @@ export async function handleActivityStream(
         for await (const frame of iterator as AsyncIterable<ActivityBusFrame>) {
           if (frame.type === 'init') {
             controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: 'init', events: [], cursor: null })}\n\n`,
-              ),
+              encoder.encode(`data: ${JSON.stringify({ type: 'init', events: [], cursor: null })}\n\n`),
             );
             continue;
           }
           const publicEvent = toPublicActivityEvent(frame.event, { includeFull });
           controller.enqueue(encoder.encode(`id: ${frame.event.id}\n`));
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: 'event', event: publicEvent })}\n\n`,
-            ),
-          );
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'event', event: publicEvent })}\n\n`));
         }
       } catch {
         // iterator closed

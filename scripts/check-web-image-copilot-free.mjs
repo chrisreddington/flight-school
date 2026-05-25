@@ -102,19 +102,14 @@ export function isAllowedRunnerSource(rawSrc) {
   // — otherwise the bare prefix directory (e.g. `/app/.next/`) would
   // satisfy `startsWith` against itself and admit the entire subtree,
   // defeating the prefix's purpose of admitting only nested paths.
-  return RUNNER_ALLOWED_RUNNER_PREFIXES.some(
-    (p) => rawSrc.startsWith(p) && rawSrc.length > p.length,
-  );
+  return RUNNER_ALLOWED_RUNNER_PREFIXES.some((p) => rawSrc.startsWith(p) && rawSrc.length > p.length);
 }
 
 function describeAllowlist() {
   // Dedupe the exact-match list against the prefix list by normalising
   // exact entries to a trailing-slash form, so the diagnostic does not
   // surface `/app/public` twice for readers.
-  const display = new Set([
-    ...RUNNER_ALLOWED_RUNNER_SOURCES.map((s) => `${s}/`),
-    ...RUNNER_ALLOWED_RUNNER_PREFIXES,
-  ]);
+  const display = new Set([...RUNNER_ALLOWED_RUNNER_SOURCES.map((s) => `${s}/`), ...RUNNER_ALLOWED_RUNNER_PREFIXES]);
   return [...display].join(', ');
 }
 
@@ -279,10 +274,7 @@ async function assertionB() {
       const full = path.join(dir, entry.name);
       const rel = path.relative(STANDALONE, full);
       const segments = rel.split(path.sep);
-      const hit = segments.some(
-        (seg, i) =>
-          i > 0 && segments[i - 1] === 'node_modules' && seg === '@github',
-      );
+      const hit = segments.some((seg, i) => i > 0 && segments[i - 1] === 'node_modules' && seg === '@github');
       if (hit) {
         hits.push(rel);
         // Don't recurse into a known hit — one path is enough to
@@ -328,8 +320,7 @@ async function assertionC() {
     return;
   }
 
-  const edgeRegex =
-    /(?:require(?:\.resolve)?\s*\(\s*|import\s*\(\s*|from\s+)['"]@github\/copilot/;
+  const edgeRegex = /(?:require(?:\.resolve)?\s*\(\s*|import\s*\(\s*|from\s+)['"]@github\/copilot/;
   const exts = new Set(['.js', '.mjs', '.cjs']);
   const hits = [];
 
@@ -372,8 +363,7 @@ async function assertionC() {
 // Gate the IIFE on direct CLI invocation so unit tests can import the
 // exported helpers (`extractCopySources`, `isAllowedRunnerSource`)
 // without triggering Assertions A–C and a `process.exit(1)`.
-const invokedDirectly =
-  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
   (async () => {
     await assertionA();

@@ -80,7 +80,10 @@ describe('Storage Utils', () => {
 
       await writeStorage('new.json', { created: true });
 
-      const exists = await fs.stat(TEST_STORAGE_DIR).then(() => true).catch(() => false);
+      const exists = await fs
+        .stat(TEST_STORAGE_DIR)
+        .then(() => true)
+        .catch(() => false);
       expect(exists).toBe(true);
     });
   });
@@ -176,7 +179,10 @@ describe('Storage Utils', () => {
 
       await deleteStorage('todelete.json');
 
-      const exists = await fs.stat(filePath).then(() => true).catch(() => false);
+      const exists = await fs
+        .stat(filePath)
+        .then(() => true)
+        .catch(() => false);
       expect(exists).toBe(false);
     });
 
@@ -223,8 +229,10 @@ describe('Storage Utils', () => {
     it('should create parent directory when writing', async () => {
       await writeFile('newdir/nested', 'file.txt', 'content');
 
-      const dirExists = await fs.stat(path.join(TEST_STORAGE_DIR, 'newdir/nested'))
-        .then(() => true).catch(() => false);
+      const dirExists = await fs
+        .stat(path.join(TEST_STORAGE_DIR, 'newdir/nested'))
+        .then(() => true)
+        .catch(() => false);
       expect(dirExists).toBe(true);
     });
   });
@@ -252,8 +260,10 @@ describe('Storage Utils', () => {
 
       await deleteDir('todelete');
 
-      const exists = await fs.stat(path.join(TEST_STORAGE_DIR, 'todelete'))
-        .then(() => true).catch(() => false);
+      const exists = await fs
+        .stat(path.join(TEST_STORAGE_DIR, 'todelete'))
+        .then(() => true)
+        .catch(() => false);
       expect(exists).toBe(false);
     });
 

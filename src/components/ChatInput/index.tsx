@@ -27,10 +27,10 @@ interface ChatInputProps {
 
 /**
  * Chat input component with auto-resize and keyboard shortcuts.
- * 
+ *
  * Supports Enter to submit (with Shift+Enter for newlines),
  * auto-resizing textarea, and character count indicator.
- * 
+ *
  * @example
  * ```tsx
  * <ChatInput
@@ -56,36 +56,42 @@ export function ChatInput({
   const handleSubmit = useCallback(() => {
     const trimmedValue = value.trim();
     if (!trimmedValue || effectivelyDisabled) return;
-    
+
     onSend(trimmedValue);
     setValue('');
-    
+
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
   }, [value, effectivelyDisabled, onSend]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Submit on Enter (without Shift)
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  }, [handleSubmit]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Submit on Enter (without Shift)
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit],
+  );
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    if (newValue.length <= maxLength) {
-      setValue(newValue);
-    }
-    
-    // Auto-resize textarea
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }
-  }, [maxLength]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newValue = e.target.value;
+      if (newValue.length <= maxLength) {
+        setValue(newValue);
+      }
+
+      // Auto-resize textarea
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      }
+    },
+    [maxLength],
+  );
 
   const canSubmit = value.trim().length > 0 && !effectivelyDisabled;
   const charCount = value.length;
@@ -111,7 +117,7 @@ export function ChatInput({
               aria-label="Type your message"
             />
             {showCharCount && (
-              <span 
+              <span
                 className={`${styles.charCount} ${charCount >= maxLength ? styles.charCountLimit : ''}`}
                 aria-live="polite"
               >
@@ -135,8 +141,8 @@ export function ChatInput({
                 rateLimited
                   ? `Sending paused. Retry in ${retryInSeconds}s`
                   : canSubmit
-                  ? 'Send message (Enter)'
-                  : 'Type a message to send'
+                    ? 'Send message (Enter)'
+                    : 'Type a message to send'
               }
               variant="primary"
               size="medium"
@@ -155,4 +161,3 @@ export function ChatInput({
     </div>
   );
 }
-

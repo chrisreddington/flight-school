@@ -24,7 +24,14 @@ import styles from '../challenge.module.css';
 // authoring UI streams in as a separate chunk.
 const ChallengeAuthoring = dynamic(
   () => import('@/components/ChallengeAuthoring').then((mod) => mod.ChallengeAuthoring),
-  { ssr: false, loading: () => <div className={styles.loading}><Spinner size="medium" /></div> }
+  {
+    ssr: false,
+    loading: () => (
+      <div className={styles.loading}>
+        <Spinner size="medium" />
+      </div>
+    ),
+  },
 );
 
 /**
@@ -48,9 +55,7 @@ export default function CreateChallengePage() {
   const handleSaveChallenge = useCallback(
     async (challenge: DailyChallenge) => {
       if (isQueueFull) {
-        setErrorMessage(
-          `Queue is full (${maxQueueSize} challenges max). Complete or remove some challenges first.`
-        );
+        setErrorMessage(`Queue is full (${maxQueueSize} challenges max). Complete or remove some challenges first.`);
         return;
       }
 
@@ -63,27 +68,19 @@ export default function CreateChallengePage() {
         return;
       }
     },
-    [addChallenge, isQueueFull, maxQueueSize, router]
+    [addChallenge, isQueueFull, maxQueueSize, router],
   );
 
   return (
     <div className={styles.root}>
       <AppHeader />
       {errorMessage && (
-        <Banner
-          title="Error"
-          description={errorMessage}
-          variant="critical"
-          onDismiss={() => setErrorMessage(null)}
-        />
+        <Banner title="Error" description={errorMessage} variant="critical" onDismiss={() => setErrorMessage(null)} />
       )}
 
       <main className={styles.main}>
         <div className={styles.authoringWrapper}>
-          <ChallengeAuthoring
-            onSaveChallenge={handleSaveChallenge}
-            userAvatarUrl={profile?.user?.avatarUrl}
-          />
+          <ChallengeAuthoring onSaveChallenge={handleSaveChallenge} userAvatarUrl={profile?.user?.avatarUrl} />
         </div>
       </main>
     </div>

@@ -22,10 +22,7 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import {
-  AggregationType,
-  PeriodicExportingMetricReader,
-} from '@opentelemetry/sdk-metrics';
+import { AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 
@@ -54,15 +51,10 @@ export async function startWorkerOtel(): Promise<void> {
     resource: resourceFromAttributes({
       'service.name': serviceName,
       'service.version': INSTRUMENTATION_SCOPE_VERSION,
-      'deployment.environment.name':
-        process.env.NODE_ENV === 'production' ? 'production' : 'development',
+      'deployment.environment.name': process.env.NODE_ENV === 'production' ? 'production' : 'development',
     }),
     sampler: createTelemetryHygieneSampler(),
-    spanProcessors: [
-      new BatchSpanProcessor(
-        new BubbleFilteringSpanExporter(new OTLPTraceExporter()),
-      ),
-    ],
+    spanProcessors: [new BatchSpanProcessor(new BubbleFilteringSpanExporter(new OTLPTraceExporter()))],
     metricReader: new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter(),
     }),

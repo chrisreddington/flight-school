@@ -27,6 +27,12 @@
     "aspire:deploy": "aspire deploy",
     "aspire:destroy": "aspire destroy",
     "lint": "eslint",
+    "lint:md": "markdownlint-cli2",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify:fast": "npm run lint && npm run lint:md && npm run format:check",
+    "verify": "npm run lint && npm run format:check && npx tsc --noEmit && npm test && npm run check:guardrails && npm run build",
+    "prepare": "husky",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
@@ -54,6 +60,14 @@
     "mcp": "npm run aspire:mcp",
     "deploy": "npm run aspire:deploy",
     "destroy": "npm run aspire:destroy"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs}": [
+      "eslint --fix --max-warnings 0",
+      "prettier --write"
+    ],
+    "*.{json,yml,yaml,css}": "prettier --write",
+    "*.md": "markdownlint-cli2 --fix"
   },
   "dependencies": {
     "@azure/cosmos": "^4.9.3",
@@ -110,9 +124,14 @@
     "esbuild": "^0.28.0",
     "eslint": "^10.0.3",
     "eslint-config-next": "16.2.6",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "knip": "^6.13.1",
+    "lint-staged": "^17.0.5",
     "madge": "^8.0.0",
+    "markdownlint-cli2": "^0.22.1",
+    "prettier": "^3.8.3",
     "ts-prune": "^0.10.3",
     "tsx": "^4.22.3",
     "typescript": "^5.9.3",

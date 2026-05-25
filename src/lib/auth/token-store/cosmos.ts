@@ -4,13 +4,7 @@ import { CryptographyClient } from '@azure/keyvault-keys';
 
 import { logger } from '@/lib/logger';
 import { nowMs } from '@/lib/utils/date-utils';
-import {
-  buildTokenEnvelope,
-  decryptTokenDocument,
-  envelopeDigest,
-  KEY_WRAP_ALG,
-  type TokenDocument,
-} from './envelope';
+import { buildTokenEnvelope, decryptTokenDocument, envelopeDigest, KEY_WRAP_ALG, type TokenDocument } from './envelope';
 import type { StoredToken, TokenStore } from './types';
 
 const log = logger.withTag('TokenStore');
@@ -127,7 +121,10 @@ export class CosmosTokenStore implements TokenStore {
     if (config.container) {
       this.container = config.container;
     } else {
-      const client = new CosmosClient({ endpoint: config.cosmosEndpoint, aadCredentials: credential });
+      const client = new CosmosClient({
+        endpoint: config.cosmosEndpoint,
+        aadCredentials: credential,
+      });
       this.container = client.database(config.databaseId).container(config.containerId);
     }
 

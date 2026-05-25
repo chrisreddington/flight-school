@@ -123,10 +123,7 @@ const NEXTJS_FRAMEWORK_STUB_SPAN_TYPES = new Set<string>([
  * where the parent's sampling decision was lost (defensive — should be
  * unreachable in practice).
  */
-export function isProxyRouteSpan(
-  spanName: string,
-  attrs: Attributes | undefined,
-): boolean {
+export function isProxyRouteSpan(spanName: string, attrs: Attributes | undefined): boolean {
   if (spanName.endsWith(PROXY_PATH)) {
     return true;
   }
@@ -157,17 +154,12 @@ export function isProxyRouteSpan(
  * Returns `true` if the given span is a Next.js framework stub INTERNAL
  * span on the allowlist. Exposed for unit testing.
  */
-function isNextjsFrameworkStubSpan(
-  spanKind: SpanKind | undefined,
-  attrs: Attributes | undefined,
-): boolean {
+function isNextjsFrameworkStubSpan(spanKind: SpanKind | undefined, attrs: Attributes | undefined): boolean {
   if (spanKind !== undefined && spanKind !== SpanKind.INTERNAL) {
     return false;
   }
   const spanType = attrs?.['next.span_type'];
-  return (
-    typeof spanType === 'string' && NEXTJS_FRAMEWORK_STUB_SPAN_TYPES.has(spanType)
-  );
+  return typeof spanType === 'string' && NEXTJS_FRAMEWORK_STUB_SPAN_TYPES.has(spanType);
 }
 
 /**
@@ -201,18 +193,10 @@ export function createTelemetryHygieneSampler(): Sampler {
       if (isNextjsFrameworkStubSpan(spanKind, attributes)) {
         return NOT_RECORD;
       }
-      return delegate.shouldSample(
-        context,
-        traceId,
-        spanName,
-        spanKind,
-        attributes,
-        links,
-      );
+      return delegate.shouldSample(context, traceId, spanName, spanKind, attributes, links);
     },
     toString(): string {
       return 'TelemetryHygieneSampler';
     },
   };
 }
-

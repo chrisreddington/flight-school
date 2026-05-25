@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { getNextAchievableSkills, SKILL_PREREQUISITES } from './prerequisites';
 import type { SkillProfile } from './types';
 
-function makeProfile(skills: Array<{ skillId: string; level: 'beginner' | 'intermediate' | 'advanced' }>): SkillProfile {
+function makeProfile(
+  skills: Array<{ skillId: string; level: 'beginner' | 'intermediate' | 'advanced' }>,
+): SkillProfile {
   return {
     skills: skills.map((s) => ({ ...s, source: 'manual' as const })),
     lastUpdated: new Date().toISOString(),

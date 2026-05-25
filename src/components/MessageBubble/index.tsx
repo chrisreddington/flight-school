@@ -77,19 +77,13 @@ function ToolEventRow({ event, showDetails }: ToolEventRowProps) {
     >
       <span className={styles.toolEventLine}>
         <span className={styles.toolEventStatus} aria-hidden="true">
-          {isRunning ? (
-            <Spinner size="small" srText="" />
-          ) : (
-            <CheckIcon size={14} className={styles.toolEventCheck} />
-          )}
+          {isRunning ? <Spinner size="small" srText="" /> : <CheckIcon size={14} className={styles.toolEventCheck} />}
         </span>
         <span className={styles.toolEventIcon} aria-hidden="true">
           {icon}
         </span>
         <span className={styles.toolEventSummary}>{summary}</span>
-        {duration && !isRunning && (
-          <span className={styles.toolEventDuration}>{duration}</span>
-        )}
+        {duration && !isRunning && <span className={styles.toolEventDuration}>{duration}</span>}
       </span>
       {showDetails && (
         <details className={styles.toolEventDetails}>
@@ -185,9 +179,7 @@ export const MessageBubble = memo(function MessageBubble({
         <div className={styles.content}>
           {/* Header */}
           <Stack direction="horizontal" align="center" gap="condensed" className={styles.header}>
-            <span className={styles.role}>
-              {isUser ? 'You' : 'Copilot'}
-            </span>
+            <span className={styles.role}>{isUser ? 'You' : 'Copilot'}</span>
             <RelativeTime date={new Date(message.timestamp)} className={styles.timestamp} />
             {hasActionable && isAssistant && !isError && (
               <Label variant="attention" size="small">
@@ -202,17 +194,9 @@ export const MessageBubble = memo(function MessageBubble({
           {/* Tool event timeline — surfaced to all users, not just debug mode. */}
           {resolvedToolEvents.length > 0 && (
             <div className={styles.toolEvents}>
-              <ul
-                data-testid="tool-event-list"
-                className={styles.toolEventList}
-                aria-label="Tool calls"
-              >
+              <ul data-testid="tool-event-list" className={styles.toolEventList} aria-label="Tool calls">
                 {resolvedToolEvents.map((event) => (
-                  <ToolEventRow
-                    key={event.id}
-                    event={event}
-                    showDetails={isDebugMode}
-                  />
+                  <ToolEventRow key={event.id} event={event} showDetails={isDebugMode} />
                 ))}
               </ul>
               <span className={styles.srOnly} role="status" aria-live="polite">
@@ -248,7 +232,7 @@ export const MessageBubble = memo(function MessageBubble({
               {message.perf.sessionPoolHit !== undefined && (
                 <ConversationBadge
                   reused={message.perf.sessionPoolHit}
-                  createTimeMs={message.perf.sessionPoolHit ? undefined : message.perf.sessionCreateMs ?? undefined}
+                  createTimeMs={message.perf.sessionPoolHit ? undefined : (message.perf.sessionCreateMs ?? undefined)}
                 />
               )}
               {/* 2. TTFT - Server→Client flow (server time INCLUDES session creation) */}
@@ -258,14 +242,10 @@ export const MessageBubble = memo(function MessageBubble({
               />
               {/* 3. Total time (end-to-end completion) */}
               {message.perf.clientTotalMs !== undefined && (
-                <StatusBadge variant="info">
-                  Total: {message.perf.clientTotalMs}ms
-                </StatusBadge>
+                <StatusBadge variant="info">Total: {message.perf.clientTotalMs}ms</StatusBadge>
               )}
               {/* 4. Model (metadata) */}
-              {message.perf.model && (
-                <ModelBadge model={message.perf.model} />
-              )}
+              {message.perf.model && <ModelBadge model={message.perf.model} />}
               {/* 5. MCP tools (feature indicator) */}
               {message.perf.mcpEnabled && <McpToolsBadge />}
             </div>

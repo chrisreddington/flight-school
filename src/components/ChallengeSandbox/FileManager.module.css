@@ -38,7 +38,9 @@
   white-space: nowrap;
   font-size: 13px;
   color: var(--fgColor-muted);
-  transition: background-color 0.1s ease, color 0.1s ease;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
   position: relative;
   top: 1px;
 }

@@ -18,10 +18,10 @@ interface State {
 
 /**
  * Global error boundary for consistent error handling.
- * 
+ *
  * Catches React rendering errors and displays a user-friendly fallback UI.
  * Logs errors for debugging and optionally reports to external service.
- * 
+ *
  * @example
  * ```tsx
  * <ErrorBoundary onError={logToSentry}>
@@ -54,16 +54,11 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className={styles.inlineErrorContainer}>
           <Stack direction="vertical" gap="normal">
             <Banner variant="critical" title="Something went wrong">
-              <p>
-                We encountered an unexpected error. Your work is safe, but you may need to refresh
-                the page.
-              </p>
+              <p>We encountered an unexpected error. Your work is safe, but you may need to refresh the page.</p>
               {this.state.error && (
                 <details className={styles.inlineErrorDetails}>
                   <summary className={styles.errorSummary}>Error details</summary>
-                  <pre className={styles.inlineErrorPre}>
-                    {this.state.error.message}
-                  </pre>
+                  <pre className={styles.inlineErrorPre}>{this.state.error.message}</pre>
                 </details>
               )}
             </Banner>
@@ -71,9 +66,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <Button variant="primary" onClick={() => window.location.reload()}>
                 Refresh Page
               </Button>
-              <Button onClick={() => this.setState({ hasError: false, error: null })}>
-                Try Again
-              </Button>
+              <Button onClick={() => this.setState({ hasError: false, error: null })}>Try Again</Button>
             </Stack>
           </Stack>
         </div>

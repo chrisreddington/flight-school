@@ -13,13 +13,7 @@
 import { DifficultyBadge } from '@/components/DifficultyBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import type { ChallengeDef } from '@/lib/copilot/types';
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CodeIcon,
-  InfoIcon,
-  RocketIcon,
-} from '@primer/octicons-react';
+import { ChevronDownIcon, ChevronRightIcon, CodeIcon, InfoIcon, RocketIcon } from '@primer/octicons-react';
 import { Button, Label, SegmentedControl } from '@primer/react';
 import styles from './ChallengeSandbox.module.css';
 

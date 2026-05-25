@@ -26,4 +26,3 @@ export const { GET, POST, DELETE } = createStorageRoute({
   logger: logger.withTag('Focus Storage API'),
   validateSchema,
 });
-

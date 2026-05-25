@@ -120,8 +120,7 @@ describe('POST /api/otel/v1/traces', () => {
 
   it('forwards configured OTLP headers (e.g. auth) to the upstream', async () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318';
-    process.env.OTEL_EXPORTER_OTLP_HEADERS =
-      'x-otlp-api-key=secret-key,authorization=Bearer abc';
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-otlp-api-key=secret-key,authorization=Bearer abc';
     mocks.fetch.mockResolvedValue(new Response(null, { status: 200 }));
     const { POST } = await loadRoute();
 

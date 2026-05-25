@@ -33,15 +33,10 @@ export function SettingsClient({ login }: SettingsClientProps) {
           Privacy &amp; data
         </Heading>
         <Text as="p" className={styles.sectionLead}>
-          Flight School stores your chats, evaluations, and background job
-          history per-account on the server so AI features can resume across
-          devices. You can wipe everything from your account here.
+          Flight School stores your chats, evaluations, and background job history per-account on the server so AI
+          features can resume across devices. You can wipe everything from your account here.
         </Text>
-        <Button
-          variant="danger"
-          leadingVisual={TrashIcon}
-          onClick={() => setDialogOpen(true)}
-        >
+        <Button variant="danger" leadingVisual={TrashIcon} onClick={() => setDialogOpen(true)}>
           Delete all my data
         </Button>
       </section>

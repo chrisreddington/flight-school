@@ -78,14 +78,14 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
       />
 
       <div className={styles.content}>
-        {loadError && (
-          <Banner title="Failed to load skill profile" description={loadError} variant="critical" />
-        )}
+        {loadError && <Banner title="Failed to load skill profile" description={loadError} variant="critical" />}
         <Stack direction="vertical" gap="normal">
           <div className={styles.pageHeader}>
             <Stack direction="horizontal" align="center" justify="space-between">
               <div>
-                <Heading as="h1" className={styles.pageTitle}>Your Skills</Heading>
+                <Heading as="h1" className={styles.pageTitle}>
+                  Your Skills
+                </Heading>
                 <p className={styles.pageDescription}>
                   Calibrate your skill levels for personalized learning recommendations.
                 </p>
@@ -109,8 +109,8 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
             <Stack direction="horizontal" align="start" gap="condensed">
               <InfoIcon size={16} className={styles.infoIcon} />
               <p className={styles.infoText}>
-                Skills are initially detected from your GitHub activity. You can adjust levels here
-                to calibrate your recommendations.
+                Skills are initially detected from your GitHub activity. You can adjust levels here to calibrate your
+                recommendations.
               </p>
             </Stack>
           </div>
@@ -130,19 +130,10 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
             />
           )}
 
-          {showAddForm && (
-            <AddSkillForm
-              onSuccess={handleSuccessfulAdd}
-              onCancel={() => setShowAddForm(false)}
-            />
-          )}
+          {showAddForm && <AddSkillForm onSuccess={handleSuccessfulAdd} onCancel={() => setShowAddForm(false)} />}
 
           <div className={styles.skillsSection}>
-            <SkillsList
-              profile={profile}
-              onSkillChange={handleSkillChange}
-              onRemoveSkill={handleRemoveSkill}
-            />
+            <SkillsList profile={profile} onSkillChange={handleSkillChange} onRemoveSkill={handleRemoveSkill} />
           </div>
 
           {profile?.lastUpdated && (

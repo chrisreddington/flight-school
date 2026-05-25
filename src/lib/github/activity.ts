@@ -9,7 +9,6 @@ import type { Octokit } from 'octokit';
 import { now } from '@/lib/utils/date-utils';
 import type { ActivityMetrics, GitHubEvent } from './types';
 
-
 /**
  * Fetch user events from GitHub, scoped to user-owned repos only.
  *
@@ -23,25 +22,23 @@ import type { ActivityMetrics, GitHubEvent } from './types';
  * @param perPage - Number of events to fetch
  * @returns Array of event data from user-owned repos only
  */
-export async function getUserEvents(
-  octokit: Octokit,
-  username: string,
-  perPage = 100
-): Promise<GitHubEvent[]> {
+export async function getUserEvents(octokit: Octokit, username: string, perPage = 100): Promise<GitHubEvent[]> {
   const { data } = await octokit.rest.activity.listEventsForAuthenticatedUser({
     username,
     per_page: perPage,
   });
 
-  return data
-    .map((event) => ({
-      type: event.type || 'Unknown',
-      repo: event.repo?.name || 'unknown',
-      createdAt: event.created_at || now(),
-      payload: event.payload as GitHubEvent['payload'],
-    }))
-    // Exclude events from organization repos — only include user-owned repos
-    .filter((event) => event.repo.split('/')[0] === username);
+  return (
+    data
+      .map((event) => ({
+        type: event.type || 'Unknown',
+        repo: event.repo?.name || 'unknown',
+        createdAt: event.created_at || now(),
+        payload: event.payload as GitHubEvent['payload'],
+      }))
+      // Exclude events from organization repos — only include user-owned repos
+      .filter((event) => event.repo.split('/')[0] === username)
+  );
 }
 
 /**
@@ -52,10 +49,7 @@ export async function getUserEvents(
  * @param daysBack - Number of days to analyze
  * @returns Activity metrics
  */
-export function calculateActivityMetrics(
-  events: GitHubEvent[],
-  daysBack = 7
-): ActivityMetrics {
+export function calculateActivityMetrics(events: GitHubEvent[], daysBack = 7): ActivityMetrics {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - daysBack);
 

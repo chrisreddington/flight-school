@@ -23,12 +23,15 @@ import layoutStyles from '@/styles/two-column-layout.module.css';
 import styles from '../habits.module.css';
 
 const HabitCreationDialog = dynamic(
-  () => import('@/components/Habits/HabitCreationDialog').then(m => ({ default: m.HabitCreationDialog })),
-  { ssr: false }
+  () =>
+    import('@/components/Habits/HabitCreationDialog').then((m) => ({
+      default: m.HabitCreationDialog,
+    })),
+  { ssr: false },
 );
 const HabitEditDialog = dynamic(
-  () => import('@/components/Habits/HabitEditDialog').then(m => ({ default: m.HabitEditDialog })),
-  { ssr: false }
+  () => import('@/components/Habits/HabitEditDialog').then((m) => ({ default: m.HabitEditDialog })),
+  { ssr: false },
 );
 
 interface HabitsClientProps {
@@ -70,10 +73,7 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
 
   const actions = useHabitActions(loadHabits);
 
-  const totalCheckIns = [...activeHabits, ...completedHabits].reduce(
-    (sum, h) => sum + h.checkIns.length,
-    0
-  );
+  const totalCheckIns = [...activeHabits, ...completedHabits].reduce((sum, h) => sum + h.checkIns.length, 0);
 
   return (
     <>
@@ -113,9 +113,7 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
             </Stack>
           )}
 
-          {loadError && (
-            <Banner title="Failed to load habits" description={loadError} variant="critical" />
-          )}
+          {loadError && <Banner title="Failed to load habits" description={loadError} variant="critical" />}
           {actions.actionError && (
             <Banner
               title="Action failed"

@@ -4,11 +4,7 @@
  * success/error recorders that emit OTel spans + activity-log completions.
  */
 
-import {
-  recordAiOperation,
-  recordAiStreamMetrics,
-  recordAiTokenUsage,
-} from '@/lib/observability/telemetry';
+import { recordAiOperation, recordAiStreamMetrics, recordAiTokenUsage } from '@/lib/observability/telemetry';
 import { GEN_AI_OPERATION } from '@/lib/observability/semconv';
 import { type Span, SpanStatusCode } from '@opentelemetry/api';
 
@@ -81,7 +77,12 @@ export function recordTerminalSuccess(
   ctx: StreamContext,
   streamSpan: Span,
   complete: (
-    response: { text: string; fullResponse: string; toolsUsed: string[]; metadata: Record<string, unknown> },
+    response: {
+      text: string;
+      fullResponse: string;
+      toolsUsed: string[];
+      metadata: Record<string, unknown>;
+    },
     errorMessage: string | undefined,
     serverMetrics: { firstTokenMs: number | null; totalMs: number },
   ) => void,

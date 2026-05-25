@@ -69,9 +69,9 @@ describe('getConversationSession multitenant cache', () => {
   });
 
   it('throws when userId is missing (multi-tenant invariant)', async () => {
-    await expect(
-      getConversationSession('conv-x', chatOptions('', 'ghu_x')),
-    ).rejects.toThrow(/userId required for session cache key/);
+    await expect(getConversationSession('conv-x', chatOptions('', 'ghu_x'))).rejects.toThrow(
+      /userId required for session cache key/,
+    );
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 });
@@ -83,24 +83,30 @@ describe('createSessionWithMetrics gitHubToken invariant (D4)', () => {
   });
 
   it('throws when gitHubToken is an empty string', async () => {
-    await expect(
-      createSessionWithMetrics(chatOptions('u1', '')),
-    ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
+    await expect(createSessionWithMetrics(chatOptions('u1', ''))).rejects.toThrow(
+      /gitHubToken is required — multi-tenant invariant/,
+    );
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 
   it('throws when gitHubToken field is missing entirely', async () => {
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createSessionWithMetrics({ userId: 'u1', profile: 'chat', capabilities: [], systemMessage: 's', model: 'm' } as any),
+      createSessionWithMetrics({
+        userId: 'u1',
+        profile: 'chat',
+        capabilities: [],
+        systemMessage: 's',
+        model: 'm',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any),
     ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 
   it('throws from getConversationSession when gitHubToken is empty', async () => {
-    await expect(
-      getConversationSession('conv-y', chatOptions('u1', '')),
-    ).rejects.toThrow(/gitHubToken is required — multi-tenant invariant/);
+    await expect(getConversationSession('conv-y', chatOptions('u1', ''))).rejects.toThrow(
+      /gitHubToken is required — multi-tenant invariant/,
+    );
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 });
@@ -118,23 +124,23 @@ describe('entitlement failure handling (P5)', () => {
     const { CopilotEntitlementRequiredError } = await import('./entitlement');
     createSessionMock.mockRejectedValueOnce(new Error('User is not entitled to Copilot'));
 
-    await expect(
-      getConversationSession('conv-x', chatOptions('userNoLicense', 'ghu_x')),
-    ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
+    await expect(getConversationSession('conv-x', chatOptions('userNoLicense', 'ghu_x'))).rejects.toBeInstanceOf(
+      CopilotEntitlementRequiredError,
+    );
   });
 
   it('caches the negative verdict for subsequent calls (no second SDK ping)', async () => {
     const { CopilotEntitlementRequiredError } = await import('./entitlement');
     createSessionMock.mockRejectedValueOnce(new Error('No active Copilot subscription'));
 
-    await expect(
-      getConversationSession('conv-1', chatOptions('userCached', 'ghu_x')),
-    ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
+    await expect(getConversationSession('conv-1', chatOptions('userCached', 'ghu_x'))).rejects.toBeInstanceOf(
+      CopilotEntitlementRequiredError,
+    );
 
     // Second call should short-circuit without invoking the SDK again.
-    await expect(
-      getConversationSession('conv-2', chatOptions('userCached', 'ghu_x')),
-    ).rejects.toBeInstanceOf(CopilotEntitlementRequiredError);
+    await expect(getConversationSession('conv-2', chatOptions('userCached', 'ghu_x'))).rejects.toBeInstanceOf(
+      CopilotEntitlementRequiredError,
+    );
 
     expect(createSessionMock).toHaveBeenCalledTimes(1);
   });
@@ -143,8 +149,6 @@ describe('entitlement failure handling (P5)', () => {
     const networkError = new Error('ECONNREFUSED localhost:54321');
     createSessionMock.mockRejectedValueOnce(networkError);
 
-    await expect(
-      getConversationSession('conv-net', chatOptions('userNet', 'ghu_x')),
-    ).rejects.toBe(networkError);
+    await expect(getConversationSession('conv-net', chatOptions('userNet', 'ghu_x'))).rejects.toBe(networkError);
   });
 });

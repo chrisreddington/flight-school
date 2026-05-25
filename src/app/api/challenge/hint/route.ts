@@ -89,9 +89,7 @@ interface ErrorResponse {
  * // concepts: ["string methods", "array conversion"]
  * ```
  */
-export async function POST(
-  request: NextRequest
-): Promise<Response> {
+export async function POST(request: NextRequest): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 
@@ -104,7 +102,7 @@ export async function POST(
         error: parseResult.error,
         meta: { totalTimeMs: nowMs() - startTime },
       } satisfies ErrorResponse,
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -116,7 +114,7 @@ export async function POST(
         error: validationError,
         meta: { totalTimeMs: nowMs() - startTime },
       } satisfies ErrorResponse,
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -126,14 +124,13 @@ export async function POST(
     log.info(`Getting hint for: ${challenge.title}`);
 
     return await withGuardedRoute(
-      { ...EVAL_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/challenge/hint', challengeTitle: challenge.title } },
+      {
+        ...EVAL_GUARD,
+        eventType: 'copilot.session.create',
+        auditMetadata: { route: '/api/challenge/hint', challengeTitle: challenge.title },
+      },
       async (ctx) => {
-        const hintResult: HintResult = await getHint(
-          createSessionIdentity(ctx),
-          challenge,
-          question,
-          currentCode
-        );
+        const hintResult: HintResult = await getHint(createSessionIdentity(ctx), challenge, question, currentCode);
 
         const totalTime = nowMs() - startTime;
         log.info(`Hint generated in ${totalTime}ms`);

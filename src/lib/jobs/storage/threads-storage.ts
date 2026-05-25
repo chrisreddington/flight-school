@@ -39,7 +39,7 @@ async function readThreadsStorage(userId: string): Promise<Thread[]> {
   const storage = await readStorage<ThreadsStorageSchema>(
     userScopedFilename(userId, 'threads.json'),
     DEFAULT_THREADS_SCHEMA,
-    validateThreadsSchema
+    validateThreadsSchema,
   );
   return storage.threads;
 }
@@ -61,7 +61,7 @@ async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<v
 /** Get a thread by ID directly from storage for a specific user. */
 export async function getThreadById(userId: string, threadId: string): Promise<Thread | null> {
   const threads = await readThreadsStorage(userId);
-  const thread = threads.find(t => t.id === threadId);
+  const thread = threads.find((t) => t.id === threadId);
   if (!thread) return null;
   // Strip the `▊` cursor glyph from any thread last persisted by an
   // older worker that wrote partial assistant content into the
@@ -72,7 +72,7 @@ export async function getThreadById(userId: string, threadId: string): Promise<T
 /** Update a thread directly in storage for a specific user. */
 export async function updateThread(userId: string, updatedThread: Thread): Promise<void> {
   const threads = await readThreadsStorage(userId);
-  const index = threads.findIndex(t => t.id === updatedThread.id);
+  const index = threads.findIndex((t) => t.id === updatedThread.id);
   if (index >= 0) {
     threads[index] = { ...updatedThread, updatedAt: now() };
   } else {

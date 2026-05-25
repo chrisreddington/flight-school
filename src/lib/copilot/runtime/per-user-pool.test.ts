@@ -6,9 +6,19 @@ describe('createPerUserRuntimePool', () => {
 
   it('reuses a runtime for the same user', async () => {
     const disconnect = vi.fn();
-    const createRuntime = vi.fn(async (userId: string) => ({ userId, copilotHome: `/tmp/${userId}`, executeChat: vi.fn(), disconnect }));
+    const createRuntime = vi.fn(async (userId: string) => ({
+      userId,
+      copilotHome: `/tmp/${userId}`,
+      executeChat: vi.fn(),
+      disconnect,
+    }));
     const onEvent = vi.fn();
-    const pool = createPerUserRuntimePool({ createRuntime, idleTtlMs: 60_000, maxActiveRuntimes: 2, onEvent });
+    const pool = createPerUserRuntimePool({
+      createRuntime,
+      idleTtlMs: 60_000,
+      maxActiveRuntimes: 2,
+      onEvent,
+    });
 
     const first = await pool.getRuntime('123', context);
     const second = await pool.getRuntime('123', context);
@@ -21,13 +31,19 @@ describe('createPerUserRuntimePool', () => {
 
   it('shares concurrent runtime creation for the same user', async () => {
     const disconnect = vi.fn();
-    const createRuntime = vi.fn(async (userId: string) => ({ userId, copilotHome: `/tmp/${userId}`, executeChat: vi.fn(), disconnect }));
-    const pool = createPerUserRuntimePool({ createRuntime, idleTtlMs: 60_000, maxActiveRuntimes: 2 });
+    const createRuntime = vi.fn(async (userId: string) => ({
+      userId,
+      copilotHome: `/tmp/${userId}`,
+      executeChat: vi.fn(),
+      disconnect,
+    }));
+    const pool = createPerUserRuntimePool({
+      createRuntime,
+      idleTtlMs: 60_000,
+      maxActiveRuntimes: 2,
+    });
 
-    const [first, second] = await Promise.all([
-      pool.getRuntime('123', context),
-      pool.getRuntime('123', context),
-    ]);
+    const [first, second] = await Promise.all([pool.getRuntime('123', context), pool.getRuntime('123', context)]);
 
     expect(first).toBe(second);
     expect(createRuntime).toHaveBeenCalledTimes(1);
@@ -63,7 +79,12 @@ describe('createPerUserRuntimePool', () => {
   it('evicts idle runtimes before returning a runtime', async () => {
     let currentTime = 0;
     const disconnect = vi.fn();
-    const createRuntime = vi.fn(async (userId: string) => ({ userId, copilotHome: `/tmp/${userId}`, executeChat: vi.fn(), disconnect }));
+    const createRuntime = vi.fn(async (userId: string) => ({
+      userId,
+      copilotHome: `/tmp/${userId}`,
+      executeChat: vi.fn(),
+      disconnect,
+    }));
     const pool = createPerUserRuntimePool({
       createRuntime,
       idleTtlMs: 100,
@@ -87,10 +108,12 @@ describe('createPerUserRuntimePool', () => {
       disconnect: vi.fn(),
     }));
 
-    expect(() => createPerUserRuntimePool({
-      createRuntime,
-      idleTtlMs: 60_000,
-      maxActiveRuntimes: 0,
-    })).toThrow('maxActiveRuntimes must be at least 1');
+    expect(() =>
+      createPerUserRuntimePool({
+        createRuntime,
+        idleTtlMs: 60_000,
+        maxActiveRuntimes: 0,
+      }),
+    ).toThrow('maxActiveRuntimes must be at least 1');
   });
 });

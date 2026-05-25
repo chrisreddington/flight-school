@@ -1,6 +1,6 @@
 /**
  * Shared State Machine Core
- * 
+ *
  * Generic state transition primitives used by focus items and habits.
  * Provides type-safe state management with audit trails.
  */
@@ -42,7 +42,7 @@ export function validateTransition<TState>(
   currentState: TState,
   newState: TState,
   validTransitions: Record<TState & string, TState[]>,
-  itemType: string
+  itemType: string,
 ): void {
   if (currentState === newState) {
     return; // Idempotent transitions are allowed
@@ -52,7 +52,7 @@ export function validateTransition<TState>(
   if (!allowedStates.includes(newState)) {
     throw new Error(
       `Invalid ${itemType} state transition: ${String(currentState)} → ${String(newState)}. ` +
-      `Valid transitions: ${allowedStates.join(', ') || 'none (terminal state)'}`
+        `Valid transitions: ${allowedStates.join(', ') || 'none (terminal state)'}`,
     );
   }
 }

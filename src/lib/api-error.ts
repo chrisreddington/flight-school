@@ -44,7 +44,7 @@ export function handleApiError(
   error: unknown,
   contextTag: string,
   startTime: number,
-  options: ApiErrorOptions = {}
+  options: ApiErrorOptions = {},
 ): Response {
   const totalTime = nowMs() - startTime;
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -82,6 +82,6 @@ export function handleApiError(
       error: options.responseMessage ?? errorMessage,
       meta: { totalTimeMs: totalTime },
     },
-    { status: statusCode }
+    { status: statusCode },
   );
 }

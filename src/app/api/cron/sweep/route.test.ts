@@ -1,29 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  verifyCronRequestMock,
-  sweepAllUsersMock,
-  sweepWorkerJobsMock,
-  captureTraceMock,
-  CronAuthErrorMock,
-} = vi.hoisted(() => {
-  class CronAuthErrorMock extends Error {
-    readonly status: number;
-    constructor(message: string, status = 401) {
-      super(message);
-      this.name = 'CronAuthError';
-      this.status = status;
+const { verifyCronRequestMock, sweepAllUsersMock, sweepWorkerJobsMock, captureTraceMock, CronAuthErrorMock } =
+  vi.hoisted(() => {
+    class CronAuthErrorMock extends Error {
+      readonly status: number;
+      constructor(message: string, status = 401) {
+        super(message);
+        this.name = 'CronAuthError';
+        this.status = status;
+      }
     }
-  }
 
-  return {
-    verifyCronRequestMock: vi.fn(),
-    sweepAllUsersMock: vi.fn(),
-    sweepWorkerJobsMock: vi.fn(),
-    captureTraceMock: vi.fn(),
-    CronAuthErrorMock,
-  };
-});
+    return {
+      verifyCronRequestMock: vi.fn(),
+      sweepAllUsersMock: vi.fn(),
+      sweepWorkerJobsMock: vi.fn(),
+      captureTraceMock: vi.fn(),
+      CronAuthErrorMock,
+    };
+  });
 
 vi.mock('@/lib/security/cron-auth', () => ({
   verifyCronRequest: verifyCronRequestMock,

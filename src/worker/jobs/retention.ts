@@ -48,10 +48,7 @@ function isTerminalStatus(status: string | undefined): boolean {
  * Mark `pending` / `running` jobs that have not progressed in
  * `staleRunningMs` as failed.
  */
-export async function sweepStaleRunningJobs(
-  nowMs: number,
-  ttlMs: number = staleRunningMs,
-): Promise<SweepResult> {
+export async function sweepStaleRunningJobs(nowMs: number, ttlMs: number = staleRunningMs): Promise<SweepResult> {
   const all = await jobStorage.getAll();
   let deleted = 0;
   let inspected = 0;
@@ -59,8 +56,7 @@ export async function sweepStaleRunningJobs(
   for (const job of all) {
     if (job.status !== 'pending' && job.status !== 'running') continue;
     inspected += 1;
-    const reference =
-      job.status === 'running' ? job.startedAt ?? job.createdAt : job.createdAt;
+    const reference = job.status === 'running' ? (job.startedAt ?? job.createdAt) : job.createdAt;
     const ts = parseTimestamp(reference);
     if (ts === null) continue;
     if (nowMs - ts <= ttlMs) continue;
@@ -116,9 +112,7 @@ function redactJobInput(input: Record<string, unknown> | undefined): Record<stri
 }
 
 function redactJobResult<T>(result: T, nowMs: number): T {
-  return result
-    ? ({ __redacted: true, redactedAt: new Date(nowMs).toISOString() } as T)
-    : result;
+  return result ? ({ __redacted: true, redactedAt: new Date(nowMs).toISOString() } as T) : result;
 }
 
 // Indirection so test harness can stub if needed; production just uses Date.now.

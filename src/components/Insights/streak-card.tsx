@@ -1,6 +1,6 @@
 /**
  * Streak Card Component
- * 
+ *
  * Displays current and longest learning streaks with flame icon.
  * Shows consecutive days of activity (challenges completed or topics explored).
  */
@@ -25,16 +25,16 @@ export function StreakCard({ currentStreak, longestStreak }: StreakCardProps) {
 
       <div className={styles.streakMetrics}>
         <div className={styles.streakMetric}>
-          <span className={`${styles.streakValue} ${currentStreak > 0 ? styles.streakValueActive : styles.streakValueInactive}`}>
+          <span
+            className={`${styles.streakValue} ${currentStreak > 0 ? styles.streakValueActive : styles.streakValueInactive}`}
+          >
             {currentStreak}
           </span>
           <span className={styles.streakLabel}>Current Streak</span>
         </div>
 
         <div className={styles.streakMetric}>
-          <span className={styles.streakValue}>
-            {longestStreak}
-          </span>
+          <span className={styles.streakValue}>{longestStreak}</span>
           <span className={styles.streakLabel}>Longest Streak</span>
         </div>
       </div>

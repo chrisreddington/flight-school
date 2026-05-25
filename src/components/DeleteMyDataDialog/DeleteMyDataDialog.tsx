@@ -48,9 +48,8 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
       if (err instanceof ApiError && err.context?.code === 'recent_auth_required') {
         // Sudo-mode style: bounce through a fresh sign-in then return to
         // /settings so the user can retry the deletion within the window.
-        const callbackUrl = typeof window !== 'undefined'
-          ? `${window.location.pathname}${window.location.search}`
-          : '/settings';
+        const callbackUrl =
+          typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/settings';
         await signIn('github', { callbackUrl });
         return;
       }
@@ -80,9 +79,8 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
     >
       <Stack direction="vertical" gap="normal">
         <Text as="p">
-          This will permanently delete every conversation, evaluation, focus
-          item, and background job stored on the server for your account. Your
-          session will be signed out afterwards.
+          This will permanently delete every conversation, evaluation, focus item, and background job stored on the
+          server for your account. Your session will be signed out afterwards.
         </Text>
         <Text as="p">
           To confirm, type your GitHub login <strong>{login}</strong> below.
@@ -98,9 +96,7 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
             autoComplete="off"
           />
         </FormControl>
-        {error ? (
-          <Banner variant="critical" title="Could not delete data" description={error} />
-        ) : null}
+        {error ? <Banner variant="critical" title="Could not delete data" description={error} /> : null}
       </Stack>
     </Dialog>
   );

@@ -43,10 +43,7 @@ const FACTORY_IMPORT_PATTERN = new RegExp(
   'g',
 );
 
-const SDK_ALLOWED_PREFIXES = [
-  'src/worker/',
-  'src/lib/copilot/runtime/',
-];
+const SDK_ALLOWED_PREFIXES = ['src/worker/', 'src/lib/copilot/runtime/'];
 
 // SDK adapter modules that legitimately wrap `@github/copilot-sdk` for
 // worker-internal use. These are imported only by the runtime and the
@@ -65,10 +62,7 @@ const SDK_ALLOWED_FILES = new Set([
 // internal worker API routes. `src/lib/copilot/execution/` is the public
 // dispatch API consumed by Web/API and intentionally NOT on this list:
 // the dispatchers there speak HTTP/IPC to the worker, never the SDK.
-const WORKER_INTERNAL_PREFIXES = [
-  'src/worker/',
-  'src/lib/copilot/runtime/',
-];
+const WORKER_INTERNAL_PREFIXES = ['src/worker/', 'src/lib/copilot/runtime/'];
 
 // SDK adapter / session-factory modules. These files legitimately wrap
 // the SDK or its session factories for worker-internal use, and they
@@ -121,17 +115,16 @@ for (const root of SCAN_ROOTS) {
       !isUnderPrefix(relativePath, SDK_ALLOWED_PREFIXES) &&
       !SDK_ALLOWED_FILES.has(relativePath)
     ) {
-      violations.push(`${relativePath}: imports @github/copilot-sdk directly. Only ${SDK_ALLOWED_PREFIXES.join(' or ')} (or SDK_ALLOWED_FILES) may.`);
+      violations.push(
+        `${relativePath}: imports @github/copilot-sdk directly. Only ${SDK_ALLOWED_PREFIXES.join(' or ')} (or SDK_ALLOWED_FILES) may.`,
+      );
     }
 
     let match;
     FACTORY_IMPORT_PATTERN.lastIndex = 0;
     while ((match = FACTORY_IMPORT_PATTERN.exec(source)) !== null) {
       const factoryName = match[1];
-      if (
-        !isUnderPrefix(relativePath, WORKER_INTERNAL_PREFIXES) &&
-        !WORKER_INTERNAL_FILES.has(relativePath)
-      ) {
+      if (!isUnderPrefix(relativePath, WORKER_INTERNAL_PREFIXES) && !WORKER_INTERNAL_FILES.has(relativePath)) {
         violations.push(
           `${relativePath}: imports '${factoryName}' from a non-worker module. Route this through @/lib/copilot/execution instead.`,
         );

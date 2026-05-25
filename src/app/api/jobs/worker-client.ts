@@ -1,10 +1,6 @@
 import type { BackgroundJob } from '@/lib/jobs/storage';
 import type { JobListDTO } from '@/lib/jobs/redact';
-import type {
-  DispatchableJobInput,
-  DispatchableJobType,
-  WorkerDispatchCredentials,
-} from '@/lib/jobs/dispatch';
+import type { DispatchableJobInput, DispatchableJobType, WorkerDispatchCredentials } from '@/lib/jobs/dispatch';
 import { workerFetchJson } from '@/lib/copilot/execution/worker-fetch';
 import type { TracePropagationHeaders } from '@/lib/observability/context-propagation';
 

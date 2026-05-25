@@ -1,6 +1,6 @@
 /**
  * Habit History Card
- * 
+ *
  * Shows a single day's check-in status for a habit.
  * - Past days: Read-only historical view with status
  * - Today: Full interactive experience with tracking UI and actions
@@ -29,8 +29,8 @@ interface HabitHistoryCardProps {
 
 export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: HabitHistoryCardProps) {
   // Find check-in for this specific date
-  const checkIn = habit.checkIns.find(c => c.date === dateKey);
-  
+  const checkIn = habit.checkIns.find((c) => c.date === dateKey);
+
   // For today's entry, check if pending
   const isPending = isToday && isPendingToday(habit, dateKey);
   const remainingSkips = isToday ? getRemainingSkips(habit) : 0;
@@ -58,7 +58,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
   }, []);
 
   const handlePause = useCallback(() => {
-    setIsPaused(prev => !prev);
+    setIsPaused((prev) => !prev);
   }, []);
 
   const handleCheckIn = useCallback(async () => {
@@ -78,7 +78,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
 
       const updated = checkInHabit(habit, value, dateKey);
       await habitStore.update(updated);
-      
+
       // Reset UI
       setStartTime(null);
       setElapsedTime(0);
@@ -119,7 +119,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
   }, [habit, dateKey, isToday, onUpdate]);
 
   const handleIncrement = useCallback(() => {
-    setCurrentValue(prev => prev + 1);
+    setCurrentValue((prev) => prev + 1);
   }, []);
 
   // Render action buttons for today's entry
@@ -237,12 +237,7 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
 
           {/* Tracking UI */}
           {isToday && isPending && (
-            <HabitProgressBar
-              habit={habit}
-              currentValue={currentValue}
-              elapsedTime={elapsedTime}
-              isPaused={isPaused}
-            />
+            <HabitProgressBar habit={habit} currentValue={currentValue} elapsedTime={elapsedTime} isPaused={isPaused} />
           )}
 
           {/* Action buttons */}
@@ -250,7 +245,9 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
             {renderTodayActions()}
           </Stack>
           {actionError && (
-            <InlineMessage variant="critical" size="small">{actionError}</InlineMessage>
+            <InlineMessage variant="critical" size="small">
+              {actionError}
+            </InlineMessage>
           )}
         </Stack>
       </div>
@@ -268,7 +265,9 @@ export function HabitHistoryCard({ habit, dateKey, isToday = false, onUpdate }: 
         onUndo={isToday && !isPending ? handleUndo : undefined}
       />
       {actionError && (
-        <InlineMessage variant="critical" size="small">{actionError}</InlineMessage>
+        <InlineMessage variant="critical" size="small">
+          {actionError}
+        </InlineMessage>
       )}
     </>
   );

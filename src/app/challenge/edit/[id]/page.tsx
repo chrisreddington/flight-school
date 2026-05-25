@@ -60,7 +60,7 @@ export default function EditChallengePage() {
         error: result.error ?? 'Failed to save changes. The challenge may no longer exist.',
       };
     },
-    [challengeId, router]
+    [challengeId, router],
   );
 
   const handleCancel = useCallback(() => router.back(), [router]);
@@ -114,11 +114,7 @@ export default function EditChallengePage() {
     <div className={styles.root}>
       <AppHeader />
       <main className={styles.main}>
-        <EditChallengeForm
-          initialChallenge={challenge}
-          onSave={handleSave}
-          onCancel={handleCancel}
-        />
+        <EditChallengeForm initialChallenge={challenge} onSave={handleSave} onCancel={handleCancel} />
       </main>
     </div>
   );

@@ -14,18 +14,13 @@
  * `fallback` hint — there is no alternative provider to point at.
  */
 
-import {
-  COPILOT_ENTITLEMENT_ERROR_NAME,
-  CopilotEntitlementRequiredError,
-} from '@/lib/copilot/entitlement';
+import { COPILOT_ENTITLEMENT_ERROR_NAME, CopilotEntitlementRequiredError } from '@/lib/copilot/entitlement';
 
 /** Detect either the typed error or anything carrying the stable name. */
 function isEntitlementError(error: unknown): error is CopilotEntitlementRequiredError {
   if (error instanceof CopilotEntitlementRequiredError) return true;
   return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { name?: string }).name === COPILOT_ENTITLEMENT_ERROR_NAME
+    typeof error === 'object' && error !== null && (error as { name?: string }).name === COPILOT_ENTITLEMENT_ERROR_NAME
   );
 }
 

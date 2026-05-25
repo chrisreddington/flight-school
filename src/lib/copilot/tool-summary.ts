@@ -130,7 +130,10 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
       const repo = pickRepo(args);
       const num = pickString(args, 'pull_number', 'number', 'pr_number');
       if (repo && num) return { icon: '🔀', summary: `Reading PR #${num} on ${code(repo)}` };
-      return { icon: '🔀', summary: repo ? `Reading pull request on ${code(repo)}` : 'Reading pull request' };
+      return {
+        icon: '🔀',
+        summary: repo ? `Reading pull request on ${code(repo)}` : 'Reading pull request',
+      };
     }
     case 'list_issues': {
       const repo = pickRepo(args);

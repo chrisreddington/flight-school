@@ -82,12 +82,7 @@ export function isCopilotEntitlementError(err: unknown): boolean {
 
   // ResponseError-style shape from vscode-jsonrpc: { code: number, message: string }
   const candidate = err as { code?: unknown; message?: unknown; data?: unknown };
-  const message =
-    typeof candidate.message === 'string'
-      ? candidate.message
-      : err instanceof Error
-        ? err.message
-        : '';
+  const message = typeof candidate.message === 'string' ? candidate.message : err instanceof Error ? err.message : '';
 
   if (!message) return false;
 
@@ -96,10 +91,7 @@ export function isCopilotEntitlementError(err: unknown): boolean {
   // server-defined error range; we only treat them as entitlement when the
   // accompanying message references Copilot or auth.
   if (typeof candidate.code === 'number') {
-    if (
-      (candidate.code === -32001 || candidate.code === -32002) &&
-      /copilot|auth|forbid|entitl/i.test(message)
-    ) {
+    if ((candidate.code === -32001 || candidate.code === -32002) && /copilot|auth|forbid|entitl/i.test(message)) {
       return true;
     }
   }
@@ -125,8 +117,7 @@ const globalForEntitlementCache = globalThis as typeof globalThis & {
 };
 
 const negativeCache =
-  globalForEntitlementCache.__copilotEntitlementNegativeCache ??
-  new Map<string, NegativeCacheEntry>();
+  globalForEntitlementCache.__copilotEntitlementNegativeCache ?? new Map<string, NegativeCacheEntry>();
 
 if (!globalForEntitlementCache.__copilotEntitlementNegativeCache) {
   globalForEntitlementCache.__copilotEntitlementNegativeCache = negativeCache;

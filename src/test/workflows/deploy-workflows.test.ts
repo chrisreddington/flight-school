@@ -243,7 +243,7 @@ describe('infra workflow — Bicep apply with live-state tag preservation', () =
     expect(infraWf).toMatch(/grep -E '"imageTag"/);
   });
 
-  it('reads each app\'s current template image to preserve tags on apply', () => {
+  it("reads each app's current template image to preserve tags on apply", () => {
     // Web Container App: resource and container both named `${appName}`.
     // Worker Container App: resource `${appName}-worker`, container `copilot-worker`.
     expect(infraWf).toMatch(/properties\.template\.containers\[\?name=='\$container_name'\]/);
@@ -297,9 +297,7 @@ describe('deploy workflows — third-party action SHA pinning', () => {
     const usesLines = src.match(/uses:\s*[^\n]+/g) ?? [];
     it(`${name}: every uses: pins a 40-hex SHA followed by a version comment`, () => {
       for (const line of usesLines) {
-        expect(line, `uses line: ${line}`).toMatch(
-          /uses:\s*[\w-]+\/[\w./-]+@[0-9a-f]{40}\s+#\s*v[\d.]+/,
-        );
+        expect(line, `uses line: ${line}`).toMatch(/uses:\s*[\w-]+\/[\w./-]+@[0-9a-f]{40}\s+#\s*v[\d.]+/);
       }
     });
   }
@@ -320,15 +318,67 @@ describe('CI ↔ CD coupling — display name', () => {
   });
 });
 
+describe('CI — lint-gaps job', () => {
+  // Catches gaps that eslint/tsc can't see: workflow YAML correctness
+  // (with embedded shellcheck) and markdown. The job runs in parallel
+  // with build-and-test; both must report green for a PR to merge.
+  const lintGapsBlock = (() => {
+    const start = ciWf.search(/^ {2}lint-gaps:\s*$/m);
+    if (start < 0) return null;
+    const rest = ciWf.slice(start + 1);
+    const nextJob = rest.search(/^ {2}\S/m);
+    return nextJob < 0 ? ciWf.slice(start) : ciWf.slice(start, start + 1 + nextJob);
+  })();
+
+  it('declares the lint-gaps job', () => {
+    expect(lintGapsBlock).not.toBeNull();
+  });
+
+  it('lint-gaps has no `needs:` (parallel with build-and-test)', () => {
+    expect(lintGapsBlock).not.toBeNull();
+    expect(lintGapsBlock!).not.toMatch(/^\s+needs:/m);
+  });
+
+  it('pins actionlint and markdownlint actions by 40-hex SHA + version comment', () => {
+    expect(lintGapsBlock).not.toBeNull();
+    const pinned = /uses:\s*[\w-]+\/[\w./-]+@[0-9a-f]{40}\s+#\s*v[\d.]+/;
+    expect(lintGapsBlock!).toMatch(/reviewdog\/action-actionlint@[0-9a-f]{40}\s+#\s*v[\d.]+/);
+    expect(lintGapsBlock!).toMatch(/DavidAnson\/markdownlint-cli2-action@[0-9a-f]{40}\s+#\s*v[\d.]+/);
+    const usesLines = lintGapsBlock!.match(/uses:[^\n]*/g) ?? [];
+    for (const line of usesLines) {
+      expect(line).toMatch(pinned);
+    }
+  });
+
+  it('runs markdownlint with `if: always()` so both linters report on every run', () => {
+    expect(lintGapsBlock).not.toBeNull();
+    expect(lintGapsBlock!).toMatch(/if:\s*always\(\)[\s\S]+DavidAnson\/markdownlint-cli2-action/);
+  });
+});
+
+describe('CI — HUSKY=0 on install steps', () => {
+  // Husky v9 runs `prepare` on `npm ci`, which would no-op in CI but
+  // can still touch the working tree. Pinning HUSKY=0 keeps install
+  // deterministic and prevents accidental hook installation on runners.
+  const ciNpmInstallers = [
+    { name: 'ci.yml build-and-test', src: ciWf },
+    { name: 'deploy-web.yml', src: webWf },
+    { name: 'deploy-worker.yml', src: workerWf },
+  ];
+  for (const { name, src } of ciNpmInstallers) {
+    it(`${name}: install step disables husky via HUSKY=0`, () => {
+      expect(src).toMatch(/HUSKY:\s*['"]?0['"]?/);
+    });
+  }
+});
+
 describe('path-filter scopes — inline filters parsed from each workflow', () => {
   function parseInlineFilter(yamlText: string, key: 'web' | 'worker' | 'infra'): string[] {
     // The inline filters live in a `filters: |` block of dorny/paths-filter.
     // Capture the `<key>:` sub-list inside that block.
     const filtersBlock = yamlText.match(/filters:\s*\|\s*\n([\s\S]+?)(?:\n {0,8}\S|$)/);
     if (!filtersBlock) return [];
-    const section = filtersBlock[1].match(
-      new RegExp(`^\\s+${key}:\\s*\\n((?:\\s+(?:-[^\\n]*|#[^\\n]*)\\n?)+)`, 'm'),
-    );
+    const section = filtersBlock[1].match(new RegExp(`^\\s+${key}:\\s*\\n((?:\\s+(?:-[^\\n]*|#[^\\n]*)\\n?)+)`, 'm'));
     if (!section) return [];
     return section[1]
       .split('\n')

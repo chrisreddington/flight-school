@@ -2,7 +2,7 @@
 
 /**
  * AI Activity Panel
- * 
+ *
  * Shows real-time Copilot SDK operations for developer education.
  * Only available when debug mode is enabled.
  * Activated via:
@@ -12,7 +12,15 @@
 
 import { useDebugMode } from '@/contexts/debug-context';
 import { useAIActivity } from '@/hooks/use-ai-activity';
-import { CopyIcon, FilterIcon, ScreenFullIcon, ScreenNormalIcon, SortDescIcon, TrashIcon, XIcon } from '@primer/octicons-react';
+import {
+  CopyIcon,
+  FilterIcon,
+  ScreenFullIcon,
+  ScreenNormalIcon,
+  SortDescIcon,
+  TrashIcon,
+  XIcon,
+} from '@primer/octicons-react';
 import { Button, IconButton, TextInput } from '@primer/react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import styles from './AIActivityPanel.module.css';
@@ -40,9 +48,10 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
   const [showEducational, setShowEducational] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const isResizingRef = useRef(false);
-  
-  const { events, isPaused, setIsPaused, clear, exportJSON, exportMarkdown, stats, pendingCount } =
-    useAIActivity({ enabled: isDebugMode });
+
+  const { events, isPaused, setIsPaused, clear, exportJSON, exportMarkdown, stats, pendingCount } = useAIActivity({
+    enabled: isDebugMode,
+  });
 
   // Use extracted filtering hook
   const {
@@ -67,7 +76,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
   // Keyboard shortcut: Ctrl+Shift+A (Cmd+Shift+A on Mac) - only in debug mode
   useEffect(() => {
     if (!isDebugMode) return;
-    
+
     const handleKeydown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
@@ -135,11 +144,14 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
     return Math.min(maxDockedWidth, Math.max(MIN_DOCKED_WIDTH, nextWidth));
   }, []);
 
-  const handleResizeMouseMove = useCallback((event: MouseEvent) => {
-    if (!isResizingRef.current) return;
-    const nextWidth = window.innerWidth - event.clientX;
-    setPanelWidth(getClampedPanelWidth(nextWidth));
-  }, [getClampedPanelWidth]);
+  const handleResizeMouseMove = useCallback(
+    (event: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const nextWidth = window.innerWidth - event.clientX;
+      setPanelWidth(getClampedPanelWidth(nextWidth));
+    },
+    [getClampedPanelWidth],
+  );
 
   const handleResizeMouseUp = useCallback(() => {
     if (!isResizingRef.current) return;
@@ -149,13 +161,16 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
     window.removeEventListener('mouseup', handleResizeMouseUp);
   }, [handleResizeMouseMove]);
 
-  const handleResizeMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    isResizingRef.current = true;
-    setIsResizeHandleActive(true);
-    window.addEventListener('mousemove', handleResizeMouseMove);
-    window.addEventListener('mouseup', handleResizeMouseUp);
-  }, [handleResizeMouseMove, handleResizeMouseUp]);
+  const handleResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      isResizingRef.current = true;
+      setIsResizeHandleActive(true);
+      window.addEventListener('mousemove', handleResizeMouseMove);
+      window.addEventListener('mouseup', handleResizeMouseUp);
+    },
+    [handleResizeMouseMove, handleResizeMouseUp],
+  );
 
   useEffect(() => {
     return () => {
@@ -177,10 +192,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
         onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
         onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.4')}
       >
-        <button
-          onClick={() => setState('badge')}
-          className={`f6 color-fg-muted ${styles.hiddenHintButton}`}
-        >
+        <button onClick={() => setState('badge')} className={`f6 color-fg-muted ${styles.hiddenHintButton}`}>
           ⌘+Shift+A for AI Activity
         </button>
       </div>
@@ -189,13 +201,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
 
   // Badge state - floating compact badge
   if (state === 'badge') {
-    return (
-      <ActivityBadge
-        count={events.length}
-        pendingCount={pendingCount}
-        onClick={() => setState('docked')}
-      />
-    );
+    return <ActivityBadge count={events.length} pendingCount={pendingCount} onClick={() => setState('docked')} />;
   }
 
   // Docked or Fullscreen - full panel
@@ -216,9 +222,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
       {/* Header */}
       <div className={styles.header}>
         <span className={styles.headerTitle}>🔍 AI Activity</span>
-        <span className="f6 color-fg-muted">
-          {pendingCount > 0 && `${pendingCount} running`}
-        </span>
+        <span className="f6 color-fg-muted">{pendingCount > 0 && `${pendingCount} running`}</span>
         <div className={styles.headerSpacer} />
         <Button size="small" onClick={() => setIsPaused(!isPaused)}>
           {isPaused ? '▶ Resume' : '⏸ Pause'}
@@ -229,22 +233,13 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
           size="small"
           onClick={() => setState(isFullscreen ? 'docked' : 'fullscreen')}
         />
-        <IconButton
-          icon={XIcon}
-          aria-label="Close panel"
-          size="small"
-          onClick={() => setState('badge')}
-        />
+        <IconButton icon={XIcon} aria-label="Close panel" size="small" onClick={() => setState('badge')} />
       </div>
 
       {/* Settings bar */}
       <div className={styles.settingsBar}>
         <label className={styles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={showEducational}
-            onChange={(e) => setShowEducational(e.target.checked)}
-          />
+          <input type="checkbox" checked={showEducational} onChange={(e) => setShowEducational(e.target.checked)} />
           <span>Show explanations</span>
         </label>
         <div className={styles.searchWrapper}>
@@ -271,7 +266,14 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
           aria-label="Change sort"
           size="small"
           onClick={() => {
-            const sortOptions: SortBy[] = ['time-desc', 'latency-desc', 'ttft-desc', 'time-asc', 'latency-asc', 'ttft-asc'];
+            const sortOptions: SortBy[] = [
+              'time-desc',
+              'latency-desc',
+              'ttft-desc',
+              'time-asc',
+              'latency-asc',
+              'ttft-asc',
+            ];
             const currentIndex = sortOptions.indexOf(sortBy);
             const nextIndex = (currentIndex + 1) % sortOptions.length;
             setSortBy(sortOptions[nextIndex]);
@@ -283,7 +285,9 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
       {showFilters && (
         <div className={styles.filtersPanel}>
           <div className={styles.filterGroup}>
-            <label htmlFor="ai-activity-operation-filter" className="color-fg-muted">Operation:</label>
+            <label htmlFor="ai-activity-operation-filter" className="color-fg-muted">
+              Operation:
+            </label>
             <select
               id="ai-activity-operation-filter"
               value={operationFilter}
@@ -291,14 +295,18 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
               className={styles.filterSelect}
             >
               <option value="all">All operations</option>
-              {uniqueOperations.map(op => (
-                <option key={op} value={op}>{op}</option>
+              {uniqueOperations.map((op) => (
+                <option key={op} value={op}>
+                  {op}
+                </option>
               ))}
             </select>
           </div>
-          
+
           <div className={styles.filterGroup}>
-            <label htmlFor="ai-activity-model-filter" className="color-fg-muted">Model:</label>
+            <label htmlFor="ai-activity-model-filter" className="color-fg-muted">
+              Model:
+            </label>
             <select
               id="ai-activity-model-filter"
               value={modelFilter}
@@ -306,14 +314,18 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
               className={styles.filterSelect}
             >
               <option value="all">All models</option>
-              {uniqueModels.map(model => (
-                <option key={model} value={model}>{model}</option>
+              {uniqueModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
               ))}
             </select>
           </div>
 
           <div className={styles.filterGroup}>
-            <label htmlFor="ai-activity-sort-filter" className="color-fg-muted">Sort by:</label>
+            <label htmlFor="ai-activity-sort-filter" className="color-fg-muted">
+              Sort by:
+            </label>
             <select
               id="ai-activity-sort-filter"
               value={sortBy}
@@ -349,9 +361,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
       <div className={styles.eventsList}>
         {filteredAndSortedEvents.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyStateIcon}>
-              {events.length === 0 ? '🤖' : '🔍'}
-            </div>
+            <div className={styles.emptyStateIcon}>{events.length === 0 ? '🤖' : '🔍'}</div>
             <div className={`color-fg-muted ${styles.emptyStateText}`}>
               {events.length === 0 ? (
                 <>

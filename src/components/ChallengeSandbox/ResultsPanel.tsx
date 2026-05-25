@@ -152,9 +152,7 @@ export function ResultsPanel({
                   leadingVisual={PlayIcon}
                   disabled={!canEvaluate || isRateLimited}
                   aria-label={
-                    isRateLimited
-                      ? `Evaluation paused. Retry in ${rateLimitRetryInSeconds}s`
-                      : 'Evaluate code solution'
+                    isRateLimited ? `Evaluation paused. Retry in ${rateLimitRetryInSeconds}s` : 'Evaluate code solution'
                   }
                 >
                   {isRateLimited ? `Retry in ${rateLimitRetryInSeconds}s` : 'Evaluate'}
@@ -182,11 +180,7 @@ export function ResultsPanel({
                   difficulty: challenge.difficulty,
                 }}
                 onSelectSuggestion={(suggestion) => {
-                  logger.info(
-                    'Related suggestion selected',
-                    { suggestionTitle: suggestion.title },
-                    'ChallengeSandbox',
-                  );
+                  logger.info('Related suggestion selected', { suggestionTitle: suggestion.title }, 'ChallengeSandbox');
                 }}
               />
             )}

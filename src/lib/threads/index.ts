@@ -14,14 +14,7 @@
  */
 
 // Types
-export type {
-    CreateThreadOptions,
-    Message,
-    RepoReference,
-    Thread,
-    ThreadContext,
-    ToolCallEvent
-} from './types';
+export type { CreateThreadOptions, Message, RepoReference, Thread, ThreadContext, ToolCallEvent } from './types';
 
 // Storage
 export { threadStore } from './storage';
@@ -35,13 +28,15 @@ export const THREAD_DATA_CHANGED_EVENT = 'thread-data-changed';
 /**
  * Dispatch thread data changed event to notify all listeners.
  * Call this after successfully persisting thread data from background jobs.
- * 
+ *
  * @param threadId - The ID of the thread that changed
  */
 export function notifyThreadDataChanged(threadId?: string): void {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(THREAD_DATA_CHANGED_EVENT, {
-      detail: { threadId }
-    }));
+    window.dispatchEvent(
+      new CustomEvent(THREAD_DATA_CHANGED_EVENT, {
+        detail: { threadId },
+      }),
+    );
   }
 }

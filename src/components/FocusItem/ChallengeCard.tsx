@@ -1,6 +1,6 @@
 /**
  * Shared Challenge Card Component
- * 
+ *
  * Displays a challenge with consistent styling and actions across Dashboard and History.
  * Automatically detects state (in-progress vs not-started) from storage.
  */
@@ -84,7 +84,7 @@ export function ChallengeCard({
         const history = await focusStore.getHistory();
         const record = history[dateKey];
         if (record?.challenges) {
-          const item = record.challenges.find(c => c.data.id === challenge.id);
+          const item = record.challenges.find((c) => c.data.id === challenge.id);
           if (item && item.stateHistory.length > 0) {
             setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
           }
@@ -147,7 +147,7 @@ export function ChallengeCard({
       onSkipAndReplace(challenge.id, [challenge.title]);
       return;
     }
-    
+
     // Fallback: just mark as skipped and refresh
     try {
       setActionError(null);
@@ -168,9 +168,7 @@ export function ChallengeCard({
 
   // Show loading state while regenerating (with stop button on dashboard)
   if (isSkipping) {
-    return (
-      <SkippingCard id={challenge.id} itemType="challenge" skeletonLines={3} onStop={onStopSkip} />
-    );
+    return <SkippingCard id={challenge.id} itemType="challenge" skeletonLines={3} onStop={onStopSkip} />;
   }
 
   // Don't render skipped challenges on dashboard (they've been replaced)
@@ -192,7 +190,9 @@ export function ChallengeCard({
             <Label size="small">{challenge.language}</Label>
             {challenge.estimatedTime && (
               <Label size="small" variant="secondary">
-                <span className={styles.iconInline}><ClockIcon size={12} /></span>
+                <span className={styles.iconInline}>
+                  <ClockIcon size={12} />
+                </span>
                 {challenge.estimatedTime}
               </Label>
             )}
@@ -204,23 +204,11 @@ export function ChallengeCard({
           </Stack>
           <Stack direction="horizontal" gap="condensed" align="center">
             {/* Show completion status on dashboard AND history */}
-            {isCompleted && (
-              <Label variant="success">
-                Completed
-              </Label>
-            )}
+            {isCompleted && <Label variant="success">Completed</Label>}
             {/* Show skipped status only in history */}
-            {isSkipped && showHistoryActions && (
-              <Label variant="secondary">
-                Skipped
-              </Label>
-            )}
+            {isSkipped && showHistoryActions && <Label variant="secondary">Skipped</Label>}
             {/* Show in-progress status on dashboard */}
-            {isInProgress && !showHistoryActions && (
-              <Label variant="accent">
-                In Progress
-              </Label>
-            )}
+            {isInProgress && !showHistoryActions && <Label variant="accent">In Progress</Label>}
             {/* Only show action menu on today's items */}
             {isToday && (
               <ChallengeActionMenu
@@ -267,29 +255,17 @@ export function ChallengeCard({
         <Stack direction="horizontal" gap="condensed">
           {isCompleted ? (
             <>
-              <Button
-                variant="default"
-                onClick={handleStartChallenge}
-                disabled={isSkipped}
-              >
+              <Button variant="default" onClick={handleStartChallenge} disabled={isSkipped}>
                 View Challenge
               </Button>
               {onAdvanceQueue && queueCount && queueCount > 1 && (
-                <Button
-                  variant="primary"
-                  onClick={onAdvanceQueue}
-                  leadingVisual={ArrowRightIcon}
-                >
+                <Button variant="primary" onClick={onAdvanceQueue} leadingVisual={ArrowRightIcon}>
                   Next Challenge
                 </Button>
               )}
             </>
           ) : (
-            <Button
-              variant="primary"
-              onClick={handleStartChallenge}
-              disabled={isSkipped}
-            >
+            <Button variant="primary" onClick={handleStartChallenge} disabled={isSkipped}>
               {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
             </Button>
           )}

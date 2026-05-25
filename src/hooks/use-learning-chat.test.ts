@@ -51,8 +51,7 @@ vi.mock('./use-learning-chat-stream', () => ({
 const opsRegistered = vi.hoisted(() => [] as Array<{ jobId: string; threadId: string }>);
 vi.mock('@/lib/operations', () => ({
   operationsManager: {
-    registerExistingJob: (jobId: string, _t: string, threadId: string) =>
-      opsRegistered.push({ jobId, threadId }),
+    registerExistingJob: (jobId: string, _t: string, threadId: string) => opsRegistered.push({ jobId, threadId }),
   },
 }));
 
@@ -98,9 +97,11 @@ function installFetch(): void {
       return json({ threads: backend.threads });
     }
     if (url === '/api/threads/storage' && method === 'POST') {
-      backend.threads = (JSON.parse((init?.body as string) ?? '{"threads":[]}') as {
-        threads: Thread[];
-      }).threads;
+      backend.threads = (
+        JSON.parse((init?.body as string) ?? '{"threads":[]}') as {
+          threads: Thread[];
+        }
+      ).threads;
       return json({ ok: true });
     }
     if (url === '/api/jobs' && method === 'POST') {
@@ -203,9 +204,11 @@ describe('useLearningChat.sendMessage — target thread resolution', () => {
 
   it.each<[string, string, string]>([
     ['short message → exact title', 'Teach me generics', 'Teach me generics'],
-    ['long message → 30-char prefix + ellipsis',
+    [
+      'long message → 30-char prefix + ellipsis',
       'This is a very lengthy initial question about React hooks',
-      'This is a very lengthy initial...'],
+      'This is a very lengthy initial...',
+    ],
   ])('auto-creates a thread when none exists (%s)', async (_, message, expectedTitle) => {
     const { result } = await renderHookWithSeed([]);
 
@@ -239,9 +242,7 @@ describe('useLearningChat.sendMessage — pending stream bookkeeping', () => {
     });
 
     expect(streamState.marked).toEqual([{ threadId: 'thread-x', userMessageId: 'msg-fixed' }]);
-    expect(streamState.registered).toEqual([
-      { jobId: 'job-1', threadId: 'thread-x', assistantId: ASSISTANT_ID },
-    ]);
+    expect(streamState.registered).toEqual([{ jobId: 'job-1', threadId: 'thread-x', assistantId: ASSISTANT_ID }]);
     expect(opsRegistered).toEqual([{ jobId: 'job-1', threadId: 'thread-x' }]);
     await waitFor(() => expect(result.current.streamingThreadIds).toContain('thread-x'));
     expect(result.current.isStreaming).toBe(true);
@@ -266,17 +267,30 @@ describe('useLearningChat.sendMessage — job payload composition', () => {
   const repo = (n: string) => ({ fullName: `octo/${n}`, owner: 'octo', name: n });
 
   it.each([
-    ['forwards explicit repos, profile and capabilities',
-      { profile: 'learning' as const, capabilities: ['github'] as const, repos: [repo('one'), repo('two')] },
-      { profile: 'learning', capabilities: ['github'], repos: ['octo/one', 'octo/two'] }, [] as ReturnType<typeof repo>[]],
-    ['falls back to thread.context.repos when none supplied',
-      undefined, { profile: 'learning', repos: ['octo/ctx'] }, [repo('ctx')]],
-    ['defaults to no repos when neither option nor context provides any',
-      undefined, { profile: 'learning', repos: [] }, [] as ReturnType<typeof repo>[]],
+    [
+      'forwards explicit repos, profile and capabilities',
+      {
+        profile: 'learning' as const,
+        capabilities: ['github'] as const,
+        repos: [repo('one'), repo('two')],
+      },
+      { profile: 'learning', capabilities: ['github'], repos: ['octo/one', 'octo/two'] },
+      [] as ReturnType<typeof repo>[],
+    ],
+    [
+      'falls back to thread.context.repos when none supplied',
+      undefined,
+      { profile: 'learning', repos: ['octo/ctx'] },
+      [repo('ctx')],
+    ],
+    [
+      'defaults to no repos when neither option nor context provides any',
+      undefined,
+      { profile: 'learning', repos: [] },
+      [] as ReturnType<typeof repo>[],
+    ],
   ] as const)('%s', async (_, options, expected, contextRepos) => {
-    const { result } = await renderHookWithSeed([
-      makeThread({ id: 'thread-x', context: { repos: contextRepos } }),
-    ]);
+    const { result } = await renderHookWithSeed([makeThread({ id: 'thread-x', context: { repos: contextRepos } })]);
     await act(async () => {
       await result.current.sendMessage('Q', options);
     });

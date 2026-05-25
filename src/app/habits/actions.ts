@@ -83,7 +83,10 @@ export async function createHabitAction(payload: CreateHabitPayload): Promise<Ha
     }
 
     const habitWithHistory = createHabitWithHistory(habit);
-    const next: HabitCollection = { ...collection, habits: [...collection.habits, habitWithHistory] };
+    const next: HabitCollection = {
+      ...collection,
+      habits: [...collection.habits, habitWithHistory],
+    };
     await writeUserStorage(HABITS_FILENAME, next, isHabitCollection);
     revalidatePath('/habits');
     return { ok: true, habit: habitWithHistory };
@@ -107,10 +110,7 @@ export interface HabitEditableFields {
  * we re-check the title/description requirement server-side and merge
  * only the editable fields into the canonical habit record.
  */
-export async function updateHabitAction(
-  habitId: string,
-  edits: HabitEditableFields,
-): Promise<HabitActionResult> {
+export async function updateHabitAction(habitId: string, edits: HabitEditableFields): Promise<HabitActionResult> {
   const { release } = await requireGuardedUserContext({
     ...HABITS_ACTION_GUARD,
     auditMetadata: { ...HABITS_ACTION_GUARD.auditMetadata, action: 'updateHabit' },

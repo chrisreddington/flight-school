@@ -67,12 +67,7 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        const quiz = await generateTopicQuiz(
-          createSessionIdentity(ctx),
-          topicTitle,
-          topicDescription,
-          profileContext,
-        );
+        const quiz = await generateTopicQuiz(createSessionIdentity(ctx), topicTitle, topicDescription, profileContext);
         return NextResponse.json(quiz);
       } catch (error) {
         // Map known errors (entitlement → 402, etc.) before the

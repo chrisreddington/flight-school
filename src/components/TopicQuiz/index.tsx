@@ -133,9 +133,7 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
           <Button variant="primary" onClick={startQuiz}>
             Start Practice Quiz
           </Button>
-          {errorMessage && (
-            <Text style={{ color: 'var(--fgColor-danger)' }}>{errorMessage}</Text>
-          )}
+          {errorMessage && <Text style={{ color: 'var(--fgColor-danger)' }}>{errorMessage}</Text>}
         </Stack>
       )}
 
@@ -164,11 +162,7 @@ export function TopicQuiz({ topicTitle, topicDescription, onClose }: TopicQuizPr
             <Stack direction="vertical" gap="condensed">
               {currentQuestion.options.map((option, index) => (
                 <FormControl key={`${currentQuestion.id}-option-${index}`}>
-                  <Radio
-                    value={String(index)}
-                    checked={selectedIndex === index}
-                    disabled={viewState === 'answered'}
-                  />
+                  <Radio value={String(index)} checked={selectedIndex === index} disabled={viewState === 'answered'} />
                   <FormControl.Label>{option}</FormControl.Label>
                 </FormControl>
               ))}

@@ -9,14 +9,14 @@
 // full generated surface for development.
 declare module './.modules/aspire.js' {
   enum EndpointProperty {
-    Url = "Url",
-    Host = "Host",
-    IPV4Host = "IPV4Host",
-    Port = "Port",
-    Scheme = "Scheme",
-    TargetPort = "TargetPort",
-    HostAndPort = "HostAndPort",
-    TlsEnabled = "TlsEnabled",
+    Url = 'Url',
+    Host = 'Host',
+    IPV4Host = 'IPV4Host',
+    Port = 'Port',
+    Scheme = 'Scheme',
+    TargetPort = 'TargetPort',
+    HostAndPort = 'HostAndPort',
+    TlsEnabled = 'TlsEnabled',
   }
 
   type EndpointReferenceExpression = object;
@@ -38,7 +38,9 @@ declare module './.modules/aspire.js' {
     withCommand(
       name: string,
       displayName: string,
-      callback: (ctx: { logger: { get(): Promise<{ logInformation(message: string): Promise<void> }> } }) => Promise<{ success: boolean; errorMessage?: string }>,
+      callback: (ctx: {
+        logger: { get(): Promise<{ logInformation(message: string): Promise<void> }> };
+      }) => Promise<{ success: boolean; errorMessage?: string }>,
     ): Promise<void>;
   }
 
@@ -50,17 +52,8 @@ declare module './.modules/aspire.js' {
 
   interface AspireBuilder {
     addAzureContainerAppEnvironment(name: string): AzureContainerAppEnvironmentResource;
-    addNextJsApp(
-      name: string,
-      appDirectory: string,
-      options?: { runScriptName?: string }
-    ): NextJsAppResource;
-    addExecutable(
-      name: string,
-      command: string,
-      workingDirectory: string,
-      args: string[]
-    ): ExecutableResource;
+    addNextJsApp(name: string, appDirectory: string, options?: { runScriptName?: string }): NextJsAppResource;
+    addExecutable(name: string, command: string, workingDirectory: string, args: string[]): ExecutableResource;
     build(): {
       run(): Promise<void>;
     };

@@ -22,9 +22,11 @@ function getDifficultyVariant(difficulty: RelatedSuggestion['difficulty']): 'suc
   return 'danger';
 }
 
-function getFallbackSuggestions(
-  completedChallenge: { title: string; language: string; difficulty: string }
-): RelatedSuggestion[] {
+function getFallbackSuggestions(completedChallenge: {
+  title: string;
+  language: string;
+  difficulty: string;
+}): RelatedSuggestion[] {
   return [
     {
       id: 'fallback-suggestion-1',
@@ -43,10 +45,7 @@ function getFallbackSuggestions(
   ];
 }
 
-export function RelatedSuggestions({
-  completedChallenge,
-  onSelectSuggestion,
-}: RelatedSuggestionsProps) {
+export function RelatedSuggestions({ completedChallenge, onSelectSuggestion }: RelatedSuggestionsProps) {
   const [suggestions, setSuggestions] = useState<RelatedSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -106,15 +105,9 @@ export function RelatedSuggestions({
                     {suggestion.difficulty}
                   </Label>
                 </Stack>
-                <Text className={styles.suggestionReason}>
-                  {suggestion.reason}
-                </Text>
+                <Text className={styles.suggestionReason}>{suggestion.reason}</Text>
                 <div>
-                  <Button
-                    variant="default"
-                    size="small"
-                    onClick={() => onSelectSuggestion?.(suggestion)}
-                  >
+                  <Button variant="default" size="small" onClick={() => onSelectSuggestion?.(suggestion)}>
                     Try this →
                   </Button>
                 </div>

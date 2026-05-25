@@ -24,7 +24,7 @@ const log = logger.withTag('ChallengePage');
 
 // PERF: Code split ChallengeSandbox (includes Monaco Editor ~200KB)
 const ChallengeSandbox = lazy(() =>
-  import('@/components/ChallengeSandbox').then((mod) => ({ default: mod.ChallengeSandbox }))
+  import('@/components/ChallengeSandbox').then((mod) => ({ default: mod.ChallengeSandbox })),
 );
 
 function ChallengePageContent() {
@@ -32,10 +32,7 @@ function ChallengePageContent() {
 
   useMonacoPreload();
 
-  const { challengeId, challenge } = useMemo(
-    () => parseChallengeFromSearchParams(searchParams),
-    [searchParams]
-  );
+  const { challengeId, challenge } = useMemo(() => parseChallengeFromSearchParams(searchParams), [searchParams]);
 
   // Memoise the breadcrumb href so unrelated re-renders don't re-register it.
   const breadcrumbHref = useMemo(() => {
@@ -78,12 +75,7 @@ function ChallengePageContent() {
     <div className={styles.root}>
       <AppHeader />
       <main className={styles.main}>
-        <ChallengeSandbox
-          challengeId={challengeId}
-          challenge={challenge}
-          onComplete={handleComplete}
-          autoFocus
-        />
+        <ChallengeSandbox challengeId={challengeId} challenge={challenge} onComplete={handleComplete} autoFocus />
       </main>
     </div>
   );

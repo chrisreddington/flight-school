@@ -18,8 +18,8 @@ export function Footer() {
           <Text className={styles.footerText}>Made with</Text>
           <HeartFillIcon size={16} className={styles.footerHeart} />
           <Text className={styles.footerText}>by</Text>
-          <Link 
-            href="https://github.com/chrisreddington" 
+          <Link
+            href="https://github.com/chrisreddington"
             className={styles.footerLink}
             target="_blank"
             rel="noopener noreferrer"
@@ -27,8 +27,8 @@ export function Footer() {
             @chrisreddington
           </Link>
           <Text className={styles.footerText}>and</Text>
-          <Link 
-            href="https://github.com/github/copilot-cli" 
+          <Link
+            href="https://github.com/github/copilot-cli"
             className={styles.footerLink}
             target="_blank"
             rel="noopener noreferrer"
@@ -40,12 +40,7 @@ export function Footer() {
           <Text className={styles.footerText}>Powered by</Text>
           {POWERED_BY_LINKS.map((link, index) => (
             <span key={link.name}>
-              <Link 
-                href={link.href} 
-                className={styles.footerLink}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <Link href={link.href} className={styles.footerLink} target="_blank" rel="noopener noreferrer">
                 {link.name}
               </Link>
               {index < POWERED_BY_LINKS.length - 1 && (

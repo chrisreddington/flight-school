@@ -68,7 +68,12 @@ describe('getGuidedPlanFallback', () => {
   });
 
   it('should return distinct plans for different challenge inputs', () => {
-    const plan1 = getGuidedPlanFallback({ ...baseChallenge, title: 'Fibonacci', language: 'Python', difficulty: 'intermediate' });
+    const plan1 = getGuidedPlanFallback({
+      ...baseChallenge,
+      title: 'Fibonacci',
+      language: 'Python',
+      difficulty: 'intermediate',
+    });
     const plan2 = getGuidedPlanFallback(baseChallenge);
 
     expect(plan1.steps[0].instruction).toContain('Python');

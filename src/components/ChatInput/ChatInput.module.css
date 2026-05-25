@@ -13,11 +13,11 @@
   width: 100%;
 }
 
-.container [class*="FormControl"] {
+.container [class*='FormControl'] {
   width: 100%;
 }
 
-.container [class*="Stack"] {
+.container [class*='Stack'] {
   width: 100%;
 }
 
@@ -37,7 +37,7 @@
 
 /* Target the Primer Textarea wrapper to enforce consistent height */
 .textareaWrapper :global(.prc-TextInputWrapper-TextInputBaseWrapper-B7SHG),
-.textareaWrapper :global([class*="TextInputWrapper"]) {
+.textareaWrapper :global([class*='TextInputWrapper']) {
   /* Use Primer medium control height (32px) */
   min-height: var(--control-medium-size, 32px) !important;
   max-height: 200px;

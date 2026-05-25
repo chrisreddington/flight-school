@@ -36,9 +36,7 @@ describe('validateRepoName', () => {
   describe('Rule 2: Max 100 characters', () => {
     it('should reject names longer than 100 characters', () => {
       const longName = 'a'.repeat(101);
-      expect(validateRepoName(longName)).toBe(
-        'Repository name must be 100 characters or less'
-      );
+      expect(validateRepoName(longName)).toBe('Repository name must be 100 characters or less');
     });
 
     it('should accept exactly 100 characters', () => {
@@ -59,7 +57,7 @@ describe('validateRepoName', () => {
       { name: '日本語', invalid: 'unicode characters' },
     ])('should reject name with $invalid', ({ name }) => {
       expect(validateRepoName(name)).toBe(
-        'Repository name can only contain letters, numbers, hyphens, and underscores'
+        'Repository name can only contain letters, numbers, hyphens, and underscores',
       );
     });
   });
@@ -71,9 +69,7 @@ describe('validateRepoName', () => {
       { name: '-myrepo-', desc: 'starting and ending with hyphen' },
       { name: '-', desc: 'single hyphen' },
     ])('should reject $desc', ({ name }) => {
-      expect(validateRepoName(name)).toBe(
-        'Repository name cannot start or end with a hyphen'
-      );
+      expect(validateRepoName(name)).toBe('Repository name cannot start or end with a hyphen');
     });
 
     it('should allow hyphens in the middle', () => {
@@ -96,15 +92,13 @@ describe('validateRepoName', () => {
     it('should check length before character validation', () => {
       // 101 invalid chars - should fail on length first
       const tooLong = '.'.repeat(101);
-      expect(validateRepoName(tooLong)).toBe(
-        'Repository name must be 100 characters or less'
-      );
+      expect(validateRepoName(tooLong)).toBe('Repository name must be 100 characters or less');
     });
 
     it('should check characters before hyphen position', () => {
       // Invalid char that also starts with hyphen
       expect(validateRepoName('-.repo')).toBe(
-        'Repository name can only contain letters, numbers, hyphens, and underscores'
+        'Repository name can only contain letters, numbers, hyphens, and underscores',
       );
     });
   });

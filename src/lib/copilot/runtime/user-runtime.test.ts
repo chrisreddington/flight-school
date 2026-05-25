@@ -32,12 +32,16 @@ describe('createCopilotUserRuntime', () => {
     mocks.forceStop.mockResolvedValue(undefined);
     mocks.CopilotClient.mockImplementation(function CopilotClientMock() {
       return {
-      createSession: mocks.createSession,
-      stop: mocks.stop,
-      forceStop: mocks.forceStop,
+        createSession: mocks.createSession,
+        stop: mocks.stop,
+        forceStop: mocks.forceStop,
       };
     });
-    mocks.wrapSessionWithLogging.mockReturnValue({ sendAndWait: vi.fn(), destroy: vi.fn(), model: 'claude-haiku-4.5' });
+    mocks.wrapSessionWithLogging.mockReturnValue({
+      sendAndWait: vi.fn(),
+      destroy: vi.fn(),
+      model: 'claude-haiku-4.5',
+    });
     mocks.executeChatWithSessionFactory.mockResolvedValue({
       response: 'answer',
       toolCalls: [],
@@ -64,11 +68,13 @@ describe('createCopilotUserRuntime', () => {
 
     expect(runtime.userId).toBe('123');
     expect(runtime.copilotHome).toBe('/tmp/runtimes/123');
-    expect(mocks.CopilotClient).toHaveBeenCalledWith(expect.objectContaining({
-      gitHubToken: 'ghu_user',
-      useLoggedInUser: false,
-      copilotHome: '/tmp/runtimes/123',
-    }));
+    expect(mocks.CopilotClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gitHubToken: 'ghu_user',
+        useLoggedInUser: false,
+        copilotHome: '/tmp/runtimes/123',
+      }),
+    );
   });
 
   it('executes chat through the runtime client session factory', async () => {
@@ -77,14 +83,15 @@ describe('createCopilotUserRuntime', () => {
       gitHubToken: 'ghu_user',
       copilotHome: '/tmp/runtimes/123',
     });
-    const request = { identity: { userId: '123', gitHubToken: 'ghu_user' }, prompt: 'hello', profile: 'chat' as const };
+    const request = {
+      identity: { userId: '123', gitHubToken: 'ghu_user' },
+      prompt: 'hello',
+      profile: 'chat' as const,
+    };
 
     await expect(runtime.executeChat(request)).resolves.toMatchObject({ response: 'answer' });
 
-    expect(mocks.executeChatWithSessionFactory).toHaveBeenCalledWith(
-      request,
-      expect.any(Function),
-    );
+    expect(mocks.executeChatWithSessionFactory).toHaveBeenCalledWith(request, expect.any(Function));
   });
 
   it('force stops the client when graceful stop reports errors', async () => {

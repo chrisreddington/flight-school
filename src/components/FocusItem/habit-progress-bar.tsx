@@ -1,6 +1,6 @@
 /**
  * Habit Progress Bar Component
- * 
+ *
  * Displays progress tracking for time and count-based habits.
  * Shows current progress against target with visual progress bar.
  */
@@ -22,7 +22,7 @@ export function HabitProgressBar({ habit, currentValue, elapsedTime, isPaused }:
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    
+
     if (minutes === 0) {
       return `${seconds}s`;
     }
@@ -38,9 +38,7 @@ export function HabitProgressBar({ habit, currentValue, elapsedTime, isPaused }:
     return (
       <Stack direction="vertical" gap="condensed">
         <Stack direction="horizontal" justify="space-between">
-          <span className={styles.progressLabel}>
-            {isGoalReached ? 'Goal Reached!' : 'Session:'}
-          </span>
+          <span className={styles.progressLabel}>{isGoalReached ? 'Goal Reached!' : 'Session:'}</span>
           <span className={styles.progressValue}>
             {isGoalReached ? (
               <span className={styles.textSuccess}>

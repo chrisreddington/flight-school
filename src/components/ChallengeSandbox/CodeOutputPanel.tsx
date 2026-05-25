@@ -15,9 +15,7 @@ export function CodeOutputPanel({ result, isRunning, language }: CodeOutputPanel
     <div className={styles.container}>
       {isRunning && <Spinner size="small" aria-label="Running code" />}
       {!isRunning && !isRunnable && (
-        <span className="fgColor-muted">
-          ▷ Run not available for {language} — use Submit to check your solution
-        </span>
+        <span className="fgColor-muted">▷ Run not available for {language} — use Submit to check your solution</span>
       )}
       {!isRunning && isRunnable && result && (
         <>
@@ -26,14 +24,8 @@ export function CodeOutputPanel({ result, isRunning, language }: CodeOutputPanel
               {line}
             </pre>
           ))}
-          {result.returnValue && (
-            <pre className={styles.outputLine}>{result.returnValue}</pre>
-          )}
-          {result.error && (
-            <pre className={styles.errorLine}>
-              {result.error}
-            </pre>
-          )}
+          {result.returnValue && <pre className={styles.outputLine}>{result.returnValue}</pre>}
+          {result.error && <pre className={styles.errorLine}>{result.error}</pre>}
           {!result.output.length && !result.error && !result.returnValue && (
             <span className="fgColor-muted">No output</span>
           )}

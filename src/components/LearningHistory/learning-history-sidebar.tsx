@@ -51,11 +51,7 @@ export const LearningHistorySidebar = memo(function LearningHistorySidebar({
           </div>
         </div>
 
-        <ActivityGraph
-          activity={activityData}
-          selectedDate={selectedDate}
-          onSelectDate={onSelectDate}
-        />
+        <ActivityGraph activity={activityData} selectedDate={selectedDate} onSelectDate={onSelectDate} />
         <StatsSummary stats={stats} />
       </div>
 

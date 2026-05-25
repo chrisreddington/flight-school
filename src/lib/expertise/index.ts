@@ -5,4 +5,3 @@
  */
 
 export { analyzeCommitPatterns, identifySkillGaps } from './skills';
-

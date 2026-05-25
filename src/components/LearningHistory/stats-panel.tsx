@@ -31,13 +31,7 @@ export function StatsPanel({
   if (hasNoInsightsHistory || !insights) {
     return (
       <>
-        {loadError && (
-          <Banner
-            title="Failed to load history"
-            description={loadError}
-            variant="critical"
-          />
-        )}
+        {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
         <Banner
           title="No stats yet"
           description="Start exploring topics and completing challenges to see your stats here."
@@ -50,19 +44,10 @@ export function StatsPanel({
 
   return (
     <>
-      {loadError && (
-        <Banner
-          title="Failed to load history"
-          description={loadError}
-          variant="critical"
-        />
-      )}
+      {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
       <Stack direction="vertical" gap="normal" className={styles.statsTabContent}>
         <div className={styles.statsGrid}>
-          <StreakCard
-            currentStreak={insights.currentStreak}
-            longestStreak={insights.longestStreak}
-          />
+          <StreakCard currentStreak={insights.currentStreak} longestStreak={insights.longestStreak} />
           <ActivitySummary
             totalChallengesCompleted={insights.totalChallengesCompleted}
             totalTopicsExplored={insights.totalTopicsExplored}

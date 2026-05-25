@@ -32,7 +32,11 @@ export async function POST(request: NextRequest): Promise<Response> {
   };
 
   return withGuardedRoute(
-    { ...PLAN_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/guided-plan' } },
+    {
+      ...PLAN_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: { route: '/api/guided-plan' },
+    },
     async (ctx) => {
       const { context: profileContext } = await buildProfileContext({
         maxChars: 1000,
@@ -41,11 +45,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       });
 
       try {
-        const plan = await generateGuidedPlan(
-          createSessionIdentity(ctx),
-          challenge,
-          profileContext,
-        );
+        const plan = await generateGuidedPlan(createSessionIdentity(ctx), challenge, profileContext);
         return NextResponse.json(plan);
       } catch (error) {
         // Re-throw entitlement / known API errors so the outer guard

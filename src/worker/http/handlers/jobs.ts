@@ -9,11 +9,7 @@ import { parseJsonBody } from '@/lib/api/request-utils';
 import { getTokenStore } from '@/lib/auth/token-store';
 import { jobStorage } from '@/lib/jobs';
 import type { BackgroundJob } from '@/lib/jobs/storage';
-import type {
-  DispatchableJobInput,
-  DispatchableJobType,
-  WorkerDispatchCredentials,
-} from '@/lib/jobs/dispatch';
+import type { DispatchableJobInput, DispatchableJobType, WorkerDispatchCredentials } from '@/lib/jobs/dispatch';
 import { redactJobForDetail, redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
 import {
@@ -46,11 +42,11 @@ function parseCredentials(value: unknown): WorkerDispatchCredentials | null | 'i
   if (typeof value !== 'object' || value === null) return 'invalid';
   const raw = value as Partial<WorkerDispatchCredentials>;
   if (
-    typeof raw.accessToken !== 'string'
-    || typeof raw.refreshToken !== 'string'
-    || typeof raw.expiresAt !== 'number'
-    || !Number.isFinite(raw.expiresAt)
-    || raw.expiresAt <= 0
+    typeof raw.accessToken !== 'string' ||
+    typeof raw.refreshToken !== 'string' ||
+    typeof raw.expiresAt !== 'number' ||
+    !Number.isFinite(raw.expiresAt) ||
+    raw.expiresAt <= 0
   ) {
     return 'invalid';
   }
@@ -71,9 +67,7 @@ interface CreateJobBody {
   credentials?: WorkerDispatchCredentials;
 }
 
-function parseCreateBody(requestBody: unknown):
-  | { ok: true; body: CreateJobBody }
-  | { ok: false } {
+function parseCreateBody(requestBody: unknown): { ok: true; body: CreateJobBody } | { ok: false } {
   if (typeof requestBody !== 'object' || requestBody === null) return { ok: false };
   const raw = requestBody as Partial<CreateJobBody> & { credentials?: unknown };
   if (typeof raw.id !== 'string' || !UUID_V4_RE.test(raw.id)) return { ok: false };
@@ -94,12 +88,7 @@ function parseCreateBody(requestBody: unknown):
     if (chatInput.capabilities !== undefined && !isCapabilitiesArg(chatInput.capabilities)) {
       return { ok: false };
     }
-    if (
-      !areCapabilitiesAllowedForProfile(
-        chatInput.profile,
-        chatInput.capabilities as CapabilitiesArg | undefined,
-      )
-    ) {
+    if (!areCapabilitiesAllowedForProfile(chatInput.profile, chatInput.capabilities as CapabilitiesArg | undefined)) {
       return { ok: false };
     }
   }
@@ -131,21 +120,15 @@ function buildChatTupleCollisionFinder(
   if (body.type !== 'chat-response') return undefined;
   const input = body.input as { threadId?: unknown; assistantMessageId?: unknown };
   const threadId = typeof input.threadId === 'string' ? input.threadId : undefined;
-  const assistantMessageId =
-    typeof input.assistantMessageId === 'string' ? input.assistantMessageId : undefined;
+  const assistantMessageId = typeof input.assistantMessageId === 'string' ? input.assistantMessageId : undefined;
   if (!threadId || !assistantMessageId) return undefined;
   return (jobs) => {
     for (const candidate of Object.values(jobs)) {
       if (candidate.userId !== body.userId) continue;
       if (candidate.type !== 'chat-response') continue;
       if (candidate.status !== 'pending' && candidate.status !== 'running') continue;
-      const candidateInput = candidate.input as
-        | { threadId?: string; assistantMessageId?: string }
-        | undefined;
-      if (
-        candidateInput?.threadId === threadId
-        && candidateInput?.assistantMessageId === assistantMessageId
-      ) {
+      const candidateInput = candidate.input as { threadId?: string; assistantMessageId?: string } | undefined;
+      if (candidateInput?.threadId === threadId && candidateInput?.assistantMessageId === assistantMessageId) {
         return candidate;
       }
     }
@@ -190,9 +173,7 @@ export async function handleJobsCreate(request: Request): Promise<Response> {
     await getTokenStore().setTokenIfNewer(body.userId, body.credentials);
   }
 
-  const causality = body.causality as
-    | (Record<string, unknown> & { capturedAt?: string })
-    | undefined;
+  const causality = body.causality as (Record<string, unknown> & { capturedAt?: string }) | undefined;
   const outcome = await jobStorage.createIfAbsent(
     {
       id: body.id,

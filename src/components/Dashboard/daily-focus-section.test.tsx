@@ -67,12 +67,8 @@ vi.mock('@/components/FocusItem', () => ({
     onSkipAndReplace?: (challengeId: string, existingChallengeTitles: string[]) => void;
   }) => (
     <>
-      <button onClick={() => void onAdvanceQueue?.()}>
-        {challenge.title}
-      </button>
-      <button onClick={() => onSkipAndReplace?.(challenge.id, [challenge.title])}>
-        Skip {challenge.title}
-      </button>
+      <button onClick={() => void onAdvanceQueue?.()}>{challenge.title}</button>
+      <button onClick={() => onSkipAndReplace?.(challenge.id, [challenge.title])}>Skip {challenge.title}</button>
     </>
   ),
   GoalCard: () => <div>Goal</div>,
@@ -129,27 +125,22 @@ describe('DailyFocusSection', () => {
         toolsUsed={[]}
         loadingComponents={[]}
         onRefresh={vi.fn()}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Custom Queue Challenge' }));
 
     await waitFor(() => {
       expect(addChallengeMock).toHaveBeenCalledWith('2026-01-01', customChallenge);
-      expect(transitionChallengeMock).toHaveBeenCalledWith(
-        '2026-01-01',
-        'custom-1',
-        'completed',
-        'advance-queue'
-      );
+      expect(transitionChallengeMock).toHaveBeenCalledWith('2026-01-01', 'custom-1', 'completed', 'advance-queue');
       expect(advanceQueueMock).toHaveBeenCalledTimes(1);
     });
 
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      transitionChallengeMock.mock.invocationCallOrder[0]
+      transitionChallengeMock.mock.invocationCallOrder[0],
     );
     expect(transitionChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      advanceQueueMock.mock.invocationCallOrder[0]
+      advanceQueueMock.mock.invocationCallOrder[0],
     );
   });
 
@@ -197,27 +188,22 @@ describe('DailyFocusSection', () => {
         loadingComponents={[]}
         onRefresh={vi.fn()}
         onSkipChallenge={onSkipChallenge}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip Custom Queue Skip Challenge' }));
 
     await waitFor(() => {
       expect(addChallengeMock).toHaveBeenCalledWith('2026-01-01', customChallenge);
-      expect(transitionChallengeMock).toHaveBeenCalledWith(
-        '2026-01-01',
-        'custom-skip-1',
-        'skipped',
-        'skip-queue'
-      );
+      expect(transitionChallengeMock).toHaveBeenCalledWith('2026-01-01', 'custom-skip-1', 'skipped', 'skip-queue');
       expect(advanceQueueMock).toHaveBeenCalledTimes(1);
     });
     expect(onSkipChallenge).not.toHaveBeenCalled();
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      transitionChallengeMock.mock.invocationCallOrder[0]
+      transitionChallengeMock.mock.invocationCallOrder[0],
     );
     expect(transitionChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      advanceQueueMock.mock.invocationCallOrder[0]
+      advanceQueueMock.mock.invocationCallOrder[0],
     );
   });
 });

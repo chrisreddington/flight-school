@@ -2,10 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const appHeaderSource = readFileSync(
-  resolve(process.cwd(), 'src/components/AppHeader/index.tsx'),
-  'utf8'
-);
+const appHeaderSource = readFileSync(resolve(process.cwd(), 'src/components/AppHeader/index.tsx'), 'utf8');
 
 describe('AppHeader debug mode visibility', () => {
   const hasDevelopmentGuard = /process\.env\.NODE_ENV === 'development'/.test(appHeaderSource);

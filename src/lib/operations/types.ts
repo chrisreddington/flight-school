@@ -6,11 +6,7 @@
  */
 
 /** Types of operations that can be tracked */
-export type OperationType =
-  | 'topic-regeneration'
-  | 'challenge-regeneration'
-  | 'goal-regeneration'
-  | 'chat-response';
+export type OperationType = 'topic-regeneration' | 'challenge-regeneration' | 'goal-regeneration' | 'chat-response';
 
 /** Status of an operation */
 export type OperationStatus = 'pending' | 'in-progress' | 'complete' | 'failed' | 'aborted';

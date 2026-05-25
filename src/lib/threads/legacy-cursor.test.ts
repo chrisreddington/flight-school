@@ -37,9 +37,7 @@ describe('stripLegacyCursorFromThread', () => {
 
   it('strips trailing ▊ on assistant messages', () => {
     const thread = mkThread({
-      messages: [
-        { id: 'a1', role: 'assistant', content: 'Partial ▊', timestamp: 'x' },
-      ],
+      messages: [{ id: 'a1', role: 'assistant', content: 'Partial ▊', timestamp: 'x' }],
     });
     const result = stripLegacyCursorFromThread(thread);
     expect(result).not.toBe(thread);

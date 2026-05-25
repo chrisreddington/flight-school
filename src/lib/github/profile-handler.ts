@@ -104,10 +104,7 @@ function toRepoReference(repo: { fullName: string; language: string | null }) {
 }
 
 /** Best-effort activity metrics — never throws; logs and degrades. */
-async function getRecentActivity(
-  octokit: Octokit,
-  login: string,
-): Promise<ProfileResponse['pastSevenDays']> {
+async function getRecentActivity(octokit: Octokit, login: string): Promise<ProfileResponse['pastSevenDays']> {
   try {
     const events = await getUserEvents(octokit, login, 100);
     const metrics = calculateActivityMetrics(events, 7);

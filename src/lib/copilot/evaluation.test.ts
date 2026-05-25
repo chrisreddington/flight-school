@@ -31,7 +31,10 @@ const mockChallenge: ChallengeDef = {
 };
 
 const mockFiles: WorkspaceFileInput[] = [
-  { name: 'solution.ts', content: 'export const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);' },
+  {
+    name: 'solution.ts',
+    content: 'export const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);',
+  },
 ];
 
 // =============================================================================

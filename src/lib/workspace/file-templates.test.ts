@@ -6,11 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  getFileTemplatesForLanguage,
-  getFilePathFromTemplate,
-  type FileTemplate,
-} from './file-templates';
+import { getFileTemplatesForLanguage, getFilePathFromTemplate, type FileTemplate } from './file-templates';
 
 describe('File Templates', () => {
   // ===========================================================================
@@ -239,12 +235,7 @@ describe('File Templates', () => {
   // ===========================================================================
 
   describe('getFileTemplatesForLanguage - C#', () => {
-    it.each([
-      ['C#'],
-      ['c#'],
-      ['CSharp'],
-      ['csharp'],
-    ])('should return C# templates for %s', (language) => {
+    it.each([['C#'], ['c#'], ['CSharp'], ['csharp']])('should return C# templates for %s', (language) => {
       const templates = getFileTemplatesForLanguage(language);
 
       const labels = templates.map((t) => t.label);

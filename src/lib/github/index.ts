@@ -8,11 +8,7 @@
  */
 
 // User
-export {
-    calculateExperienceLevel,
-    calculateYearsOnGitHub,
-    getAuthenticatedUser
-} from './user';
+export { calculateExperienceLevel, calculateYearsOnGitHub, getAuthenticatedUser } from './user';
 
 // Repositories
 export { getLanguageStats, getUserRepositories } from './repos';

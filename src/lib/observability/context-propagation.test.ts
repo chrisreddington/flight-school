@@ -16,10 +16,7 @@ describe('context-propagation', () => {
       traceFlags: TraceFlags.SAMPLED,
       isRemote: false,
     } as const;
-    const explicitContext = trace.setSpan(
-      context.active(),
-      trace.wrapSpanContext(spanContext),
-    );
+    const explicitContext = trace.setSpan(context.active(), trace.wrapSpanContext(spanContext));
 
     const headers = captureTracePropagationHeaders(explicitContext);
 
@@ -43,9 +40,8 @@ describe('context-propagation', () => {
   it('round-trips propagated headers through extracted context', async () => {
     const traceparent = '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01';
 
-    const reboundHeaders = await withExtractedTraceContext(
-      { traceparent },
-      async (extractedContext) => captureTracePropagationHeaders(extractedContext),
+    const reboundHeaders = await withExtractedTraceContext({ traceparent }, async (extractedContext) =>
+      captureTracePropagationHeaders(extractedContext),
     );
 
     expect(reboundHeaders.traceparent).toBe(traceparent);

@@ -1,9 +1,9 @@
 /**
  * Storage Utilities
- * 
+ *
  * Reusable utilities for server-side file storage in user data directory.
  * Ensures atomic writes, schema validation, and consistent error handling.
- * 
+ *
  * Storage location (cross-platform):
  * - Linux/macOS: ~/.local/share/flight-school/
  * - Windows: %LOCALAPPDATA%\flight-school\
@@ -42,7 +42,7 @@ const STORAGE_DIR = getStorageRoot();
 /**
  * Safely joins path segments and ensures the result is within STORAGE_DIR.
  * This is the ONLY function that should construct paths from user input.
- * 
+ *
  * @param segments - Path segments to join (relative to STORAGE_DIR)
  * @returns Absolute path guaranteed to be within STORAGE_DIR
  * @throws Error if the resulting path would escape STORAGE_DIR
@@ -50,16 +50,16 @@ const STORAGE_DIR = getStorageRoot();
 function safePath(...segments: string[]): string {
   // Resolve the base storage directory to an absolute path
   const baseDir = path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
-  
+
   // Join all segments and resolve to absolute path
   const targetPath = path.resolve(/* turbopackIgnore: true */ baseDir, ...segments);
-  
+
   // Ensure the resolved path starts with baseDir
   // This check MUST happen after path.resolve() to catch traversal attacks
   if (!targetPath.startsWith(baseDir + path.sep) && targetPath !== baseDir) {
     throw new Error(`Path traversal detected: ${segments.join('/')}`);
   }
-  
+
   return targetPath;
 }
 
@@ -127,9 +127,7 @@ export function safeChildPath(baseDir: string, ...segments: string[]): string {
   const resolvedTarget = path.resolve(/* turbopackIgnore: true */ resolvedBase, ...segments);
 
   if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
-    throw new Error(
-      `safeChildPath: path "${segments.join('/')}" escapes baseDir`
-    );
+    throw new Error(`safeChildPath: path "${segments.join('/')}" escapes baseDir`);
   }
 
   return resolvedTarget;
@@ -152,13 +150,13 @@ function getStoragePath(filename: string): string {
 
 /**
  * Reads and parses a JSON storage file with schema validation.
- * 
+ *
  * @template T - The expected schema type
  * @param filename - Name of file in .data directory
  * @param defaultSchema - Default schema if file doesn't exist or is invalid
  * @param validate - Optional validation function
  * @returns Parsed and validated schema
- * 
+ *
  * @example
  * ```typescript
  * const storage = await readStorage<MySchema>(
@@ -171,30 +169,30 @@ function getStoragePath(filename: string): string {
 export async function readStorage<T>(
   filename: string,
   defaultSchema: T,
-  validate?: (data: unknown) => boolean
+  validate?: (data: unknown) => boolean,
 ): Promise<T> {
   const filePath = getStoragePath(filename);
-  
+
   try {
     await ensureStorageDir();
     const data = await fs.readFile(filePath, 'utf-8');
-    
+
     // Handle empty file
     if (!data || data.trim().length === 0) {
       log.warn(`Empty storage file: ${filename}, using default schema`);
       await writeStorage(filename, defaultSchema);
       return defaultSchema;
     }
-    
+
     const parsed = JSON.parse(data);
-    
+
     // Validate schema if validator provided
     if (validate && !validate(parsed)) {
       log.warn(`Invalid schema in ${filename}, using default schema`);
       await writeStorage(filename, defaultSchema);
       return defaultSchema;
     }
-    
+
     return parsed as T;
   } catch (error: unknown) {
     // File doesn't exist - create with default
@@ -203,7 +201,7 @@ export async function readStorage<T>(
       await writeStorage(filename, defaultSchema);
       return defaultSchema;
     }
-    
+
     // JSON parse error or other error - use default
     log.error(`Failed to read storage file: ${filename}`, { error });
     await writeStorage(filename, defaultSchema);
@@ -213,39 +211,36 @@ export async function readStorage<T>(
 
 /**
  * Writes data to storage file atomically (temp file + rename).
- * 
+ *
  * @template T - The schema type
  * @param filename - Name of file in .data directory
  * @param data - Data to write
- * 
+ *
  * @example
  * ```typescript
  * await writeStorage('my-data.json', { version: 1, items: [] });
  * ```
  */
-export async function writeStorage<T>(
-  filename: string,
-  data: T
-): Promise<void> {
+export async function writeStorage<T>(filename: string, data: T): Promise<void> {
   const filePath = getStoragePath(filename);
   // Use unique temp file per write to avoid race conditions with concurrent writes
   const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  
+
   try {
     await ensureStorageDir();
-    
+
     // Validate data is not empty
     const jsonData = JSON.stringify(data, null, 2);
     if (jsonData.length === 0 || jsonData === '{}' || jsonData === '[]') {
       throw new Error(`Attempted to write empty data to ${filename}`);
     }
-    
+
     // Atomic write: write to temp, then rename
     await fs.writeFile(tempPath, jsonData, 'utf-8');
     await fs.rename(tempPath, filePath);
-    
+
     log.debug(`Storage written successfully: ${filename}`, {
-      bytes: jsonData.length
+      bytes: jsonData.length,
     });
   } catch (error) {
     // Clean up temp file if it exists
@@ -254,7 +249,7 @@ export async function writeStorage<T>(
     } catch {
       // Ignore cleanup errors
     }
-    
+
     log.error(`Failed to write storage file: ${filename}`, { error });
     throw error;
   }
@@ -262,12 +257,12 @@ export async function writeStorage<T>(
 
 /**
  * Deletes a storage file.
- * 
+ *
  * @param filename - Name of file in .data directory
  */
 export async function deleteStorage(filename: string): Promise<void> {
   const filePath = getStoragePath(filename);
-  
+
   try {
     await fs.unlink(filePath);
     log.debug(`Storage file deleted: ${filename}`);
@@ -293,10 +288,7 @@ export async function deleteStorage(filename: string): Promise<void> {
  *   restrict the directory permissions on platforms that honour POSIX modes.
  *   On Windows the mode is ignored by the OS.
  */
-export async function ensureDir(
-  subdir: string,
-  options: { mode?: number } = {}
-): Promise<void> {
+export async function ensureDir(subdir: string, options: { mode?: number } = {}): Promise<void> {
   const dirPath = safePath(subdir);
   try {
     await fs.mkdir(dirPath, { recursive: true, mode: options.mode });
@@ -315,7 +307,7 @@ export async function ensureDir(
 
 /**
  * Reads a file from a subdirectory.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
  * @param filename - Name of file in subdirectory
  * @returns File contents or null if not found
@@ -335,7 +327,7 @@ export async function readFile(subdir: string, filename: string): Promise<string
 
 /**
  * Writes a file to a subdirectory atomically.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
  * @param filename - Name of file in subdirectory
  * @param content - File content to write
@@ -343,13 +335,17 @@ export async function readFile(subdir: string, filename: string): Promise<string
 export async function writeFile(subdir: string, filename: string, content: string): Promise<void> {
   const filePath = safePath(subdir, filename);
   const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  
+
   try {
     await ensureDir(subdir);
     await fs.writeFile(tempPath, content, 'utf-8');
     await fs.rename(tempPath, filePath);
   } catch (error) {
-    try { await fs.unlink(tempPath); } catch { /* ignore */ }
+    try {
+      await fs.unlink(tempPath);
+    } catch {
+      /* ignore */
+    }
     log.error(`Failed to write file: ${subdir}/${filename}`, { error });
     throw error;
   }
@@ -357,7 +353,7 @@ export async function writeFile(subdir: string, filename: string, content: strin
 
 /**
  * Deletes a file from a subdirectory.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
  * @param filename - Name of file in subdirectory
  */
@@ -376,7 +372,7 @@ export async function deleteFile(subdir: string, filename: string): Promise<void
 
 /**
  * Deletes an entire subdirectory and its contents.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
  */
 export async function deleteDir(subdir: string): Promise<void> {
@@ -395,7 +391,7 @@ export async function deleteDir(subdir: string): Promise<void> {
 
 /**
  * Lists subdirectories in a directory.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data (empty string for .data root)
  * @returns Array of subdirectory names
  */
@@ -405,7 +401,7 @@ export async function listDirs(subdir: string): Promise<string[]> {
     await ensureStorageDir();
     if (subdir) await ensureDir(subdir);
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    return entries.filter(e => e.isDirectory()).map(e => e.name);
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];
@@ -417,7 +413,7 @@ export async function listDirs(subdir: string): Promise<string[]> {
 
 /**
  * Lists files in a subdirectory.
- * 
+ *
  * @param subdir - Subdirectory path relative to .data
  * @returns Array of filenames
  */
@@ -425,7 +421,7 @@ export async function listFiles(subdir: string): Promise<string[]> {
   const dirPath = safePath(subdir);
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    return entries.filter(e => e.isFile()).map(e => e.name);
+    return entries.filter((e) => e.isFile()).map((e) => e.name);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];

@@ -59,7 +59,7 @@ export function useActiveOperations(): UseActiveOperationsResult {
   const snapshot = useSyncExternalStore(
     operationsManager.subscribe.bind(operationsManager),
     getSnapshot,
-    getServerSnapshot
+    getServerSnapshot,
   );
 
   // Derive the active IDs from snapshot

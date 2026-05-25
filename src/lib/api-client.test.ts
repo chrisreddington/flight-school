@@ -52,7 +52,7 @@ describe('API Client', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
           }),
-        })
+        }),
       );
       expect(result).toEqual({ data: 'test' });
     });
@@ -87,7 +87,7 @@ describe('API Client', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ name: 'test' }),
-        })
+        }),
       );
       expect(result).toEqual({ created: true });
     });
@@ -105,7 +105,7 @@ describe('API Client', () => {
         expect.objectContaining({
           method: 'POST',
           body: undefined,
-        })
+        }),
       );
     });
   });
@@ -127,7 +127,7 @@ describe('API Client', () => {
         '/api/delete/1',
         expect.objectContaining({
           method: 'DELETE',
-        })
+        }),
       );
       expect(result).toEqual({ deleted: true });
     });
@@ -216,10 +216,7 @@ describe('API Client', () => {
   // ===========================================================================
 
   describe('429 rate-limit detection', () => {
-    function make429Response(opts: {
-      headers?: Record<string, string>;
-      body?: unknown;
-    }) {
+    function make429Response(opts: { headers?: Record<string, string>; body?: unknown }) {
       const headers = new Headers(opts.headers ?? {});
       return {
         ok: false,
@@ -291,12 +288,10 @@ describe('API Client', () => {
 
   describe('retry logic', () => {
     it('should retry on server errors', async () => {
-      mockFetch
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ success: true }),
-        });
+      mockFetch.mockRejectedValueOnce(new Error('Network error')).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      });
 
       const resultPromise = apiGet('/api/flaky', { retries: 1 });
 
@@ -419,7 +414,7 @@ describe('API Client', () => {
         '/api/test',
         expect.objectContaining({
           signal: expect.any(AbortSignal),
-        })
+        }),
       );
     });
   });
@@ -443,7 +438,7 @@ describe('API Client', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
           }),
-        })
+        }),
       );
     });
 
@@ -464,7 +459,7 @@ describe('API Client', () => {
             'Content-Type': 'application/json',
             Authorization: 'Bearer token',
           }),
-        })
+        }),
       );
     });
 

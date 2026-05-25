@@ -18,13 +18,8 @@ import { focusStore } from '@/lib/focus';
 import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { LearningTopic } from '@/lib/focus/types';
-import {
-  CalendarIcon,
-} from '@primer/octicons-react';
-import {
-  Banner,
-  Link,
-} from '@primer/react';
+import { CalendarIcon } from '@primer/octicons-react';
+import { Banner, Link } from '@primer/react';
 import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -54,9 +49,9 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
   const todayDateKey = getDateKey();
   const { activeTopicIds, activeChallengeIds, activeGoalIds } = useActiveOperations();
   const router = useRouter();
-  
+
   // Use AI focus hook for skip-and-replace operations
-  const { 
+  const {
     skipAndReplaceTopic,
     skipAndReplaceChallenge,
     skipAndReplaceGoal,
@@ -85,14 +80,14 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
   const [loadError, setLoadError] = useState<string | null>(null);
   const [insights, setInsights] = useState<LearningInsights | null>(null);
   const [totalGoalsCompleted, setTotalGoalsCompleted] = useState(0);
-  
+
   // Toast for "Explore started" notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const forceRefresh = useCallback(() => setRefreshKey(prev => prev + 1), []);
-  
+  const forceRefresh = useCallback(() => setRefreshKey((prev) => prev + 1), []);
+
   const toggleDayCollapse = useCallback((dateKey: string) => {
-    setCollapsedDays(prev => {
+    setCollapsedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
         next.delete(dateKey);
@@ -102,36 +97,46 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
       return next;
     });
   }, []);
-  
+
   // Handle "Explore" from history - creates thread, starts streaming, navigates
-  const handleExploreTopic = useCallback(async (topic: LearningTopic) => {
-    try {
-      // Create a new thread for this topic
-      const thread = await createThread({ 
-        title: `Learning: ${topic.title}`,
-        context: {
-          learningFocus: topic.title,
-        },
-      }, true);
-      
-      // Prepare the initial explore message
-      const exploreMessage = `I'd like to learn about "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
-      
-      // Start the chat (this will stream in the background)
-      await sendMessage(exploreMessage, { threadId: thread.id, profile: 'learning', capabilities: ['github'] });
-      
-      // Show toast notification
-      setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
-      
-      // Auto-dismiss toast after 3 seconds
-      setTimeout(() => setToastMessage(null), 3000);
-      
-      // Navigate to dashboard after a short delay to let the stream start
-      setTimeout(() => router.push('/'), 500);
-    } catch {
-      setToastMessage('Failed to start chat. Please try again.');
-    }
-  }, [createThread, sendMessage, router]);
+  const handleExploreTopic = useCallback(
+    async (topic: LearningTopic) => {
+      try {
+        // Create a new thread for this topic
+        const thread = await createThread(
+          {
+            title: `Learning: ${topic.title}`,
+            context: {
+              learningFocus: topic.title,
+            },
+          },
+          true,
+        );
+
+        // Prepare the initial explore message
+        const exploreMessage = `I'd like to learn about "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
+
+        // Start the chat (this will stream in the background)
+        await sendMessage(exploreMessage, {
+          threadId: thread.id,
+          profile: 'learning',
+          capabilities: ['github'],
+        });
+
+        // Show toast notification
+        setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
+
+        // Auto-dismiss toast after 3 seconds
+        setTimeout(() => setToastMessage(null), 3000);
+
+        // Navigate to dashboard after a short delay to let the stream start
+        setTimeout(() => router.push('/'), 500);
+      } catch {
+        setToastMessage('Failed to start chat. Please try again.');
+      }
+    },
+    [createThread, sendMessage, router],
+  );
 
   // Auto-expand current month on load
   useEffect(() => {
@@ -153,13 +158,13 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
   // Load data
   useEffect(() => {
     let cancelled = false;
-    
+
     const loadData = async () => {
       try {
         setLoadError(null);
         const rawHistory = await focusStore.getHistory();
         const habitsCollection = await habitStore.load();
-        
+
         if (cancelled) return;
 
         const entries = buildHistoryEntries(rawHistory, habitsCollection, todayDateKey);
@@ -176,42 +181,42 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
         if (!cancelled) setIsLoading(false);
       }
     };
-    
+
     loadData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [refreshKey, todayDateKey]);
 
-  const {
-    activityData,
-    filteredEntries,
-    groupedEntries,
-    hasNoInsightsHistory,
-    stats,
-  } = useMemo(() => buildLearningHistoryViewModel({
-    entries: allEntries,
-    selectedDate,
-    typeFilter,
-    statusFilter,
-    searchQuery,
-    todayDateKey,
-    activeTopicCount: activeTopicIds.size,
-    insights,
-    totalGoalsCompleted,
-  }), [
-    allEntries,
-    selectedDate,
-    typeFilter,
-    statusFilter,
-    searchQuery,
-    todayDateKey,
-    activeTopicIds.size,
-    insights,
-    totalGoalsCompleted,
-  ]);
+  const { activityData, filteredEntries, groupedEntries, hasNoInsightsHistory, stats } = useMemo(
+    () =>
+      buildLearningHistoryViewModel({
+        entries: allEntries,
+        selectedDate,
+        typeFilter,
+        statusFilter,
+        searchQuery,
+        todayDateKey,
+        activeTopicCount: activeTopicIds.size,
+        insights,
+        totalGoalsCompleted,
+      }),
+    [
+      allEntries,
+      selectedDate,
+      typeFilter,
+      statusFilter,
+      searchQuery,
+      todayDateKey,
+      activeTopicIds.size,
+      insights,
+      totalGoalsCompleted,
+    ],
+  );
 
   // Handlers
   const toggleMonth = useCallback((month: string) => {
-    setExpandedMonths(prev => {
+    setExpandedMonths((prev) => {
       const next = new Set(prev);
       if (next.has(month)) next.delete(month);
       else next.add(month);
@@ -223,10 +228,13 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     setSelectedDate(date);
   }, []);
 
-  const handleTabSelect = useCallback((tab: 'history' | 'stats') => {
-    if (tab === activeTab) return;
-    router.replace(`/history?tab=${tab}`);
-  }, [activeTab, router]);
+  const handleTabSelect = useCallback(
+    (tab: 'history' | 'stats') => {
+      if (tab === activeTab) return;
+      router.replace(`/history?tab=${tab}`);
+    },
+    [activeTab, router],
+  );
 
   // Empty state
   if (!isLoading && allEntries.length === 0) {
@@ -249,26 +257,14 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
               <p className={styles.pageDescription}>Browse your learning journey over time</p>
             </div>
             <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
-              <UnderlinePanels.Tab
-                aria-selected={activeTab === 'history'}
-                onSelect={() => handleTabSelect('history')}
-              >
+              <UnderlinePanels.Tab aria-selected={activeTab === 'history'} onSelect={() => handleTabSelect('history')}>
                 History
               </UnderlinePanels.Tab>
-              <UnderlinePanels.Tab
-                aria-selected={activeTab === 'stats'}
-                onSelect={() => handleTabSelect('stats')}
-              >
+              <UnderlinePanels.Tab aria-selected={activeTab === 'stats'} onSelect={() => handleTabSelect('stats')}>
                 Stats
               </UnderlinePanels.Tab>
               <UnderlinePanels.Panel>
-                {loadError && (
-                  <Banner
-                    title="Failed to load history"
-                    description={loadError}
-                    variant="critical"
-                  />
-                )}
+                {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
                 <div className={styles.emptyState}>
                   <Banner
                     title="No learning history yet"
@@ -282,13 +278,7 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
                 </div>
               </UnderlinePanels.Panel>
               <UnderlinePanels.Panel>
-                {loadError && (
-                  <Banner
-                    title="Failed to load history"
-                    description={loadError}
-                    variant="critical"
-                  />
-                )}
+                {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
                 <div className={styles.emptyState}>
                   <Banner
                     title="No learning history yet"
@@ -308,23 +298,19 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     );
   }
 
-  const hasGenerating = (activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size) > 0 
-    && (!selectedDate || selectedDate === todayDateKey);
+  const hasGenerating =
+    activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size > 0 &&
+    (!selectedDate || selectedDate === todayDateKey);
 
   return (
     <div className={styles.containerV2}>
       {/* Toast notification for "Explore from History" */}
       {toastMessage && (
         <div className={styles.toast}>
-          <Banner
-            title="Success"
-            description={toastMessage}
-            variant="success"
-            hideTitle
-          />
+          <Banner title="Success" description={toastMessage} variant="success" hideTitle />
         </div>
       )}
-      
+
       {/* Two-column layout */}
       <div className={styles.layoutV2}>
         <LearningHistorySidebar
@@ -352,16 +338,10 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
           </div>
 
           <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
-            <UnderlinePanels.Tab
-              aria-selected={activeTab === 'history'}
-              onSelect={() => handleTabSelect('history')}
-            >
+            <UnderlinePanels.Tab aria-selected={activeTab === 'history'} onSelect={() => handleTabSelect('history')}>
               History
             </UnderlinePanels.Tab>
-            <UnderlinePanels.Tab
-              aria-selected={activeTab === 'stats'}
-              onSelect={() => handleTabSelect('stats')}
-            >
+            <UnderlinePanels.Tab aria-selected={activeTab === 'stats'} onSelect={() => handleTabSelect('stats')}>
               Stats
             </UnderlinePanels.Tab>
             <UnderlinePanels.Panel>

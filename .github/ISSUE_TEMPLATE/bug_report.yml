@@ -1,13 +1,13 @@
 name: 🐛 Bug Report
 description: Report a bug or issue with the Flight School app
-title: "[Bug]: "
-labels: ["bug", "triage"]
+title: '[Bug]: '
+labels: ['bug', 'triage']
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for reporting this bug! Please fill out the form below.
-        
+
         ⚠️ **Privacy Note**: Issues are public and visible to everyone. Please check logs, screenshots, and descriptions for personal information before submitting.
 
   - type: textarea
@@ -17,12 +17,12 @@ body:
       description: Describe the bug and how to reproduce it
       placeholder: |
         Example: When I click the submit button, nothing happens.
-        
+
         Steps to reproduce:
         1. Go to the page
         2. Click the button
         3. Nothing appears
-        
+
         Expected: A response should appear
     validations:
       required: true
@@ -64,7 +64,7 @@ body:
       description: URL that triggers the bug, console errors, screenshots, etc.
       placeholder: |
         URL: https://...
-        
+
         Console errors (if any):
         Error: ...
       render: shell

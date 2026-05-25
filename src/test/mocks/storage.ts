@@ -32,10 +32,7 @@ interface TestStorageOptions {
  */
 export function createTestStorageContext(options: TestStorageOptions = {}): TestStorageContext {
   const { prefix = 'flight-school-test', stubEnv = true } = options;
-  const storageDir = path.join(
-    os.tmpdir(),
-    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  const storageDir = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   if (stubEnv) {
     vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', storageDir);

@@ -30,7 +30,11 @@ export async function POST(request: NextRequest) {
   };
 
   return withGuardedRoute(
-    { ...SUGGESTIONS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/suggestions' } },
+    {
+      ...SUGGESTIONS_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: { route: '/api/suggestions' },
+    },
     async (ctx) => {
       const { context: profileContext } = await buildProfileContext({
         maxChars: 1000,
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
         const result: WhatsNextResult = await generateWhatsNext(
           createSessionIdentity(ctx),
           completedChallenge,
-          profileContext
+          profileContext,
         );
         return NextResponse.json(result);
       } catch (error) {

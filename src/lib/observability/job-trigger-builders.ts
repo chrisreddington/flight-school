@@ -8,11 +8,10 @@ const SKIP_ACTION_BY_TARGET_TYPE: Record<SkippableTargetType, ClientTriggerMetad
   goal: 'skip-goal',
 };
 
-export type PartialClientTriggerMetadata =
-  Omit<ClientTriggerMetadata, 'correlationId' | 'targetId'> & {
-    correlationId?: string;
-    targetId?: string;
-  };
+export type PartialClientTriggerMetadata = Omit<ClientTriggerMetadata, 'correlationId' | 'targetId'> & {
+  correlationId?: string;
+  targetId?: string;
+};
 
 function getCurrentPagePath(): string | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -40,10 +39,7 @@ export function completeClientTriggerMetadata(
   };
 }
 
-export function createLearningChatSendTrigger(
-  threadId: string,
-  correlationId: string,
-): ClientTriggerMetadata {
+export function createLearningChatSendTrigger(threadId: string, correlationId: string): ClientTriggerMetadata {
   return {
     source: 'learning-chat',
     action: 'send-message',

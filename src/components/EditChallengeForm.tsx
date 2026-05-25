@@ -1,17 +1,7 @@
 'use client';
 
 import { PencilIcon } from '@primer/octicons-react';
-import {
-  Banner,
-  Button,
-  FormControl,
-  Heading,
-  Select,
-  Spinner,
-  Stack,
-  TextInput,
-  Textarea,
-} from '@primer/react';
+import { Banner, Button, FormControl, Heading, Select, Spinner, Stack, TextInput, Textarea } from '@primer/react';
 import { useCallback, useRef, useState } from 'react';
 
 import type { DailyChallenge } from '@/lib/focus/types';
@@ -37,8 +27,7 @@ function validateChallenge(formData: DailyChallenge): ValidationErrors {
   else if (formData.title.length < 5) errors.title = 'Title must be at least 5 characters';
 
   if (!formData.description?.trim()) errors.description = 'Description is required';
-  else if (formData.description.length < 20)
-    errors.description = 'Description must be at least 20 characters';
+  else if (formData.description.length < 20) errors.description = 'Description must be at least 20 characters';
 
   if (!formData.language?.trim()) errors.language = 'Language is required';
 
@@ -49,11 +38,7 @@ function validateChallenge(formData: DailyChallenge): ValidationErrors {
  * Controlled edit form for a custom challenge. Owns validation, dirty-state
  * tracking, and submission UI; the page passes in load + persistence callbacks.
  */
-export function EditChallengeForm({
-  initialChallenge,
-  onSave,
-  onCancel,
-}: EditChallengeFormProps) {
+export function EditChallengeForm({ initialChallenge, onSave, onCancel }: EditChallengeFormProps) {
   const [formData, setFormData] = useState<DailyChallenge>({ ...initialChallenge });
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -68,7 +53,7 @@ export function EditChallengeForm({
       }
       setSaveError(null);
     },
-    [errors]
+    [errors],
   );
 
   const handleSubmit = useCallback(
@@ -94,7 +79,7 @@ export function EditChallengeForm({
         setIsSaving(false);
       }
     },
-    [formData, onSave]
+    [formData, onSave],
   );
 
   return (
@@ -123,9 +108,7 @@ export function EditChallengeForm({
               block
               aria-invalid={Boolean(errors.title)}
             />
-            {errors.title && (
-              <FormControl.Validation variant="error">{errors.title}</FormControl.Validation>
-            )}
+            {errors.title && <FormControl.Validation variant="error">{errors.title}</FormControl.Validation>}
           </FormControl>
 
           <FormControl required>
@@ -156,21 +139,14 @@ export function EditChallengeForm({
               block
               aria-invalid={Boolean(errors.language)}
             />
-            {errors.language && (
-              <FormControl.Validation variant="error">{errors.language}</FormControl.Validation>
-            )}
+            {errors.language && <FormControl.Validation variant="error">{errors.language}</FormControl.Validation>}
           </FormControl>
 
           <FormControl>
             <FormControl.Label>Difficulty</FormControl.Label>
             <Select
               value={formData.difficulty}
-              onChange={(e) =>
-                updateField(
-                  'difficulty',
-                  e.target.value as 'beginner' | 'intermediate' | 'advanced'
-                )
-              }
+              onChange={(e) => updateField('difficulty', e.target.value as 'beginner' | 'intermediate' | 'advanced')}
               block
             >
               <Select.Option value="beginner">Beginner</Select.Option>
@@ -191,15 +167,13 @@ export function EditChallengeForm({
 
           <FormControl>
             <FormControl.Label>Why This Challenge?</FormControl.Label>
-            <FormControl.Caption>
-              List reasons why this challenge is valuable (one per line).
-            </FormControl.Caption>
+            <FormControl.Caption>List reasons why this challenge is valuable (one per line).</FormControl.Caption>
             <Textarea
               value={formData.whyThisChallenge?.join('\n') || ''}
               onChange={(e) =>
                 updateField(
                   'whyThisChallenge',
-                  e.target.value.split('\n').filter((line) => line.trim())
+                  e.target.value.split('\n').filter((line) => line.trim()),
                 )
               }
               placeholder="Learn X concept&#10;Practice Y pattern"

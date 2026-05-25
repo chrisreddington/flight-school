@@ -37,52 +37,52 @@ export function useHabitActions(reload: () => Promise<void>): HabitActions {
         setActionError(error instanceof Error ? error.message : 'Action failed. Please try again.');
       }
     },
-    [reload]
+    [reload],
   );
 
   const checkIn = useCallback(
     (habit: HabitWithHistory, value: number | boolean) =>
       run(() => habitStore.update(checkInHabit(habit, value)), habit.id, 'check in'),
-    [run]
+    [run],
   );
 
   const skip = useCallback(
-    (habit: HabitWithHistory) =>
-      run(() => habitStore.update(skipHabitDay(habit)), habit.id, 'skip'),
-    [run]
+    (habit: HabitWithHistory) => run(() => habitStore.update(skipHabitDay(habit)), habit.id, 'skip'),
+    [run],
   );
 
   const undo = useCallback(
-    (habit: HabitWithHistory) =>
-      run(() => habitStore.update(undoCheckIn(habit)), habit.id, 'undo check-in'),
-    [run]
+    (habit: HabitWithHistory) => run(() => habitStore.update(undoCheckIn(habit)), habit.id, 'undo check-in'),
+    [run],
   );
 
-  const stop = useCallback(async (habit: HabitWithHistory) => {
-    const confirmed = await confirm({
-      title: 'Stop Habit',
-      content: `Are you sure you want to stop "${habit.title}"? You can always view it in the Stopped Habits section.`,
-      confirmButtonContent: 'Stop Habit',
-      confirmButtonType: 'danger',
-    });
-    if (!confirmed) return;
-    await run(
-      () => habitStore.update({ ...habit, state: 'abandoned' }),
-      habit.id,
-      'stop habit'
-    );
-  }, [confirm, run]);
+  const stop = useCallback(
+    async (habit: HabitWithHistory) => {
+      const confirmed = await confirm({
+        title: 'Stop Habit',
+        content: `Are you sure you want to stop "${habit.title}"? You can always view it in the Stopped Habits section.`,
+        confirmButtonContent: 'Stop Habit',
+        confirmButtonType: 'danger',
+      });
+      if (!confirmed) return;
+      await run(() => habitStore.update({ ...habit, state: 'abandoned' }), habit.id, 'stop habit');
+    },
+    [confirm, run],
+  );
 
-  const remove = useCallback(async (habit: HabitWithHistory) => {
-    const confirmed = await confirm({
-      title: 'Delete Habit',
-      content: `Are you sure you want to delete "${habit.title}"? This action cannot be undone.`,
-      confirmButtonContent: 'Delete',
-      confirmButtonType: 'danger',
-    });
-    if (!confirmed) return;
-    await run(() => habitStore.delete(habit.id), habit.id, 'delete habit');
-  }, [confirm, run]);
+  const remove = useCallback(
+    async (habit: HabitWithHistory) => {
+      const confirmed = await confirm({
+        title: 'Delete Habit',
+        content: `Are you sure you want to delete "${habit.title}"? This action cannot be undone.`,
+        confirmButtonContent: 'Delete',
+        confirmButtonType: 'danger',
+      });
+      if (!confirmed) return;
+      await run(() => habitStore.delete(habit.id), habit.id, 'delete habit');
+    },
+    [confirm, run],
+  );
 
   return {
     actionError,

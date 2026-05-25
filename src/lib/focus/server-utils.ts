@@ -12,10 +12,7 @@ import type { SkillProfile } from '@/lib/skills/types';
 /**
  * Normalize a partial focus response with IDs and defaults.
  */
-export function addMissingIds(
-  data: Partial<FocusResponse>,
-  requestedComponents?: string[]
-): Partial<FocusResponse> {
+export function addMissingIds(data: Partial<FocusResponse>, requestedComponents?: string[]): Partial<FocusResponse> {
   const timestamp = nowMs();
   const components = requestedComponents || ['challenge', 'goal', 'learningTopics'];
   const result: Partial<FocusResponse> = {};
@@ -97,18 +94,15 @@ export function getFallbackLearningTopics(): LearningTopic[] {
   ];
 }
 
-
 /**
  * Generate calibration suggestions based on language usage.
  */
 export function generateCalibrationSuggestions(
   compactProfile: CompactDeveloperProfile,
-  skillProfile?: SkillProfile
+  skillProfile?: SkillProfile,
 ): CalibrationNeededItem[] {
   const suggestions: CalibrationNeededItem[] = [];
-  const existingSkillIds = new Set(
-    skillProfile?.skills.map((s) => s.skillId.toLowerCase()) ?? []
-  );
+  const existingSkillIds = new Set(skillProfile?.skills.map((s) => s.skillId.toLowerCase()) ?? []);
 
   const languages = compactProfile.lp || [];
 

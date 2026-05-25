@@ -69,11 +69,13 @@ export async function createChatStreamingSession(
         `does not match factory profile '${profile}' — caller bug`,
     );
   }
-  const resolved = preResolved ?? resolveProfile(profile, {
-    prompt,
-    capabilities,
-    conversationCapabilities: getConversationCapabilities(identity.userId, conversationId),
-  });
+  const resolved =
+    preResolved ??
+    resolveProfile(profile, {
+      prompt,
+      capabilities,
+      conversationCapabilities: getConversationCapabilities(identity.userId, conversationId),
+    });
   return createGenericStreamingSession({
     prompt,
     profile: resolved.profileId,

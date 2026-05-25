@@ -142,9 +142,7 @@ describe('Habit Storage', () => {
       const fullCollection: HabitCollection = { habits: activeHabits };
       vi.mocked(apiGet).mockResolvedValue(fullCollection);
 
-      await expect(habitStore.create(mockHabit)).rejects.toThrow(
-        `Maximum ${MAX_ACTIVE_HABITS} active habits allowed`
-      );
+      await expect(habitStore.create(mockHabit)).rejects.toThrow(`Maximum ${MAX_ACTIVE_HABITS} active habits allowed`);
     });
 
     it('should allow creating when at limit but some are completed', async () => {
@@ -174,9 +172,7 @@ describe('Habit Storage', () => {
       const fullCollection: HabitCollection = { habits: pausedHabits };
       vi.mocked(apiGet).mockResolvedValue(fullCollection);
 
-      await expect(habitStore.create(mockHabit)).rejects.toThrow(
-        `Maximum ${MAX_ACTIVE_HABITS} active habits allowed`
-      );
+      await expect(habitStore.create(mockHabit)).rejects.toThrow(`Maximum ${MAX_ACTIVE_HABITS} active habits allowed`);
     });
 
     it('should count not-started habits toward limit', async () => {
@@ -188,9 +184,7 @@ describe('Habit Storage', () => {
       const fullCollection: HabitCollection = { habits: notStartedHabits };
       vi.mocked(apiGet).mockResolvedValue(fullCollection);
 
-      await expect(habitStore.create(mockHabit)).rejects.toThrow(
-        `Maximum ${MAX_ACTIVE_HABITS} active habits allowed`
-      );
+      await expect(habitStore.create(mockHabit)).rejects.toThrow(`Maximum ${MAX_ACTIVE_HABITS} active habits allowed`);
     });
   });
 
@@ -221,7 +215,7 @@ describe('Habit Storage', () => {
       vi.mocked(apiGet).mockResolvedValue(collection);
 
       await expect(habitStore.update(mockHabitWithHistory)).rejects.toThrow(
-        `Habit ${mockHabitWithHistory.id} not found`
+        `Habit ${mockHabitWithHistory.id} not found`,
       );
     });
 

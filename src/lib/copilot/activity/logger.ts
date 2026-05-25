@@ -9,12 +9,7 @@
  * `/api/internal/ai-activity/*` (handled inside the worker process).
  */
 import { activityLoggerWorker } from './logger-worker';
-import type {
-  AIActivityInput,
-  AIActivityOutput,
-  AIActivityStatus,
-  AIActivityType,
-} from './types';
+import type { AIActivityInput, AIActivityOutput, AIActivityStatus, AIActivityType } from './types';
 
 /**
  * Closure returned by {@link ActivityLogger.startOperation}. Call
@@ -78,12 +73,7 @@ export interface ActivityLogger {
 const workerAdapter: ActivityLogger = {
   async startOperation(userId, type, operation, input) {
     await activityLoggerWorker.ensureHydrated(userId);
-    const { eventId, complete } = activityLoggerWorker.startOperation(
-      userId,
-      type,
-      operation,
-      input,
-    );
+    const { eventId, complete } = activityLoggerWorker.startOperation(userId, type, operation, input);
     return { eventId, complete };
   },
   logEvent(userId, type, operation, input, output, status) {

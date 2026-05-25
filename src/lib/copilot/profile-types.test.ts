@@ -22,12 +22,9 @@ describe('isChatResponseProfile', () => {
     expect(isChatResponseProfile(id)).toBe(false);
   });
 
-  it.each<unknown>([null, undefined, 0, {}, [], 'CHAT'])(
-    'rejects non-string / unknown profile values: %s',
-    (value) => {
-      expect(isChatResponseProfile(value)).toBe(false);
-    },
-  );
+  it.each<unknown>([null, undefined, 0, {}, [], 'CHAT'])('rejects non-string / unknown profile values: %s', (value) => {
+    expect(isChatResponseProfile(value)).toBe(false);
+  });
 });
 
 describe('areCapabilitiesAllowedForProfile', () => {

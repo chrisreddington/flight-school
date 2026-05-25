@@ -12,14 +12,11 @@ type FocusComponent = 'challenge' | 'goal' | 'learningTopics';
 export function mergeFocusComponent(
   prev: FocusResponse | null,
   componentResult: Partial<FocusResponse>,
-  component: FocusComponent
+  component: FocusComponent,
 ): FocusResponse {
   const challenge =
-    component === 'challenge' && componentResult.challenge
-      ? componentResult.challenge
-      : prev?.challenge;
-  const goal =
-    component === 'goal' && componentResult.goal ? componentResult.goal : prev?.goal;
+    component === 'challenge' && componentResult.challenge ? componentResult.challenge : prev?.challenge;
+  const goal = component === 'goal' && componentResult.goal ? componentResult.goal : prev?.goal;
   const learningTopics =
     component === 'learningTopics' && componentResult.learningTopics
       ? componentResult.learningTopics
@@ -57,9 +54,9 @@ export function mergeFocusComponent(
 export function isFocusReadyToPersist(merged: FocusResponse): boolean {
   return Boolean(
     merged.challenge?.id &&
-      merged.challenge?.title &&
-      merged.goal?.id &&
-      merged.goal?.title &&
-      merged.learningTopics?.length
+    merged.challenge?.title &&
+    merged.goal?.id &&
+    merged.goal?.title &&
+    merged.learningTopics?.length,
   );
 }

@@ -24,23 +24,16 @@ export async function runRestartSweep(): Promise<void> {
   try {
     const { jobStorage } = await import('@/lib/jobs');
     const jobs = await jobStorage.getAll();
-    const staleJobs = jobs.filter(
-      (job) => job.status === 'pending' || job.status === 'running',
-    );
+    const staleJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running');
 
-    await Promise.all(
-      staleJobs.map((job) =>
-        jobStorage.markFailed(job.id, 'Server process restarted'),
-      ),
-    );
+    await Promise.all(staleJobs.map((job) => jobStorage.markFailed(job.id, 'Server process restarted')));
 
     const staleChatJobs = staleJobs.filter((job) => job.type === 'chat-response');
     if (staleChatJobs.length > 0) {
-      const [{ getThreadById, updateThread }, { stripLegacyCursorFromThread }] =
-        await Promise.all([
-          import('@/lib/jobs/storage/threads-storage'),
-          import('@/lib/threads/legacy-cursor'),
-        ]);
+      const [{ getThreadById, updateThread }, { stripLegacyCursorFromThread }] = await Promise.all([
+        import('@/lib/jobs/storage/threads-storage'),
+        import('@/lib/threads/legacy-cursor'),
+      ]);
       await Promise.all(
         staleChatJobs.map(async (job) => {
           const input = (job.input ?? {}) as {

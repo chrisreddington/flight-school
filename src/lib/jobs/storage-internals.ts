@@ -22,10 +22,7 @@ export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancel
  * the UI can route credentials-related failures to a re-auth CTA instead of
  * rendering a generic error string.
  */
-export type JobErrorCode =
-  | 'credentials_missing'
-  | 'credentials_refresh_failed'
-  | 'unknown';
+export type JobErrorCode = 'credentials_missing' | 'credentials_refresh_failed' | 'unknown';
 
 interface JobCausalityContext extends TracePropagationHeaders {
   capturedAt: string;

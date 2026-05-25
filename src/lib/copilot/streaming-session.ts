@@ -21,12 +21,7 @@ import { activityLogger } from './activity/logger';
 import { mcpCapabilityIdsOf, type CapabilitySelection } from './capabilities';
 import type { BaseProfileId, CapabilitiesArg } from './profile-types';
 import { getConversationSession } from './sessions';
-import {
-  type StreamContext,
-  pumpEventQueue,
-  recordTerminalError,
-  recordTerminalSuccess,
-} from './streaming-telemetry';
+import { type StreamContext, pumpEventQueue, recordTerminalError, recordTerminalSuccess } from './streaming-telemetry';
 import { formatRequestedCapabilities } from './telemetry-attrs';
 import type { StreamEvent, StreamingSession, StreamingToolCall } from './types';
 
@@ -59,9 +54,7 @@ export interface StreamingSessionConfig {
  *
  * @internal
  */
-export async function createGenericStreamingSession(
-  config: StreamingSessionConfig,
-): Promise<StreamingSession> {
+export async function createGenericStreamingSession(config: StreamingSessionConfig): Promise<StreamingSession> {
   const {
     prompt,
     profile,
@@ -103,25 +96,20 @@ export async function createGenericStreamingSession(
   const toolCalls: StreamingToolCall[] = [];
   let totalContent = '';
 
-  const { eventId: activityEventId, complete } = await activityLogger.startOperation(
-    userId,
-    'ask',
-    operationName,
-    {
-      prompt: prompt.slice(0, 100),
-      model,
-      sessionMetrics: metrics
-        ? {
-            poolHit: !metrics.createdNew,
-            sessionCreateMs: metrics.sessionCreateMs,
-            mcpEnabled: metrics.mcpEnabled,
-            conversationReused: metrics.reusedConversation,
-          }
-        : undefined,
-      // Server-side metrics are placeholders until the stream terminates.
-      serverMetrics: { firstTokenMs: null, totalMs: 0 },
-    },
-  );
+  const { eventId: activityEventId, complete } = await activityLogger.startOperation(userId, 'ask', operationName, {
+    prompt: prompt.slice(0, 100),
+    model,
+    sessionMetrics: metrics
+      ? {
+          poolHit: !metrics.createdNew,
+          sessionCreateMs: metrics.sessionCreateMs,
+          mcpEnabled: metrics.mcpEnabled,
+          conversationReused: metrics.reusedConversation,
+        }
+      : undefined,
+    // Server-side metrics are placeholders until the stream terminates.
+    serverMetrics: { firstTokenMs: null, totalMs: 0 },
+  });
 
   const streamingMetrics = {
     firstDeltaMs: null as number | null,

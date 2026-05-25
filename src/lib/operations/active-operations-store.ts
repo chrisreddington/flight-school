@@ -1,6 +1,6 @@
 /**
  * Active operations materialized view.
- * 
+ *
  * On the server, persists to disk for recovery across restarts.
  * On the client, uses in-memory storage only (no fs module available).
  */
@@ -102,7 +102,7 @@ export class ActiveOperationsStore {
    */
   async getEntries(): Promise<ActiveOperationEntry[]> {
     const storageUtils = await getStorageUtils();
-    
+
     let schema: ActiveOperationsSchema;
     if (storageUtils) {
       schema = await storageUtils.readStorage(STORAGE_FILE, DEFAULT_SCHEMA, validateSchema);
@@ -134,7 +134,7 @@ export class ActiveOperationsStore {
    */
   async addEntry(entry: ActiveOperationEntry): Promise<void> {
     const storageUtils = await getStorageUtils();
-    
+
     let schema: ActiveOperationsSchema;
     if (storageUtils) {
       schema = await storageUtils.readStorage(STORAGE_FILE, DEFAULT_SCHEMA, validateSchema);
@@ -168,7 +168,7 @@ export class ActiveOperationsStore {
    */
   async removeByJobId(jobId: string): Promise<void> {
     const storageUtils = await getStorageUtils();
-    
+
     let schema: ActiveOperationsSchema;
     if (storageUtils) {
       schema = await storageUtils.readStorage(STORAGE_FILE, DEFAULT_SCHEMA, validateSchema);

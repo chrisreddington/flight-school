@@ -58,9 +58,7 @@ describe('useActiveOperations core logic', () => {
 
     it('should return empty set when no active operations', () => {
       const snapshot = {
-        topicRegenerations: new Map([
-          ['op-1', { status: 'complete', meta: { targetId: 'topic-123' } }],
-        ]),
+        topicRegenerations: new Map([['op-1', { status: 'complete', meta: { targetId: 'topic-123' } }]]),
       };
 
       const activeTopicIds = new Set<string>();

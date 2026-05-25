@@ -2,7 +2,7 @@
 
 /**
  * Shared Topic Card Component
- * 
+ *
  * Displays a learning topic with consistent styling across Dashboard and History.
  */
 
@@ -63,7 +63,7 @@ export function TopicCard({
         if (record?.learningTopics) {
           // Topics are arrays of arrays
           for (const topicArray of record.learningTopics) {
-            const item = topicArray.find(t => t.data.id === topic.id);
+            const item = topicArray.find((t) => t.data.id === topic.id);
             if (item && item.stateHistory.length > 0) {
               setCurrentState(item.stateHistory[item.stateHistory.length - 1].state);
               break;
@@ -120,13 +120,13 @@ export function TopicCard({
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Label size="small" variant="accent">
-            <span className={styles.iconInline}><BookIcon size={12} /></span>
+            <span className={styles.iconInline}>
+              <BookIcon size={12} />
+            </span>
             {topic.type === 'best-practice' ? 'Best Practice' : topic.type === 'concept' ? 'Concept' : 'Pattern'}
           </Label>
           {(isExplored || isSkipped) && showHistoryActions && (
-            <Label variant={isExplored ? 'success' : 'secondary'}>
-              {isExplored ? 'Explored' : 'Skipped'}
-            </Label>
+            <Label variant={isExplored ? 'success' : 'secondary'}>{isExplored ? 'Explored' : 'Skipped'}</Label>
           )}
         </Stack>
 
@@ -152,11 +152,7 @@ export function TopicCard({
           </Button>
           {/* Show Skip for unexplored topics, New for explored topics - only on today's items */}
           {!isSkipped && isToday && (
-            <Button
-              variant="invisible"
-              leadingVisual={isExplored ? PlusIcon : SkipIcon}
-              onClick={handleSkip}
-            >
+            <Button variant="invisible" leadingVisual={isExplored ? PlusIcon : SkipIcon} onClick={handleSkip}>
               {isExplored ? 'New' : 'Skip'}
             </Button>
           )}

@@ -76,8 +76,7 @@ export async function POST(request: NextRequest) {
         return new Response(workerResponse.body, {
           status: workerResponse.status,
           headers: {
-            'content-type':
-              workerResponse.headers.get('content-type') ?? 'text/event-stream',
+            'content-type': workerResponse.headers.get('content-type') ?? 'text/event-stream',
             'cache-control': 'no-store, no-transform',
             connection: 'keep-alive',
           },

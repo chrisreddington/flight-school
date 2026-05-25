@@ -51,10 +51,7 @@ export interface WorkPatternSummary {
  * @param username - GitHub username
  * @returns Work pattern summary
  */
-export async function analyzeWorkPatterns(
-  octokit: Octokit,
-  username: string
-): Promise<WorkPatternSummary> {
+export async function analyzeWorkPatterns(octokit: Octokit, username: string): Promise<WorkPatternSummary> {
   return fetchAndAnalyze(octokit, username);
 }
 
@@ -78,15 +75,14 @@ async function fetchAndAnalyze(octokit: Octokit, username: string): Promise<Work
       per_page: MAX_ITEMS,
     });
 
-    const counts = new Map<string, number>(
-      Object.keys(PATTERN_KEYWORDS).map((k) => [k, 0])
-    );
+    const counts = new Map<string, number>(Object.keys(PATTERN_KEYWORDS).map((k) => [k, 0]));
 
     let bugCount = 0;
     let featureCount = 0;
 
     for (const item of response.data.items) {
-      const text = `${item.title} ${(item.labels as Array<{ name?: string }>).map((l) => l.name ?? '').join(' ')}`.toLowerCase();
+      const text =
+        `${item.title} ${(item.labels as Array<{ name?: string }>).map((l) => l.name ?? '').join(' ')}`.toLowerCase();
 
       for (const [pattern, keywords] of Object.entries(PATTERN_KEYWORDS)) {
         if (keywords.some((kw) => text.includes(kw))) {

@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  validateTransition,
-  getCurrentState,
-  type StateTransition,
-} from './core';
+import { validateTransition, getCurrentState, type StateTransition } from './core';
 
 // Test state types
 type TestState = 'pending' | 'active' | 'completed' | 'cancelled';
@@ -29,9 +25,7 @@ describe('validateTransition', () => {
       { from: 'active', to: 'completed' },
       { from: 'active', to: 'cancelled' },
     ] as const)('should allow $from → $to', ({ from, to }) => {
-      expect(() =>
-        validateTransition(from, to, TEST_TRANSITIONS, 'test')
-      ).not.toThrow();
+      expect(() => validateTransition(from, to, TEST_TRANSITIONS, 'test')).not.toThrow();
     });
   });
 
@@ -43,37 +37,26 @@ describe('validateTransition', () => {
       { from: 'completed', to: 'pending', desc: 'from terminal to start' },
       { from: 'cancelled', to: 'active', desc: 'from cancelled' },
     ] as const)('should reject $from → $to ($desc)', ({ from, to }) => {
-      expect(() =>
-        validateTransition(from, to, TEST_TRANSITIONS, 'test')
-      ).toThrow(/Invalid test state transition/);
+      expect(() => validateTransition(from, to, TEST_TRANSITIONS, 'test')).toThrow(/Invalid test state transition/);
     });
 
     it('should include helpful error message', () => {
-      expect(() =>
-        validateTransition('pending', 'completed', TEST_TRANSITIONS, 'habit')
-      ).toThrow(
-        'Invalid habit state transition: pending → completed. Valid transitions: active, cancelled'
+      expect(() => validateTransition('pending', 'completed', TEST_TRANSITIONS, 'habit')).toThrow(
+        'Invalid habit state transition: pending → completed. Valid transitions: active, cancelled',
       );
     });
 
     it('should show empty transitions for terminal states', () => {
-      expect(() =>
-        validateTransition('completed', 'active', TEST_TRANSITIONS, 'focus')
-      ).toThrow(
-        'Invalid focus state transition: completed → active. Valid transitions: none (terminal state)'
+      expect(() => validateTransition('completed', 'active', TEST_TRANSITIONS, 'focus')).toThrow(
+        'Invalid focus state transition: completed → active. Valid transitions: none (terminal state)',
       );
     });
   });
 
   describe('idempotent transitions', () => {
-    it.each(['pending', 'active', 'completed', 'cancelled'] as const)(
-      'should allow %s → %s (same state)',
-      (state) => {
-        expect(() =>
-          validateTransition(state, state, TEST_TRANSITIONS, 'test')
-        ).not.toThrow();
-      }
-    );
+    it.each(['pending', 'active', 'completed', 'cancelled'] as const)('should allow %s → %s (same state)', (state) => {
+      expect(() => validateTransition(state, state, TEST_TRANSITIONS, 'test')).not.toThrow();
+    });
   });
 });
 
@@ -90,9 +73,7 @@ describe('getCurrentState', () => {
     });
 
     it('should work with single entry', () => {
-      const history: StateTransition<TestState>[] = [
-        { state: 'pending', timestamp: '2026-01-01T00:00:00Z' },
-      ];
+      const history: StateTransition<TestState>[] = [{ state: 'pending', timestamp: '2026-01-01T00:00:00Z' }];
 
       expect(getCurrentState(history)).toBe('pending');
     });

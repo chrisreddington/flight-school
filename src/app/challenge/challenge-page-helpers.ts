@@ -18,9 +18,10 @@ const DEFAULT_CHALLENGE: ChallengeDef = {
  * to {@link DEFAULT_CHALLENGE} when no `title` is provided. Pure — exported so
  * the page coordinator stays focused on rendering.
  */
-export function parseChallengeFromSearchParams(
-  searchParams: URLSearchParams
-): { challengeId: string; challenge: ChallengeDef } {
+export function parseChallengeFromSearchParams(searchParams: URLSearchParams): {
+  challengeId: string;
+  challenge: ChallengeDef;
+} {
   const id = searchParams.get('id');
   const title = searchParams.get('title');
   const description = searchParams.get('description');
@@ -33,7 +34,12 @@ export function parseChallengeFromSearchParams(
     return { challengeId: 'default-challenge', challenge: DEFAULT_CHALLENGE };
   }
 
-  const actualId = id || `challenge-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)}`;
+  const actualId =
+    id ||
+    `challenge-${title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 50)}`;
 
   return {
     challengeId: actualId,
@@ -57,7 +63,9 @@ export function parseChallengeFromSearchParams(
 export function useMonacoPreload() {
   useEffect(() => {
     const preload = () => {
-      import('@monaco-editor/react').catch(() => { /* fall through to on-demand load */ });
+      import('@monaco-editor/react').catch(() => {
+        /* fall through to on-demand load */
+      });
     };
 
     if ('requestIdleCallback' in window) {

@@ -1,13 +1,13 @@
 /**
  * Focus Analytics
- * 
+ *
  * Computes insights and analytics from FocusHistory stored data.
  * Provides metrics for learning journey visualization.
- * 
+ *
  * @example
  * ```typescript
  * import { computeInsights } from '@/lib/focus/analytics';
- * 
+ *
  * const history = await focusStore.getHistory();
  * const insights = computeInsights(history);
  * console.log(`Total challenges completed: ${insights.totalChallengesCompleted}`);
@@ -49,7 +49,7 @@ export interface LearningInsights {
 
 /**
  * Compute insights from focus history.
- * 
+ *
  * @param history - FocusHistory from storage
  * @returns Computed learning insights
  */
@@ -64,10 +64,10 @@ export function computeInsights(history: FocusHistory): LearningInsights {
   };
   const challengesByLanguage: Record<string, number> = {};
   const recentActivity: ActivityItem[] = [];
-  
+
   // Get sorted date keys (newest first for recent activity, oldest first for streaks)
   const dateKeys = Object.keys(history).sort();
-  
+
   // Track dates with activity for streak calculation
   const datesWithActivity = new Set<string>();
 
@@ -79,22 +79,20 @@ export function computeInsights(history: FocusHistory): LearningInsights {
     // Process challenges
     for (const statefulChallenge of record.challenges) {
       // Check if this challenge was completed
-      const wasCompleted = statefulChallenge.stateHistory.some(
-        transition => transition.state === 'completed'
-      );
-      
+      const wasCompleted = statefulChallenge.stateHistory.some((transition) => transition.state === 'completed');
+
       if (wasCompleted) {
         totalChallengesCompleted++;
         hasActivityThisDay = true;
-        
+
         // Count by difficulty
         const difficulty = statefulChallenge.data.difficulty;
         challengesByDifficulty[difficulty]++;
-        
+
         // Count by language
         const language = statefulChallenge.data.language;
         challengesByLanguage[language] = (challengesByLanguage[language] || 0) + 1;
-        
+
         // Add to recent activity
         recentActivity.push({
           date: dateKey,
@@ -106,13 +104,11 @@ export function computeInsights(history: FocusHistory): LearningInsights {
 
     // Process goals
     for (const statefulGoal of record.goals) {
-      const wasCompleted = statefulGoal.stateHistory.some(
-        transition => transition.state === 'completed'
-      );
-      
+      const wasCompleted = statefulGoal.stateHistory.some((transition) => transition.state === 'completed');
+
       if (wasCompleted) {
         hasActivityThisDay = true;
-        
+
         // Add to recent activity
         recentActivity.push({
           date: dateKey,
@@ -125,14 +121,12 @@ export function computeInsights(history: FocusHistory): LearningInsights {
     // Process topics (flatten the nested arrays)
     for (const topicArray of record.learningTopics) {
       for (const statefulTopic of topicArray) {
-        const wasExplored = statefulTopic.stateHistory.some(
-          transition => transition.state === 'explored'
-        );
-        
+        const wasExplored = statefulTopic.stateHistory.some((transition) => transition.state === 'explored');
+
         if (wasExplored) {
           totalTopicsExplored++;
           hasActivityThisDay = true;
-          
+
           // Add to recent activity
           recentActivity.push({
             date: dateKey,
@@ -153,9 +147,7 @@ export function computeInsights(history: FocusHistory): LearningInsights {
   const { currentStreak, longestStreak } = calculateStreaks(datesWithActivity);
 
   // Get recent activity (last 7 items, newest first)
-  const sortedRecentActivity = recentActivity
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 7);
+  const sortedRecentActivity = recentActivity.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
 
   return {
     totalChallengesCompleted,
@@ -171,27 +163,28 @@ export function computeInsights(history: FocusHistory): LearningInsights {
 
 /**
  * Calculate current and longest streaks from dates with activity.
- * 
+ *
  * @param datesWithActivity - Set of date keys that had activity
  * @returns Current and longest streaks
  */
-function calculateStreaks(
-  datesWithActivity: Set<string>
-): { currentStreak: number; longestStreak: number } {
+function calculateStreaks(datesWithActivity: Set<string>): {
+  currentStreak: number;
+  longestStreak: number;
+} {
   if (datesWithActivity.size === 0) {
     return { currentStreak: 0, longestStreak: 0 };
   }
 
   // Get today's date key
   const today = new Date();
-  
+
   // Calculate current streak (counting backwards from today)
   let currentStreak = 0;
   const checkDate = new Date(today);
-  
+
   while (true) {
     const dateKey = checkDate.toISOString().split('T')[0];
-    
+
     if (datesWithActivity.has(dateKey)) {
       currentStreak++;
       // Move to previous day
@@ -208,16 +201,14 @@ function calculateStreaks(
   let previousDate: Date | null = null;
 
   const sortedActivityDates = Array.from(datesWithActivity).sort();
-  
+
   for (const dateKey of sortedActivityDates) {
     const currentDate = new Date(dateKey + 'T00:00:00');
-    
+
     if (previousDate) {
       // Check if this date is consecutive to previous
-      const daysDiff = Math.floor(
-        (currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      
+      const daysDiff = Math.floor((currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24));
+
       if (daysDiff === 1) {
         // Consecutive day
         tempStreak++;
@@ -230,10 +221,10 @@ function calculateStreaks(
       // First date
       tempStreak = 1;
     }
-    
+
     previousDate = currentDate;
   }
-  
+
   // Check final streak
   longestStreak = Math.max(longestStreak, tempStreak);
 

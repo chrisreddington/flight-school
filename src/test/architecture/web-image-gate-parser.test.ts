@@ -25,15 +25,11 @@ describe('extractCopySources — shell-form COPY', () => {
   });
 
   it('skips `--flag=value` flags', () => {
-    expect(extractCopySources('COPY --chown=node:node src /app')).toEqual([
-      'src',
-    ]);
+    expect(extractCopySources('COPY --chown=node:node src /app')).toEqual(['src']);
   });
 
   it('skips `--flag value` flags (two-token form)', () => {
-    expect(extractCopySources('COPY --chown node:node src /app')).toEqual([
-      'src',
-    ]);
+    expect(extractCopySources('COPY --chown node:node src /app')).toEqual(['src']);
   });
 
   it('skips boolean flags like `--link`', () => {
@@ -41,17 +37,13 @@ describe('extractCopySources — shell-form COPY', () => {
   });
 
   it('skips multi-stage `--from=builder` flags', () => {
-    expect(
-      extractCopySources('COPY --from=builder /build/out /app/out'),
-    ).toEqual(['/build/out']);
+    expect(extractCopySources('COPY --from=builder /build/out /app/out')).toEqual(['/build/out']);
   });
 
   it('handles a flag mix in any order', () => {
-    expect(
-      extractCopySources(
-        'COPY --from=builder --chown=node:node --link /build/out /app/out',
-      ),
-    ).toEqual(['/build/out']);
+    expect(extractCopySources('COPY --from=builder --chown=node:node --link /build/out /app/out')).toEqual([
+      '/build/out',
+    ]);
   });
 });
 
@@ -61,9 +53,7 @@ describe('extractCopySources — JSON-array form', () => {
   });
 
   it('handles flags before the JSON array', () => {
-    expect(
-      extractCopySources('COPY --chown=node:node ["src","/app"]'),
-    ).toEqual(['src']);
+    expect(extractCopySources('COPY --chown=node:node ["src","/app"]')).toEqual(['src']);
   });
 
   it('handles single-quoted entries', () => {
@@ -78,23 +68,17 @@ describe('extractCopySources — JSON-array form', () => {
     // returning zero sources and bypassing Assertion A. The
     // flag-walker must strip both `--flag=value` AND `--flag value`
     // shapes before locating the array.
-    expect(
-      extractCopySources('COPY --from builder ["/app","/dst"]'),
-    ).toEqual(['/app']);
+    expect(extractCopySources('COPY --from builder ["/app","/dst"]')).toEqual(['/app']);
   });
 
   it('handles two-token --chown before a JSON array', () => {
-    expect(
-      extractCopySources('COPY --chown node:node ["/src","/dst"]'),
-    ).toEqual(['/src']);
+    expect(extractCopySources('COPY --chown node:node ["/src","/dst"]')).toEqual(['/src']);
   });
 
   it('handles a mix of one-token and two-token flags before a JSON array', () => {
-    expect(
-      extractCopySources(
-        'COPY --from=builder --chown node:node --link ["/build/out","/app/out"]',
-      ),
-    ).toEqual(['/build/out']);
+    expect(extractCopySources('COPY --from=builder --chown node:node --link ["/build/out","/app/out"]')).toEqual([
+      '/build/out',
+    ]);
   });
 
   it('fails closed on an unterminated JSON array', () => {

@@ -10,10 +10,7 @@
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
 
-import {
-  activeOperationsStore,
-  type ActiveOperationItemType,
-} from './active-operations-store';
+import { activeOperationsStore, type ActiveOperationItemType } from './active-operations-store';
 import type { ActiveOperation, OperationType } from './types';
 
 const log = logger.withTag('ChatJobRegistry');
@@ -93,10 +90,7 @@ export function registerExistingChatJob(
  * Tear down an SSE-tracked chat op when its stream terminates.
  * Safe to call with an unknown jobId (drops only the persisted entry).
  */
-export function completeExistingChatJob(
-  state: ChatJobRegistryState,
-  jobId: string,
-): void {
+export function completeExistingChatJob(state: ChatJobRegistryState, jobId: string): void {
   const operationId = state.jobToOperation.get(jobId);
   if (operationId) {
     state.operations.delete(operationId);

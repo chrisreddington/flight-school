@@ -90,9 +90,7 @@ describe('useStoreQuery — onLoaded', () => {
     const onLoaded = vi.fn(async () => {
       throw new Error('post-load failed');
     });
-    const { result } = renderHook(() =>
-      useStoreQuery(query, { initialValue: [] as number[], onLoaded }),
-    );
+    const { result } = renderHook(() => useStoreQuery(query, { initialValue: [] as number[], onLoaded }));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.data).toEqual([1]);
     expect(result.current.error).toBeNull();
@@ -102,10 +100,13 @@ describe('useStoreQuery — onLoaded', () => {
 describe('useStoreQuery — unmount safety', () => {
   it('does not set state after unmount', async () => {
     let resolveQuery!: (value: number[]) => void;
-    const query = vi.fn(() => new Promise<number[]>((resolve) => { resolveQuery = resolve; }));
-    const { result, unmount } = renderHook(() =>
-      useStoreQuery(query, { initialValue: [] as number[] }),
+    const query = vi.fn(
+      () =>
+        new Promise<number[]>((resolve) => {
+          resolveQuery = resolve;
+        }),
     );
+    const { result, unmount } = renderHook(() => useStoreQuery(query, { initialValue: [] as number[] }));
     unmount();
     await act(async () => {
       resolveQuery([99]);

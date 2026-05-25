@@ -9,34 +9,21 @@ import { focusStore } from '@/lib/focus';
 import type { CalibrationNeededItem, DailyChallenge, FocusResponse, LearningTopic } from '@/lib/focus/types';
 import { getDateKey } from '@/lib/utils/date-utils';
 import {
-    BookIcon,
-    CheckIcon,
-    CodeIcon,
-    CopilotIcon,
-    FlameIcon,
-    HistoryIcon,
-    StopIcon,
-    ZapIcon,
+  BookIcon,
+  CheckIcon,
+  CodeIcon,
+  CopilotIcon,
+  FlameIcon,
+  HistoryIcon,
+  StopIcon,
+  ZapIcon,
 } from '@primer/octicons-react';
-import {
-    Button,
-    Heading,
-    Label,
-    Link,
-    SkeletonBox,
-    Spinner,
-    Stack,
-    Token,
-} from '@primer/react';
+import { Button, Heading, Label, Link, SkeletonBox, Spinner, Stack, Token } from '@primer/react';
 import { UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useRateLimitCountdown } from '@/hooks/use-rate-limit-countdown';
-import {
-    getDynamicChallenge,
-    getDynamicGoal,
-    getDynamicLearningTopics,
-} from './dashboard-helpers';
+import { getDynamicChallenge, getDynamicGoal, getDynamicLearningTopics } from './dashboard-helpers';
 import styles from './Dashboard.module.css';
 import { InlineCalibration } from './inline-calibration';
 
@@ -97,13 +84,13 @@ export const DailyFocusSection = memo(function DailyFocusSection({
 }: DailyFocusSectionProps) {
   const { isDebugMode } = useDebugMode();
   const router = useRouter();
-  
+
   // Local state for calibration items - allows persistence on dismiss/confirm
   const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[] | null>(null);
-  
+
   // Use local state if set, otherwise fall back to aiFocus data
   const calibrationNeeded: CalibrationNeededItem[] = calibrationItems ?? aiFocus?.calibrationNeeded ?? [];
-  
+
   // Seed local calibration state from the fresh aiFocus payload once
   // (subsequent edits stay client-side until the next focus refresh).
   // Doing this in useEffect rather than during render avoids the Strict
@@ -115,23 +102,19 @@ export const DailyFocusSection = memo(function DailyFocusSection({
       setCalibrationItems(incoming);
     }
   }, [aiFocus?.calibrationNeeded, calibrationItems]);
-  
+
   // Handle calibration item changes (from InlineCalibration)
   const handleCalibrationChange = useCallback((items: CalibrationNeededItem[]) => {
     setCalibrationItems(items);
   }, []);
-  
+
   // Get the daily challenge from AI focus or fallback
-  const dailyChallenge: DailyChallenge | null = (aiFocus?.challenge?.title ? aiFocus.challenge : null) || getDynamicChallenge(profile);
-  
+  const dailyChallenge: DailyChallenge | null =
+    (aiFocus?.challenge?.title ? aiFocus.challenge : null) || getDynamicChallenge(profile);
+
   // Use custom challenge queue for priority handling (S3)
-  const {
-    activeChallenge,
-    activeSource,
-    queueRemaining,
-    advanceQueue,
-  } = useCustomChallengeQueue(dailyChallenge);
-  
+  const { activeChallenge, activeSource, queueRemaining, advanceQueue } = useCustomChallengeQueue(dailyChallenge);
+
   // Use active challenge (custom takes priority over daily)
   const challenge = activeChallenge || dailyChallenge || getDynamicChallenge(profile);
   const isCustomChallenge = challenge?.isCustom || activeSource === 'custom-queue';
@@ -143,28 +126,32 @@ export const DailyFocusSection = memo(function DailyFocusSection({
     await advanceQueue();
   }, [challenge, advanceQueue]);
 
-  const handleSkipCustomChallenge = useCallback(async (challengeId: string) => {
-    if (challenge.id !== challengeId) return;
+  const handleSkipCustomChallenge = useCallback(
+    async (challengeId: string) => {
+      if (challenge.id !== challengeId) return;
 
-    const dateKey = getDateKey();
-    await focusStore.addChallenge(dateKey, challenge);
-    await focusStore.transitionChallenge(dateKey, challenge.id, 'skipped', 'skip-queue');
-    await advanceQueue();
-  }, [challenge, advanceQueue]);
-  
+      const dateKey = getDateKey();
+      await focusStore.addChallenge(dateKey, challenge);
+      await focusStore.transitionChallenge(dateKey, challenge.id, 'skipped', 'skip-queue');
+      await advanceQueue();
+    },
+    [challenge, advanceQueue],
+  );
+
   const goal = aiFocus?.goal || getDynamicGoal(profile);
   const learningTopics = aiFocus?.learningTopics?.length ? aiFocus.learningTopics : getDynamicLearningTopics(profile);
 
   // Handle single topic skip
-  const handleSkipTopic = useCallback((skippedTopic: LearningTopic) => {
-    if (onSkipTopic) {
-      // Pass the titles of remaining non-skipped topics to avoid duplicates
-      const existingTitles = learningTopics
-        .filter(t => t.id !== skippedTopic.id)
-        .map(t => t.title);
-      onSkipTopic(skippedTopic, existingTitles);
-    }
-  }, [learningTopics, onSkipTopic]);
+  const handleSkipTopic = useCallback(
+    (skippedTopic: LearningTopic) => {
+      if (onSkipTopic) {
+        // Pass the titles of remaining non-skipped topics to avoid duplicates
+        const existingTitles = learningTopics.filter((t) => t.id !== skippedTopic.id).map((t) => t.title);
+        onSkipTopic(skippedTopic, existingTitles);
+      }
+    },
+    [learningTopics, onSkipTopic],
+  );
 
   // Navigate to create challenge page
   const handleCreateChallenge = useCallback(() => {
@@ -174,7 +161,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   // Profile loading blocks all tabs (no data available yet)
   // But once profile is loaded, each tab renders independently based on its own loading state
   const isProfileLoading = isLoading;
-  
+
   // Per-component loading states for progressive rendering
   const isChallengeLoading = isProfileLoading || loadingComponents.includes('challenge');
   const isGoalLoading = isProfileLoading || loadingComponents.includes('goal');
@@ -195,7 +182,9 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           </Heading>
           {isAIEnabled && (
             <Label variant="success" size="small">
-              <span className={styles.iconInline}><CopilotIcon size={12} /></span>
+              <span className={styles.iconInline}>
+                <CopilotIcon size={12} />
+              </span>
               AI-Powered
             </Label>
           )}
@@ -228,7 +217,12 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <div className={styles.focusContent}>
             {isChallengeLoading ? (
               <div className={styles.challengeCard}>
-                <Stack direction="horizontal" align="center" justify="space-between" className={styles.skeletonLoadingRow}>
+                <Stack
+                  direction="horizontal"
+                  align="center"
+                  justify="space-between"
+                  className={styles.skeletonLoadingRow}
+                >
                   <Stack direction="horizontal" align="center" gap="condensed">
                     <Spinner size="small" />
                     <span className={styles.loadingText}>Generating challenge...</span>
@@ -278,7 +272,12 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <div className={styles.focusContent}>
             {isGoalLoading ? (
               <div className={styles.goalCard}>
-                <Stack direction="horizontal" align="center" justify="space-between" className={styles.skeletonLoadingRow}>
+                <Stack
+                  direction="horizontal"
+                  align="center"
+                  justify="space-between"
+                  className={styles.skeletonLoadingRow}
+                >
                   <Stack direction="horizontal" align="center" gap="condensed">
                     <Spinner size="small" />
                     <span className={styles.loadingText}>Generating goal...</span>
@@ -316,7 +315,12 @@ export const DailyFocusSection = memo(function DailyFocusSection({
           <div className={styles.focusContent}>
             {isTopicsLoading ? (
               <Stack direction="vertical" gap="normal">
-                <Stack direction="horizontal" align="center" justify="space-between" className={styles.skeletonLoadingRow}>
+                <Stack
+                  direction="horizontal"
+                  align="center"
+                  justify="space-between"
+                  className={styles.skeletonLoadingRow}
+                >
                   <Stack direction="horizontal" align="center" gap="condensed">
                     <Spinner size="small" />
                     <span className={styles.loadingText}>Generating learning topics...</span>
