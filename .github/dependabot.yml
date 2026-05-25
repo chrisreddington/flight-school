@@ -37,6 +37,17 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # TypeScript 6 is blocked by madge@8.0.0 declaring peerOptional
+      # typescript@^5.4.4, which excludes TS 6.x. Runtime compat looks fine
+      # (madge -> dependency-tree -> detective-typescript@14.1.2 already
+      # accepts TS ^5.4.4 || ^6.0.2), but `npm ci` fails ERESOLVE before
+      # any code runs. Tracking issue in this repo lists the exit checklist;
+      # upstream tracking: pahen/madge#462 and pahen/madge#460.
+      # Remove this rule once madge ships a release whose peer accepts TS 6.
+      - dependency-name: 'typescript'
+        update-types:
+          - 'version-update:semver-major'
 
   - package-ecosystem: devcontainers
     directory: /
