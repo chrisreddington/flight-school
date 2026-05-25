@@ -43,21 +43,35 @@ function fail(assertion, message) {
 
 // ---------- Assertion A: Dockerfile static lint --------------------------
 //
-// Three checks on the runner stage:
-//   r1: bans `COPY ... @github` (anywhere in the file)
-//   r2: bans `COPY ... /app/node_modules` (inside the runner stage only)
-//   r3: allowlist-based — every runner-stage COPY source that begins
-//       with `/app` MUST start with one of `RUNNER_ALLOWED_SRC_PREFIXES`.
-//       This closes the broad-copy bypass for forms r2 never sees:
-//       `COPY ... /app ./`, `COPY ... /app/ ./`, `COPY ... /app/. ./`,
-//       `COPY ... /app/* ./`, and JSON-array form
-//       `COPY ["/app", "./"]`.
+// Two checks on the runner stage:
+//   r1: bans `COPY ... @github` anywhere in the file.
+//   r2: positive allowlist — every runner-stage COPY source MUST match
+//       `isAllowedRunnerSource()`. Any source not on the allowlist
+//       fails the gate. This subsumes all known broad-copy bypass
+//       shapes (`/app`, `/app/`, `/app/.`, `/app/*`, `/app/node_modules`,
+//       JSON-array `["/app", "./"]`), all relative-source shapes
+//       (`.`, `./`, `*`), and all unresolved variable-source shapes
+//       (`${VAR}`) — none of those match the allowlist.
 //
 // Stage detection is header-anchored: enumerate `FROM ...` lines,
 // pick the one whose header text contains `AS runner`, and slice
 // from that header to the next header (or EOF). Tolerates flags on
 // the FROM line (e.g. `FROM --platform=linux/amd64 node:20-slim AS runner`).
-const RUNNER_ALLOWED_SRC_PREFIXES = ['/app/.next/', '/app/public'];
+
+// Exact matches and segment-bounded prefixes. The `/` boundary on
+// prefixes is required so `/app/publicity` does not silently match
+// `/app/public`.
+const RUNNER_ALLOWED_RUNNER_SOURCES = ['/app/public'];
+const RUNNER_ALLOWED_RUNNER_PREFIXES = ['/app/.next/', '/app/public/'];
+
+function isAllowedRunnerSource(src) {
+  if (RUNNER_ALLOWED_RUNNER_SOURCES.includes(src)) return true;
+  return RUNNER_ALLOWED_RUNNER_PREFIXES.some((p) => src.startsWith(p));
+}
+
+function describeAllowlist() {
+  return [...RUNNER_ALLOWED_RUNNER_SOURCES, ...RUNNER_ALLOWED_RUNNER_PREFIXES].join(', ');
+}
 
 /**
  * Extract the list of source paths from a single Dockerfile COPY
@@ -123,40 +137,27 @@ async function assertionA() {
   const runnerEnd = nextHeader ? nextHeader.index : stripped.length;
   const runnerStage = stripped.slice(runnerStart, runnerEnd);
 
-  const r2 = /^\s*COPY\b[^\n]*\/app\/node_modules\b/im;
-  if (r2.test(runnerStage)) {
-    fail(
-      'Assertion A',
-      `Runner-stage \`COPY ... /app/node_modules\` is forbidden by ` +
-        `design — the standalone tree at \`/app/.next/standalone\` is ` +
-        `self-contained. If you need a runtime package, scope the COPY ` +
-        `to the specific path and re-justify the gate.`,
-    );
-  }
-
-  // r3: parse every runner-stage COPY instruction, extract its source
-  // paths, and require any source starting with `/app` to match the
-  // explicit allowlist. This catches every broad-copy shape that
-  // would drag builder-stage `node_modules` into the runner image:
-  // `/app`, `/app/`, `/app/.`, `/app/*`, and JSON-array form.
+  // r2: positive allowlist. Parse every runner-stage COPY and require
+  // every source to match `isAllowedRunnerSource`. This catches every
+  // broad-copy shape (`/app`, `/app/`, `/app/.`, `/app/*`, JSON-array
+  // form), every relative source (`.`, `./`, `*`), every unresolved
+  // variable source (`${...}`), and segment-bounded near-misses like
+  // `/app/publicity` that a non-bounded prefix would silently allow.
   const copyLineRegex = /^\s*COPY\b[^\n]*/gim;
   const copyLines = [...runnerStage.matchAll(copyLineRegex)].map((m) => m[0]);
   for (const copyLine of copyLines) {
     const sources = extractCopySources(copyLine);
     for (const src of sources) {
-      if (!src.startsWith('/app')) continue;
-      const allowed = RUNNER_ALLOWED_SRC_PREFIXES.some((p) => src.startsWith(p));
-      if (!allowed) {
-        fail(
-          'Assertion A',
-          `Runner-stage COPY source \`${src}\` is not in the allowlist ` +
-            `(${RUNNER_ALLOWED_SRC_PREFIXES.join(', ')}). A broad \`/app\` ` +
-            `source would transitively copy \`node_modules\` from the ` +
-            `source stage into the final image. Scope to a specific ` +
-            `descendant or extend the allowlist with justification.\n` +
-            `  in: ${copyLine.trim()}`,
-        );
-      }
+      if (isAllowedRunnerSource(src)) continue;
+      fail(
+        'Assertion A',
+        `Runner-stage COPY source \`${src}\` is not on the allowlist ` +
+          `(${describeAllowlist()}). Broad sources (\`/app\`, \`.\`, ` +
+          `\`./\`, \`\${VAR}\`) would transitively copy \`node_modules\` ` +
+          `from the source stage into the final image. Scope to a ` +
+          `specific descendant or extend the allowlist with justification.\n` +
+          `  in: ${copyLine.trim()}`,
+      );
     }
   }
 }
