@@ -1,17 +1,8 @@
 /**
- * Internal worker endpoint for the jobs collection.
+ * Handlers for `/api/internal/jobs` — list (GET) and create (POST).
  *
- * `POST /api/internal/jobs` — create (or idempotently replay) a job
- * record. The web edge captures causality and pre-validates the
- * payload before forwarding here; this route is the single writer of
- * job records.
- *
- * `GET /api/internal/jobs?userId=&type=&status=` — list redacted
- * job DTOs scoped to a user. Mirrors the multi-tenant filter on
- * `/api/jobs`.
- *
- * All requests require Bearer auth (`COPILOT_WORKER_SECRET`) and
- * `COPILOT_WORKER_MODE=1`.
+ * Faithfully ports `src/app/api/internal/jobs/route.ts`, minus the
+ * env-mode/bearer check (handled by Hono middleware) and Next types.
  */
 
 import { parseJsonBody } from '@/lib/api/request-utils';
@@ -25,8 +16,6 @@ import type {
 } from '@/lib/jobs/dispatch';
 import { redactJobForDetail, redactJobForList } from '@/lib/jobs/redact';
 import { logger } from '@/lib/logger';
-import { withExtractedTraceContext } from '@/lib/observability/context-propagation';
-import { NextRequest, NextResponse } from 'next/server';
 import {
   areCapabilitiesAllowedForProfile,
   isChatResponseProfile,
@@ -38,7 +27,6 @@ import { scheduleWorkerJobExecution } from '@/worker/jobs/scheduler';
 
 const log = logger.withTag('InternalJobs');
 
-/** RFC4122 v4 uuid shape (lowercase hex). Matches `/api/jobs` validator. */
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const DISPATCHABLE_JOB_TYPES: DispatchableJobType[] = [
@@ -101,15 +89,9 @@ function parseCreateBody(requestBody: unknown):
   const credentials = parseCredentials(raw.credentials);
   if (credentials === 'invalid') return { ok: false };
   if (raw.type === 'chat-response') {
-    const chatInput = raw.input as {
-      profile?: unknown;
-      capabilities?: unknown;
-    };
+    const chatInput = raw.input as { profile?: unknown; capabilities?: unknown };
     if (!isChatResponseProfile(chatInput.profile)) return { ok: false };
-    if (
-      chatInput.capabilities !== undefined
-      && !isCapabilitiesArg(chatInput.capabilities)
-    ) {
+    if (chatInput.capabilities !== undefined && !isCapabilitiesArg(chatInput.capabilities)) {
       return { ok: false };
     }
     if (
@@ -135,41 +117,14 @@ function parseCreateBody(requestBody: unknown):
   };
 }
 
-function authorize(request: NextRequest): NextResponse | null {
-  if (process.env.COPILOT_WORKER_MODE !== '1') {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-  const secret = process.env.COPILOT_WORKER_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json({ error: 'COPILOT_WORKER_SECRET is not configured' }, { status: 500 });
-  }
-  if (request.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  return null;
-}
-
-/**
- * Pre-flight ownership check so cross-user id collisions return a clean 409.
- * The atomic `createIfAbsent` also detects this, but only by failing the
- * insert — without this read we'd lose the distinction between cross-user
- * conflict and same-user idempotent replay in the response code.
- */
-async function rejectIfOwnedByDifferentUser(
-  body: CreateJobBody,
-): Promise<NextResponse | null> {
+async function rejectIfOwnedByDifferentUser(body: CreateJobBody): Promise<Response | null> {
   const preExisting = await jobStorage.get(body.id);
   if (preExisting && preExisting.userId !== body.userId) {
-    return NextResponse.json({ error: 'Conflict' }, { status: 409 });
+    return Response.json({ error: 'Conflict' }, { status: 409 });
   }
   return null;
 }
 
-/**
- * For chat-response jobs only: build a predicate that flags an in-flight
- * job targeting the same (threadId, assistantMessageId) tuple as a collision.
- * Returning `undefined` skips the tuple check inside `createIfAbsent`.
- */
 function buildChatTupleCollisionFinder(
   body: CreateJobBody,
 ): ((jobs: Readonly<Record<string, BackgroundJob>>) => BackgroundJob | undefined) | undefined {
@@ -179,7 +134,6 @@ function buildChatTupleCollisionFinder(
   const assistantMessageId =
     typeof input.assistantMessageId === 'string' ? input.assistantMessageId : undefined;
   if (!threadId || !assistantMessageId) return undefined;
-
   return (jobs) => {
     for (const candidate of Object.values(jobs)) {
       if (candidate.userId !== body.userId) continue;
@@ -199,11 +153,6 @@ function buildChatTupleCollisionFinder(
   };
 }
 
-/**
- * Schedule executor on the next tick. Errors here mark the SAME job failed
- * so the polling client sees a deterministic terminal state instead of a
- * permanently `pending` row.
- */
 function dispatchExecutorOnNextTick(job: BackgroundJob, body: CreateJobBody): void {
   setImmediate(() => {
     try {
@@ -223,17 +172,14 @@ function dispatchExecutorOnNextTick(job: BackgroundJob, body: CreateJobBody): vo
   });
 }
 
-async function handleCreate(request: NextRequest) {
-  const authError = authorize(request);
-  if (authError) return authError;
-
+export async function handleJobsCreate(request: Request): Promise<Response> {
   const parseResult = await parseJsonBody<unknown>(request);
   if (!parseResult.success) {
-    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
+    return Response.json({ error: 'Invalid worker request' }, { status: 400 });
   }
   const parsed = parseCreateBody(parseResult.data);
   if (!parsed.ok) {
-    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
+    return Response.json({ error: 'Invalid worker request' }, { status: 400 });
   }
   const body = parsed.body;
 
@@ -244,8 +190,6 @@ async function handleCreate(request: NextRequest) {
     await getTokenStore().setTokenIfNewer(body.userId, body.credentials);
   }
 
-  // Atomic check-then-create — both id and chat-tuple collisions run under
-  // the same `withJobsMutation` lock as the insert. See `createIfAbsent`.
   const causality = body.causality as
     | (Record<string, unknown> & { capturedAt?: string })
     | undefined;
@@ -261,28 +205,24 @@ async function handleCreate(request: NextRequest) {
     buildChatTupleCollisionFinder(body),
   );
 
-  // Idempotent replay path: same id or chat-collision tuple won the race.
   if (!outcome.created) {
     if (outcome.existing.userId !== body.userId) {
-      return NextResponse.json({ error: 'Conflict' }, { status: 409 });
+      return Response.json({ error: 'Conflict' }, { status: 409 });
     }
-    return NextResponse.json(redactJobForDetail(outcome.existing), { status: 200 });
+    return Response.json(redactJobForDetail(outcome.existing), { status: 200 });
   }
 
   dispatchExecutorOnNextTick(outcome.job, body);
-  return NextResponse.json(redactJobForDetail(outcome.job), { status: 202 });
+  return Response.json(redactJobForDetail(outcome.job), { status: 202 });
 }
 
-async function handleList(request: NextRequest) {
-  const authError = authorize(request);
-  if (authError) return authError;
-
+export async function handleJobsList(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId');
   const type = searchParams.get('type');
   const status = searchParams.get('status');
   if (!userId) {
-    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    return Response.json({ error: 'userId is required' }, { status: 400 });
   }
 
   jobStorage.invalidateCache();
@@ -290,13 +230,5 @@ async function handleList(request: NextRequest) {
   jobs = jobs.filter((job) => job.userId === userId);
   if (status) jobs = jobs.filter((job) => job.status === status);
 
-  return NextResponse.json({ jobs: jobs.map(redactJobForList) });
-}
-
-export async function POST(request: NextRequest) {
-  return withExtractedTraceContext(request.headers, async () => handleCreate(request));
-}
-
-export async function GET(request: NextRequest) {
-  return withExtractedTraceContext(request.headers, async () => handleList(request));
+  return Response.json({ jobs: jobs.map(redactJobForList) });
 }

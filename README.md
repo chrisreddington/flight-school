@@ -186,8 +186,12 @@ The chat and challenge evaluation experiences stream feedback in real-time using
 
 ## OpenTelemetry + Aspire Dashboard
 
-Flight School now registers OpenTelemetry via `@vercel/otel` in `src/instrumentation.ts`.
-When running with Aspire Dashboard, traces and metrics include:
+Flight School registers OpenTelemetry from two processes: the **web** tier uses
+`@vercel/otel` in `src/instrumentation.ts`; the **worker** tier (standalone
+Hono/Node) uses `@opentelemetry/sdk-node` in `src/worker/lifecycle/otel.ts`,
+started from `src/worker/bootstrap.ts` before any handler loads. Both export
+to the same OTLP endpoint Aspire injects. When running with Aspire Dashboard,
+traces and metrics include:
 
 - Next.js API request timelines
 - GitHub API request spans (including rate-limit headers when available)

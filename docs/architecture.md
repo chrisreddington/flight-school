@@ -25,8 +25,9 @@ subprocess access to GitHub's [Remote MCP server](https://github.com/github/gith
 Two processes do the work:
 
 - A **web** Next.js app handles browser traffic, OAuth, and per-user data.
-- A **worker** Next.js app (same codebase, different role) is the *only*
-  place the Copilot SDK ever runs.
+- A **worker** standalone Node process (Hono + `@hono/node-server`, no
+  Next.js framework) is the *only* place the Copilot SDK ever runs.
+  See [decision 2](#2-the-copilot-sdk-runs-in-a-separate-worker-process).
 
 Everything else flows from that split.
 
@@ -44,7 +45,7 @@ flowchart LR
         JobsApi["/api/jobs<br/>(thin proxy)"]
     end
 
-    subgraph Worker["Worker (Next.js, COPILOT_WORKER_MODE=1)"]
+    subgraph Worker["Worker (Hono + Node, no Next.js)"]
         WInternal["/api/internal/*<br/>(bearer-auth)"]
         Pool["per-user<br/>runtime pool"]
         SDK["CopilotClient<br/>+ MCP config"]
@@ -101,17 +102,24 @@ entitlement. Mixing that with the public web tier would mean every web
 replica owned per-user CLI state, and a crash would take browser traffic
 down with it.
 
-So we split it: **Web dispatches; Worker executes.** If
-`COPILOT_WORKER_URL` is unset, web AI routes fail fast with a typed
-`CopilotWorkerRequiredError`. The boundary is enforced by a CI script.
+So we split it: **Web dispatches; Worker executes.** The worker is a
+**standalone Node process** (Hono + `@hono/node-server`) — *not* a
+Next.js app. Web has no `next/*` import reachable from the worker
+entrypoint; the CI gate
+[`scripts/check-worker-next-free.mjs`](../scripts/check-worker-next-free.mjs)
+fails the build if any leak appears. If `COPILOT_WORKER_URL` is unset,
+web AI routes fail fast with a typed `CopilotWorkerRequiredError`.
 
 | Concern | Implementation |
 | --- | --- |
 | Web-side dispatch primitives (the only sanctioned SDK entry points from web) | [`src/lib/copilot/execution/`](../src/lib/copilot/execution/) → `executeCopilotChat`, `executeCopilotCoachJob`, `openCopilotAuthoringStreamViaWorker` |
 | Worker-required failure mode | [`src/lib/copilot/execution/worker-required-error.ts`](../src/lib/copilot/execution/worker-required-error.ts) |
-| Worker-side endpoints (bearer-auth) | [`src/app/api/internal/copilot/execute/`](../src/app/api/internal/copilot/execute/), [`coach/`](../src/app/api/internal/copilot/coach/), [`authoring/`](../src/app/api/internal/copilot/authoring/) |
+| Worker entrypoint (Node) | [`src/worker/bootstrap.ts`](../src/worker/bootstrap.ts) → `src/worker/server-main.ts` (`runWorker()`) |
+| Hono app + routes (bearer-auth) | [`src/worker/http/app.ts`](../src/worker/http/app.ts), handlers under [`src/worker/http/handlers/`](../src/worker/http/handlers/) |
+| Worker lifecycle (OTel, warmup, restart-sweep, shutdown) | [`src/worker/lifecycle/`](../src/worker/lifecycle/) |
 | Session + MCP factories (worker-only) | [`src/lib/copilot/sessions.ts`](../src/lib/copilot/sessions.ts), [`server.ts`](../src/lib/copilot/server.ts), [`mcp.ts`](../src/lib/copilot/mcp.ts) |
-| Boundary guard (CI) | [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs) |
+| Boundary guards (CI) | [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs), [`scripts/check-worker-next-free.mjs`](../scripts/check-worker-next-free.mjs) |
+| Build / image | [`scripts/build-worker.mjs`](../scripts/build-worker.mjs) + [`Dockerfile.worker`](../Dockerfile.worker) — esbuild bundles to `dist-worker/*.mjs`; runtime image only carries the externalised native packages (`@github/copilot`, OTel SDK, `@hono/node-server`, `@azure/cosmos`, …). |
 
 ### 3. One Copilot runtime per user, pooled and evicted
 
@@ -162,7 +170,7 @@ job flow shows up as one distributed trace.
 | --- | --- |
 | Enqueue (web → worker proxy) | [`src/app/api/jobs/route.ts`](../src/app/api/jobs/route.ts) |
 | Pre-enqueue token seed | [`src/lib/auth/seed.ts`](../src/lib/auth/seed.ts) → `seedTokenStoreFromJwt` |
-| Worker-side create/dispatch | [`src/app/api/internal/jobs/`](../src/app/api/internal/jobs/) |
+| Worker-side create/dispatch | [`src/worker/http/handlers/jobs.ts`](../src/worker/http/handlers/jobs.ts), [`jobs-by-id.ts`](../src/worker/http/handlers/jobs-by-id.ts), [`jobs-stream.ts`](../src/worker/http/handlers/jobs-stream.ts) |
 | Executors (one per job type) | [`src/worker/jobs/executors/`](../src/worker/jobs/executors/) |
 | Token resolver (refresh-on-execute) | [`src/lib/auth/token-resolver.ts`](../src/lib/auth/token-resolver.ts) |
 | Scheduler + retention sweeps | [`src/worker/jobs/scheduler.ts`](../src/worker/jobs/scheduler.ts), [`retention.ts`](../src/worker/jobs/retention.ts) |
@@ -281,7 +289,7 @@ sequenceDiagram
     actor U as User
     participant B as Browser
     participant W as Web (Next.js)
-    participant K as Worker
+    participant K as Worker (Hono/Node)
     participant C as Copilot CLI (per-user)
     participant M as GitHub MCP
 
@@ -317,7 +325,7 @@ sequenceDiagram
     participant B as Browser
     participant W as Web (Next.js)
     participant TS as TokenStore (Cosmos + KV)
-    participant K as Worker
+    participant K as Worker (Hono/Node)
     participant E as Executor
 
     U->>B: trigger "regenerate focus"
@@ -347,15 +355,16 @@ the dispatch table is in
 
 ## Running it locally (Aspire AppHost)
 
-Local dev mirrors the production shape: two Next.js processes (web +
-worker) talking to each other over HTTP, plus an OTLP-receiving
-dashboard. The TypeScript Aspire AppHost wires it together.
+Local dev mirrors the production shape: a Next.js web process and a
+standalone Node (Hono) worker process talking to each other over HTTP,
+plus an OTLP-receiving dashboard. The TypeScript Aspire AppHost wires
+it together.
 
 ```mermaid
 flowchart LR
     subgraph AppHost["apphost.ts (Aspire)"]
-        Web["flight-school<br/>(npm run dev:web-only)<br/>port 3000"]
-        Worker["copilot-worker<br/>(npm run dev:worker)<br/>port 3001"]
+        Web["flight-school<br/>(npm run dev:web-only)<br/>Next.js, port 3000"]
+        Worker["copilot-worker<br/>(npm run dev:worker)<br/>Hono/Node, port 3001"]
         Cmd[/"custom command:<br/>sweep-retention"/]
     end
     Dashboard[[Aspire Dashboard<br/>UI :18888, OTLP :4318]]
@@ -371,18 +380,25 @@ What each script actually does:
 | Command | What it starts | When to use |
 | --- | --- | --- |
 | `npm run dev` (alias `npm run aspire:run`) | AppHost → web on `:3000` + worker on `:3001` + dashboard wiring. | **Default.** Mirrors prod shape; AI features work. |
-| `npm run dev:web-only` | Just web on `:3000`, no worker. | UI work that doesn't exercise Copilot chat. AI routes intentionally fail fast. |
-| `npm run dev:worker` | Just worker on `:3001`. | Combine with `dev:web-worker` to debug the worker in isolation. |
+| `npm run dev:web-only` | Just Next.js web on `:3000`, no worker. | UI work that doesn't exercise Copilot chat. AI routes intentionally fail fast. |
+| `npm run dev:worker` | Just the Hono worker on `:3001` (`tsx watch src/worker/bootstrap.ts`). | Combine with `dev:web-worker` to debug the worker in isolation. |
 | `npm run dev:web-worker` | Web on `:3000` pointed at a manually started local worker. | Two-terminal debug flow. |
+| `npm run build:worker` | Bundles the worker to `dist-worker/*.mjs` via esbuild + writes a minimal runtime `package.json`. | Container build (consumed by `Dockerfile.worker`). |
+| `npm run start:worker` | Runs the bundled worker (`node dist-worker/bootstrap.mjs`). | Local production-shape check. |
 | `npm run dashboard` | Standalone Aspire Dashboard (anonymous). | Inspect telemetry from any of the above. |
 
 AppHost wiring (read alongside the code):
 
-- The resource graph is declared in [`apphost.ts`](../apphost.ts) using
-  `addNextJsApp(...)`. The worker resource sets `COPILOT_WORKER_MODE=1`,
-  `COPILOT_WORKER_ENABLED=1`, a shared `COPILOT_WORKER_SECRET`, and a
-  distinct `OTEL_SERVICE_NAME=flight-school-worker` so the dashboard can
-  tell the two processes apart.
+- The resource graph is declared in [`apphost.ts`](../apphost.ts).
+  Until Aspire's JavaScript hosting integration grows a first-class
+  `addNodeApp`/`addDockerfile` primitive, the worker is still declared
+  via `addNextJsApp` pointed at `runScriptName: 'dev:worker'` for
+  **local dev only**. The deployed container is Next-free (built from
+  [`Dockerfile.worker`](../Dockerfile.worker) over `dist-worker/`),
+  so the cosmetic mismatch never leaves your laptop.
+- The worker resource sets a shared `COPILOT_WORKER_SECRET` and a
+  distinct `OTEL_SERVICE_NAME=flight-school-worker` so the dashboard
+  can tell the two processes apart.
 - The web resource resolves the worker's URL via
   `workerEndpoint.property(EndpointProperty.Url)` and injects it as
   `COPILOT_WORKER_URL`. `OTEL_SERVICE_NAME=flight-school-web` and

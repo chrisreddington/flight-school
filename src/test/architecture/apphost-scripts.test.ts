@@ -19,10 +19,10 @@ describe('AppHost npm scripts', () => {
     expect(packageJson.scripts?.['dev:web-only']).toContain('next dev');
   });
 
-  it('uses a separate Next dev directory for the worker resource', () => {
-    expect(packageJson.scripts?.['dev:worker']).toContain('NEXT_DIST_DIR=.next-worker');
-    expect(packageJson.scripts?.['dev:worker']).toContain('rm -rf .next-worker');
-    expect(nextConfigSource).toContain("distDir: process.env.NEXT_DIST_DIR ?? '.next'");
+  it('runs the worker as a standalone Node process (no Next)', () => {
+    expect(packageJson.scripts?.['dev:worker']).toContain('tsx');
+    expect(packageJson.scripts?.['dev:worker']).toContain('src/worker/bootstrap.ts');
+    expect(packageJson.scripts?.['dev:worker']).not.toContain('next dev');
   });
 
   it('pins the Turbopack root to this repository for parallel web and worker dev servers', () => {

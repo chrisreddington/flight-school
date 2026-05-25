@@ -1,0 +1,27 @@
+# Worker image — Hono/Node only, no Next.js.
+#
+# Multi-stage:
+#   1. build stage   → `npm ci` + `npm run build:worker` produces
+#                      `dist-worker/{bootstrap,server-main}.mjs` plus
+#                      a minimal `dist-worker/package.json` listing every
+#                      externalised runtime package (see scripts/build-worker.mjs).
+#   2. runtime stage → copy `dist-worker/` only; `npm install --omit=dev`
+#                      lays down the optional platform prebuilds for
+#                      `@github/copilot`, `sharp`, etc.
+
+FROM node:20-bookworm AS build
+WORKDIR /repo
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY tsconfig.json ./
+COPY scripts ./scripts
+COPY src ./src
+RUN npm run build:worker
+
+FROM node:20-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /app/dist-worker
+COPY --from=build /repo/dist-worker ./
+RUN npm install --omit=dev --no-audit --no-fund
+EXPOSE 3001
+CMD ["node", "bootstrap.mjs"]

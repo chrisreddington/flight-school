@@ -29,15 +29,7 @@ const { auth } = NextAuth(edgeAuthConfig);
 const PUBLIC_PREFIXES = [
   '/api/auth',
   '/api/health',
-  '/api/internal',
   '/sign-in',
-  '/_next',
-  '/favicon.ico',
-];
-
-const WORKER_ALLOWED_PREFIXES = [
-  '/api/health',
-  '/api/internal',
   '/_next',
   '/favicon.ico',
 ];
@@ -47,13 +39,6 @@ function isPublicPath(pathname: string): boolean {
     return true;
   }
   // Common static asset extensions served from /public.
-  return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
-}
-
-function isWorkerAllowedPath(pathname: string): boolean {
-  if (WORKER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-    return true;
-  }
   return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
 }
 
@@ -85,14 +70,6 @@ const authProxy = auth((req) => {
 });
 
 export default function proxy(...args: Parameters<typeof authProxy>) {
-  const [req] = args;
-  const pathname = req.nextUrl.pathname;
-  if (process.env.COPILOT_WORKER_MODE === '1') {
-    return isWorkerAllowedPath(pathname)
-      ? NextResponse.next()
-      : NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   return authProxy(...args);
 }
 

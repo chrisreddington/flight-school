@@ -1,15 +1,13 @@
 /**
- * Activity logger selector.
+ * Activity logger surface used by worker-internal callers (logged
+ * sessions, streaming sessions, authoring sessions).
  *
- * Picks the right implementation at module-load time based on
- * `process.env.COPILOT_WORKER_MODE`:
- *  - `'1'` → in-process worker singleton (`logger-worker.ts`)
- *  - anything else → thin HTTP client wrapper (`logger-client.ts`)
- *
- * Callers should always import {@link activityLogger} from this module
- * so they pick up the correct impl transparently.
+ * Wraps the synchronous worker singleton in a thin adapter that awaits
+ * `ensureHydrated(userId)` before every operation. Worker-side callers
+ * import {@link activityLogger}; the public web tier never imports
+ * this module — it talks to the worker over HTTP via the routes under
+ * `/api/internal/ai-activity/*` (handled inside the worker process).
  */
-import { activityLoggerClient } from './logger-client';
 import { activityLoggerWorker } from './logger-worker';
 import type {
   AIActivityInput,
@@ -67,17 +65,15 @@ export interface ActivityLogger {
   clear(userId: string): Promise<void>;
 }
 
-const isWorker = process.env.COPILOT_WORKER_MODE === '1';
-
 /**
- * Wrap the synchronous worker impl in a thin adapter so the public
- * shape matches the async HTTP client. The adapter awaits
- * `ensureHydrated` for the user before forwarding to the worker
- * singleton; without this, an in-process caller (streaming, logged
- * session, authoring) racing the durable-store load could append
- * events to the bus before hydration completes, and hydration would
- * then duplicate them. We keep the inner worker methods synchronous
- * because the HTTP routes already await hydration before calling them.
+ * Wrap the synchronous worker impl in an async adapter so callers can
+ * `await` `ensureHydrated` for the user before forwarding to the
+ * worker singleton; without this, an in-process caller (streaming,
+ * logged session, authoring) racing the durable-store load could
+ * append events to the bus before hydration completes, and hydration
+ * would then duplicate them. We keep the inner worker methods
+ * synchronous because the HTTP routes already await hydration before
+ * calling them.
  */
 const workerAdapter: ActivityLogger = {
   async startOperation(userId, type, operation, input) {
@@ -107,4 +103,4 @@ const workerAdapter: ActivityLogger = {
   },
 };
 
-export const activityLogger: ActivityLogger = isWorker ? workerAdapter : activityLoggerClient;
+export const activityLogger: ActivityLogger = workerAdapter;

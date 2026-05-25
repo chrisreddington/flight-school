@@ -12,33 +12,48 @@ This doc covers the **container image** half of deploying Flight School. The
 full Azure Container Apps deployment (infra, identity, secrets wiring) is
 tracked in P8.
 
-## Current Copilot runtime limitation
+## Current Copilot runtime architecture
 
-The current container runs the Next.js app and the Copilot SDK's auto-managed
-CLI runtime in the same app process/container. User identity is isolated at the
-SDK session level by passing the authenticated user's GitHub token into each
-session, but Copilot CLI process state is shared per app replica.
+The platform deploys **two container images** built from the same monorepo:
 
-That is acceptable for this exploratory ACA lab, but it is not the target shape
-for a public multi-user platform. The target architecture is an internal worker
-service with a per-user Copilot runtime pool, described in
-[`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md).
-The current code has this split in place:
-`src/lib/copilot/execution/` handles chat worker transport,
-`src/app/api/jobs/dispatcher.ts` dispatches async jobs to the worker, and
-`/api/internal/jobs/{execute,cancel}` is the worker-owned background job boundary.
-Service Bus/KEDA durable workers remain future work.
+1. **Web image** — Next.js app served from `Dockerfile`. Handles browser
+   traffic, OAuth, Octokit calls. Has no Copilot SDK reachable from its
+   import graph.
+2. **Worker image** — standalone Hono/Node process built from
+   `Dockerfile.worker` over `dist-worker/*.mjs` (esbuild bundle, no Next
+   runtime). Owns the per-user Copilot runtime pool, the SDK, the CLI
+   subprocesses, and all `/api/internal/*` routes.
 
-## Building the image
+The split is enforced in CI by
+[`scripts/check-worker-next-free.mjs`](../scripts/check-worker-next-free.mjs)
+(no `next/*` reachable from the worker entrypoint) and
+[`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
+(no `@github/copilot-sdk` reachable outside the worker).
 
-The repo ships a multi-stage `Dockerfile` at the root. It produces a
-Next.js standalone server image based on `node:20-slim` for test environments.
+The worker is a **single-replica** service: the in-process scheduler,
+runtime pool, and local job storage all assume one process. Until a
+durable queue (Service Bus / KEDA) lands, the ACA worker app must be
+declared with `maxReplicas = 1`.
+
+## Building the images
 
 ```bash
+# Web (Next.js)
 docker build -t flight-school .
+
+# Worker (Hono/Node, no Next)
+docker build -t flight-school-worker -f Dockerfile.worker .
 ```
 
-Build stages:
+The worker image is intentionally minimal: `npm run build:worker`
+emits `dist-worker/{bootstrap,server-main}.mjs` plus a generated
+`dist-worker/package.json` listing only the externalised runtime
+packages (`@github/copilot`, `@github/copilot-*` platform variants,
+`@hono/node-server`, `@azure/cosmos`, OTel SDK, …). The runtime stage
+runs `npm install --omit=dev` inside `dist-worker/` and starts via
+`CMD ["node", "bootstrap.mjs"]`.
+
+### Web image (legacy Dockerfile) stages
 
 1. **`deps`** – installs the full dependency tree with `npm ci`. We do *not*
    prune `@github/copilot`: it ships a Node CLI binary plus native prebuilds
@@ -49,6 +64,28 @@ Build stages:
 3. **`runner`** – a clean `node:20-slim` image with only the standalone server,
    static assets, `public/`, and the `@github/*` packages copied in. Runs as
    the non-root `node` user under `tini` for clean signal handling.
+
+### Worker image notes
+
+`Dockerfile.worker` builds in two stages: the `build` stage runs
+`npm ci` + `npm run build:worker`, and the `runtime` stage copies only
+`dist-worker/` then runs `npm install --omit=dev` to pull the
+externalised native prebuilds for the current platform
+(`@github/copilot-{linux,linuxmusl,darwin,win32}-{x64,arm64}`,
+`@img/sharp-*`, `tree-sitter-*`). Target image size: < 200 MB.
+
+The Hono worker configures HTTP server timeouts explicitly to support
+long SSE streams (previously handled by Next's `maxDuration = 300`):
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `server.keepAliveTimeout` | 310 s | > 300 s SSE budget |
+| `server.headersTimeout` | 320 s | must exceed keepAlive |
+| `server.requestTimeout` | 0 (disabled) | rely on SSE heartbeat for liveness |
+
+**ACA ingress idle timeout (default 240 s) must be raised above 300 s
+or paired with a shorter SSE heartbeat** — otherwise long authoring /
+job streams disconnect at the ingress proxy.
 
 ## Running locally
 

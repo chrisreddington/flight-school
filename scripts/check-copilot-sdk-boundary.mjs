@@ -68,7 +68,6 @@ const SDK_ALLOWED_FILES = new Set([
 const WORKER_INTERNAL_PREFIXES = [
   'src/worker/',
   'src/lib/copilot/runtime/',
-  'src/app/api/internal/copilot/',
 ];
 
 // SDK adapter / session-factory modules. These files legitimately wrap

@@ -1,10 +1,16 @@
+/**
+ * Handler for `POST /api/internal/copilot/authoring`.
+ *
+ * Owns the in-process Copilot SDK session and emits the stream as SSE so
+ * the public route can be a literal pipe.
+ */
+
 import { parseJsonBody } from '@/lib/api/request-utils';
 import { createGenericStreamingSession } from '@/lib/challenge/authoring/authoring-session';
 import { parseGeneratedChallenge } from '@/lib/challenge/authoring/challenge-parser';
 import type { AuthoringContext } from '@/lib/challenge/authoring/types';
 import { CopilotEntitlementRequiredError } from '@/lib/copilot/entitlement';
 import { nowMs } from '@/lib/utils/date-utils';
-import { NextRequest, NextResponse } from 'next/server';
 
 interface AuthoringWorkerRequest {
   identity: { userId: string; gitHubToken: string };
@@ -14,30 +20,23 @@ interface AuthoringWorkerRequest {
   action?: 'clarify' | 'generate' | 'validate';
 }
 
-/**
- * Worker streaming endpoint for the challenge-authoring conversation.
- *
- * Web/API authenticates the caller and proxies bytes through; this
- * worker route owns the in-process Copilot SDK session and emits the
- * stream as SSE so the public route can be a literal pipe.
- */
-export async function POST(request: NextRequest) {
-  if (process.env.COPILOT_WORKER_MODE !== '1') {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
+function isAuthoringWorkerRequest(value: unknown): value is AuthoringWorkerRequest {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  const identity = record.identity as Record<string, unknown> | undefined;
+  return (
+    typeof record.prompt === 'string' &&
+    record.prompt.length > 0 &&
+    !!identity &&
+    typeof identity.userId === 'string' &&
+    typeof identity.gitHubToken === 'string'
+  );
+}
 
-  const secret = process.env.COPILOT_WORKER_SECRET?.trim();
-  if (!secret) {
-    return NextResponse.json({ error: 'COPILOT_WORKER_SECRET is not configured' }, { status: 500 });
-  }
-
-  if (request.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function handleCopilotAuthoring(request: Request): Promise<Response> {
   const parseResult = await parseJsonBody<AuthoringWorkerRequest>(request);
   if (!parseResult.success || !isAuthoringWorkerRequest(parseResult.data)) {
-    return NextResponse.json({ error: 'Invalid worker request' }, { status: 400 });
+    return Response.json({ error: 'Invalid worker request' }, { status: 400 });
   }
 
   const body = parseResult.data;
@@ -54,10 +53,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof CopilotEntitlementRequiredError) {
-      return NextResponse.json({ error: 'copilot_required' }, { status: 402 });
+      return Response.json({ error: 'copilot_required' }, { status: 402 });
     }
     const message = error instanceof Error ? error.message : 'Authoring session failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: 500 });
   }
 
   const { stream, cleanup, model, newConversationId, streamingMetrics } = sessionHandle;
@@ -115,17 +114,4 @@ export async function POST(request: NextRequest) {
       connection: 'keep-alive',
     },
   });
-}
-
-function isAuthoringWorkerRequest(value: unknown): value is AuthoringWorkerRequest {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
-  const identity = record.identity as Record<string, unknown> | undefined;
-  return (
-    typeof record.prompt === 'string' &&
-    record.prompt.length > 0 &&
-    !!identity &&
-    typeof identity.userId === 'string' &&
-    typeof identity.gitHubToken === 'string'
-  );
 }

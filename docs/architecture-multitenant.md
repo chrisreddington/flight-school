@@ -38,7 +38,7 @@ flowchart LR
         Exec["copilot/execution/<br/>worker dispatch"]
     end
 
-    subgraph WorkerProc["Worker (Next.js, COPILOT_WORKER_MODE=1)"]
+    subgraph WorkerProc["Worker (standalone Hono/Node, not Next.js)"]
         WRoute["/api/internal/copilot/*<br/>(bearer-auth)"]
         Sess["createLogged*Session(<br/>{ userId, gitHubToken })"]
         Client["CopilotClient<br/>(per-user pool)"]
@@ -85,9 +85,10 @@ dispatches `executeCopilotChat()` to the private worker over HTTP:
   `CopilotWorkerRequiredError` and `/api/copilot` fails fast. The web
   process never runs the SDK in-process for public chat.
 - The web process posts to `/api/internal/copilot/execute` on the worker
-  with a bearer secret and a timeout.
-- Auth.js middleware allows `/api/internal/*` through so the route-specific
-  bearer-secret gate (not session auth) can run.
+  with a bearer secret and a timeout. The worker is a standalone Node
+  process (Hono, not Next.js) listening only inside the private
+  ingress — `src/proxy.ts` rejects any browser-side hit on
+  `/api/internal/*` because no Next route exists at those paths.
 - The public web Container App does **not** set `COPILOT_WORKER_ENABLED`;
   only the private worker app does.
 

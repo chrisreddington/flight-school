@@ -5,7 +5,7 @@ import {
 } from '@/lib/copilot/prompts';
 import { createLoggedCoachSession } from '@/lib/copilot/server';
 import type { DailyChallenge, DailyGoal, LearningTopic } from '@/lib/focus/types';
-import { getOctokitForToken } from '@/lib/github/client';
+import { getOctokitForToken } from '@/lib/github/octokit-factory';
 import { buildCompactContext, serializeContext } from '@/lib/github/profile';
 import { jobStorage } from '@/lib/jobs';
 import type {

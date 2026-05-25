@@ -1,26 +1,9 @@
-/**
- * Worker-internal AI activity SSE endpoint.
- *
- * `GET /api/internal/ai-activity/stream?cursor=<event.id>&include=...`
- *   Emits `id: <event.id>\ndata: { type:'event', event }\n\n` for each
- *   live event broadcast through the bus. The initial frame is
- *   `{ type:'init', events, cursor }` with the current retained set
- *   resolved against the cursor (replace semantics on evicted cursors).
- *   Honours both `?cursor=` and `Last-Event-ID` (header takes precedence).
- */
+/** Handler for `GET /api/internal/ai-activity/stream` — SSE. */
+
 import { activityBus, type ActivityBusFrame } from '@/lib/copilot/activity/activity-bus';
 import { toPublicActivityEvent } from '@/lib/copilot/activity/dto';
 import { resolveIncludeMode } from '@/lib/copilot/activity/include-mode';
 import { activityLoggerWorker } from '@/lib/copilot/activity/logger-worker';
-import { withExtractedTraceContext } from '@/lib/observability/context-propagation';
-import { NextRequest } from 'next/server';
-
-import { authorizeInternalActivity } from '../auth';
-
-// Guarded by COPILOT_WORKER_SECRET via authorizeInternalActivity.
-
-// Streaming SSE connection: hold the route open for the stream lifetime.
-export const maxDuration = 300;
 
 const SSE_HEADERS: HeadersInit = {
   'Content-Type': 'text/event-stream',
@@ -29,16 +12,14 @@ const SSE_HEADERS: HeadersInit = {
   'X-Accel-Buffering': 'no',
 };
 
-async function handleStream(request: NextRequest): Promise<Response> {
-  const authResult = authorizeInternalActivity(request);
-  if (!authResult.ok) return authResult.response;
-  const { userId } = authResult.auth;
-
+export async function handleActivityStream(
+  request: Request,
+  userId: string,
+): Promise<Response> {
   const includeFull = resolveIncludeMode(request) === 'full';
 
-  // Last-Event-ID takes precedence over `?cursor=` (per SSE spec).
   const lastEventId = request.headers.get('last-event-id');
-  const queryCursor = request.nextUrl.searchParams.get('cursor');
+  const queryCursor = new URL(request.url).searchParams.get('cursor');
   const cursor = lastEventId ?? queryCursor;
 
   await activityLoggerWorker.ensureHydrated(userId);
@@ -55,11 +36,6 @@ async function handleStream(request: NextRequest): Promise<Response> {
 
   const stream = new ReadableStream({
     async start(controller) {
-      // Emit an `init` frame ONLY when the client needs replace semantics:
-      // first connect (no cursor) OR cursor was unknown/evicted. For a
-      // known cursor (replay mode) we skip `init` entirely because
-      // `useAIActivity` treats every `init` as replace-all — sending
-      // `{type:'init',events:[]}` would wipe the client's existing list.
       if (mode === 'init') {
         const initFrame = {
           type: 'init' as const,
@@ -69,11 +45,6 @@ async function handleStream(request: NextRequest): Promise<Response> {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(initFrame)}\n\n`));
       }
 
-      // Replay events at and after the cursor (inclusive). Re-delivering
-      // the cursor event itself is required so a client that disconnected
-      // mid-pending can pick up subsequent in-place updates (the bus stores
-      // one slot per id, so we send the latest version). The client upserts
-      // by `event.id`, making the re-delivery idempotent.
       if (mode === 'replay') {
         for (const event of initialRaw) {
           const publicEvent = toPublicActivityEvent(event, { includeFull });
@@ -142,8 +113,4 @@ async function handleStream(request: NextRequest): Promise<Response> {
   });
 
   return new Response(stream, { status: 200, headers: SSE_HEADERS });
-}
-
-export async function GET(request: NextRequest) {
-  return withExtractedTraceContext(request.headers, async () => handleStream(request));
 }

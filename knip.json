@@ -12,9 +12,5 @@
   "ignoreBinaries": [
     "aspire",
     "wait-on"
-  ],
-  "ignoreDependencies": [
-    "tsx",
-    "esbuild"
   ]
 }
