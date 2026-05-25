@@ -2,10 +2,14 @@
  * useUserProfile Hook
  *
  * Fetches and caches the authenticated user's GitHub profile and activity data.
- * Uses server-side JSON storage for day-based persistence with manual refresh capability.
+ * Server-side JSON storage acts as a day-keyed cache; the React state machine
+ * is provided by TanStack Query.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { useCallback, useRef } from 'react';
 
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { apiGet } from '@/lib/api-client';
@@ -34,9 +38,7 @@ async function getCachedProfile(): Promise<ProfileResponse | null> {
     const data = (await response.json()) as ProfileStorageSchema | null;
     if (!data) return null;
 
-    // Check if cache is from today
-    const todayKey = getDateKey();
-    if (data.date !== todayKey) return null;
+    if (data.date !== getDateKey()) return null;
 
     // Invalidate cache if it's missing authMethod (old schema)
     if (!data.profile?.meta?.authMethod) return null;
@@ -112,58 +114,65 @@ function normalizeProfileResponse(profile: ProfileResponse | null): ProfileRespo
   };
 }
 
+/**
+ * Fetch + cache the user's profile.
+ *
+ * @remarks
+ * Cache resolution happens inside `queryFn` (not `initialData`) because
+ * `getCachedProfile` is async — `initialData` requires a synchronous value.
+ * Running on the client only also avoids SSR hydration mismatch.
+ *
+ * `meta: { bypassCache: true }` triggers a fresh API fetch (used by `refetch`).
+ */
+async function fetchUserProfile({ bypassCache }: { bypassCache: boolean }): Promise<ProfileResponse | null> {
+  if (!bypassCache) {
+    const cached = await getCachedProfile();
+    if (cached) return normalizeProfileResponse(cached);
+  }
+
+  try {
+    const profile = await apiGet<ProfileResponse>('/api/profile');
+    const normalized = normalizeProfileResponse(profile);
+    if (normalized) {
+      await setCachedProfile(normalized);
+    }
+    return normalized;
+  } catch (err) {
+    logger.error(
+      'Error loading profile',
+      { message: err instanceof Error ? err.message : String(err) },
+      'useUserProfile',
+    );
+    throw err;
+  }
+}
+
 export function useUserProfile(): UseUserProfileResult {
-  // SSR-safe: Always start with null/loading state for consistent hydration
-  // Cache is checked in useEffect after hydration completes
-  const [data, setData] = useState<ProfileResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Ref toggles to true while a manual `refetch()` is in flight, so that
+  // refetch bypasses the server-side day cache and forces a fresh
+  // `/api/profile` request. The ref is consumed and reset inside queryFn.
+  const bypassCacheRef = useRef(false);
 
-  const fetchProfile = useCallback(async (bypassCache = false) => {
-    // Check cache validity (from today)
-    if (!bypassCache) {
-      const cached = await getCachedProfile();
-      if (cached) {
-        const normalized = normalizeProfileResponse(cached);
-        setData(normalized);
-        setIsLoading(false);
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Use centralized API client with automatic retry and error handling
-      const profile = await apiGet<ProfileResponse>('/api/profile');
-      const normalized = normalizeProfileResponse(profile);
-
-      // Save to server-side storage
-      if (normalized) {
-        await setCachedProfile(normalized);
-      }
-
-      setData(normalized);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load profile';
-      setError(message);
-      logger.error('Error loading profile', { message }, 'useUserProfile');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const query = useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      const bypassCache = bypassCacheRef.current;
+      bypassCacheRef.current = false;
+      return fetchUserProfile({ bypassCache });
+    },
+  });
 
   const refetch = useCallback(async () => {
-    await fetchProfile(true);
-  }, [fetchProfile]);
+    bypassCacheRef.current = true;
+    await query.refetch({ cancelRefetch: true });
+  }, [query]);
 
-  // Check cache after hydration to avoid SSR mismatch
-  useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
-
-  return { data, isLoading, error, refetch };
+  return {
+    data: query.data ?? null,
+    isLoading: query.isFetching,
+    error: query.error instanceof Error ? query.error.message : query.error ? 'Failed to load profile' : null,
+    refetch,
+  };
 }
 
 /**

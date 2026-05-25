@@ -1,4 +1,5 @@
 import type { HabitWithHistory } from '@/lib/habits/types';
+import { createQueryTestWrapper } from '@/test/query-test-wrapper';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { HabitsSection } from './habits-section';
@@ -46,6 +47,11 @@ function createHabit(overrides: Partial<HabitWithHistory> = {}): HabitWithHistor
   };
 }
 
+function renderWithQueryClient() {
+  const { wrapper } = createQueryTestWrapper();
+  return render(<HabitsSection />, { wrapper });
+}
+
 describe('HabitsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,7 +60,7 @@ describe('HabitsSection', () => {
   it('renders an error banner when habits fail to load', async () => {
     getActiveMock.mockRejectedValueOnce(new Error('load failed'));
 
-    render(<HabitsSection />);
+    renderWithQueryClient();
 
     expect(await screen.findByText('Failed to load habits')).toBeInTheDocument();
   });
@@ -66,7 +72,7 @@ describe('HabitsSection', () => {
     });
     getActiveMock.mockReturnValueOnce(loadingPromise);
 
-    render(<HabitsSection />);
+    renderWithQueryClient();
 
     expect(screen.getByText('Loading habits...')).toBeInTheDocument();
 
@@ -80,7 +86,7 @@ describe('HabitsSection', () => {
   it('renders habit cards when habits load successfully', async () => {
     getActiveMock.mockResolvedValueOnce([createHabit({ title: 'Review PRs' })]);
 
-    render(<HabitsSection />);
+    renderWithQueryClient();
 
     expect(await screen.findByText('Review PRs')).toBeInTheDocument();
   });

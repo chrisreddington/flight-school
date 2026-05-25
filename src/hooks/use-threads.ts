@@ -18,13 +18,16 @@
 
 'use client';
 
-import { logger } from '@/lib/logger';
-import { now, nowMs } from '@/lib/utils/date-utils';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
+import { logger } from '@/lib/logger';
 import { threadStore, type CreateThreadOptions, type Message, type Thread, type ThreadContext } from '@/lib/threads';
+import { now, nowMs } from '@/lib/utils/date-utils';
 
 const log = logger.withTag('useThreads');
+
+const THREADS_KEY = ['threads'] as const;
 
 /** State returned by the useThreads hook */
 interface UseThreadsState {
@@ -64,186 +67,184 @@ export type UseThreadsReturn = UseThreadsState & UseThreadsActions;
 /**
  * Hook for managing chat threads.
  *
- * Provides comprehensive thread management including:
- * - Creating, selecting, deleting threads
- * - Renaming threads
- * - Updating thread context (repos, learning focus)
- * - Adding messages to threads
- * - Automatic server-side JSON persistence
+ * @remarks
+ * Backed by TanStack Query: the thread list lives in the QueryClient cache
+ * under `['threads']` and every mutation invalidates that key to trigger a
+ * refetch. Local `selectedThreadId` state captures the user's selection.
  *
- * @returns Thread state and actions
+ * Error contract preserved from the pre-TanStack version:
+ * - `createThread` re-throws (callers `await` and expect rejections).
+ * - All other mutations swallow + log (callers expect `.resolves.toBeUndefined()`).
+ *
+ * `addMessage` and `updateActiveThread` read the target thread fresh from
+ * `threadStore` (not from the TanStack cache) to avoid a stale-cache race
+ * during in-flight invalidation when callers chain rename→update.
+ *
+ * No `useMemo` / `useCallback` here on purpose — the React Compiler handles
+ * memoization, and a hand-rolled `useMemo` over `threads.find(...)` was
+ * caught returning stale results in tests. See repo guideline in
+ * `.github/copilot-instructions.md` (Next 16 / React 19.2 build flags).
  */
 export function useThreads(): UseThreadsReturn {
-  const [threads, setThreads] = useState<Thread[]>([]);
+  const queryClient = useQueryClient();
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+
+  const threadsQuery = useQuery({
+    queryKey: THREADS_KEY,
+    queryFn: () => threadStore.getAll(),
+  });
+
+  const threads = threadsQuery.data ?? [];
+  const isLoading = threadsQuery.isPending;
 
   const activeThreadId = selectedThreadId ?? threads[0]?.id ?? null;
 
-  // Compute active thread from ID
-  const activeThread = useMemo(() => {
-    if (!activeThreadId) return null;
-    return threads.find((t) => t.id === activeThreadId) ?? null;
-  }, [threads, activeThreadId]);
+  const activeThread = activeThreadId ? (threads.find((thread) => thread.id === activeThreadId) ?? null) : null;
 
-  // Load threads from storage
-  const loadThreads = useCallback(async () => {
+  const invalidateThreads = () => queryClient.invalidateQueries({ queryKey: THREADS_KEY });
+
+  const createMutation = useMutation({
+    mutationFn: (options?: CreateThreadOptions) => threadStore.create(options),
+    onSuccess: () => invalidateThreads(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => threadStore.delete(id),
+    onSuccess: async (_void, deletedId) => {
+      if (selectedThreadId === deletedId) {
+        // Pre-invalidation cache still includes the deleted thread; filter it
+        // out manually so the next selection is deterministic.
+        const cachedThreads = queryClient.getQueryData<Thread[]>(THREADS_KEY) ?? [];
+        const remaining = cachedThreads.filter((thread) => thread.id !== deletedId);
+        setSelectedThreadId(remaining[0]?.id ?? null);
+      }
+      await invalidateThreads();
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => threadStore.rename(id, title),
+    onSuccess: (updated) => {
+      if (updated) return invalidateThreads();
+      return undefined;
+    },
+  });
+
+  const updateContextMutation = useMutation({
+    mutationFn: ({ id, context }: { id: string; context: Partial<ThreadContext> }) =>
+      threadStore.updateContext(id, context),
+    onSuccess: (updated) => {
+      if (updated) return invalidateThreads();
+      return undefined;
+    },
+  });
+
+  const updateThreadMutation = useMutation({
+    mutationFn: (updated: Thread) => threadStore.update(updated),
+    onSuccess: () => invalidateThreads(),
+  });
+
+  const createThread = async (options?: CreateThreadOptions, makeActive = true): Promise<Thread> => {
     try {
-      const loaded = await threadStore.getAll();
-      setThreads(loaded);
+      const thread = await createMutation.mutateAsync(options);
+      log.debug('Created thread', { id: thread.id, title: thread.title, options });
+      if (makeActive) {
+        setSelectedThreadId(thread.id);
+      }
+      return thread;
     } catch (error) {
-      log.error('Failed to load threads', { error });
-    } finally {
-      setIsLoading(false);
+      log.error('Failed to create thread', { error });
+      throw error;
     }
-  }, []);
+  };
 
-  // Initial load
-  useEffect(() => {
-    loadThreads();
-  }, [loadThreads]);
-
-  // Refresh threads from storage
-  const refresh = useCallback(async () => {
-    await loadThreads();
-  }, [loadThreads]);
-
-  // Create a new thread
-  const createThread = useCallback(
-    async (options?: CreateThreadOptions, makeActive = true): Promise<Thread> => {
-      try {
-        const thread = await threadStore.create(options);
-        log.debug('Created thread', { id: thread.id, title: thread.title, options });
-        if (makeActive) {
-          setSelectedThreadId(thread.id);
-        }
-        await loadThreads();
-        return thread;
-      } catch (error) {
-        log.error('Failed to create thread', { error });
-        throw error;
-      }
-    },
-    [loadThreads],
-  );
-
-  // Select a thread by ID
-  const selectThread = useCallback((id: string) => {
+  const selectThread = (id: string) => {
     setSelectedThreadId(id);
-  }, []);
+  };
 
-  // Delete a thread by ID
-  const deleteThread = useCallback(
-    async (id: string) => {
-      try {
-        await threadStore.delete(id);
-        if (activeThreadId === id) {
-          const remaining = await threadStore.getAll();
-          setSelectedThreadId(remaining[0]?.id ?? null);
-        }
-        await loadThreads();
-      } catch (error) {
-        log.error('Failed to delete thread', { error });
-      }
-    },
-    [activeThreadId, loadThreads],
-  );
+  const deleteThread = async (id: string) => {
+    try {
+      await deleteMutation.mutateAsync(id);
+    } catch (error) {
+      log.error('Failed to delete thread', { error });
+    }
+  };
 
-  // Rename a thread
-  const renameThread = useCallback(
-    async (id: string, title: string) => {
-      try {
-        const updated = await threadStore.rename(id, title);
-        if (updated) {
-          await loadThreads();
-        }
-      } catch (error) {
-        log.error('Failed to rename thread', { error });
-      }
-    },
-    [loadThreads],
-  );
+  const renameThread = async (id: string, title: string) => {
+    try {
+      await renameMutation.mutateAsync({ id, title });
+    } catch (error) {
+      log.error('Failed to rename thread', { error });
+    }
+  };
 
-  // Update thread context
-  const updateContext = useCallback(
-    async (id: string, context: Partial<ThreadContext>) => {
-      try {
-        const updated = await threadStore.updateContext(id, context);
-        if (updated) {
-          await loadThreads();
-        }
-      } catch (error) {
-        log.error('Failed to update thread context', { error });
-      }
-    },
-    [loadThreads],
-  );
+  const updateContext = async (id: string, context: Partial<ThreadContext>) => {
+    try {
+      await updateContextMutation.mutateAsync({ id, context });
+    } catch (error) {
+      log.error('Failed to update thread context', { error });
+    }
+  };
 
-  // Add a message to the active thread
-  const addMessage = useCallback(
-    async (message: Omit<Message, 'id' | 'timestamp'>) => {
-      try {
-        if (!activeThreadId) return;
+  const addMessage = async (message: Omit<Message, 'id' | 'timestamp'>) => {
+    try {
+      if (!activeThreadId) return;
 
-        const thread = await threadStore.getById(activeThreadId);
-        if (!thread) return;
+      // Single source of truth: avoids stale TQ cache during in-flight
+      // invalidation when the caller has just renamed or otherwise mutated
+      // this same thread moments before.
+      const thread = await threadStore.getById(activeThreadId);
+      if (!thread) return;
 
-        const newMessage: Message = {
-          ...message,
-          id: `msg-${nowMs()}-${Math.random().toString(36).slice(2, 9)}`,
-          timestamp: now(),
-        };
+      const newMessage: Message = {
+        ...message,
+        id: `msg-${nowMs()}-${Math.random().toString(36).slice(2, 9)}`,
+        timestamp: now(),
+      };
 
-        const updated: Thread = {
-          ...thread,
-          messages: [...thread.messages, newMessage],
-          updatedAt: now(),
-        };
+      const updated: Thread = {
+        ...thread,
+        messages: [...thread.messages, newMessage],
+        updatedAt: now(),
+      };
 
-        await threadStore.update(updated);
-        await loadThreads();
-      } catch (error) {
-        log.error('Failed to add message to thread', { error });
-      }
-    },
-    [activeThreadId, loadThreads],
-  );
+      await updateThreadMutation.mutateAsync(updated);
+    } catch (error) {
+      log.error('Failed to add message to thread', { error });
+    }
+  };
 
-  // Update the active thread (or a specific thread by ID)
-  const updateActiveThread = useCallback(
-    async (update: Partial<Thread>, targetThreadId?: string) => {
-      try {
-        const threadId = targetThreadId ?? activeThreadId;
-        if (!threadId) return;
+  const updateActiveThread = async (update: Partial<Thread>, targetThreadId?: string) => {
+    try {
+      const threadId = targetThreadId ?? activeThreadId;
+      if (!threadId) return;
 
-        // Get fresh thread data from storage to avoid stale React state issues
-        // This is critical when rename happens before message update
-        const thread = await threadStore.getById(threadId);
-        if (!thread) return;
+      // Fresh server read — see addMessage comment.
+      const thread = await threadStore.getById(threadId);
+      if (!thread) return;
 
-        const updated: Thread = {
-          ...thread,
-          ...update,
-          id: thread.id, // Prevent ID override
-          updatedAt: now(),
-        };
+      const updated: Thread = {
+        ...thread,
+        ...update,
+        id: thread.id, // Prevent ID override
+        updatedAt: now(),
+      };
 
-        await threadStore.update(updated);
-        await loadThreads();
-      } catch (error) {
-        log.error('Failed to update active thread', { error });
-      }
-    },
-    [activeThreadId, loadThreads],
-  );
+      await updateThreadMutation.mutateAsync(updated);
+    } catch (error) {
+      log.error('Failed to update active thread', { error });
+    }
+  };
+
+  const refresh = async () => {
+    await threadsQuery.refetch();
+  };
 
   return {
-    // State
     threads,
     activeThread,
     activeThreadId,
     isLoading,
-    // Actions
     createThread,
     selectThread,
     deleteThread,

@@ -7,6 +7,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { Thread } from '@/lib/threads';
+import { createQueryTestWrapper } from '@/test/query-test-wrapper';
 import { useThreads } from './use-threads';
 
 const { errorSpy } = vi.hoisted(() => ({ errorSpy: vi.fn() }));
@@ -53,7 +54,8 @@ function mountStorage(seed: Thread[] = []) {
 
 async function mountHook(seed: Thread[] = []) {
   const state = mountStorage(seed);
-  const hook = renderHook(() => useThreads());
+  const { wrapper } = createQueryTestWrapper();
+  const hook = renderHook(() => useThreads(), { wrapper });
   await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
   return { ...hook, state };
 }
@@ -69,7 +71,8 @@ describe('useThreads — initial load', () => {
       makeThread({ id: 'a', title: 'A', updatedAt: '2024-01-02T00:00:00Z' }),
       makeThread({ id: 'b', title: 'B', updatedAt: '2024-01-01T00:00:00Z' }),
     ]);
-    const { result } = renderHook(() => useThreads());
+    const { wrapper } = createQueryTestWrapper();
+    const { result } = renderHook(() => useThreads(), { wrapper });
     expect(result.current.isLoading).toBe(true);
     expect(result.current.threads).toEqual([]);
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -193,7 +196,9 @@ describe('useThreads — deleteThread', () => {
     await act(async () => {
       await result.current.deleteThread(del);
     });
-    expect(result.current.threads.map((t) => t.id)).toEqual(expectIds);
+    await waitFor(() => {
+      expect(result.current.threads.map((t) => t.id)).toEqual(expectIds);
+    });
     expect(result.current.activeThreadId).toBe(expectActive);
   });
 });
@@ -246,8 +251,11 @@ describe('useThreads — addMessage / updateActiveThread', () => {
     await act(async () => {
       await result.current.addMessage({ role: 'user', content: 'Hello' });
     });
+    await waitFor(() => {
+      const msgs = result.current.activeThread?.messages ?? [];
+      expect(msgs).toHaveLength(1);
+    });
     const msgs = result.current.activeThread?.messages ?? [];
-    expect(msgs).toHaveLength(1);
     expect(msgs[0]).toMatchObject({ role: 'user', content: 'Hello' });
     expect(msgs[0].id).toMatch(/^msg-/);
     expect(typeof msgs[0].timestamp).toBe('string');
@@ -294,7 +302,7 @@ describe('useThreads — refresh', () => {
     await act(async () => {
       await result.current.refresh();
     });
-    expect(result.current.threads[0].title).toBe('A-renamed');
+    await waitFor(() => expect(result.current.threads[0].title).toBe('A-renamed'));
   });
 });
 

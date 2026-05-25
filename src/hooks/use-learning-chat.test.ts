@@ -9,6 +9,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Thread } from '@/lib/threads';
+import { createQueryTestWrapper } from '@/test/query-test-wrapper';
 import { useLearningChat } from './use-learning-chat';
 
 // --- Peer hook + tiny module stubs -----------------------------------------
@@ -126,7 +127,8 @@ const makeThread = (overrides: Partial<Thread> = {}): Thread => ({
 
 async function renderHookWithSeed(seed: Thread[] = []) {
   backend.threads = seed;
-  const view = renderHook(() => useLearningChat());
+  const { wrapper } = createQueryTestWrapper();
+  const view = renderHook(() => useLearningChat(), { wrapper });
   await waitFor(() => expect(view.result.current.isThreadsLoading).toBe(false));
   return view;
 }
