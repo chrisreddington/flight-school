@@ -38,11 +38,13 @@ function writeCache(challengeId: string, plan: GuidedPlan): void {
  * Pre-fetches and caches the AI-generated guided plan for a challenge.
  *
  * Starts fetching immediately on mount (before the user clicks "Guided Mode"),
- * so the plan is ready by the time they open the panel. Results are persisted
- * in localStorage for 24 hours and mirrored into the TanStack Query cache for
- * the lifetime of the page. The localStorage check happens inside `queryFn`
- * (not via `initialData`) so SSR and client hydration stay aligned and the
- * cache freshness clock starts at the original cache-write time.
+ * so the plan is ready by the time they open the panel. Successful responses
+ * are persisted in localStorage for 24 hours; the localStorage check happens
+ * inside `queryFn` (not via `initialData`) so SSR and client hydration stay
+ * aligned. Errors do NOT poison the cache — the hook surfaces a static
+ * fallback derived from the challenge metadata while leaving the TanStack
+ * query in an error state, so a remount/back-navigation can retry the AI
+ * request.
  *
  * @param challengeId - Used as the localStorage cache key
  * @param challenge - Challenge metadata for the AI prompt
@@ -59,22 +61,21 @@ export function useGuidedPlan(
       const cached = readCache(challengeId);
       if (cached) return cached.plan;
 
-      try {
-        const data = await apiPost<GuidedPlan>('/api/guided-plan', {
-          challengeTitle: challenge.title,
-          challengeDescription: challenge.description,
-          challengeLanguage: challenge.language,
-          challengeDifficulty: challenge.difficulty,
-        });
-        writeCache(challengeId, data);
-        return data;
-      } catch {
-        // 402 already broadcast to the banner via apiPost; fall back to
-        // the static plan for this view.
-        return getGuidedPlanFallback(challenge);
-      }
+      const data = await apiPost<GuidedPlan>('/api/guided-plan', {
+        challengeTitle: challenge.title,
+        challengeDescription: challenge.description,
+        challengeLanguage: challenge.language,
+        challengeDifficulty: challenge.difficulty,
+      });
+      writeCache(challengeId, data);
+      return data;
+      // Errors propagate to query.error. The static fallback is derived
+      // outside the query so failed fetches don't suppress retries by
+      // looking like fresh successful 24h-cached data.
     },
   });
 
-  return { plan: query.data ?? null, loading: query.isPending };
+  const plan = query.data ?? (query.isError ? getGuidedPlanFallback(challenge) : null);
+
+  return { plan, loading: query.isPending };
 }
