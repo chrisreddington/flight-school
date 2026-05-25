@@ -19,9 +19,10 @@ web:
   - 'tsconfig.json'
   - '.github/workflows/deploy-web.yml'
   - '.github/path-filters/web.yml'
-  # `infra/**` is in both filters: a Bicep change (env-var wiring,
-  # scaling, resource property) must roll out via the next deploy on
-  # either side. Whichever workflow fires first re-converges both
-  # apps; the second re-reads the unchanged side's tag from ACA and
-  # is a no-op on the image set.
-  - 'infra/**'
+  # Runtime-affecting infra only — Bicep templates and the parameters
+  # JSON. `infra/README.md` and other doc edits do NOT trigger a deploy.
+  # The same patterns are in BOTH filters: whichever workflow fires
+  # first re-converges both apps via the read-other-app-tag step.
+  - 'infra/main.bicep'
+  - 'infra/main.parameters.json'
+  - 'infra/modules/**'

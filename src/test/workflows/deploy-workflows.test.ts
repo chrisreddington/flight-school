@@ -294,7 +294,14 @@ describe('path-filter scopes — representative mapping', () => {
     'infra/main.parameters.json',
     'infra/modules/container-app.bicep',
   ];
-  const neither = ['README.md', 'docs/architecture.md', 'CONTRIBUTING.md'];
+  const neither = [
+    'README.md',
+    'docs/architecture.md',
+    'CONTRIBUTING.md',
+    // Infra docs and operational notes do NOT trigger a deploy —
+    // only runtime-affecting infra (Bicep + parameters JSON) does.
+    'infra/README.md',
+  ];
 
   function matchesAny(file: string, globs: string[]): boolean {
     return globs.some((g) => {
