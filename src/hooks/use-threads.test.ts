@@ -336,3 +336,35 @@ describe('useThreads — error handling', () => {
     expect(errorSpy).toHaveBeenCalledWith(logMessage, expect.any(Object));
   });
 });
+
+describe('useThreads — callback stability across re-renders', () => {
+  // Consumers (notably useChatSseSubscriptions) place these callbacks in
+  // effect dependency arrays. If any of them changed identity on an
+  // unrelated render, the SSE subscription would tear down and rebuild
+  // on every render — exactly the bug gpt55-dev caught in panel round 4.
+  it('preserves Object.is identity for every exported action across an unrelated rerender', async () => {
+    const { result, rerender } = await mountHook([]);
+
+    const first = {
+      createThread: result.current.createThread,
+      selectThread: result.current.selectThread,
+      deleteThread: result.current.deleteThread,
+      renameThread: result.current.renameThread,
+      updateContext: result.current.updateContext,
+      addMessage: result.current.addMessage,
+      updateActiveThread: result.current.updateActiveThread,
+      refresh: result.current.refresh,
+    };
+
+    rerender();
+
+    expect(result.current.createThread).toBe(first.createThread);
+    expect(result.current.selectThread).toBe(first.selectThread);
+    expect(result.current.deleteThread).toBe(first.deleteThread);
+    expect(result.current.renameThread).toBe(first.renameThread);
+    expect(result.current.updateContext).toBe(first.updateContext);
+    expect(result.current.addMessage).toBe(first.addMessage);
+    expect(result.current.updateActiveThread).toBe(first.updateActiveThread);
+    expect(result.current.refresh).toBe(first.refresh);
+  });
+});

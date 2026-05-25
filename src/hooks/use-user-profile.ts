@@ -122,8 +122,9 @@ function normalizeProfileResponse(profile: ProfileResponse | null): ProfileRespo
  * `getCachedProfile` is async — `initialData` requires a synchronous value.
  * Running on the client only also avoids SSR hydration mismatch.
  *
- * `bypassCache: true` is used by manual `refetch()` to force a fresh
- * `/api/profile` request even when the day-keyed server cache is warm.
+ * `bypassCache: true` is used by manual `refetch()` (routed through
+ * `queryClient.fetchQuery`) to force a fresh `/api/profile` request even
+ * when the day-keyed server cache is warm.
  */
 async function fetchUserProfile({ bypassCache }: { bypassCache: boolean }): Promise<ProfileResponse | null> {
   if (!bypassCache) {
@@ -148,35 +149,47 @@ async function fetchUserProfile({ bypassCache }: { bypassCache: boolean }): Prom
   }
 }
 
+// Bounded staleness: the server-side day cache owns the canonical TTL
+// (entries expire at midnight). A finite client-side stale window lets
+// TanStack's own freshness machinery re-enter `getCachedProfile()` after
+// roughly an hour of foreground activity, which catches the date-key
+// rollover for long-lived tabs without flooding the cache endpoint on
+// every subscriber mount. Window-focus refetches (TanStack default) cover
+// users returning to the tab after midnight.
+const PROFILE_STALE_TIME_MS = 60 * 60 * 1000;
+
 export function useUserProfile(): UseUserProfileResult {
   const queryClient = useQueryClient();
   // Tracks an in-flight manual `refetch()` so `isLoading` reflects the
   // explicit cache-bypass refetch the same way it did before the TanStack
-  // migration. The TanStack query itself only triggers a fetch on initial
-  // mount (staleTime: Infinity); bypass writes its result directly into
-  // the cache so all observers see the fresh value.
+  // migration. `fetchQuery` below routes the bypass through TanStack's
+  // own pipeline so success/failure both update `query.data` / `query.error`
+  // for free; this state only drives the loading indicator.
   const [isManuallyRefetching, setIsManuallyRefetching] = useState(false);
 
   const query = useQuery({
     queryKey: ['profile'],
-    // The server-side day cache owns TTL semantics (entries expire at
-    // midnight). Setting staleTime to Infinity prevents TanStack from
-    // racing background refetches against that cache-check path, which
-    // also eliminates the cross-observer ambiguity around manual
-    // refetches.
-    staleTime: Infinity,
+    staleTime: PROFILE_STALE_TIME_MS,
     queryFn: () => fetchUserProfile({ bypassCache: false }),
   });
 
   const refetch = useCallback(async () => {
     setIsManuallyRefetching(true);
     try {
-      const fresh = await fetchUserProfile({ bypassCache: true });
-      queryClient.setQueryData(['profile'], fresh);
+      // `fetchQuery` with `staleTime: 0` forces a fresh fetch and routes
+      // through the same observer pipeline as the initial mount, so
+      // success populates `query.data` and failure populates `query.error`.
+      // It also dedupes against any in-flight initial query, removing the
+      // race where a manual bypass could be overwritten by the queryFn
+      // resolving afterward.
+      await queryClient.fetchQuery({
+        queryKey: ['profile'],
+        queryFn: () => fetchUserProfile({ bypassCache: true }),
+        staleTime: 0,
+      });
     } catch {
-      // fetchUserProfile already logs and the query.error state is
-      // surfaced through the next render via setQueryData not being
-      // called; nothing else to do here.
+      // fetchUserProfile already logged; the error is surfaced via
+      // `query.error` thanks to the fetchQuery pipeline.
     } finally {
       setIsManuallyRefetching(false);
     }

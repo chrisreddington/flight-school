@@ -160,9 +160,23 @@ describe('useGuidedPlan — fallback path', () => {
 
     expect(result.current.plan).not.toBeNull();
     expect(result.current.plan?.steps[0]?.title).toContain('Two Sum');
+    // Consumers need to be able to badge "Using offline plan" when the
+    // AI request failed; the flag is the discriminator they observe.
+    expect(result.current.isFallback).toBe(true);
 
     // Failure must not be written to localStorage — a subsequent mount has
     // to be free to retry the AI request.
     expect(stubStorage.getItem('guided-plan:challenge-1')).toBeNull();
+  });
+
+  it('keeps isFallback false on the happy path so the UI does not flag a healthy plan', async () => {
+    fetchMock.mockImplementation(async () => okJson(aiPlan));
+
+    const { wrapper } = createQueryTestWrapper();
+    const { result } = renderHook(() => useGuidedPlan('challenge-1', challenge), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.plan).toEqual(aiPlan);
+    expect(result.current.isFallback).toBe(false);
   });
 });

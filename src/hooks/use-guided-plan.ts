@@ -76,6 +76,10 @@ export function useGuidedPlan(
   });
 
   const plan = query.data ?? (query.isError ? getGuidedPlanFallback(challenge) : null);
+  // `isFallback` lets the UI optionally badge "Using offline plan" when
+  // the AI request failed. The query stays in an error state so a
+  // remount/back-navigation can retry; the fallback is ephemeral.
+  const isFallback = query.isError && !query.data;
 
-  return { plan, loading: query.isPending };
+  return { plan, loading: query.isPending, isFallback };
 }

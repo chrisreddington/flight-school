@@ -88,9 +88,13 @@ export type UseThreadsReturn = UseThreadsState & UseThreadsActions;
  *
  * Exported action callbacks ARE wrapped in `useCallback` so consumers
  * (e.g. `useChatSseSubscriptions`) can use them in effect dependency
- * arrays without restarting subscriptions on every render. Closure
- * stability for callbacks is a separate concern from the
- * derived-data-memo pitfall.
+ * arrays without restarting subscriptions on every render. Each
+ * callback depends only on stable primitives — `mutateAsync` references
+ * destructured once from their `useMutation` result (TanStack guarantees
+ * those are stable per observer) plus `activeThreadId` and
+ * `queryClient`. Depending on the whole mutation/query result objects
+ * would defeat the purpose: TanStack returns a new result object on
+ * every render so the callback identity would churn anyway.
  */
 export function useThreads(): UseThreadsReturn {
   const queryClient = useQueryClient();
@@ -114,6 +118,7 @@ export function useThreads(): UseThreadsReturn {
     mutationFn: (options?: CreateThreadOptions) => threadStore.create(options),
     onSuccess: () => invalidateThreads(),
   });
+  const { mutateAsync: createThreadAsync } = createMutation;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => threadStore.delete(id),
@@ -128,6 +133,7 @@ export function useThreads(): UseThreadsReturn {
       await invalidateThreads();
     },
   });
+  const { mutateAsync: deleteThreadAsync } = deleteMutation;
 
   const renameMutation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => threadStore.rename(id, title),
@@ -136,6 +142,7 @@ export function useThreads(): UseThreadsReturn {
       return undefined;
     },
   });
+  const { mutateAsync: renameThreadAsync } = renameMutation;
 
   const updateContextMutation = useMutation({
     mutationFn: ({ id, context }: { id: string; context: Partial<ThreadContext> }) =>
@@ -145,16 +152,18 @@ export function useThreads(): UseThreadsReturn {
       return undefined;
     },
   });
+  const { mutateAsync: updateContextAsync } = updateContextMutation;
 
   const updateThreadMutation = useMutation({
     mutationFn: (updated: Thread) => threadStore.update(updated),
     onSuccess: () => invalidateThreads(),
   });
+  const { mutateAsync: updateThreadAsync } = updateThreadMutation;
 
   const createThread = useCallback(
     async (options?: CreateThreadOptions, makeActive = true): Promise<Thread> => {
       try {
-        const thread = await createMutation.mutateAsync(options);
+        const thread = await createThreadAsync(options);
         log.debug('Created thread', { id: thread.id, title: thread.title, options });
         if (makeActive) {
           setSelectedThreadId(thread.id);
@@ -165,7 +174,7 @@ export function useThreads(): UseThreadsReturn {
         throw error;
       }
     },
-    [createMutation],
+    [createThreadAsync],
   );
 
   const selectThread = useCallback((id: string) => {
@@ -175,34 +184,34 @@ export function useThreads(): UseThreadsReturn {
   const deleteThread = useCallback(
     async (id: string) => {
       try {
-        await deleteMutation.mutateAsync(id);
+        await deleteThreadAsync(id);
       } catch (error) {
         log.error('Failed to delete thread', { error });
       }
     },
-    [deleteMutation],
+    [deleteThreadAsync],
   );
 
   const renameThread = useCallback(
     async (id: string, title: string) => {
       try {
-        await renameMutation.mutateAsync({ id, title });
+        await renameThreadAsync({ id, title });
       } catch (error) {
         log.error('Failed to rename thread', { error });
       }
     },
-    [renameMutation],
+    [renameThreadAsync],
   );
 
   const updateContext = useCallback(
     async (id: string, context: Partial<ThreadContext>) => {
       try {
-        await updateContextMutation.mutateAsync({ id, context });
+        await updateContextAsync({ id, context });
       } catch (error) {
         log.error('Failed to update thread context', { error });
       }
     },
-    [updateContextMutation],
+    [updateContextAsync],
   );
 
   const addMessage = useCallback(
@@ -228,12 +237,12 @@ export function useThreads(): UseThreadsReturn {
           updatedAt: now(),
         };
 
-        await updateThreadMutation.mutateAsync(updated);
+        await updateThreadAsync(updated);
       } catch (error) {
         log.error('Failed to add message to thread', { error });
       }
     },
-    [activeThreadId, updateThreadMutation],
+    [activeThreadId, updateThreadAsync],
   );
 
   const updateActiveThread = useCallback(
@@ -253,17 +262,17 @@ export function useThreads(): UseThreadsReturn {
           updatedAt: now(),
         };
 
-        await updateThreadMutation.mutateAsync(updated);
+        await updateThreadAsync(updated);
       } catch (error) {
         log.error('Failed to update active thread', { error });
       }
     },
-    [activeThreadId, updateThreadMutation],
+    [activeThreadId, updateThreadAsync],
   );
 
   const refresh = useCallback(async () => {
-    await threadsQuery.refetch();
-  }, [threadsQuery]);
+    await queryClient.refetchQueries({ queryKey: THREADS_KEY });
+  }, [queryClient]);
 
   return {
     threads,

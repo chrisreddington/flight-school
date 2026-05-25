@@ -190,7 +190,7 @@ describe('useUserProfile — refetch bypass', () => {
     expect(result.current.data?.user.login).toBe('fresh-user');
   });
 
-  it('preserves previous data and clears loading even when a manual refetch fails', async () => {
+  it('preserves previous data, clears loading, and surfaces error when a manual refetch fails', async () => {
     const cached = makeProfile({ login: 'cached-user' });
     mountApi({ cached, liveFails: true });
 
@@ -198,6 +198,7 @@ describe('useUserProfile — refetch bypass', () => {
     const { result } = renderHook(() => useUserProfile(), { wrapper });
 
     await waitFor(() => expect(result.current.data?.user.login).toBe('cached-user'));
+    expect(result.current.error).toBeNull();
 
     await act(async () => {
       await result.current.refetch();
@@ -205,6 +206,10 @@ describe('useUserProfile — refetch bypass', () => {
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data?.user.login).toBe('cached-user');
+    // Contract: refetch failures surface through `error` so consumers can
+    // toast or retry — the imperative refetch must route through TanStack's
+    // pipeline rather than swallow errors.
+    expect(result.current.error).not.toBeNull();
   });
 });
 
