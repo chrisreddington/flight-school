@@ -1,5 +1,14 @@
 # Multi-tenant Architecture
 
+> [!TIP]
+> **Start with [`docs/architecture.md`](architecture.md)** for the
+> story-level overview, system diagrams, and the five load-bearing
+> decisions. This document is the threat-model-grade deep dive: it
+> enumerates the multi-tenant invariants the rest of the system has to
+> uphold (per-request Octokit, per-session Copilot identity, token store
+> CAS / AAD binding / DEK cache, no tokens on the public session,
+> background jobs, etc.).
+
 > [!WARNING]
 > **Exploratory project — not a reference architecture.** Flight School is a
 > single-developer experiment; this document captures the current state, not

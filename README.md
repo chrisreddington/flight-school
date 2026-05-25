@@ -29,6 +29,11 @@ Flight School is a sample implementation showing how to build AI-powered develop
 > `COPILOT_WORKER_URL` is unset, AI routes fail fast. See
 > [Multi-tenant Architecture](docs/architecture-multitenant.md) for details.
 
+> [!TIP]
+> **New here?** Start with [`docs/architecture.md`](docs/architecture.md) — a
+> story-level walkthrough of the system, with diagrams for the chat-turn,
+> background-job, and local Aspire dev-loop flows, plus links into the code.
+
 ## Getting Started
 
 Flight School is multi-tenant: it authenticates each developer via a

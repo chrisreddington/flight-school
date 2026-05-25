@@ -11,6 +11,12 @@
 
 ## Architecture Overview
 
+> For the full story (with diagrams, sequence flows, Aspire local-dev,
+> and storage/observability layout), see
+> [`docs/architecture.md`](../docs/architecture.md). The deep
+> multi-tenant invariants live in
+> [`docs/architecture-multitenant.md`](../docs/architecture-multitenant.md).
+
 Next.js 16 App Router application on React 19.2 with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes (or Server Components / Server Actions) to protect credentials. Public Copilot chat execution is routed to a mandatory private worker service.
 
 **Data Flow**: Dashboard → `/api/profile` (Octokit direct) → `/api/focus` (Copilot SDK creative generation) → UI
