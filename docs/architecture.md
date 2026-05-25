@@ -369,7 +369,7 @@ flowchart LR
     end
     Dashboard[[Aspire Dashboard<br/>UI :18888, OTLP :4318]]
 
-    Worker -->|COPILOT_WORKER_URL<br/>+ shared bearer| Web
+    Web -->|COPILOT_WORKER_URL<br/>+ shared bearer| Worker
     Web -. OTLP traces/metrics/logs .-> Dashboard
     Worker -. OTLP traces/metrics/logs .-> Dashboard
     Cmd --> Web
@@ -393,8 +393,11 @@ AppHost wiring (read alongside the code):
   worker is wired via `addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])`
   which spawns `tsx watch src/worker/bootstrap.ts` as a plain Node
   process — Aspire never treats it as a Next.js app. The deployed
-  container builds from [`Dockerfile.worker`](../Dockerfile.worker)
-  over `dist-worker/` and is identical in shape to local dev.
+  container ([`Dockerfile.worker`](../Dockerfile.worker) over
+  `dist-worker/`) runs the same plain-Node process shape — no Next.js
+  machinery in either environment — though the toolchain differs (local
+  dev runs `tsx watch` against TypeScript source; the container runs
+  the esbuild-compiled `bootstrap.mjs`).
 - The worker resource sets a shared `COPILOT_WORKER_SECRET` and a
   distinct `OTEL_SERVICE_NAME=flight-school-worker` so the dashboard
   can tell the two processes apart.

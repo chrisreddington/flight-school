@@ -15,10 +15,12 @@ async function main(): Promise<void> {
   // command that POSTs to the cron endpoint with `CRON_SKIP_AUTH=1`; the
   // route honours the bypass only when `NODE_ENV !== 'production'`.
   const workerSecret = 'local-dev-worker-secret';
+  // Worker is a standalone Hono/Node process — addExecutable, not
+  // addNextJsApp. Mirrors the deployed image (`Dockerfile.worker` over
+  // `dist-worker/`). See decision 2 in `docs/architecture.md`.
   const copilotWorker = await builder
     .addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])
     .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
-    .withEnvironment('COPILOT_WORKER_ENABLED', '1')
     .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
     // Distinct OTEL service name so dashboards/logs/traces can tell the
     // worker apart from the web tier — without this both processes emit

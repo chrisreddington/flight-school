@@ -89,8 +89,6 @@ dispatches `executeCopilotChat()` to the private worker over HTTP:
   process (Hono, not Next.js) listening only inside the private
   ingress — `src/proxy.ts` rejects any browser-side hit on
   `/api/internal/*` because no Next route exists at those paths.
-- The public web Container App does **not** set `COPILOT_WORKER_ENABLED`;
-  only the private worker app does.
 
 ### Per-user runtime pool on the worker
 

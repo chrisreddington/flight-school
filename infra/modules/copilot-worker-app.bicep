@@ -1,8 +1,10 @@
 // =============================================================================
 // Flight School Copilot Worker Container App
 // =============================================================================
-// - Internal ingress only on port 3000.
-// - Same image as the web app, with COPILOT_WORKER_ENABLED=1.
+// - Internal ingress only on port 3001.
+// - Distinct image (`${appName}-worker:${imageTag}`) built from
+//   `Dockerfile.worker`; the worker is a standalone Hono/Node process, not
+//   the Next.js web image.
 // - System-assigned managed identity used to resolve Key Vault secret refs.
 // =============================================================================
 
@@ -31,7 +33,7 @@ param keyVaultName string
 param keyVaultUri string
 
 var workerName = '${appName}-worker'
-var image = '${acrLoginServer}/${appName}:${imageTag}'
+var image = '${acrLoginServer}/${appName}-worker:${imageTag}'
 
 func kvSecretUri(vaultUri string, secretName string) string =>
   '${vaultUri}secrets/${secretName}'
@@ -52,7 +54,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
       activeRevisionsMode: 'Single'
       ingress: {
         external: false
-        targetPort: 3000
+        targetPort: 3001
         exposedPort: 0
         transport: 'http'
         allowInsecure: false
@@ -110,9 +112,8 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'NODE_ENV', value: 'production' }
             { name: 'ACA_DEPLOYMENT', value: 'true' }
             { name: 'AUTH_TRUST_HOST', value: 'true' }
-            { name: 'PORT', value: '3000' }
+            { name: 'PORT', value: '3001' }
             { name: 'KEY_VAULT_NAME', value: keyVaultName }
-            { name: 'COPILOT_WORKER_ENABLED', value: '1' }
             { name: 'AUTH_SECRET', secretRef: 'auth-secret' }
             { name: 'AUTH_GITHUB_ID', secretRef: 'auth-github-id' }
             { name: 'AUTH_GITHUB_SECRET', secretRef: 'auth-github-secret' }
@@ -128,7 +129,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
               type: 'Liveness'
               httpGet: {
                 path: '/api/health'
-                port: 3000
+                port: 3001
                 scheme: 'HTTP'
               }
               initialDelaySeconds: 30
@@ -140,7 +141,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
               type: 'Readiness'
               httpGet: {
                 path: '/api/health'
-                port: 3000
+                port: 3001
                 scheme: 'HTTP'
               }
               initialDelaySeconds: 10
@@ -152,7 +153,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
               type: 'Startup'
               httpGet: {
                 path: '/api/health'
-                port: 3000
+                port: 3001
                 scheme: 'HTTP'
               }
               initialDelaySeconds: 5

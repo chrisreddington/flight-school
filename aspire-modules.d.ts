@@ -1,3 +1,12 @@
+// Fallback declarations for the Aspire-generated TypeScript modules.
+//
+// The real, full type surface lives in `.modules/aspire.ts` after running
+// `aspire restore`. That folder is gitignored, so this hand-maintained
+// `.d.ts` keeps `tsconfig.apphost.json` happy in clean checkouts (CI
+// cold-starts, fresh worktrees) by declaring only the methods `apphost.ts`
+// actually calls. Add to this file whenever `apphost.ts` calls a new
+// Aspire API — and prefer running `aspire restore` locally to get the
+// full generated surface for development.
 declare module './.modules/aspire.js' {
   enum EndpointProperty {
     Url = "Url",

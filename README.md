@@ -215,7 +215,7 @@ By default, the dashboard listens on:
 
 This repository includes a TypeScript Aspire AppHost:
 
-- `apphost.ts` orchestrates the Next.js app with `addNextJsApp(...)`
+- `apphost.ts` orchestrates the Next.js web app with `addNextJsApp(...)` and the standalone Copilot worker (Hono/Node) with `addExecutable(...)`
 - `aspire.config.json` configures the TypeScript AppHost profile
 - AppHost includes an Azure Container Apps environment (`addAzureContainerAppEnvironment("aca-env")`)
 

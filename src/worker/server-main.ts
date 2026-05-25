@@ -30,7 +30,15 @@ export async function runWorker(): Promise<void> {
 
   await runRestartSweep();
 
-  const port = Number.parseInt(process.env.COPILOT_WORKER_PORT ?? '3001', 10);
+  // Prefer `PORT` (the ACA/Container-Apps convention) over the worker-specific
+  // override; default to 3001 to match `Dockerfile.worker` EXPOSE and the
+  // Aspire AppHost endpoint. Honouring `PORT` keeps the worker container
+  // hosting-agnostic — ACA passes `PORT` to every container without knowing
+  // the app's internal naming.
+  const port = Number.parseInt(
+    process.env.PORT ?? process.env.COPILOT_WORKER_PORT ?? '3001',
+    10,
+  );
   const app = createWorkerApp();
 
   const server = serve({ fetch: app.fetch, port }) as unknown as import('node:http').Server;

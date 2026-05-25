@@ -345,10 +345,12 @@ contract isn't enough, fix it in `apphost.ts` via `withEnvironment(...)`.
 - **Duplicate fetch spans**: `@vercel/otel` v2's default
   `instrumentations: ["auto"]` installs `FetchInstrumentation`, and
   Next.js's built-in tracer **also** emits `AppRender.fetch` spans for
-  every server-side `fetch()`. Set **`NEXT_OTEL_FETCH_DISABLED=1`** in
-  `apphost.ts` (via `withEnvironment`) to suppress Next.js's built-in
-  span and keep only the richer `FetchInstrumentation` span. Without
-  this every server fetch is double-counted.
+  every server-side `fetch()`. Set **`NEXT_OTEL_FETCH_DISABLED=1`** on
+  the **Next.js web resource** in `apphost.ts` (via `withEnvironment`)
+  to suppress Next.js's built-in span and keep only the richer
+  `FetchInstrumentation` span. Without this every server fetch is
+  double-counted. The worker is no longer a Next.js app, so this var
+  is intentionally absent from the worker resource.
 - App Router route handlers (`app/api/.../route.ts`) automatically set
   `http.route`. Pages Router and middleware do not — set it explicitly
   if you ever add one of those.
