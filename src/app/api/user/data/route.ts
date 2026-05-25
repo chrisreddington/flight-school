@@ -17,7 +17,7 @@
  *   - the Auth.js session token store (sign-out handles that)
  *   - SDK on-disk session-state under `~/.copilot/session-state/{id}/`,
  *     because those are keyed by session id (not user id) and are
- *     covered by Phase C's compaction sweeper
+ *     covered by the session-state retention sweeper
  *
  * Cross-user deletion is impossible by construction: every operation is
  * filtered by the server-resolved `userId` from {@link requireUserContext}.

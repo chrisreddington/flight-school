@@ -71,20 +71,17 @@ runs `npm install --omit=dev` inside `dist-worker/` and starts via
 ### Web image (`Dockerfile`) stages
 
 The web image runs Next.js only — the Copilot SDK and CLI live in the
-worker image. The `@github/copilot*` packages are still installed at
-build time (they are imported by code paths that fan out to the worker)
-but the web runtime never spawns the CLI subprocess.
+worker image. The runner stage ships zero `@github/*` packages.
 
 1. **`deps`** – installs the full dependency tree with `npm ci`. The
-   `@github/copilot*` packages are kept on disk conservatively because
-   the Next.js bundle's traced runtime graph still reaches them (the
-   tracer can't statically prove they're unused once a single shared
-   module imports a value from the SDK). The CLI binary itself is
-   never spawned from the web container. Trimming is a follow-up
-   gated by re-running the trace once the shared imports are
-   isolated to worker-only modules.
+   `@github/copilot*` packages are present in this stage because the
+   build needs to resolve their type definitions, but they are never
+   copied forward into the runner.
 2. **`builder`** – runs `npm run build`, producing `.next/standalone` thanks to
-   `output: 'standalone'` in `next.config.ts`.
+   `output: 'standalone'` in `next.config.ts`. The Next.js tracer
+   includes only the modules actually reachable from a value-imported
+   server entry; SDK execution lives in the worker, so the standalone
+   trace excludes the `@github/*` namespace.
 3. **`runner`** – a clean `node:20-slim` image with only the standalone server,
    static assets, and `public/`. Runs as the non-root `node` user under
    `tini` for clean signal handling. The `@github/copilot*` packages are

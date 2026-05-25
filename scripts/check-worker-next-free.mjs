@@ -44,8 +44,8 @@ const FORBIDDEN_INPUT_PREFIXES = ['node_modules/next/', 'node_modules/server-onl
 const FORBIDDEN_IMPORT_PATTERNS = [/^next($|\/)/, /^server-only$/];
 
 async function loadSharedEsbuildOptions() {
-  // Resolved lazily so the pre-B.7-3 path doesn't require the module
-  // (or esbuild) to exist. The config lands with B.7-6.
+  // Loaded lazily so the script reports a targeted error if the shared
+  // esbuild config is missing rather than a generic import failure.
   const modulePath = resolve(REPO_ROOT, 'scripts/worker-esbuild-config.mjs');
   if (!(await fileExists(modulePath))) {
     throw new Error(

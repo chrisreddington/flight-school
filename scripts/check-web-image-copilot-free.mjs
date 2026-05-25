@@ -24,8 +24,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOCKERFILE = path.join(REPO_ROOT, 'Dockerfile');
 const DIST_DIR = process.env.NEXT_DIST_DIR ?? '.next';
 const STANDALONE = path.join(REPO_ROOT, DIST_DIR, 'standalone');
@@ -42,9 +43,12 @@ function fail(assertion, message) {
 
 // ---------- Assertion A: Dockerfile static lint --------------------------
 //
-// Bans two patterns in the runner stage:
-//   r1: COPY ... @github (anywhere in the file)
-//   r2: COPY ... /app/node_modules (inside the runner stage only)
+// Three checks on the runner stage:
+//   r1: bans `COPY ... @github` (anywhere in the file)
+//   r2: bans `COPY ... /app/node_modules` (inside the runner stage only)
+//   r3: bans broad runner-stage `/app` copies (e.g. `COPY ... /app ./`
+//       or `COPY ... /app/ ./`) that would transitively re-introduce
+//       `node_modules` from any builder stage without triggering r2
 //
 // Stage detection is header-anchored: enumerate `FROM ...` lines,
 // pick the one whose header text contains `AS runner`, and slice
@@ -74,7 +78,7 @@ async function assertionA() {
   if (!runnerHeader) {
     fail(
       'Assertion A',
-      `Dockerfile has no \`AS runner\` stage; gate cannot scope r2. ` +
+      `Dockerfile has no \`AS runner\` stage; gate cannot scope r2/r3. ` +
         `If you renamed the runner stage, update this script.`,
     );
     return;
@@ -92,6 +96,27 @@ async function assertionA() {
         `design — the standalone tree at \`/app/.next/standalone\` is ` +
         `self-contained. If you need a runtime package, scope the COPY ` +
         `to the specific path and re-justify the gate.`,
+    );
+  }
+
+  // r3: catch broad runner-stage copies whose source is `/app` or
+  // `/app/` (without a more specific tail). A line like
+  // `COPY --from=builder /app ./` would drag every builder-stage
+  // package into the runner image without matching r2.
+  //
+  // Allowed runner-stage sources are deliberately narrow — explicit
+  // descendants of `/app/.next` or `/app/public`. Anything else is
+  // suspect and must be re-justified.
+  const broadAppCopyRegex = /^\s*COPY\b[^\n]*?(\s|=)\/app(\/?)(\s|$)/gim;
+  const matches = [...runnerStage.matchAll(broadAppCopyRegex)];
+  for (const match of matches) {
+    fail(
+      'Assertion A',
+      `Runner-stage broad source path \`/app\` (or \`/app/\`) is ` +
+        `forbidden: it would transitively copy \`node_modules\` from ` +
+        `the source stage into the final image. Scope to a specific ` +
+        `descendant (e.g. \`/app/.next/standalone\`) and re-justify ` +
+        `the gate.\n  matched: ${match[0].trim()}`,
     );
   }
 }
@@ -142,7 +167,12 @@ async function assertionB() {
         (seg, i) =>
           i > 0 && segments[i - 1] === 'node_modules' && seg === '@github',
       );
-      if (hit) hits.push(rel);
+      if (hit) {
+        hits.push(rel);
+        // Don't recurse into a known hit — one path is enough to
+        // signal the violation and keeps the failure output crisp.
+        continue;
+      }
       await walk(full);
     }
   }
