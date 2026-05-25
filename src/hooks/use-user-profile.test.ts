@@ -265,10 +265,64 @@ describe('useUserProfile — refetch bypass', () => {
       await refetchPromise;
     });
 
-    // The /api/profile endpoint must have been hit (bypass actually ran),
-    // and the surfaced data must come from that response, not the cache.
-    expect(liveCalls.count).toBeGreaterThanOrEqual(1);
+    // The /api/profile endpoint must have been hit exactly once (the
+    // bypass call) — not zero (which would mean cancellation failed and
+    // dedupe won) and not more than one (which would mean the bypass
+    // fired redundantly).
+    expect(liveCalls.count).toBe(1);
     expect(result.current.data?.user.login).toBe('fresh-from-bypass');
+  });
+
+  it('only flips isLoading off after all overlapping refetch calls settle', async () => {
+    // Regression for the ref-counted guard in `refetch()`. Two refetches
+    // are dispatched back-to-back so both increment the in-flight count
+    // before either settles. With the guard, only the last-to-finish
+    // call clears the indicator; without the guard, the first call's
+    // `finally` would have already flipped `isManuallyRefetching` to
+    // false while the second is still in flight.
+    const cached = makeProfile({ login: 'cached' });
+    const fresh = makeProfile({ login: 'fresh' });
+
+    fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const target = typeof url === 'string' ? url : url.toString();
+      const method = (init?.method ?? 'GET').toUpperCase();
+
+      if (target.includes('/api/profile/storage')) {
+        if (method === 'POST') return okJson({});
+        return okJson({ date: getDateKey(), profile: cached });
+      }
+
+      if (target.includes('/api/profile')) {
+        return okJson(fresh);
+      }
+
+      return okJson({});
+    });
+
+    const { wrapper } = createQueryTestWrapper();
+    const { result } = renderHook(() => useUserProfile(), { wrapper });
+
+    await waitFor(() => expect(result.current.data?.user.login).toBe('cached'));
+
+    // Dispatch both refetches before awaiting either. Both increment
+    // the ref count to 2, set the indicator true, and join the same
+    // bypass fetchQuery via TanStack's dedupe.
+    let firstRefetch!: Promise<void>;
+    let secondRefetch!: Promise<void>;
+    act(() => {
+      firstRefetch = result.current.refetch();
+      secondRefetch = result.current.refetch();
+    });
+
+    expect(result.current.isLoading).toBe(true);
+
+    await act(async () => {
+      await Promise.all([firstRefetch, secondRefetch]);
+    });
+
+    // Indicator flips off only after both settle.
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data?.user.login).toBe('fresh');
   });
 });
 

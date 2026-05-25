@@ -9,7 +9,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { apiGet } from '@/lib/api-client';
@@ -166,6 +166,12 @@ export function useUserProfile(): UseUserProfileResult {
   // own pipeline so success/failure both update `query.data` / `query.error`
   // for free; this state only drives the loading indicator.
   const [isManuallyRefetching, setIsManuallyRefetching] = useState(false);
+  // Ref-counted concurrent-refetch guard. If a user clicks refresh twice
+  // in rapid succession, call 2's `cancelQueries` aborts call 1's fetch;
+  // call 1's `finally` would otherwise flip the indicator off while call 2
+  // is still in flight, producing a transient `isLoading: false` flash.
+  // Only the LAST in-flight refetch clears the indicator.
+  const inflightRefetchCount = useRef(0);
 
   const query = useQuery({
     queryKey: ['profile'],
@@ -180,6 +186,7 @@ export function useUserProfile(): UseUserProfileResult {
   });
 
   const refetch = useCallback(async () => {
+    inflightRefetchCount.current += 1;
     setIsManuallyRefetching(true);
     try {
       // Cancel any in-flight non-bypass query for this key first.
@@ -198,9 +205,15 @@ export function useUserProfile(): UseUserProfileResult {
       });
     } catch {
       // fetchUserProfile already logged; the error is surfaced via
-      // `query.error` thanks to the fetchQuery pipeline.
+      // `query.error` thanks to the fetchQuery pipeline. A rapid second
+      // `refetch()` will also land here when its cancelQueries aborts
+      // this call's fetchQuery — that's expected and handled by the
+      // ref-counted indicator below.
     } finally {
-      setIsManuallyRefetching(false);
+      inflightRefetchCount.current -= 1;
+      if (inflightRefetchCount.current === 0) {
+        setIsManuallyRefetching(false);
+      }
     }
   }, [queryClient]);
 
