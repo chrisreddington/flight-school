@@ -18,8 +18,8 @@ reference environment for Flight School on **Azure Container Apps (ACA)**.
 | Container Apps managed environment `cae-<appName>` | Consumption workload profile |
 | Cosmos DB (NoSQL, **serverless**) | DB `flightschool`, container `sessions` (partition key `/userId`, 30-day TTL) for future server-side session/token store |
 | Key Vault `kv-<appName>-<hash>` | RBAC-enabled; holds Auth.js, GitHub App, Cosmos, and App Insights secrets |
-| Container App `<appName>` | The Next.js + Copilot CLI workload (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<imageTag>` (built from `Dockerfile`) |
-| Container App `<appName>-worker` | Private internal Copilot worker (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<imageTag>` (built from `Dockerfile.worker`) |
+| Container App `<appName>` | Public Next.js web app — browser traffic, OAuth, Octokit, and SSE proxy to the worker (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<imageTag>` (built from `Dockerfile`). No Copilot SDK / CLI in this image. |
+| Container App `<appName>-worker` | Private internal Copilot worker — owns the Copilot SDK, the CLI subprocesses, the per-user runtime pool, and `/api/internal/*` (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<imageTag>` (built from `Dockerfile.worker`) |
 
 The Container App runs with a **system-assigned managed identity** that is
 granted the **Key Vault Secrets User** role on the Key Vault so it can resolve
@@ -28,9 +28,9 @@ secret references at runtime.
 ## Architecture notes
 
 - **Ingress** is external on target port 3000, transport `auto`, with
-  `stickySessions.affinity: 'sticky'` so an SSE stream from the Copilot CLI
-  subprocess stays pinned to the replica that owns it. `clientCertificateMode`
-  is `ignore`.
+  `stickySessions.affinity: 'sticky'` so an SSE stream proxied from the
+  worker stays pinned to the web replica that opened the upstream
+  connection. `clientCertificateMode` is `ignore`.
 - **Idle / request timeout.** ACA's HTTP edge currently caps a single request
   at **~240 s** (4 minutes). That's fine for short Copilot turns but a long
   agentic run that streams for longer than 4 minutes will be cut by the edge
@@ -39,8 +39,9 @@ secret references at runtime.
   known limitation and mitigate at the app layer (heartbeats / resume tokens /
   reconnect). If/when Microsoft surfaces a configurable idle timeout on
   `ingress`, set it here.
-- **Sizing.** 1 vCPU / 2 GiB per replica gives the Copilot CLI Node subprocess
-  enough headroom; bump if you see OOMs in App Insights.
+- **Sizing.** 1 vCPU / 2 GiB per replica. The web tier is mostly Next.js
+  + Octokit; the worker tier hosts the Copilot CLI Node subprocesses and
+  needs the headroom. Bump either if you see OOMs in App Insights.
 - **Min replicas = 1** to avoid cold-start latency on the first SSE byte. Max 5
   with an HTTP concurrency scaler at 50 concurrent requests/replica.
 - **Cosmos = serverless** to keep idle cost near zero until P9 turns on the
@@ -62,8 +63,8 @@ secret references at runtime.
    - **Worker:** `${acrLoginServer}/${appName}-worker:${imageTag}` — built
      from `Dockerfile.worker`. Both images must be pushed with the **same**
      `imageTag` for a given deployment; the Bicep template wires both
-     Container Apps to that tag. There is no CI workflow that builds the
-     worker image yet — see [`docs/deployment-aca.md`](../docs/deployment-aca.md)
+     Container Apps to that tag. There is no CI workflow that builds
+     either image yet — see [`docs/deployment-aca.md`](../docs/deployment-aca.md)
      for the manual `docker build` / push commands.
 4. A **GitHub App** (not OAuth App) — see the next section.
 
@@ -196,6 +197,17 @@ Sign in via GitHub. If the callback URL on the GitHub App was a placeholder,
 update it now to the real FQDN.
 
 ## Redeploying with a new image tag
+
+Before running the command below, ensure **both** images are pushed with
+the same tag (see
+[Building the images](../docs/deployment-aca.md#building-the-images) in
+`docs/deployment-aca.md`):
+
+- `<acrLoginServer>/<appName>:<imageTag>`
+- `<acrLoginServer>/<appName>-worker:<imageTag>`
+
+If only the web image is pushed, the worker Container App will keep
+running the previous image and the two tiers will drift.
 
 ```bash
 az deployment sub create \

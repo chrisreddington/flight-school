@@ -68,17 +68,28 @@ packages (`@github/copilot`, `@github/copilot-*` platform variants,
 runs `npm install --omit=dev` inside `dist-worker/` and starts via
 `CMD ["node", "bootstrap.mjs"]`.
 
-### Web image (legacy Dockerfile) stages
+### Web image (`Dockerfile`) stages
 
-1. **`deps`** – installs the full dependency tree with `npm ci`. We do *not*
-   prune `@github/copilot`: it ships a Node CLI binary plus native prebuilds
-   (ripgrep, sharp, tree-sitter) that the Copilot SDK spawns at runtime via
-   `import.meta.resolve`. Pruning it breaks every SDK-backed feature.
+The web image runs Next.js only — the Copilot SDK and CLI live in the
+worker image. The `@github/copilot*` packages are still installed at
+build time (they are imported by code paths that fan out to the worker)
+but the web runtime never spawns the CLI subprocess.
+
+1. **`deps`** – installs the full dependency tree with `npm ci`. The
+   `@github/copilot` package is kept on disk because shared code that
+   the Next.js bundle reaches still imports its types; the binary
+   itself is not spawned from the web container.
 2. **`builder`** – runs `npm run build`, producing `.next/standalone` thanks to
    `output: 'standalone'` in `next.config.ts`.
 3. **`runner`** – a clean `node:20-slim` image with only the standalone server,
    static assets, `public/`, and the `@github/*` packages copied in. Runs as
    the non-root `node` user under `tini` for clean signal handling.
+
+> Trimming `@github/copilot*` out of the web image is a future
+> optimisation — once nothing in the Next.js bundle imports it
+> transitively, the web image can drop those packages entirely. The
+> [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
+> guard already enforces that SDK *execution* stays worker-only.
 
 ### Worker image notes
 
@@ -127,11 +138,14 @@ out-of-the-box.
 
 ## Image footprint
 
-Most of the image is `node_modules/@github/copilot` (~100 MB of prebuilds for
-multiple architectures). We deliberately keep all of them so the same image
-can run on both amd64 and arm64 Container Apps environments. If size becomes
-a real problem, strip non-target `prebuilds/` directories in a future
-revision — but verify the SDK still spawns the CLI before shipping that.
+Most of the **worker** image is `node_modules/@github/copilot` (~100 MB
+of prebuilds for multiple architectures). We deliberately keep all of
+them so the same worker image can run on both amd64 and arm64 Container
+Apps environments. If size becomes a real problem, strip non-target
+`prebuilds/` directories in a future revision — but verify the SDK
+still spawns the CLI before shipping that. The web image does not
+spawn the CLI and is a future candidate for dropping these packages
+entirely (see the "Web image" note above).
 
 ## Next steps (P8)
 

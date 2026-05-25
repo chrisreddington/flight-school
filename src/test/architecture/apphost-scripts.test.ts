@@ -53,8 +53,10 @@ describe('AppHost npm scripts', () => {
     // the flight-school (web) resource declaration and the end of the
     // file, not in the worker block above it. If a future edit moves the
     // var from web to worker, both assertions would otherwise pass.
-    const workerStart = apphostSource.indexOf("addExecutable('copilot-worker'");
-    const webStart = apphostSource.indexOf("addNextJsApp('flight-school'");
+    // Quote-tolerant regexes match either ' or " so a formatter flip
+    // doesn't masquerade as a structural regression.
+    const workerStart = apphostSource.search(/addExecutable\(['"]copilot-worker['"]/);
+    const webStart = apphostSource.search(/addNextJsApp\(['"]flight-school['"]/);
     const otelIdx = apphostSource.indexOf('NEXT_OTEL_FETCH_DISABLED');
     expect(workerStart).toBeGreaterThanOrEqual(0);
     expect(webStart).toBeGreaterThan(workerStart);
