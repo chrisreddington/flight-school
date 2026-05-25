@@ -18,8 +18,8 @@ reference environment for Flight School on **Azure Container Apps (ACA)**.
 | Container Apps managed environment `cae-<appName>` | Consumption workload profile |
 | Cosmos DB (NoSQL, **serverless**) | DB `flightschool`, container `sessions` (partition key `/userId`, 30-day TTL) for future server-side session/token store |
 | Key Vault `kv-<appName>-<hash>` | RBAC-enabled; holds Auth.js, GitHub App, Cosmos, and App Insights secrets |
-| Container App `<appName>` | The Next.js + Copilot CLI workload (1 vCPU / 2 GiB, 1–5 replicas) |
-| Container App `<appName>-worker` | Private internal Copilot worker app using the same image (1 vCPU / 2 GiB, 1–3 replicas) |
+| Container App `<appName>` | The Next.js + Copilot CLI workload (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<imageTag>` (built from `Dockerfile`) |
+| Container App `<appName>-worker` | Private internal Copilot worker (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<imageTag>` (built from `Dockerfile.worker`) |
 
 The Container App runs with a **system-assigned managed identity** that is
 granted the **Key Vault Secrets User** role on the Key Vault so it can resolve
@@ -55,9 +55,16 @@ secret references at runtime.
 2. An Azure subscription you can deploy into; you need `Owner` or
    `Contributor` **plus** `User Access Administrator` (the deployment creates
    a role assignment on the Key Vault).
-3. A container image pushed to a registry the Container App can pull from
-   (GHCR, ACR, etc.). The full image reference used at runtime is
-   `${acrLoginServer}/${appName}:${imageTag}`.
+3. **Two** container images pushed to a registry the Container Apps can pull from
+   (GHCR, ACR, etc.). The full image references used at runtime are:
+   - **Web:** `${acrLoginServer}/${appName}:${imageTag}` — built from
+     `Dockerfile` at the repo root.
+   - **Worker:** `${acrLoginServer}/${appName}-worker:${imageTag}` — built
+     from `Dockerfile.worker`. Both images must be pushed with the **same**
+     `imageTag` for a given deployment; the Bicep template wires both
+     Container Apps to that tag. There is no CI workflow that builds the
+     worker image yet — see [`docs/deployment-aca.md`](../docs/deployment-aca.md)
+     for the manual `docker build` / push commands.
 4. A **GitHub App** (not OAuth App) — see the next section.
 
 ## GitHub App setup

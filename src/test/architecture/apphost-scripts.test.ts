@@ -49,6 +49,16 @@ describe('AppHost npm scripts', () => {
     // two means it leaked onto the worker (no Next.js machinery there).
     const occurrences = apphostSource.match(/NEXT_OTEL_FETCH_DISABLED/g) ?? [];
     expect(occurrences.length).toBe(1);
+    // Belt-and-braces: explicitly verify the single occurrence is between
+    // the flight-school (web) resource declaration and the end of the
+    // file, not in the worker block above it. If a future edit moves the
+    // var from web to worker, both assertions would otherwise pass.
+    const workerStart = apphostSource.indexOf("addExecutable('copilot-worker'");
+    const webStart = apphostSource.indexOf("addNextJsApp('flight-school'");
+    const otelIdx = apphostSource.indexOf('NEXT_OTEL_FETCH_DISABLED');
+    expect(workerStart).toBeGreaterThanOrEqual(0);
+    expect(webStart).toBeGreaterThan(workerStart);
+    expect(otelIdx).toBeGreaterThan(webStart);
   });
 
   it('pins the Turbopack root to this repository for parallel web and worker dev servers', () => {

@@ -37,13 +37,28 @@ declared with `maxReplicas = 1`.
 
 ## Building the images
 
+Both images must be pushed with the **same** `imageTag` for a given
+deployment — the Bicep template wires both Container Apps to that tag.
+
 ```bash
+# Pick one tag for this deployment (e.g. the git SHA).
+TAG=sha-$(git rev-parse --short HEAD)
+REGISTRY=<acrLoginServer>   # e.g. ghcr.io/your-org or myregistry.azurecr.io
+APPNAME=<appName>           # matches your bicep parameter
+
 # Web (Next.js)
-docker build -t flight-school .
+docker build -t "${REGISTRY}/${APPNAME}:${TAG}" .
+docker push  "${REGISTRY}/${APPNAME}:${TAG}"
 
 # Worker (Hono/Node, no Next)
-docker build -t flight-school-worker -f Dockerfile.worker .
+docker build -t "${REGISTRY}/${APPNAME}-worker:${TAG}" -f Dockerfile.worker .
+docker push  "${REGISTRY}/${APPNAME}-worker:${TAG}"
 ```
+
+There is no CI workflow that builds either image yet; this is currently
+a manual flow. After pushing both images, redeploy with
+`--parameters imageTag=${TAG}` (see [Redeploying with a new image
+tag](../infra/README.md#redeploying-with-a-new-image-tag)).
 
 The worker image is intentionally minimal: `npm run build:worker`
 emits `dist-worker/{bootstrap,server-main}.mjs` plus a generated
@@ -172,7 +187,7 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | Audit events (`copilot.session.create`, rate-limit denials, cap hits) | Application Insights traces, filterable on `eventType`. User IDs are hashed with `AUDIT_SALT`. |
 | Revision health | `az containerapp revision list` — startup/readiness probes hit `/api/health` (owned by another phase). |
 | Worker health | `az containerapp show -n <appName>-worker` — internal ingress only; probes also hit `/api/health`. |
-| Cost / scaling | ACA portal; web HTTP scaler at 50 req/replica, worker HTTP scaler at 20 req/replica. |
+| Cost / scaling | ACA portal; web HTTP scaler at 50 req/replica. Worker is fixed single replica (`maxReplicas=1` — in-process scheduler, restart-sweep, job store, and per-user runtime pool all assume one process; see `infra/modules/copilot-worker-app.bicep`). |
 
 ### 4. Rate-limit tuning
 
