@@ -232,6 +232,40 @@ LLMs may wrap JSON in markdown - use multi-strategy extraction in `parseJSONResp
 2. Find JSON by brace matching (`{` to `}`)
 3. Direct parse as final fallback
 
+### TanStack Query (client-side data cache)
+
+Client hooks that own remote/JSON-storage data use **TanStack Query v5**
+(`@tanstack/react-query`, pinned exactly — see PR #188). One `QueryProvider`
+sits in the `<Providers>` chain at the browser root; tests get fresh
+`QueryClient`s via `createQueryTestWrapper()` in `src/test/query-test-wrapper.tsx`.
+
+Rules of the road:
+
+- **Cache reads belong inside `queryFn`, never in `initialData`.** `initialData`
+  is synchronous and would hydrate the server with client-only cache
+  (localStorage, async APIs) — that breaks SSR and resets the staleness clock.
+  See `use-guided-plan.ts` for the pattern: read cache → return if fresh →
+  otherwise fetch and write cache.
+- **v5 `useQuery` has no `onSuccess` / `onError` / `onSettled`.** Side effects
+  on data go inside `queryFn` after the fetch. `useMutation` still has these
+  callbacks; mutation `onSuccess` is where invalidations live.
+- **Mutations: `mutateAsync` if callers `await` and expect rejections; `mutate`
+  otherwise.** `useThreads.createThread` re-throws (callers
+  `.rejects.toThrow(…)`); the rest swallow + log.
+- **No hand-rolled `useMemo` / `useCallback` in components reading TanStack
+  cache data.** The React Compiler memoizes correctly; a hand-written
+  `useMemo(() => threads.find(...))` was caught returning stale results
+  during the PR #188 migration. Let the compiler do its job.
+- **Sign-out invariant — no user-scoped keys today.** Current sign-out is a
+  full-page reload (`signOutAction redirectTo` + api-client 401 →
+  `window.location.assign`), so the `QueryClient` is reborn per login. Any
+  future SPA sign-out **MUST** call `queryClient.clear()` before redirecting,
+  OR include `userId` in every query key. This invariant is documented in
+  the TSDoc of `src/app/query-provider.tsx`.
+- **Double dedup is intentional.** `src/lib/api-client.ts` has its own
+  `pendingRequests` map for in-flight GET dedup; TanStack Query has its
+  own. Both run; they don't conflict.
+
 ## Code Organization
 
 | Path | Purpose |

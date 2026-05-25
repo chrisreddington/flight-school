@@ -144,7 +144,7 @@ Cross-user / cross-tenant assertion patterns are documented in [`tdd/SKILL.md`](
 
 ### Hook tests with `renderHook` + `act`
 
-The canonical hook-test exemplar after Phase 5 lands will be `src/hooks/use-store-query.test.ts`. Until then, follow the shape in section 3 above and `useStoreQuery<T>` will inherit it.
+The canonical hook-test exemplar is `src/hooks/use-threads.test.ts`. It demonstrates the standard shape: mock at the system seam (`fetch`) only, run the real store and the real TanStack Query cache through a fresh per-test `QueryClient` from `createQueryTestWrapper`, and assert on observable hook output (not internal calls).
 
 ## Anti-patterns to delete on sight
 
