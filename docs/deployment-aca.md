@@ -76,9 +76,13 @@ build time (they are imported by code paths that fan out to the worker)
 but the web runtime never spawns the CLI subprocess.
 
 1. **`deps`** – installs the full dependency tree with `npm ci`. The
-   `@github/copilot` package is kept on disk because shared code that
-   the Next.js bundle reaches still imports its types; the binary
-   itself is not spawned from the web container.
+   `@github/copilot*` packages are kept on disk conservatively because
+   the Next.js bundle's traced runtime graph still reaches them (the
+   tracer can't statically prove they're unused once a single shared
+   module imports a value from the SDK). The CLI binary itself is
+   never spawned from the web container. Trimming is a follow-up
+   gated by re-running the trace once the shared imports are
+   isolated to worker-only modules.
 2. **`builder`** – runs `npm run build`, producing `.next/standalone` thanks to
    `output: 'standalone'` in `next.config.ts`.
 3. **`runner`** – a clean `node:20-slim` image with only the standalone server,
