@@ -211,6 +211,65 @@ describe('useUserProfile — refetch bypass', () => {
     // pipeline rather than swallow errors.
     expect(result.current.error).not.toBeNull();
   });
+
+  it('runs the bypass queryFn even when the initial mount query is still in flight', async () => {
+    // Regression: TanStack's fetchQuery dedupes on same key. Without a
+    // cancelQueries before the bypass, the manual refetch would await
+    // the in-flight initial query (which uses bypassCache: false) and
+    // return cached data instead of the fresh /api/profile response.
+    const cached = makeProfile({ login: 'cached-user' });
+    const fresh = makeProfile({ login: 'fresh-from-bypass' });
+
+    let resolveCacheCheck!: (value: ProfileResponse | null) => void;
+    const cacheCheckPromise = new Promise<ProfileResponse | null>((resolve) => {
+      resolveCacheCheck = resolve;
+    });
+
+    const liveCalls = { count: 0 };
+    fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const target = typeof url === 'string' ? url : url.toString();
+      const method = (init?.method ?? 'GET').toUpperCase();
+
+      if (target.includes('/api/profile/storage')) {
+        if (method === 'POST') return okJson({});
+        const value = await cacheCheckPromise;
+        if (!value) return okJson(null);
+        return okJson({ date: getDateKey(), profile: value });
+      }
+
+      if (target.includes('/api/profile')) {
+        liveCalls.count += 1;
+        return okJson(fresh);
+      }
+
+      return okJson({});
+    });
+
+    const { wrapper } = createQueryTestWrapper();
+    const { result } = renderHook(() => useUserProfile(), { wrapper });
+
+    // Initial query is in flight (cache-check is pending).
+    expect(result.current.isLoading).toBe(true);
+
+    let refetchPromise!: Promise<void>;
+    act(() => {
+      refetchPromise = result.current.refetch();
+    });
+
+    // Unblock the cache check so the initial-query promise resolves —
+    // if cancellation hadn't happened, the bypass would now return the
+    // cached value via dedupe.
+    resolveCacheCheck(cached);
+
+    await act(async () => {
+      await refetchPromise;
+    });
+
+    // The /api/profile endpoint must have been hit (bypass actually ran),
+    // and the surfaced data must come from that response, not the cache.
+    expect(liveCalls.count).toBeGreaterThanOrEqual(1);
+    expect(result.current.data?.user.login).toBe('fresh-from-bypass');
+  });
 });
 
 describe('getDisplayName helper', () => {

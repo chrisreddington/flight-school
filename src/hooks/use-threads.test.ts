@@ -367,4 +367,49 @@ describe('useThreads — callback stability across re-renders', () => {
     expect(result.current.updateActiveThread).toBe(first.updateActiveThread);
     expect(result.current.refresh).toBe(first.refresh);
   });
+
+  it('keeps callback identity stable across a mutation-driven rerender', async () => {
+    // Stronger guarantee than the "unrelated rerender" test: a real
+    // mutation (createThread) cycles useMutation through idle → pending
+    // → success, which is the most common case where a careless dep on
+    // the whole mutation object would tear the SSE subscription down.
+    //
+    const seedThread = makeThread({ id: 'seed', title: 'Seed' });
+    const { result } = await mountHook([seedThread]);
+
+    // Pin the active thread explicitly so the derived activeThreadId
+    // doesn't flip when the new thread sorts to the top of the list.
+    // `addMessage` and `updateActiveThread` legitimately depend on
+    // `activeThreadId`, so we'd see expected (non-bug) churn there
+    // otherwise.
+    act(() => {
+      result.current.selectThread('seed');
+    });
+
+    const before = {
+      createThread: result.current.createThread,
+      selectThread: result.current.selectThread,
+      deleteThread: result.current.deleteThread,
+      renameThread: result.current.renameThread,
+      updateContext: result.current.updateContext,
+      addMessage: result.current.addMessage,
+      updateActiveThread: result.current.updateActiveThread,
+      refresh: result.current.refresh,
+    };
+
+    await act(async () => {
+      await result.current.createThread({ title: 'stability-probe' }, false);
+    });
+
+    await waitFor(() => expect(result.current.threads.length).toBe(2));
+
+    expect(result.current.createThread).toBe(before.createThread);
+    expect(result.current.selectThread).toBe(before.selectThread);
+    expect(result.current.deleteThread).toBe(before.deleteThread);
+    expect(result.current.renameThread).toBe(before.renameThread);
+    expect(result.current.updateContext).toBe(before.updateContext);
+    expect(result.current.addMessage).toBe(before.addMessage);
+    expect(result.current.updateActiveThread).toBe(before.updateActiveThread);
+    expect(result.current.refresh).toBe(before.refresh);
+  });
 });

@@ -170,18 +170,27 @@ export function useUserProfile(): UseUserProfileResult {
   const query = useQuery({
     queryKey: ['profile'],
     staleTime: PROFILE_STALE_TIME_MS,
+    // Explicit opt-in: the global QueryProvider disables window-focus
+    // refetches, but this query needs them as the backstop that catches
+    // the server-side day-cache rollover when a long-lived tab returns
+    // to the foreground after midnight. The cache-check endpoint inside
+    // the queryFn is a single cheap JSON read.
+    refetchOnWindowFocus: true,
     queryFn: () => fetchUserProfile({ bypassCache: false }),
   });
 
   const refetch = useCallback(async () => {
     setIsManuallyRefetching(true);
     try {
-      // `fetchQuery` with `staleTime: 0` forces a fresh fetch and routes
-      // through the same observer pipeline as the initial mount, so
-      // success populates `query.data` and failure populates `query.error`.
-      // It also dedupes against any in-flight initial query, removing the
-      // race where a manual bypass could be overwritten by the queryFn
-      // resolving afterward.
+      // Cancel any in-flight non-bypass query for this key first.
+      // Without this, `fetchQuery` would dedupe and return the existing
+      // promise (which was kicked off with `bypassCache: false`), so the
+      // bypass intent would be lost in the narrow window where the user
+      // clicks refresh before initial mount finishes.
+      await queryClient.cancelQueries({ queryKey: ['profile'] });
+      // `fetchQuery` with `staleTime: 0` then runs the bypass queryFn
+      // through TanStack's observer pipeline, so success populates
+      // `query.data` and failure populates `query.error`.
       await queryClient.fetchQuery({
         queryKey: ['profile'],
         queryFn: () => fetchUserProfile({ bypassCache: true }),
