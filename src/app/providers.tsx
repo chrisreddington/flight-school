@@ -5,6 +5,7 @@ import { CopilotRequiredBanner } from '@/components/CopilotRequiredBanner';
 import { BrowserOtelBootstrap } from '@/components/observability/BrowserOtelBootstrap';
 import { BreadcrumbProvider } from '@/contexts/breadcrumb-context';
 import { DebugProvider } from '@/contexts/debug-context';
+import { QueryProvider } from './query-provider';
 // Import only the Primer CSS that we need for faster load times
 import '@primer/css/dist/primer.css';
 import { BaseStyles, ThemeProvider } from '@primer/react';
@@ -15,14 +16,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider colorMode="auto">
       <DebugProvider>
         <BreadcrumbProvider>
-          <BaseStyles>
-            <BrowserOtelBootstrap />
-            <div className={styles.appRoot}>
-              <CopilotRequiredBanner />
-              {children}
-              <AIActivityPanel />
-            </div>
-          </BaseStyles>
+          <QueryProvider>
+            <BaseStyles>
+              <BrowserOtelBootstrap />
+              <div className={styles.appRoot}>
+                <CopilotRequiredBanner />
+                {children}
+                <AIActivityPanel />
+              </div>
+            </BaseStyles>
+          </QueryProvider>
         </BreadcrumbProvider>
       </DebugProvider>
     </ThemeProvider>

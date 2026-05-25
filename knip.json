@@ -3,5 +3,6 @@
   "entry": ["src/app/**/*.{ts,tsx}"],
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/test/**"],
-  "ignoreBinaries": ["aspire", "wait-on"]
+  "ignoreBinaries": ["aspire", "wait-on"],
+  "ignoreDependencies": ["eslint-plugin-react-hooks"]
 }
