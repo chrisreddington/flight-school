@@ -280,6 +280,17 @@ describe('useUserProfile — refetch bypass', () => {
     // call clears the indicator; without the guard, the first call's
     // `finally` would have already flipped `isManuallyRefetching` to
     // false while the second is still in flight.
+    //
+    // NOTE: Reviewers asked whether this test should force *divergent*
+    // settle times (call 1 settles, indicator stays true, call 2 settles
+    // later). That scenario is architecturally impossible in production:
+    // `src/lib/api-client.ts` deduplicates concurrent GETs on the same
+    // URL via its `pendingRequests` Map, so a rapid second `refetch()`
+    // joins call 1's in-flight network promise rather than starting a
+    // new one. Both refetch calls therefore always resolve on the same
+    // microtask cycle. The race the guard defends against is the order
+    // in which their two `finally` blocks run on that shared settle —
+    // exactly what this test exercises.
     const cached = makeProfile({ login: 'cached' });
     const fresh = makeProfile({ login: 'fresh' });
 
