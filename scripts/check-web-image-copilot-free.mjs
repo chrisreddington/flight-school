@@ -64,32 +64,56 @@ function fail(assertion, message) {
 const RUNNER_ALLOWED_RUNNER_SOURCES = ['/app/public'];
 const RUNNER_ALLOWED_RUNNER_PREFIXES = ['/app/.next/', '/app/public/'];
 
-function isAllowedRunnerSource(src) {
-  if (RUNNER_ALLOWED_RUNNER_SOURCES.includes(src)) return true;
-  return RUNNER_ALLOWED_RUNNER_PREFIXES.some((p) => src.startsWith(p));
+// COPY flags that take a value. Docker syntax accepts both
+// `--flag=value` and `--flag value` (separate token) forms. Stripping
+// both keeps the parser robust to harmless Dockerfile formatting.
+const COPY_VALUE_FLAGS = new Set(['--from', '--chown', '--chmod', '--exclude']);
+
+function isAllowedRunnerSource(rawSrc) {
+  // Reject relative, glob, and unresolved-variable sources outright —
+  // none of them can be safely allowlisted as a specific subtree.
+  if (!rawSrc.startsWith('/')) return false;
+  if (rawSrc.includes('${') || rawSrc.includes('$(')) return false;
+
+  // Reject any `..` segment to prevent prefix-based traversal bypass
+  // (`/app/.next/../node_modules` would otherwise satisfy the prefix
+  // check while resolving outside the allowed subtree).
+  if (rawSrc.split('/').includes('..')) return false;
+
+  // Tolerate a single trailing slash on exact-match entries so
+  // `/app/public/` and `/app/public` are equivalent for allowlist
+  // purposes (Docker treats them the same for directory copies).
+  const trimmed = rawSrc.length > 1 && rawSrc.endsWith('/') ? rawSrc.slice(0, -1) : rawSrc;
+  if (RUNNER_ALLOWED_RUNNER_SOURCES.includes(trimmed)) return true;
+  return RUNNER_ALLOWED_RUNNER_PREFIXES.some((p) => rawSrc.startsWith(p));
 }
 
 function describeAllowlist() {
-  return [...RUNNER_ALLOWED_RUNNER_SOURCES, ...RUNNER_ALLOWED_RUNNER_PREFIXES].join(', ');
+  // Dedupe the exact-match list against the prefix list by normalising
+  // exact entries to a trailing-slash form, so the diagnostic does not
+  // surface `/app/public` twice for readers.
+  const display = new Set([
+    ...RUNNER_ALLOWED_RUNNER_SOURCES.map((s) => `${s}/`),
+    ...RUNNER_ALLOWED_RUNNER_PREFIXES,
+  ]);
+  return [...display].join(', ');
 }
 
 /**
  * Extract the list of source paths from a single Dockerfile COPY
  * instruction (line-continuations already joined). Handles both
- * shell-form (`COPY [--flag=v]... src... dst`) and JSON-array form
- * (`COPY [--flag=v]... ["src",...,"dst"]`). Returns sources only
- * (the final element — the destination — is dropped).
+ * shell-form (`COPY [--flag[=value]|--flag value]... src... dst`) and
+ * JSON-array form (`COPY [--flag=v]... ["src",...,"dst"]`). Returns
+ * sources only — the final element (destination) is dropped.
  */
 function extractCopySources(copyLine) {
-  // Drop the leading `COPY` keyword and any `--flag=value` options.
-  // Flag values never contain whitespace at the Dockerfile syntax
-  // level so a single-token strip is safe.
   const withoutKeyword = copyLine.replace(/^\s*COPY\b/i, '').trim();
-  const withoutFlags = withoutKeyword.replace(/(^|\s)--\S+/g, '').trim();
 
-  // JSON-array form: `["src", ..., "dst"]`.
-  if (withoutFlags.startsWith('[')) {
-    const arrayMatch = withoutFlags.match(/^\[([^\]]*)\]/);
+  // JSON-array form: flags are space-separated tokens before the
+  // bracket; we discard everything up to and including the `[`.
+  const bracketStart = withoutKeyword.indexOf('[');
+  if (bracketStart !== -1 && withoutKeyword.slice(0, bracketStart).trim().split(/\s+/).every((t) => !t || t.startsWith('--'))) {
+    const arrayMatch = withoutKeyword.slice(bracketStart).match(/^\[([^\]]*)\]/);
     if (!arrayMatch) return [];
     const elements = arrayMatch[1]
       .split(',')
@@ -98,9 +122,25 @@ function extractCopySources(copyLine) {
     return elements.slice(0, -1);
   }
 
-  // Shell form: whitespace-separated tokens, last is destination.
-  const tokens = withoutFlags.split(/\s+/).filter(Boolean);
-  return tokens.slice(0, -1);
+  // Shell form: walk tokens and skip COPY flags (both `--flag=value`
+  // and `--flag value` forms). The remaining tokens are positional;
+  // the last is the destination.
+  const tokens = withoutKeyword.split(/\s+/).filter(Boolean);
+  const positional = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.startsWith('--')) {
+      if (token.includes('=')) continue;
+      if (COPY_VALUE_FLAGS.has(token)) {
+        i += 1;
+        continue;
+      }
+      // Boolean flag like `--link` / `--parents`: drop just the flag.
+      continue;
+    }
+    positional.push(token);
+  }
+  return positional.slice(0, -1);
 }
 
 async function assertionA() {
