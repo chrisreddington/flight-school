@@ -1,0 +1,314 @@
+name: Deploy worker (Azure Container Apps)
+
+# Deploys the Hono/Node Copilot worker image to Azure Container Apps.
+# Triggered automatically when CI succeeds on `main` and the in-scope
+# paths (see `.github/path-filters/worker.yml`) have changed since
+# the previous successful deploy. `workflow_dispatch` is the
+# rollback / replay path and requires an explicit SHA.
+#
+# Architecture: see `docs/deployment-aca.md` and the plan artefact
+# `files/deploy-decouple-plan.md` in the session store.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy (required for manual rollouts).'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shared with deploy-web.yml — see that workflow's concurrency
+  # block for the full rationale.
+  group: deploy-aca-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  should-deploy:
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+      sha: ${{ steps.sha.outputs.value }}
+      sha_short: ${{ steps.sha.outputs.short }}
+    steps:
+      - name: Validate required vars
+        env:
+          AZURE_CLIENT_ID:        ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID:        ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID:  ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ACR_LOGIN_SERVER:       ${{ vars.ACR_LOGIN_SERVER }}
+          ACR_NAME:               ${{ vars.ACR_NAME }}
+          APP_NAME:               ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME:    ${{ vars.RESOURCE_GROUP_NAME }}
+          LOCATION:               ${{ vars.LOCATION }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME LOCATION; do
+            [[ -z "${!v:-}" ]] && missing+=("$v")
+          done
+          (( ${#missing[@]} )) && { echo "::error::Missing vars: ${missing[*]}"; exit 1; }
+          [[ "$ACR_LOGIN_SERVER" != "${ACR_NAME}.azurecr.io" ]] && \
+            { echo "::error::ACR_LOGIN_SERVER does not match \${ACR_NAME}.azurecr.io"; exit 1; }
+          true
+
+      - name: Resolve deploy SHA
+        id: sha
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          WR_HEAD_SHA:   ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA:     ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          case "$GH_EVENT_NAME" in
+            workflow_run)      sha="$WR_HEAD_SHA"  ;;
+            workflow_dispatch) sha="$INPUT_SHA"    ;;
+            *)                 echo "::error::unsupported event"; exit 1 ;;
+          esac
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || \
+            { echo "::error::invalid SHA: '$sha' (must be 40-hex)"; exit 1; }
+          echo "value=$sha" >> "$GITHUB_OUTPUT"
+          # Short SHA — see deploy-web.yml for the 64-char rationale.
+          echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout deploy SHA
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ steps.sha.outputs.value }}
+          fetch-depth: 0
+
+      - name: Verify SHA is reachable from origin/main
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA:      ${{ steps.sha.outputs.value }}
+          GH_REPO:  ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status=$(gh api "/repos/${GH_REPO}/compare/main...${SHA}" --jq '.status')
+          case "$status" in
+            identical|behind) ;;
+            *) echo "::error::SHA $SHA is not reachable from main (compare status='$status')"; exit 1 ;;
+          esac
+
+      - name: Refuse stale workflow_run (head_sha != current main HEAD)
+        if: github.event_name == 'workflow_run'
+        id: stale
+        env:
+          SHA:      ${{ steps.sha.outputs.value }}
+          GH_REPO:  ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
+          if [[ "$tip" == "$SHA" ]]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::superseded — main HEAD is $tip, this run is for $SHA"
+          fi
+
+      - name: Verify CI was green for dispatched SHA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA:     ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api "/repos/${GH_REPO}/actions/workflows/ci.yml/runs?head_sha=${SHA}&event=push&status=completed&per_page=10" \
+            --jq '.workflow_runs | first | .conclusion // empty')
+          [[ "$conclusion" == "success" ]] || \
+            { echo "::error::No successful CI run found for SHA $SHA (conclusion='$conclusion')"; exit 1; }
+
+      - name: Resolve filter base (previous successful CI head_sha)
+        if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
+        id: filter-base
+        env:
+          SHA:            ${{ steps.sha.outputs.value }}
+          GH_REPO:        ${{ github.repository }}
+          GH_TOKEN:       ${{ github.token }}
+          CURRENT_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          base=$(gh api "/repos/${GH_REPO}/actions/workflows/ci.yml/runs?branch=main&status=success&event=push&per_page=100" \
+            --jq "[.workflow_runs[] | select(.id < $CURRENT_RUN_ID)] | first | .head_sha // empty")
+          if [[ -z "$base" ]]; then
+            echo "first_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -e "${base}^{commit}" || \
+            { echo "::error::filter base $base not present in local checkout (fetch-depth: 0 expected)"; exit 1; }
+          echo "first_deploy=false" >> "$GITHUB_OUTPUT"
+          echo "value=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Paths filter (workflow_run only)
+        id: filter
+        if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false' && steps.filter-base.outputs.first_deploy == 'false'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36  # v3.0.2
+        with:
+          ref:  ${{ steps.sha.outputs.value }}
+          base: ${{ steps.filter-base.outputs.value }}
+          filters: .github/path-filters/worker.yml
+
+      - name: Decide whether to proceed
+        id: gate
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          FILTER_HIT:    ${{ steps.filter.outputs.worker }}
+          SUPERSEDED:    ${{ steps.stale.outputs.superseded }}
+          FIRST_DEPLOY:  ${{ steps.filter-base.outputs.first_deploy }}
+        run: |
+          set -euo pipefail
+          if [[ "$SUPERSEDED" == 'true' ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Superseded by newer main HEAD; deploy skipped."
+          elif [[ "$GH_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$FIRST_DEPLOY" == 'true' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::First-ever deploy; paths-filter bypassed."
+          elif [[ "$FILTER_HIT" == 'true' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No in-scope paths changed; deploy skipped."
+          fi
+
+  deploy:
+    needs: should-deploy
+    if: needs.should-deploy.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_NAME: worker-${{ needs.should-deploy.outputs.sha_short }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ needs.should-deploy.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Refuse stale deploy (concurrency-queue TOCTOU guard)
+        if: github.event_name == 'workflow_run'
+        env:
+          SHA:      ${{ needs.should-deploy.outputs.sha }}
+          GH_REPO:  ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
+          [[ "$tip" == "$SHA" ]] || \
+            { echo "::error::superseded — main HEAD is $tip, refusing to deploy $SHA"; exit 1; }
+
+      - name: Validate parameters.json
+        run: |
+          set -euo pipefail
+          f=infra/main.parameters.json
+          if grep -iE '"<[^"]+>"|REPLACE_ME|your-[a-z0-9-]+|TODO' "$f" >/dev/null; then
+            echo "::error::$f contains placeholder values"; exit 1
+          fi
+          if grep -E '"imageTag"\s*:' "$f" >/dev/null; then
+            echo "::error::$f still defines legacy 'imageTag' — remove it (CD passes webImageTag/workerImageTag explicitly). If rolling back to a pre-migration commit, deploy from main HEAD with an --image-only override instead."; exit 1
+          fi
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version-file: '.node-version'
+      - run: npm ci
+      - run: npm run lint && npm run check:guardrails
+      - run: npm run build:worker && npm run check:worker-next-free
+
+      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474  # v2.3.0
+        with:
+          client-id:       ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build + push image
+        env:
+          SHA:              ${{ needs.should-deploy.outputs.sha }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          APP_NAME:         ${{ vars.APP_NAME }}
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="sha-$SHA"
+          IMAGE="${ACR_LOGIN_SERVER}/${APP_NAME}-worker:${IMAGE_TAG}"
+          docker buildx build --push -f Dockerfile.worker -t "$IMAGE" .
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Read other app's current template image tag
+        # Reads the desired-state image tag from the web app's
+        # Container App template. The web app's resource name and
+        # container name coincide (`infra/modules/container-app.bicep`
+        # uses `name: appName` for both), so the JMESPath filter
+        # uses `${APP_NAME}` directly — unlike the symmetric step
+        # in deploy-web.yml which must use a literal
+        # `copilot-worker` because the worker's container name is
+        # hardcoded distinct from its resource name.
+        env:
+          APP_NAME:            ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER:    ${{ vars.ACR_LOGIN_SERVER }}
+        run: |
+          set -euo pipefail
+          OTHER_IMAGE=$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP_NAME" \
+            --query "properties.template.containers[?name=='$APP_NAME'].image | [0]" -o tsv)
+          [[ -z "$OTHER_IMAGE" || "$OTHER_IMAGE" == "None" ]] && \
+            { echo "::error::web app has no template image for container '$APP_NAME' in resource '$APP_NAME' (verify Container App resource exists and container naming matches infra/modules/container-app.bicep)"; exit 1; }
+          EXPECTED_PREFIX="${ACR_LOGIN_SERVER}/${APP_NAME}:"
+          [[ "$OTHER_IMAGE" == "${EXPECTED_PREFIX}"* ]] || \
+            { echo "::error::other app image '$OTHER_IMAGE' does not match expected prefix '$EXPECTED_PREFIX'"; exit 1; }
+          echo "OTHER_TAG=${OTHER_IMAGE##*:}" >> "$GITHUB_ENV"
+
+      - name: Deploy via Bicep
+        env:
+          LOCATION:            ${{ vars.LOCATION }}
+          APP_NAME:            ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER:    ${{ vars.ACR_LOGIN_SERVER }}
+        run: |
+          set -euo pipefail
+          az deployment sub create \
+            --name "$DEPLOY_NAME" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters @infra/main.parameters.json \
+            --parameters \
+              appName="$APP_NAME" \
+              resourceGroupName="$RESOURCE_GROUP_NAME" \
+              acrLoginServer="$ACR_LOGIN_SERVER" \
+              location="$LOCATION" \
+              webImageTag="$OTHER_TAG" \
+              workerImageTag="$IMAGE_TAG" \
+            --only-show-errors
+
+      - name: Cancel in-flight deployment on runner cancellation
+        if: cancelled()
+        run: |
+          az deployment sub cancel --name "$DEPLOY_NAME" --only-show-errors || true

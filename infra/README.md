@@ -18,8 +18,8 @@ reference environment for Flight School on **Azure Container Apps (ACA)**.
 | Container Apps managed environment `cae-<appName>` | Consumption workload profile |
 | Cosmos DB (NoSQL, **serverless**) | DB `flightschool`, container `sessions` (partition key `/userId`, 30-day TTL) for future server-side session/token store |
 | Key Vault `kv-<appName>-<hash>` | RBAC-enabled; holds Auth.js, GitHub App, Cosmos, and App Insights secrets |
-| Container App `<appName>` | Public Next.js web app — browser traffic, OAuth, Octokit, and SSE proxy to the worker (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<imageTag>` (built from `Dockerfile`). The web image does not execute the Copilot SDK or CLI and ships zero `@github/*` packages, enforced by `npm run check:web-image`. |
-| Container App `<appName>-worker` | Private internal Copilot worker — owns the Copilot SDK, the CLI subprocesses, the per-user runtime pool, and `/api/internal/*` (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<imageTag>` (built from `Dockerfile.worker`) |
+| Container App `<appName>` | Public Next.js web app — browser traffic, OAuth, Octokit, and SSE proxy to the worker (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<webImageTag>` (built from `Dockerfile`). The web image does not execute the Copilot SDK or CLI and ships zero `@github/*` packages, enforced by `npm run check:web-image`. |
+| Container App `<appName>-worker` | Private internal Copilot worker — owns the Copilot SDK, the CLI subprocesses, the per-user runtime pool, and `/api/internal/*` (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<workerImageTag>` (built from `Dockerfile.worker`) |
 
 The Container App runs with a **system-assigned managed identity** that is
 granted the **Key Vault Secrets User** role on the Key Vault so it can resolve
@@ -57,15 +57,23 @@ secret references at runtime.
    `Contributor` **plus** `User Access Administrator` (the deployment creates
    a role assignment on the Key Vault).
 3. **Two** container images pushed to a registry the Container Apps can pull from
-   (GHCR, ACR, etc.). The full image references used at runtime are:
-   - **Web:** `${acrLoginServer}/${appName}:${imageTag}` — built from
+   (GHCR, ACR, etc.). Each image is **independently tagged** — there is no
+   shared `imageTag` parameter. The full image references used at runtime are:
+   - **Web:** `${acrLoginServer}/${appName}:${webImageTag}` — built from
      `Dockerfile` at the repo root.
-   - **Worker:** `${acrLoginServer}/${appName}-worker:${imageTag}` — built
-     from `Dockerfile.worker`. Both images must be pushed with the **same**
-     `imageTag` for a given deployment; the Bicep template wires both
-     Container Apps to that tag. There is no CI workflow that builds
-     either image yet — see [`docs/deployment-aca.md`](../docs/deployment-aca.md)
-     for the manual `docker build` / push commands.
+   - **Worker:** `${acrLoginServer}/${appName}-worker:${workerImageTag}` —
+     built from `Dockerfile.worker`. The Bicep template requires both
+     `webImageTag` and `workerImageTag` as explicit parameters with no
+     defaults, so deployments are always deterministic. CI deploys are
+     driven by
+     [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
+     and
+     [`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml),
+     which each rebuild their own image and read the *other* app's
+     currently-deployed tag from Azure before invoking
+     `az deployment sub create`. See
+     [`docs/deployment-aca.md`](../docs/deployment-aca.md) for the
+     equivalent manual `docker build` / push commands.
 4. A **GitHub App** (not OAuth App) — see the next section.
 
 ## GitHub App setup
@@ -100,7 +108,10 @@ $EDITOR infra/main.parameters.local.json
 ```
 
 Set `acrLoginServer` (e.g. `ghcr.io/your-org`), `appName`, `location`,
-`imageTag`, and `githubAppId`.
+and `githubAppId`. The `webImageTag` and `workerImageTag` parameters
+are supplied as `--parameters` overrides on the `az deployment sub create`
+command line, not in the JSON file, so each image can be promoted
+independently.
 
 ### 2. Deploy the infrastructure
 
@@ -198,28 +209,38 @@ update it now to the real FQDN.
 
 ## Redeploying with a new image tag
 
-Before running the command below, ensure **both** images are pushed with
-the same tag (see
-[Building the images](../docs/deployment-aca.md#building-the-images) in
-`docs/deployment-aca.md`):
+Each image is promoted independently. Push the rebuilt image (see
+[Building the images](../docs/deployment-aca.md#building-the-images))
+and pass both `webImageTag` and `workerImageTag` to the Bicep deploy —
+the unchanged side keeps its previous tag:
 
-- `<acrLoginServer>/<appName>:<imageTag>`
-- `<acrLoginServer>/<appName>-worker:<imageTag>`
-
-If only the web image is pushed, the worker Container App will keep
-running the previous image and the two tiers will drift.
+- `<acrLoginServer>/<appName>:<webImageTag>`
+- `<acrLoginServer>/<appName>-worker:<workerImageTag>`
 
 ```bash
+# Read the currently-deployed worker tag (when promoting web only).
+WORKER_TAG=$(az containerapp show \
+  --name "${APP}-worker" --resource-group "${RG}" \
+  --query "properties.template.containers[?name=='copilot-worker'].image | [0]" -o tsv)
+WORKER_TAG="${WORKER_TAG##*:}"
+
 az deployment sub create \
   --name flightschool-$(date +%Y%m%d-%H%M%S) \
   --location uksouth \
   --template-file infra/main.bicep \
   --parameters @infra/main.parameters.local.json \
-  --parameters imageTag=sha-abc1234
+  --parameters webImageTag=sha-abc1234 workerImageTag="${WORKER_TAG}"
 ```
 
-This creates a new ACA revision with the new image; traffic shifts to it
-once it passes the readiness probe (single-revision mode, 100% traffic).
+Both `webImageTag` and `workerImageTag` are required parameters with
+no defaults, so omitting either fails the Bicep deploy. This prevents
+a one-sided promotion from silently rolling back the unchanged side.
+The two CI deploy workflows automate this read-current-tag step before
+invoking the same `az deployment sub create` command.
+
+To roll back to a known-good tag, re-run the same command with the
+SHA-pinned tag of a previous good build (image immutability in ACR
+guarantees the bits haven't moved).
 
 ## Rotating secrets
 

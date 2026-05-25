@@ -35,7 +35,12 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DOCKERFILE = path.join(REPO_ROOT, 'Dockerfile');
+// Env-var override exists primarily so the orchestration test suite
+// can point the gate at a fixture Dockerfile in a tmp directory.
+// Production CLI usage leaves it unset and reads `<repo>/Dockerfile`.
+const DOCKERFILE = process.env.WEB_IMAGE_GATE_DOCKERFILE
+  ? path.resolve(process.env.WEB_IMAGE_GATE_DOCKERFILE)
+  : path.join(REPO_ROOT, 'Dockerfile');
 const DIST_DIR = process.env.NEXT_DIST_DIR ?? '.next';
 const STANDALONE = path.join(REPO_ROOT, DIST_DIR, 'standalone');
 
@@ -93,7 +98,13 @@ export function isAllowedRunnerSource(rawSrc) {
   // purposes (Docker treats them the same for directory copies).
   const trimmed = rawSrc.length > 1 && rawSrc.endsWith('/') ? rawSrc.slice(0, -1) : rawSrc;
   if (RUNNER_ALLOWED_RUNNER_SOURCES.includes(trimmed)) return true;
-  return RUNNER_ALLOWED_RUNNER_PREFIXES.some((p) => rawSrc.startsWith(p));
+  // Prefix match must require at least one character past the prefix
+  // — otherwise the bare prefix directory (e.g. `/app/.next/`) would
+  // satisfy `startsWith` against itself and admit the entire subtree,
+  // defeating the prefix's purpose of admitting only nested paths.
+  return RUNNER_ALLOWED_RUNNER_PREFIXES.some(
+    (p) => rawSrc.startsWith(p) && rawSrc.length > p.length,
+  );
 }
 
 function describeAllowlist() {
@@ -111,28 +122,23 @@ function describeAllowlist() {
  * Extract the list of source paths from a single Dockerfile COPY
  * instruction (line-continuations already joined). Handles both
  * shell-form (`COPY [--flag[=value]|--flag value]... src... dst`) and
- * JSON-array form (`COPY [--flag=v]... ["src",...,"dst"]`). Returns
- * sources only — the final element (destination) is dropped.
+ * JSON-array form (`COPY [--flag[=value]|--flag value]... ["src",...,"dst"]`).
+ * Returns sources only — the final element (destination) is dropped.
+ * Fails closed (returns the unparsed remainder as a single token, which
+ * the allowlist will reject) when a `COPY` line cannot be confidently
+ * parsed — better to fail the gate than to silently report zero sources.
  */
 export function extractCopySources(copyLine) {
   const withoutKeyword = copyLine.replace(/^\s*COPY\b/i, '').trim();
 
-  // JSON-array form: flags are space-separated tokens before the
-  // bracket; we discard everything up to and including the `[`.
-  const bracketStart = withoutKeyword.indexOf('[');
-  if (bracketStart !== -1 && withoutKeyword.slice(0, bracketStart).trim().split(/\s+/).every((t) => !t || t.startsWith('--'))) {
-    const arrayMatch = withoutKeyword.slice(bracketStart).match(/^\[([^\]]*)\]/);
-    if (!arrayMatch) return [];
-    const elements = arrayMatch[1]
-      .split(',')
-      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
-      .filter(Boolean);
-    return elements.slice(0, -1);
-  }
-
-  // Shell form: walk tokens and skip COPY flags (both `--flag=value`
-  // and `--flag value` forms). The remaining tokens are positional;
-  // the last is the destination.
+  // Walk tokens left-to-right and strip COPY flags in both
+  // `--flag=value` and `--flag value` forms. The same flag-walking
+  // logic must run for shell-form AND JSON-array form, otherwise a
+  // line like `COPY --from builder ["/app", "/dst"]` would slip
+  // past the pre-bracket check (`builder` does not start with `--`)
+  // and fall through to shell parsing, which would then treat the
+  // entire JSON array as one positional token and report zero
+  // sources — silently bypassing Assertion A.
   const tokens = withoutKeyword.split(/\s+/).filter(Boolean);
   const positional = [];
   for (let i = 0; i < tokens.length; i++) {
@@ -148,6 +154,27 @@ export function extractCopySources(copyLine) {
     }
     positional.push(token);
   }
+
+  // JSON-array form: after flag stripping, the remaining text begins
+  // with `[`. Reassemble the positional tokens (re-splitting on
+  // whitespace lost the inter-element spaces but JSON elements are
+  // comma-delimited so we can rejoin safely) and parse.
+  if (positional.length > 0 && positional[0].startsWith('[')) {
+    const joined = positional.join(' ');
+    const arrayMatch = joined.match(/^\[([^\]]*)\]/);
+    if (!arrayMatch) {
+      // Unterminated JSON array after flags — fail closed by
+      // returning the raw remainder so the allowlist rejects it.
+      return [joined];
+    }
+    const elements = arrayMatch[1]
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+    return elements.slice(0, -1);
+  }
+
+  // Shell form: positional tokens are src... dst.
   return positional.slice(0, -1);
 }
 

@@ -500,6 +500,22 @@ original via OTel span links.
 The OpenTelemetry skill is the operational deep dive:
 [`.github/skills/opentelemetry/SKILL.md`](../.github/skills/opentelemetry/SKILL.md).
 
+## Deployment model
+
+Both Container Apps run from the **same monorepo** but ship as
+**independently tagged images** — `webImageTag` and `workerImageTag`
+are required Bicep parameters with no defaults, so a deploy is always
+deterministic and one side can be promoted without rebuilding the
+other. Two GitHub Actions workflows
+([`deploy-web.yml`](../.github/workflows/deploy-web.yml),
+[`deploy-worker.yml`](../.github/workflows/deploy-worker.yml)) each
+trigger on `workflow_run` after CI succeeds on `main`, gate on a
+paths-filter scope ([`.github/path-filters/`](../.github/path-filters/)),
+build their own image, read the *other* app's currently-deployed tag
+from Azure, then invoke a single `az deployment sub create`. Operational
+detail lives in [`docs/deployment-aca.md`](deployment-aca.md) and
+[`infra/README.md`](../infra/README.md).
+
 ## Where to go next
 
 | You want to… | Read |

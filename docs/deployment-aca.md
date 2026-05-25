@@ -37,28 +37,48 @@ declared with `maxReplicas = 1`.
 
 ## Building the images
 
-Both images must be pushed with the **same** `imageTag` for a given
-deployment — the Bicep template wires both Container Apps to that tag.
+The two images are independently versioned: each carries its own tag,
+so a code change in the web tree triggers a web-only rebuild and
+deploy without rebuilding the worker, and vice versa. The Bicep
+template expects both `webImageTag` and `workerImageTag` as required
+parameters with no defaults — operators must pass each tag explicitly,
+which keeps deployments deterministic and prevents a stale or `latest`
+tag from quietly rolling out.
+
+In CI the deploys are driven by two independent workflows
+([`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml),
+[`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml))
+that each trigger on `workflow_run` after CI succeeds on `main`,
+gate on a paths-filter scope
+([`.github/path-filters/`](../.github/path-filters/)), build their
+own image, then read the *other* app's currently-deployed image tag
+from Azure so they can pass both `webImageTag` and `workerImageTag`
+to `az deployment sub create` without disturbing the unchanged side.
+
+For a manual local build (e.g. testing a one-off image), pick a tag
+per image:
 
 ```bash
-# Pick one tag for this deployment (e.g. the git SHA).
-TAG=sha-$(git rev-parse --short HEAD)
-REGISTRY=<acrLoginServer>   # e.g. ghcr.io/your-org or myregistry.azurecr.io
-APPNAME=<appName>           # matches your bicep parameter
+WEB_TAG=sha-$(git rev-parse --short HEAD)
+WORKER_TAG=sha-$(git rev-parse --short HEAD)
+REGISTRY=<acrLoginServer>
+APPNAME=<appName>
 
 # Web (Next.js)
-docker build -t "${REGISTRY}/${APPNAME}:${TAG}" .
-docker push  "${REGISTRY}/${APPNAME}:${TAG}"
+docker build -t "${REGISTRY}/${APPNAME}:${WEB_TAG}" .
+docker push  "${REGISTRY}/${APPNAME}:${WEB_TAG}"
 
 # Worker (Hono/Node, no Next)
-docker build -t "${REGISTRY}/${APPNAME}-worker:${TAG}" -f Dockerfile.worker .
-docker push  "${REGISTRY}/${APPNAME}-worker:${TAG}"
+docker build -t "${REGISTRY}/${APPNAME}-worker:${WORKER_TAG}" -f Dockerfile.worker .
+docker push  "${REGISTRY}/${APPNAME}-worker:${WORKER_TAG}"
 ```
 
-There is no CI workflow that builds either image yet; this is currently
-a manual flow. After pushing both images, redeploy with
-`--parameters imageTag=${TAG}` (see [Redeploying with a new image
-tag](../infra/README.md#redeploying-with-a-new-image-tag)).
+After pushing, redeploy with
+`--parameters webImageTag=${WEB_TAG} workerImageTag=${WORKER_TAG}`
+(see [Redeploying with a new image
+tag](../infra/README.md#redeploying-with-a-new-image-tag)). Both
+parameters must be set — there is no default; supplying only one
+fails the Bicep validation.
 
 The worker image is intentionally minimal: `npm run build:worker`
 emits `dist-worker/{bootstrap,server-main}.mjs` plus a generated

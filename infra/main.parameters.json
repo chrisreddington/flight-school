@@ -8,9 +8,6 @@
     "appName": {
       "value": "flightschool"
     },
-    "imageTag": {
-      "value": "latest"
-    },
     "acrLoginServer": {
       "value": "ghcr.io/<your-org>"
     },

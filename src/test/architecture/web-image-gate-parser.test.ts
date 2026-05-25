@@ -69,6 +69,42 @@ describe('extractCopySources — JSON-array form', () => {
   it('handles single-quoted entries', () => {
     expect(extractCopySources("COPY ['a','b','/dst']")).toEqual(['a', 'b']);
   });
+
+  it('handles two-token value flags (e.g. `--from builder`)', () => {
+    // Historical bypass shape: the pre-bracket precondition used to
+    // require every token before `[` to start with `--`. `builder`
+    // does not, so the parser fell through to shell-form and treated
+    // the entire JSON array as one positional token — silently
+    // returning zero sources and bypassing Assertion A. The
+    // flag-walker must strip both `--flag=value` AND `--flag value`
+    // shapes before locating the array.
+    expect(
+      extractCopySources('COPY --from builder ["/app","/dst"]'),
+    ).toEqual(['/app']);
+  });
+
+  it('handles two-token --chown before a JSON array', () => {
+    expect(
+      extractCopySources('COPY --chown node:node ["/src","/dst"]'),
+    ).toEqual(['/src']);
+  });
+
+  it('handles a mix of one-token and two-token flags before a JSON array', () => {
+    expect(
+      extractCopySources(
+        'COPY --from=builder --chown node:node --link ["/build/out","/app/out"]',
+      ),
+    ).toEqual(['/build/out']);
+  });
+
+  it('fails closed on an unterminated JSON array', () => {
+    // If the JSON-array parse fails, return the raw remainder so the
+    // allowlist rejects it. Better to fail the gate than to silently
+    // return zero sources.
+    const result = extractCopySources('COPY ["src","/dst"');
+    expect(result.length).toBeGreaterThan(0);
+    expect(isAllowedRunnerSource(result[0])).toBe(false);
+  });
 });
 
 describe('isAllowedRunnerSource — accepts allowlisted sources', () => {
@@ -126,5 +162,16 @@ describe('isAllowedRunnerSource — rejects bypass shapes', () => {
     // a distinct directory; the `/` boundary in the prefix list must
     // keep them separate.
     expect(isAllowedRunnerSource('/app/publicity')).toBe(false);
+  });
+
+  it('rejects the bare prefix directory (no path past the slash)', () => {
+    // Docker treats `COPY /app/.next/` the same as `COPY /app/.next` —
+    // both copy the entire `.next` tree. The prefix must admit only
+    // paths *inside* `.next/`; the bare prefix directory must be
+    // rejected to honour the "broad-copy sources fail the gate"
+    // invariant. Same boundary applies to `/app/public/` — but that
+    // exact path is also on the exact-match list (trailing-slash
+    // trim), so it remains accepted via that route.
+    expect(isAllowedRunnerSource('/app/.next/')).toBe(false);
   });
 });
