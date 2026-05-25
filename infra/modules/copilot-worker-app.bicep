@@ -165,18 +165,14 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
+        // Worker MUST stay single-replica until durable queue/KEDA lands.
+        // The in-process scheduler, restart-sweep, local job store, and
+        // per-user runtime pool all assume one worker process owns the
+        // truth. Scaling above 1 partitions job state and routes polling/
+        // SSE to a different worker than the one executing the job. See
+        // docs/deployment-aca.md.
         minReplicas: 1
-        maxReplicas: 3
-        rules: [
-          {
-            name: 'http-concurrency'
-            http: {
-              metadata: {
-                concurrentRequests: '20'
-              }
-            }
-          }
-        ]
+        maxReplicas: 1
       }
     }
   }

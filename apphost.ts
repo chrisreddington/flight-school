@@ -22,6 +22,10 @@ async function main(): Promise<void> {
     .addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])
     .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
     .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
+    // Pin the listen port explicitly. The worker reads PORT first (ACA
+    // convention), so without this an inherited PORT (e.g. dev shell set
+    // to 3000) would collide with the targetPort declared above.
+    .withEnvironment('PORT', '3001')
     // Distinct OTEL service name so dashboards/logs/traces can tell the
     // worker apart from the web tier — without this both processes emit
     // `service.name=flight-school` and every startup log line appears

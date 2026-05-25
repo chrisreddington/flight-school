@@ -27,13 +27,12 @@ describe('AppHost npm scripts', () => {
 
   it('wires the worker into Aspire as an executable (not a Next.js app)', () => {
     // Worker must be wired via addExecutable. Tolerate quote-style and
-    // whitespace drift, but lock the resource name, command, and run
-    // script so a "fix" that re-wraps the worker in addNextJsApp or
-    // points it at a different script gets caught.
+    // whitespace drift, but lock the resource name, command, working dir,
+    // and full args vector so a "fix" that re-wraps the worker in
+    // addNextJsApp or points it at a different script gets caught.
     expect(apphostSource).toMatch(
-      /\.addExecutable\(\s*['"]copilot-worker['"]\s*,\s*['"]npm['"]/,
+      /\.addExecutable\(\s*['"]copilot-worker['"]\s*,\s*['"]npm['"]\s*,\s*['"]\.['"]\s*,\s*\[\s*['"]run['"]\s*,\s*['"]dev:worker['"]\s*\]/,
     );
-    expect(apphostSource).toMatch(/['"]dev:worker['"]/);
     expect(apphostSource).not.toMatch(
       /\.addNextJsApp\(\s*['"]copilot-worker['"]/,
     );
@@ -45,10 +44,11 @@ describe('AppHost npm scripts', () => {
     // src/. Both must stay off the worker resource.
     expect(apphostSource).not.toContain('COPILOT_WORKER_MODE');
     expect(apphostSource).not.toContain('COPILOT_WORKER_ENABLED');
-    // NEXT_OTEL_FETCH_DISABLED is still set on the web resource (still
-    // Next.js); make sure that's the only place it appears.
+    // NEXT_OTEL_FETCH_DISABLED must appear EXACTLY once — on the web
+    // (Next.js) resource. Zero means we lost the dedupe guard (regression);
+    // two means it leaked onto the worker (no Next.js machinery there).
     const occurrences = apphostSource.match(/NEXT_OTEL_FETCH_DISABLED/g) ?? [];
-    expect(occurrences.length).toBeLessThanOrEqual(1);
+    expect(occurrences.length).toBe(1);
   });
 
   it('pins the Turbopack root to this repository for parallel web and worker dev servers', () => {
