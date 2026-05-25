@@ -20,8 +20,6 @@
  *
  * Baseline schema:
  *   { "<relativePath>": <count>, ... }
- *
- * Phase 8 deletes the baseline file entirely.
  */
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
@@ -52,9 +50,7 @@ function countBoundaryViolations(relativePath) {
   return matches ? matches.length : 0;
 }
 
-const baseline = existsSync(BASELINE_PATH)
-  ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8'))
-  : {};
+const baseline = existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : {};
 
 const failures = [];
 const tests = walk('src').filter(isTestFile);
@@ -69,8 +65,8 @@ for (const relativePath of tests) {
     if (current > baselined) {
       failures.push(
         `${relativePath} grew from baseline ${baselined} → ${current} ` +
-        `toHaveBeenCalled* matchers. Replace mock-call assertions with ` +
-        `behavioural ones (see tests-that-respect-boundaries skill).`,
+          `toHaveBeenCalled* matchers. Replace mock-call assertions with ` +
+          `behavioural ones (see tests-that-respect-boundaries skill).`,
       );
     }
     continue;
@@ -79,10 +75,10 @@ for (const relativePath of tests) {
   if (current > 0) {
     failures.push(
       `${relativePath} contains ${current} toHaveBeenCalled* matcher(s) but ` +
-      `is not allowlisted or baselined. Assert on observable behaviour ` +
-      `(return value / result.current / response body) instead, or — if ` +
-      `the test is a tenant-isolation or system-seam assertion — move it ` +
-      `under src/test/integration/.`,
+        `is not allowlisted or baselined. Assert on observable behaviour ` +
+        `(return value / result.current / response body) instead, or — if ` +
+        `the test is a tenant-isolation or system-seam assertion — move it ` +
+        `under src/test/integration/.`,
     );
   }
 }
@@ -95,5 +91,5 @@ if (failures.length > 0) {
 
 console.log(
   `Test-boundary guardrail passed (${tests.length} test files scanned, ` +
-  `${Object.keys(baseline).length} baselined).`,
+    `${Object.keys(baseline).length} baselined).`,
 );

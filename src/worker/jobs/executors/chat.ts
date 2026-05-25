@@ -34,11 +34,7 @@
 import { createChatStreamingSession } from '@/lib/copilot/streaming';
 import { buildCapabilityContextPrompt } from '@/lib/copilot/capabilities';
 import { resolveProfile } from '@/lib/copilot/profiles';
-import {
-  isBaseProfileId,
-  isChatResponseProfile,
-  CHAT_RESPONSE_PROFILES,
-} from '@/lib/copilot/profile-types';
+import { isBaseProfileId, isChatResponseProfile, CHAT_RESPONSE_PROFILES } from '@/lib/copilot/profile-types';
 import { getConversationCapabilities } from '@/lib/copilot/sessions';
 import { jobStorage } from '@/lib/jobs';
 import type { ChatResponseInput, ChatResponseResult } from '@/lib/jobs';
@@ -78,19 +74,8 @@ function appendAnnotationIdempotent(content: string, annotation: string): string
  * @see RESPONSE_STOPPED_ANNOTATION
  * @see RESPONSE_INTERRUPTED_ANNOTATION
  */
-export async function executeChatResponse(
-  jobId: string,
-  input: ChatResponseInput,
-  userId: string,
-): Promise<void> {
-  const {
-    threadId,
-    prompt,
-    assistantMessageId: providedAssistantId,
-    profile,
-    capabilities,
-    repos,
-  } = input;
+export async function executeChatResponse(jobId: string, input: ChatResponseInput, userId: string): Promise<void> {
+  const { threadId, prompt, assistantMessageId: providedAssistantId, profile, capabilities, repos } = input;
   const assistantMessageId = providedAssistantId ?? generateMessageId();
 
   // Validate BEFORE markRunning so malformed input can't leave a job
@@ -100,9 +85,7 @@ export async function executeChatResponse(
     throw new Error(`Invalid chat profile: ${String(profile)}`);
   }
   if (!isChatResponseProfile(profile)) {
-    throw new Error(
-      `chat-response job only supports ${CHAT_RESPONSE_PROFILES.join(' | ')} profiles, got '${profile}'`,
-    );
+    throw new Error(`chat-response job only supports ${CHAT_RESPONSE_PROFILES.join(' | ')} profiles, got '${profile}'`);
   }
   // Resolve once on the raw user prompt. The streaming factory reuses
   // this `ResolvedProfile` so `shouldElevate` is never re-evaluated
@@ -133,9 +116,7 @@ export async function executeChatResponse(
     try {
       const currentThread = await getThreadById(userId, threadId);
       if (!currentThread) return;
-      const contentToPersist = annotation
-        ? appendAnnotationIdempotent(fullContent, annotation)
-        : fullContent;
+      const contentToPersist = annotation ? appendAnnotationIdempotent(fullContent, annotation) : fullContent;
       const consolidatedMessage: Message = {
         id: assistantMessageId,
         role: 'assistant',
@@ -145,12 +126,7 @@ export async function executeChatResponse(
         toolEvents: toolEvents.length > 0 ? toolEvents.map((e) => ({ ...e })) : undefined,
         hasActionableItem,
       };
-      const updatedMessages = upsertMessageById(
-        currentThread.messages,
-        assistantMessageId,
-        consolidatedMessage,
-        false,
-      );
+      const updatedMessages = upsertMessageById(currentThread.messages, assistantMessageId, consolidatedMessage, false);
       await updateThread(userId, {
         ...currentThread,
         messages: updatedMessages,
@@ -194,9 +170,7 @@ export async function executeChatResponse(
     const capabilityContext = buildCapabilityContextPrompt(preResolved.capabilities, {
       repositories: repos,
     });
-    const contextualPrompt = capabilityContext
-      ? `${capabilityContext}\n\nUser question: ${prompt}`
-      : prompt;
+    const contextualPrompt = capabilityContext ? `${capabilityContext}\n\nUser question: ${prompt}` : prompt;
     if (capabilityContext) {
       log.debug(`[Job ${jobId}] Added capability context (${capabilityContext.length} chars)`);
     }

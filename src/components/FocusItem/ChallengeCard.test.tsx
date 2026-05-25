@@ -64,13 +64,7 @@ describe('ChallengeCard', () => {
     addChallengeMock.mockResolvedValueOnce(undefined);
     transitionChallengeMock.mockRejectedValueOnce(new Error('Mark failed'));
 
-    render(
-      <ChallengeCard
-        challenge={createChallenge()}
-        dateKey={getDateKey()}
-        showHistoryActions={true}
-      />
-    );
+    render(<ChallengeCard challenge={createChallenge()} dateKey={getDateKey()} showHistoryActions={true} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Complete' }));
 
@@ -81,12 +75,7 @@ describe('ChallengeCard', () => {
     const dateKey = '2026-01-01';
     const challenge = createChallenge();
 
-    render(
-      <ChallengeCard
-        challenge={challenge}
-        dateKey={dateKey}
-      />
-    );
+    render(<ChallengeCard challenge={challenge} dateKey={dateKey} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Start Challenge' }));
 
@@ -95,7 +84,7 @@ describe('ChallengeCard', () => {
       expect(transitionChallengeMock).toHaveBeenCalledWith(dateKey, challenge.id, 'in-progress', 'dashboard');
     });
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      transitionChallengeMock.mock.invocationCallOrder[0]
+      transitionChallengeMock.mock.invocationCallOrder[0],
     );
   });
 
@@ -112,13 +101,7 @@ describe('ChallengeCard', () => {
       },
     });
 
-    render(
-      <ChallengeCard
-        challenge={createChallenge()}
-        queueCount={2}
-        onAdvanceQueue={onAdvanceQueue}
-      />
-    );
+    render(<ChallengeCard challenge={createChallenge()} queueCount={2} onAdvanceQueue={onAdvanceQueue} />);
 
     const nextChallengeButton = await screen.findByRole('button', { name: 'Next Challenge' });
     fireEvent.click(nextChallengeButton);
@@ -131,13 +114,7 @@ describe('ChallengeCard', () => {
     addChallengeMock.mockResolvedValueOnce(undefined);
     transitionChallengeMock.mockResolvedValueOnce(undefined);
 
-    render(
-      <ChallengeCard
-        challenge={challenge}
-        dateKey={dateKey}
-        showHistoryActions={true}
-      />
-    );
+    render(<ChallengeCard challenge={challenge} dateKey={dateKey} showHistoryActions={true} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Complete' }));
 
@@ -146,7 +123,7 @@ describe('ChallengeCard', () => {
       expect(transitionChallengeMock).toHaveBeenCalledWith(dateKey, challenge.id, 'completed', 'history');
     });
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      transitionChallengeMock.mock.invocationCallOrder[0]
+      transitionChallengeMock.mock.invocationCallOrder[0],
     );
   });
 });

@@ -1,10 +1,10 @@
 /**
  * Legacy `▊` cursor stripper for thread payloads.
  *
- * Phase 5 of the streaming refactor removed the worker's mid-stream
- * `▊` cursor glyph. Threads persisted by an older worker may still
- * carry the glyph; reads of those threads must normalise it so the
- * UI doesn't render stale stream artefacts.
+ * Threads persisted by an older worker may carry the mid-stream `▊`
+ * cursor glyph in their assistant messages. Reads of those threads
+ * normalise the glyph out so the UI doesn't render stale stream
+ * artefacts.
  *
  * The helper preserves object identity when no cleanup is required so
  * `React.memo` and shallow equality checks downstream remain effective.
@@ -22,8 +22,8 @@ function stripGlyph(content: string): string {
 }
 
 /**
- * Return `thread` with the legacy `▊` cursor glyph stripped from
- * every assistant message. When no cleanup is needed the input thread
+ * Return `thread` with the `▊` cursor glyph stripped from every
+ * assistant message. When no cleanup is needed the input thread
  * reference is returned unchanged.
  */
 export function stripLegacyCursorFromThread(thread: Thread): Thread {

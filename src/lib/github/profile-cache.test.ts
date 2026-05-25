@@ -81,7 +81,7 @@ describe('Profile Cache', () => {
       // Set cache at time 0
       mockNowMs.mockReturnValue(0);
       setCachedProfile('testuser', mockUser, []);
-      
+
       // Expire the cache (6 minutes later)
       mockNowMs.mockReturnValue(6 * 60 * 1000);
       const cached = getCachedProfile('testuser');

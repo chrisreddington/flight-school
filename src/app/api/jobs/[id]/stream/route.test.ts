@@ -50,9 +50,10 @@ describe('/api/jobs/[id]/stream', () => {
     vi.clearAllMocks();
     globalThis.fetch = mocks.fetchImpl as unknown as typeof fetch;
     mocks.requireUserContext.mockResolvedValue({ userId: 'u1' });
-    mocks.mergeTracePropagationHeaders.mockImplementation(
-      (a: Record<string, string>, b: Record<string, string>) => ({ ...a, ...b }),
-    );
+    mocks.mergeTracePropagationHeaders.mockImplementation((a: Record<string, string>, b: Record<string, string>) => ({
+      ...a,
+      ...b,
+    }));
     mocks.handleUnauthorizedError.mockReturnValue(new Response('401', { status: 401 }));
     mocks.getCopilotWorkerConfig.mockReturnValue({
       baseUrl: 'http://worker.local',
@@ -78,14 +79,14 @@ describe('/api/jobs/[id]/stream', () => {
   });
 
   it('returns 503 when the worker is not configured', async () => {
-    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
+    mocks.getWorkerJob.mockResolvedValue({ id: 'j1', userId: 'u1' });
     mocks.getCopilotWorkerConfig.mockReturnValue(null);
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(503);
   });
 
   it('proxies the worker SSE stream on success', async () => {
-    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
+    mocks.getWorkerJob.mockResolvedValue({ id: 'j1', userId: 'u1' });
     const upstreamBody = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode('data: hi\n\n'));
@@ -108,14 +109,14 @@ describe('/api/jobs/[id]/stream', () => {
   });
 
   it('returns 404 when worker reports the job missing', async () => {
-    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
+    mocks.getWorkerJob.mockResolvedValue({ id: 'j1', userId: 'u1' });
     mocks.fetchImpl.mockResolvedValue(new Response(null, { status: 404 }));
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(404);
   });
 
   it('returns 502 when the worker is unreachable', async () => {
-    mocks.getWorkerJob.mockResolvedValue({ id: "j1", userId: "u1" });
+    mocks.getWorkerJob.mockResolvedValue({ id: 'j1', userId: 'u1' });
     mocks.fetchImpl.mockRejectedValue(new Error('connect ECONNREFUSED'));
     const res = await GET(makeRequest('j1'), makeContext('j1'));
     expect(res.status).toBe(502);

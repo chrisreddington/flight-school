@@ -149,11 +149,17 @@ describe('jobStorage', () => {
         input: { threadId: 't', assistantMessageId: 'a' },
       });
       const outcome = await jobStorage.createIfAbsent(
-        { id: 'second', type: 'chat-response', userId: 'user-1', input: { threadId: 't', assistantMessageId: 'a' } },
-        (jobs) => Object.values(jobs).find((j) => {
-          const input = j.input as { threadId?: string; assistantMessageId?: string };
-          return input?.threadId === 't' && input?.assistantMessageId === 'a';
-        }),
+        {
+          id: 'second',
+          type: 'chat-response',
+          userId: 'user-1',
+          input: { threadId: 't', assistantMessageId: 'a' },
+        },
+        (jobs) =>
+          Object.values(jobs).find((j) => {
+            const input = j.input as { threadId?: string; assistantMessageId?: string };
+            return input?.threadId === 't' && input?.assistantMessageId === 'a';
+          }),
       );
       expect(outcome.created).toBe(false);
       if (!outcome.created) {
@@ -163,12 +169,14 @@ describe('jobStorage', () => {
 
     it('serialises parallel createIfAbsent calls with the same id so only one wins', async () => {
       const results = await Promise.all(
-        Array.from({ length: 10 }, () => jobStorage.createIfAbsent({
-          id: 'race',
-          type: 'chat-response',
-          userId: 'user-1',
-          input: {},
-        })),
+        Array.from({ length: 10 }, () =>
+          jobStorage.createIfAbsent({
+            id: 'race',
+            type: 'chat-response',
+            userId: 'user-1',
+            input: {},
+          }),
+        ),
       );
       const created = results.filter((r) => r.created);
       expect(created).toHaveLength(1);
@@ -176,16 +184,18 @@ describe('jobStorage', () => {
     });
 
     it('rejects when userId is missing (multi-tenant invariant)', async () => {
-      await expect(jobStorage.createIfAbsent({
-        id: 'no-user',
-        type: 'chat-response',
-        userId: '',
-        input: {},
-      })).rejects.toThrow('userId is required');
+      await expect(
+        jobStorage.createIfAbsent({
+          id: 'no-user',
+          type: 'chat-response',
+          userId: '',
+          input: {},
+        }),
+      ).rejects.toThrow('userId is required');
     });
   });
 
-  describe('concurrency (Phase 1 mutex)', () => {
+  describe('concurrency mutex', () => {
     it('serialises parallel create calls so all jobs survive', async () => {
       // Without the withJobsMutation mutex, concurrent create() calls race on
       // the load → mutate → save sequence and lose updates. With the mutex,
@@ -291,7 +301,7 @@ describe('jobStorage', () => {
     });
   });
 
-  describe('terminal CAS helpers (Phase 5)', () => {
+  describe('terminal CAS helpers', () => {
     it('markCompletedIdempotent transitions a running job and persists the result', async () => {
       await jobStorage.create({ id: 'cas-c1', type: 'chat-response', userId: 'u1', input: {} });
       await jobStorage.markRunning('cas-c1');

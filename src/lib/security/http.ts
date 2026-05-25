@@ -1,8 +1,10 @@
 /**
- * Map a thrown guard error into a Next.js response.
+ * Map a thrown guard error into a Web-standard `Response`.
+ *
+ * Returns `Response` (not `NextResponse`) so this helper is reachable
+ * from both Next.js route handlers and the worker's Hono handlers
+ * without pulling `next/server` into the worker import graph.
  */
-
-import { NextResponse } from 'next/server';
 
 import { UnauthorizedError } from '@/lib/auth/context';
 import { copilotEntitlementErrorResponse } from '@/lib/copilot/entitlement-http';
@@ -13,7 +15,7 @@ import { TooManyConcurrentSessionsError } from '@/lib/security/session-cap';
  * Convert a `withUserGuards` error to a JSON response. Returns `null` for
  * unrelated errors so the caller can apply its own handling.
  */
-export function guardErrorResponse(error: unknown): NextResponse | null {
+export function guardErrorResponse(error: unknown): Response | null {
   // P5: Copilot entitlement failures → 402 Payment Required.
   // Checked first so a missing-license 402 takes precedence over any
   // generic 500 the route would otherwise produce.
@@ -22,7 +24,7 @@ export function guardErrorResponse(error: unknown): NextResponse | null {
 
   if (error instanceof RateLimitedError) {
     const retryAfterSeconds = Math.max(1, Math.ceil(error.retryAfterMs / 1000));
-    return NextResponse.json(
+    return Response.json(
       {
         error: error.message,
         code: error.code,
@@ -39,7 +41,7 @@ export function guardErrorResponse(error: unknown): NextResponse | null {
     );
   }
   if (error instanceof TooManyConcurrentSessionsError) {
-    return NextResponse.json(
+    return Response.json(
       {
         error: error.message,
         code: error.code,
@@ -56,7 +58,7 @@ export function guardErrorResponse(error: unknown): NextResponse | null {
     );
   }
   if (error instanceof UnauthorizedError) {
-    return NextResponse.json({ error: error.message }, { status: 401 });
+    return Response.json({ error: error.message }, { status: 401 });
   }
   return null;
 }

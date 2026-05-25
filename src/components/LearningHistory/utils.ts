@@ -49,7 +49,7 @@ export function getItemStatus(stateHistory?: Array<{ state: string }>): ItemStat
 export function matchesSearch(item: HistoryItem, query: string): boolean {
   if (!query.trim()) return true;
   const lowerQuery = query.toLowerCase();
-  
+
   switch (item.type) {
     case 'challenge':
       return (
@@ -59,8 +59,7 @@ export function matchesSearch(item: HistoryItem, query: string): boolean {
       );
     case 'goal':
       return (
-        item.data.title.toLowerCase().includes(lowerQuery) ||
-        item.data.description.toLowerCase().includes(lowerQuery)
+        item.data.title.toLowerCase().includes(lowerQuery) || item.data.description.toLowerCase().includes(lowerQuery)
       );
     case 'topic':
       return (
@@ -70,8 +69,7 @@ export function matchesSearch(item: HistoryItem, query: string): boolean {
       );
     case 'habit':
       return (
-        item.data.title.toLowerCase().includes(lowerQuery) ||
-        item.data.description?.toLowerCase().includes(lowerQuery)
+        item.data.title.toLowerCase().includes(lowerQuery) || item.data.description?.toLowerCase().includes(lowerQuery)
       );
   }
 }
@@ -80,25 +78,25 @@ export function matchesSearch(item: HistoryItem, query: string): boolean {
 export function generate52WeekActivity(entries: HistoryEntry[]): ActivityDay[] {
   const today = new Date();
   const activity: ActivityDay[] = [];
-  
+
   // Find the start of the current week (Sunday)
   const currentWeekStart = new Date(today);
   currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
-  
+
   // Go back 51 more weeks to get 52 weeks total (including current week)
   const startDate = new Date(currentWeekStart);
   startDate.setDate(startDate.getDate() - (WEEKS_TO_SHOW - 1) * DAYS_IN_WEEK);
-  
+
   for (let week = 0; week < WEEKS_TO_SHOW; week++) {
     for (let day = 0; day < DAYS_IN_WEEK; day++) {
       const date = new Date(startDate);
-      date.setDate(date.getDate() + (week * DAYS_IN_WEEK) + day);
+      date.setDate(date.getDate() + week * DAYS_IN_WEEK + day);
       const dateKey = date.toISOString().split('T')[0];
-      
+
       // Don't include future dates
       if (date > today) continue;
-      
-      const entry = entries.find(e => e.dateKey === dateKey);
+
+      const entry = entries.find((e) => e.dateKey === dateKey);
       activity.push({
         date: dateKey,
         count: entry ? entry.items.length : 0,
@@ -107,23 +105,23 @@ export function generate52WeekActivity(entries: HistoryEntry[]): ActivityDay[] {
       });
     }
   }
-  
+
   return activity;
 }
 
 /** Group entries by month for sidebar navigation */
 export function groupEntriesByMonth(entries: HistoryEntry[]): Map<string, HistoryEntry[]> {
   const grouped = new Map<string, HistoryEntry[]>();
-  
-  entries.forEach(entry => {
+
+  entries.forEach((entry) => {
     const date = new Date(entry.dateKey + 'T12:00:00');
     const monthKey = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    
+
     if (!grouped.has(monthKey)) {
       grouped.set(monthKey, []);
     }
     grouped.get(monthKey)!.push(entry);
   });
-  
+
   return grouped;
 }

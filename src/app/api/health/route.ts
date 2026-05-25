@@ -1,4 +1,3 @@
-
 const startTime = Date.now();
 
 export async function GET() {

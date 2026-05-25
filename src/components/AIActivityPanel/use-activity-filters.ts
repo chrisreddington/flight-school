@@ -1,6 +1,6 @@
 /**
  * useActivityFilters Hook
- * 
+ *
  * Manages filtering and sorting state for AI activity events.
  * Extracted from AIActivityPanel for better separation of concerns.
  */
@@ -41,7 +41,7 @@ interface UseActivityFiltersResult {
 
 /**
  * Hook for managing activity event filters and sorting.
- * 
+ *
  * @param events - Raw activity events to filter and sort
  * @returns Filter state and filtered/sorted events
  */
@@ -56,14 +56,14 @@ export function useActivityFilters(events: AIActivityEvent[]): UseActivityFilter
   const { uniqueOperations, uniqueModels } = useMemo(() => {
     const operations = new Set<string>();
     const models = new Set<string>();
-    
-    events.forEach(event => {
+
+    events.forEach((event) => {
       operations.add(event.operation);
       if (event.input?.model) {
         models.add(event.input.model);
       }
     });
-    
+
     return {
       uniqueOperations: Array.from(operations).sort(),
       uniqueModels: Array.from(models).sort(),
@@ -77,22 +77,23 @@ export function useActivityFilters(events: AIActivityEvent[]): UseActivityFilter
     // Text search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(event => 
-        event.operation.toLowerCase().includes(query) ||
-        event.input?.prompt?.toLowerCase().includes(query) ||
-        event.output?.text?.toLowerCase().includes(query) ||
-        event.input?.model?.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (event) =>
+          event.operation.toLowerCase().includes(query) ||
+          event.input?.prompt?.toLowerCase().includes(query) ||
+          event.output?.text?.toLowerCase().includes(query) ||
+          event.input?.model?.toLowerCase().includes(query),
       );
     }
 
     // Operation filter
     if (operationFilter !== 'all') {
-      filtered = filtered.filter(event => event.operation === operationFilter);
+      filtered = filtered.filter((event) => event.operation === operationFilter);
     }
 
     // Model filter
     if (modelFilter !== 'all') {
-      filtered = filtered.filter(event => event.input?.model === modelFilter);
+      filtered = filtered.filter((event) => event.input?.model === modelFilter);
     }
 
     // Sorting

@@ -19,17 +19,10 @@
  */
 
 // Types
-export type { 
-    ChallengeWorkspace, 
-    WorkspaceFile,
-} from './types';
+export type { ChallengeWorkspace, WorkspaceFile } from './types';
 
 // Constants
-export {
-    AUTO_SAVE_DELAY_MS,
-    CURRENT_WORKSPACE_SCHEMA_VERSION,
-    MAX_FILES_PER_WORKSPACE
-} from './types';
+export { AUTO_SAVE_DELAY_MS, CURRENT_WORKSPACE_SCHEMA_VERSION, MAX_FILES_PER_WORKSPACE } from './types';
 
 // Storage
 export { workspaceStore } from './storage';
@@ -39,4 +32,3 @@ export { createEmptyFile, getWorkspaceTemplate } from './templates';
 
 // Builder
 export { createWorkspaceFromTemplate } from './builder';
-

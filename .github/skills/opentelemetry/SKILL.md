@@ -36,7 +36,8 @@ No content has been copied verbatim.
 | Layer | Responsibility | File |
 | --- | --- | --- |
 | Aspire AppHost | Injects `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_RESOURCE_ATTRIBUTES`, and short export-interval vars into every child resource on launch. | `apphost.ts` |
-| Server SDK | `registerOTel(...)` from `@vercel/otel` installs a tracer provider, a meter provider (via `metricReaders`), and a log record provider (via `logRecordProcessors`). The exporters pick up endpoint + protocol from the env vars Aspire injected. | `src/instrumentation.ts` |
+| Server SDK (web, Next.js) | `registerOTel(...)` from `@vercel/otel` installs a tracer provider, a meter provider (via `metricReaders`), and a log record provider (via `logRecordProcessors`). The exporters pick up endpoint + protocol from the env vars Aspire injected. | `src/instrumentation.ts` |
+| Server SDK (worker, standalone Node) | `NodeSDK` from `@opentelemetry/sdk-node` started via `startWorkerOtel()` from inside `main()` in the worker bootstrap. **Must start before any handler import** so `@opentelemetry/api`, `undici`, and `node:http` are patched before the route graph loads. | `src/worker/lifecycle/otel.ts`, started from `src/worker/bootstrap.ts` |
 | Server semconv | Centralised constants for GenAI attribute keys, metric names, instrumentation-scope names. **Do not hard-code these strings anywhere else.** | `src/lib/observability/semconv.ts` |
 | Server tracer/meter API | Wrappers like `withSpan`, `recordAiOperation`, `recordAiStreamMetrics`, `recordGitHubOperation`, `recordJobQueueWait`. | `src/lib/observability/telemetry.ts` |
 | Browser SDK | `initBrowserOtel()` registers `WebTracerProvider` + `DocumentLoadInstrumentation` + `FetchInstrumentation`; exports JSON over HTTP to a same-origin proxy. | `src/lib/observability/browser-otel.ts` |
@@ -45,10 +46,16 @@ No content has been copied verbatim.
 
 ## Rules
 
-### 1. Use `@vercel/otel`, not `NodeSDK`
+### 1. Use the right SDK for the runtime
 
-Next.js can have edge routes; `@opentelemetry/sdk-node` is not edge-safe.
-`@vercel/otel`'s `registerOTel` is. Stay on it.
+- **Web (Next.js)**: use `@vercel/otel`'s `registerOTel` in
+  `src/instrumentation.ts`. Next.js can have edge routes;
+  `@opentelemetry/sdk-node` is not edge-safe.
+- **Worker (standalone Node)**: use `NodeSDK` from
+  `@opentelemetry/sdk-node` in `src/worker/lifecycle/otel.ts`, started
+  from `main()` in `src/worker/bootstrap.ts` *before* the handler graph
+  loads. The worker is not a Next process and has no edge routes; the
+  "no NodeSDK" rule does not apply to it.
 
 ### 2. Server instrumentation is opt-in for metrics and logs
 
@@ -338,10 +345,12 @@ contract isn't enough, fix it in `apphost.ts` via `withEnvironment(...)`.
 - **Duplicate fetch spans**: `@vercel/otel` v2's default
   `instrumentations: ["auto"]` installs `FetchInstrumentation`, and
   Next.js's built-in tracer **also** emits `AppRender.fetch` spans for
-  every server-side `fetch()`. Set **`NEXT_OTEL_FETCH_DISABLED=1`** in
-  `apphost.ts` (via `withEnvironment`) to suppress Next.js's built-in
-  span and keep only the richer `FetchInstrumentation` span. Without
-  this every server fetch is double-counted.
+  every server-side `fetch()`. Set **`NEXT_OTEL_FETCH_DISABLED=1`** on
+  the **Next.js web resource** in `apphost.ts` (via `withEnvironment`)
+  to suppress Next.js's built-in span and keep only the richer
+  `FetchInstrumentation` span. Without this every server fetch is
+  double-counted. The worker is no longer a Next.js app, so this var
+  is intentionally absent from the worker resource.
 - App Router route handlers (`app/api/.../route.ts`) automatically set
   `http.route`. Pages Router and middleware do not — set it explicitly
   if you ever add one of those.

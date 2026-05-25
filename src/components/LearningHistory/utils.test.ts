@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  generate52WeekActivity,
-  getItemStatus,
-  groupEntriesByMonth,
-  matchesSearch,
-} from './utils';
+import { generate52WeekActivity, getItemStatus, groupEntriesByMonth, matchesSearch } from './utils';
 import type { HistoryEntry, HistoryItem } from './types';
 
 function createChallengeItem(overrides?: Partial<Extract<HistoryItem, { type: 'challenge' }>['data']>): HistoryItem {
@@ -86,7 +81,7 @@ function createEntry(dateKey: string, count = 0): HistoryEntry {
     dateKey,
     displayDate: dateKey,
     items: Array.from({ length: count }, (_, i) =>
-      createChallengeItem({ id: `challenge-${dateKey}-${i}`, title: `Challenge ${i}` })
+      createChallengeItem({ id: `challenge-${dateKey}-${i}`, title: `Challenge ${i}` }),
     ),
     totalCount: count,
     completedCount: 0,
@@ -163,7 +158,7 @@ describe('generate52WeekActivity', () => {
     const todayKey = new Date().toISOString().split('T')[0];
 
     expect(activity.length).toBeGreaterThan(0);
-    expect(activity.every(day => day.date <= todayKey)).toBe(true);
+    expect(activity.every((day) => day.date <= todayKey)).toBe(true);
   });
 
   it('should return correct count for dates with matching entries when entries exist', () => {
@@ -174,25 +169,25 @@ describe('generate52WeekActivity', () => {
     const entries = [createEntry(firstDate, 2), createEntry(middleDate, 4)];
     const activity = generate52WeekActivity(entries);
 
-    expect(activity.find(day => day.date === firstDate)?.count).toBe(2);
-    expect(activity.find(day => day.date === middleDate)?.count).toBe(4);
+    expect(activity.find((day) => day.date === firstDate)?.count).toBe(2);
+    expect(activity.find((day) => day.date === middleDate)?.count).toBe(4);
   });
 
   it('should return zero count when a date has no matching entry', () => {
     const emptyActivity = generate52WeekActivity([]);
     const entryDate = emptyActivity[0].date;
-    const dateWithoutEntry = emptyActivity.find(day => day.date !== entryDate);
+    const dateWithoutEntry = emptyActivity.find((day) => day.date !== entryDate);
 
     expect(dateWithoutEntry).toBeDefined();
 
     const activity = generate52WeekActivity([createEntry(entryDate, 3)]);
-    expect(activity.find(day => day.date === dateWithoutEntry!.date)?.count).toBe(0);
+    expect(activity.find((day) => day.date === dateWithoutEntry!.date)?.count).toBe(0);
   });
 
   it('should return weekIndex and dayOfWeek within expected bounds when generating the grid', () => {
     const activity = generate52WeekActivity([]);
 
-    activity.forEach(day => {
+    activity.forEach((day) => {
       expect(day.weekIndex).toBeGreaterThanOrEqual(0);
       expect(day.weekIndex).toBeLessThanOrEqual(51);
       expect(day.dayOfWeek).toBeGreaterThanOrEqual(0);

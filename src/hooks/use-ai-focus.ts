@@ -132,27 +132,24 @@ export function useAIFocus(): UseAIFocusResult {
     [stopComponent],
   );
 
-  const mergeAndSave = useCallback(
-    async (componentResult: Partial<FocusResponse>, component: FocusComponent) => {
-      // Storage may hold data from components that finished while this one was
-      // generating; React state holds the in-session merges. Both must be
-      // consulted before we write back.
-      const storedData = await focusStore.getTodaysFocus();
+  const mergeAndSave = useCallback(async (componentResult: Partial<FocusResponse>, component: FocusComponent) => {
+    // Storage may hold data from components that finished while this one was
+    // generating; React state holds the in-session merges. Both must be
+    // consulted before we write back.
+    const storedData = await focusStore.getTodaysFocus();
 
-      setData((reactState) => {
-        const merged = mergeFocusComponent(storedData || reactState, componentResult, component);
+    setData((reactState) => {
+      const merged = mergeFocusComponent(storedData || reactState, componentResult, component);
 
-        if (isFocusReadyToPersist(merged)) {
-          focusStore.saveTodaysFocus(merged).catch((err) => {
-            log.error('Failed to save focus:', err);
-          });
-        }
+      if (isFocusReadyToPersist(merged)) {
+        focusStore.saveTodaysFocus(merged).catch((err) => {
+          log.error('Failed to save focus:', err);
+        });
+      }
 
-        return merged;
-      });
-    },
-    [],
-  );
+      return merged;
+    });
+  }, []);
 
   const fetchAllParallel = useCallback(async () => {
     const skillProfile = await getSkillProfileSafe();
@@ -170,9 +167,7 @@ export function useAIFocus(): UseAIFocusResult {
     });
 
     const results = await Promise.allSettled(promises);
-    const allFailed = results.every(
-      (r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.result),
-    );
+    const allFailed = results.every((r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.result));
 
     if (allFailed) {
       setError('Failed to load focus content');

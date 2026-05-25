@@ -33,15 +33,13 @@ import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
 import type {
-    ChallengeWorkspace,
-    WorkspaceFile,
-    WorkspaceFileMetadata,
-    WorkspaceMetadata,
-    WorkspaceStoreInterface,
+  ChallengeWorkspace,
+  WorkspaceFile,
+  WorkspaceFileMetadata,
+  WorkspaceMetadata,
+  WorkspaceStoreInterface,
 } from './types';
-import {
-    MAX_WORKSPACE_SIZE_BYTES,
-} from './types';
+import { MAX_WORKSPACE_SIZE_BYTES } from './types';
 
 const log = logger.withTag('WorkspaceStore');
 
@@ -140,7 +138,7 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
     try {
       const metadata = await apiGet<WorkspaceMetadata>(
         `/api/workspace/storage?challengeId=${encodeURIComponent(challengeId)}&metadataOnly=true`,
-        { throwOnError: false }
+        { throwOnError: false },
       );
       return metadata;
     } catch (error) {
@@ -164,7 +162,7 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
       try {
         const workspace = await apiGet<ChallengeWorkspace>(
           `/api/workspace/storage?challengeId=${encodeURIComponent(challengeId)}`,
-          { throwOnError: false }
+          { throwOnError: false },
         );
 
         if (!workspace) {
@@ -215,9 +213,9 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
 
       // Warn if approaching storage limit
       if (byteSize > MAX_WORKSPACE_SIZE_BYTES) {
-        log.warn('Workspace is large, consider exporting', { 
-          challengeId: workspace.challengeId, 
-          sizeMB: (byteSize / 1024 / 1024).toFixed(2) 
+        log.warn('Workspace is large, consider exporting', {
+          challengeId: workspace.challengeId,
+          sizeMB: (byteSize / 1024 / 1024).toFixed(2),
         });
       }
 
@@ -258,7 +256,9 @@ class ServerWorkspaceStore implements WorkspaceStoreInterface {
     }
 
     try {
-      const listResponse = await apiGet<{ challengeIds: string[] }>('/api/workspace/storage/list', { throwOnError: false });
+      const listResponse = await apiGet<{ challengeIds: string[] }>('/api/workspace/storage/list', {
+        throwOnError: false,
+      });
       return listResponse?.challengeIds ?? [];
     } catch (error) {
       log.error('Failed to list workspaces', { error });
@@ -297,9 +297,4 @@ export const workspaceStore = new ServerWorkspaceStore();
 // Server-Side Utilities (for API routes)
 // =============================================================================
 
-export {
-  WORKSPACES_DIR,
-  METADATA_FILENAME,
-  toFileMetadata,
-  toWorkspaceFile,
-};
+export { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile };

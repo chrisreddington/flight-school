@@ -10,10 +10,7 @@
 import { logger } from '@/lib/logger';
 import { nowMs } from '@/lib/utils/date-utils';
 import { activityLogger } from '@/lib/copilot/activity/logger';
-import {
-  CHAT_MODEL,
-  getConversationSession,
-} from '@/lib/copilot/sessions';
+import { CHAT_MODEL, getConversationSession } from '@/lib/copilot/sessions';
 import type {
   AuthoringSessionConfig,
   AuthoringStreamEvent,
@@ -151,7 +148,7 @@ function buildAuthoringPrompt(config: AuthoringSessionConfig): string {
  * @returns Streaming session with async iterator
  */
 export async function createGenericStreamingSession(
-  config: AuthoringSessionConfig
+  config: AuthoringSessionConfig,
 ): Promise<AuthoringStreamingSession> {
   const { prompt, conversationId, action, identity } = config;
   const startTime = nowMs();
@@ -167,17 +164,14 @@ export async function createGenericStreamingSession(
   const enhancedPrompt = buildAuthoringPrompt(config);
 
   // Get or create session (reuses session for same conversation)
-  const { session, metrics } = await getConversationSession(
-    newConversationId,
-    {
-      userId: identity.userId,
-      gitHubToken: identity.gitHubToken,
-      profile: 'authoring',
-      capabilities: [],
-      systemMessage,
-      model,
-    }
-  );
+  const { session, metrics } = await getConversationSession(newConversationId, {
+    userId: identity.userId,
+    gitHubToken: identity.gitHubToken,
+    profile: 'authoring',
+    capabilities: [],
+    systemMessage,
+    model,
+  });
 
   log.info(`Session ready: ${metrics.createdNew ? 'new' : 'reused'} (${metrics.sessionCreateMs}ms)`);
 

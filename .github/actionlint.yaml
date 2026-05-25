@@ -1,0 +1,12 @@
+# actionlint configuration.
+#
+# Skip generated agentic workflow files (the `*.lock.yml` siblings of
+# `.github/workflows/*.md`). They are emitted by an external tool and
+# may use action steps or expressions that actionlint flags as unknown.
+self-hosted-runner:
+  labels: []
+
+paths:
+  '.github/workflows/*.lock.yml':
+    ignore:
+      - '.*'

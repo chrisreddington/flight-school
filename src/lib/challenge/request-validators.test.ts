@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  validateHintRequest,
-  validateSolveRequest,
-  validateEvaluateRequest,
-} from './request-validators';
+import { validateHintRequest, validateSolveRequest, validateEvaluateRequest } from './request-validators';
 
 // =============================================================================
 // Test Fixtures
@@ -208,9 +204,7 @@ describe('validateEvaluateRequest', () => {
         challenge: validChallenge,
         files: [{ name: 'large.ts', content: largeContent }],
       };
-      expect(validateEvaluateRequest(body)).toBe(
-        'Total file content exceeds maximum size (100000 characters)'
-      );
+      expect(validateEvaluateRequest(body)).toBe('Total file content exceeds maximum size (100000 characters)');
     });
 
     it('should accept files within size limit', () => {
@@ -223,15 +217,12 @@ describe('validateEvaluateRequest', () => {
   });
 
   describe('difficulty levels', () => {
-    it.each(['beginner', 'intermediate', 'advanced'] as const)(
-      'should accept difficulty level "%s"',
-      (difficulty) => {
-        const body = {
-          challenge: { ...validChallenge, difficulty },
-          files: validFiles,
-        };
-        expect(validateEvaluateRequest(body)).toBeNull();
-      }
-    );
+    it.each(['beginner', 'intermediate', 'advanced'] as const)('should accept difficulty level "%s"', (difficulty) => {
+      const body = {
+        challenge: { ...validChallenge, difficulty },
+        files: validFiles,
+      };
+      expect(validateEvaluateRequest(body)).toBeNull();
+    });
   });
 });

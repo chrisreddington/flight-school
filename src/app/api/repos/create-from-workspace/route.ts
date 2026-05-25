@@ -11,10 +11,7 @@
 import { authErrorResponse, parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
-import {
-  type ExportWorkspaceRequest,
-  validateExportWorkspaceRequest,
-} from '@/lib/github/api-requests';
+import { type ExportWorkspaceRequest, validateExportWorkspaceRequest } from '@/lib/github/api-requests';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { createRepository, getRepositoryState } from '@/lib/github/repos';
 import { getAuthenticatedUser } from '@/lib/github/user';
@@ -67,9 +64,7 @@ interface ExportErrorResponse {
  * });
  * ```
  */
-export async function POST(
-  request: NextRequest
-): Promise<NextResponse<ExportSuccessResponse | ExportErrorResponse>> {
+export async function POST(request: NextRequest): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 
@@ -125,7 +120,7 @@ export async function POST(
           error: `Repository "${req.repoName}" already exists. Please choose a different name.`,
           meta: { totalTimeMs: nowMs() - startTime },
         } satisfies ExportErrorResponse,
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -181,7 +176,7 @@ export async function POST(
         repo: req.repoName,
         content: Buffer.from(file.content).toString('base64'),
         encoding: 'base64',
-      })
+      }),
     );
     const blobResults = await Promise.all(blobPromises);
     const blobs = blobResults.map((r) => r.data.sha);
@@ -205,7 +200,7 @@ export async function POST(
     const { data: commit } = await octokit.rest.git.createCommit({
       owner,
       repo: req.repoName,
-      message: isNewRepo 
+      message: isNewRepo
         ? `feat: Export challenge workspace - ${req.challenge.title}`
         : `feat: Add challenge files - ${req.challenge.title}`,
       tree: tree.sha,

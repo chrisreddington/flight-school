@@ -67,8 +67,6 @@ export const COACH_GITHUB_PROMPT_ADDENDUM = `You have access to two GitHub MCP t
 (repos the user owns or collaborates on). Use them to ground suggestions in \
 real profile data; do not attempt to read file contents or search code.`;
 
-
-
 /**
  * Builds a minimal challenge prompt.
  */
@@ -76,7 +74,7 @@ export function buildChallengePrompt(
   profileContext: string,
   skillProfile?: SkillProfile,
   interleavingHint?: InterleavingHint,
-  options?: { forceDebug?: boolean }
+  options?: { forceDebug?: boolean },
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
   const interleavingSection = buildInterleavingSection(interleavingHint);
@@ -100,10 +98,7 @@ JSON only:
 /**
  * Builds a minimal goal prompt.
  */
-export function buildGoalPrompt(
-  profileContext: string,
-  skillProfile?: SkillProfile
-): string {
+export function buildGoalPrompt(profileContext: string, skillProfile?: SkillProfile): string {
   const skillSections = buildSkillProfileSections(skillProfile);
   return `Developer profile: ${profileContext}${skillSections}
 
@@ -120,12 +115,13 @@ JSON only:
 export function buildLearningTopicsPrompt(
   profileContext: string,
   skillProfile?: SkillProfile,
-  reviewTopics?: string[]
+  reviewTopics?: string[],
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
-  const reviewSection = reviewTopics && reviewTopics.length > 0
-    ? `\nRT:${reviewTopics.join(',')}` // RT = Review Topics (spaced repetition candidates)
-    : '';
+  const reviewSection =
+    reviewTopics && reviewTopics.length > 0
+      ? `\nRT:${reviewTopics.join(',')}` // RT = Review Topics (spaced repetition candidates)
+      : '';
   return `Developer profile: ${profileContext}${skillSections}${reviewSection}
 
 Generate THREE learning topics for growth areas.
@@ -142,13 +138,14 @@ JSON only:
 export function buildSingleTopicPrompt(
   profileContext: string,
   existingTopicTitles: string[],
-  skillProfile?: SkillProfile
+  skillProfile?: SkillProfile,
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
-  const excludeList = existingTopicTitles.length > 0 
-    ? `\nDo NOT suggest these topics (already shown): ${existingTopicTitles.join(', ')}`
-    : '';
-  
+  const excludeList =
+    existingTopicTitles.length > 0
+      ? `\nDo NOT suggest these topics (already shown): ${existingTopicTitles.join(', ')}`
+      : '';
+
   return `Developer profile: ${profileContext}${skillSections}${excludeList}
 
 Generate ONE learning topic for a growth area.
@@ -165,14 +162,15 @@ export function buildSingleChallengePrompt(
   profileContext: string,
   existingChallengeTitles: string[],
   skillProfile?: SkillProfile,
-  interleavingHint?: InterleavingHint
+  interleavingHint?: InterleavingHint,
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
   const interleavingSection = buildInterleavingSection(interleavingHint);
-  const excludeList = existingChallengeTitles.length > 0 
-    ? `\nDo NOT suggest these challenges (already shown): ${existingChallengeTitles.join(', ')}`
-    : '';
-  
+  const excludeList =
+    existingChallengeTitles.length > 0
+      ? `\nDo NOT suggest these challenges (already shown): ${existingChallengeTitles.join(', ')}`
+      : '';
+
   return `Developer profile: ${profileContext}${skillSections}${interleavingSection}${excludeList}
 
 Generate ONE coding challenge (15-30 min, ZPD-appropriate).
@@ -188,13 +186,14 @@ JSON only:
 export function buildSingleGoalPrompt(
   profileContext: string,
   existingGoalTitles: string[],
-  skillProfile?: SkillProfile
+  skillProfile?: SkillProfile,
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
-  const excludeList = existingGoalTitles.length > 0 
-    ? `\nDo NOT suggest these goals (already shown): ${existingGoalTitles.join(', ')}`
-    : '';
-  
+  const excludeList =
+    existingGoalTitles.length > 0
+      ? `\nDo NOT suggest these goals (already shown): ${existingGoalTitles.join(', ')}`
+      : '';
+
   return `Developer profile: ${profileContext}${skillSections}${excludeList}
 
 Generate ONE daily goal (20-30 min, completable TODAY).

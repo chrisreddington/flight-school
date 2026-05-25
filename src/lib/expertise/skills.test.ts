@@ -179,11 +179,7 @@ describe('analyzeCommitPatterns', () => {
   describe('freeform commits', () => {
     it('should return freeform for non-conventional messages', () => {
       const events = [
-        createPushEvent([
-          { message: 'Updated the code' },
-          { message: 'Fixed stuff' },
-          { message: 'WIP' },
-        ]),
+        createPushEvent([{ message: 'Updated the code' }, { message: 'Fixed stuff' }, { message: 'WIP' }]),
       ];
       expect(analyzeCommitPatterns(events)).toBe('freeform');
     });
@@ -267,12 +263,7 @@ describe('analyzeCommitPatterns', () => {
 
   describe('case insensitivity', () => {
     it('should recognize uppercase conventional prefixes', () => {
-      const events = [
-        createPushEvent([
-          { message: 'FEAT: uppercase' },
-          { message: 'FIX: also uppercase' },
-        ]),
-      ];
+      const events = [createPushEvent([{ message: 'FEAT: uppercase' }, { message: 'FIX: also uppercase' }])];
       expect(analyzeCommitPatterns(events)).toBe('conventional');
     });
   });

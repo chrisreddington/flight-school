@@ -1,0 +1,314 @@
+name: Deploy worker (Azure Container Apps)
+
+# Builds the Hono/Node Copilot worker image and rolls it out by
+# updating the Container App's image — no Bicep apply. Infra changes
+# are owned by `deploy-infra.yml`.
+#
+# Operator runbook: `docs/deployment-aca.md`.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy (required for manual rollouts).'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shared with deploy-web.yml and deploy-infra.yml — see those
+  # workflows' concurrency blocks for the rationale.
+  group: deploy-aca-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  should-deploy:
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+      sha: ${{ steps.sha.outputs.value }}
+    steps:
+      - name: Validate required vars
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME; do
+            [[ -z "${!v:-}" ]] && missing+=("$v")
+          done
+          (( ${#missing[@]} )) && { echo "::error::Missing vars: ${missing[*]}"; exit 1; }
+          [[ "$ACR_LOGIN_SERVER" != "${ACR_NAME}.azurecr.io" ]] && \
+            { echo "::error::ACR_LOGIN_SERVER does not match \${ACR_NAME}.azurecr.io"; exit 1; }
+          true
+
+      - name: Resolve deploy SHA
+        id: sha
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          case "$GH_EVENT_NAME" in
+            workflow_run)      sha="$WR_HEAD_SHA"  ;;
+            workflow_dispatch) sha="$INPUT_SHA"    ;;
+            *)                 echo "::error::unsupported event"; exit 1 ;;
+          esac
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || \
+            { echo "::error::invalid SHA: '$sha' (must be 40-hex)"; exit 1; }
+          echo "value=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout deploy SHA
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.sha.outputs.value }}
+          fetch-depth: 0
+
+      - name: Verify SHA is reachable from origin/main
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status=$(gh api "/repos/${GH_REPO}/compare/main...${SHA}" --jq '.status')
+          case "$status" in
+            identical|behind) ;;
+            *) echo "::error::SHA $SHA is not reachable from main (compare status='$status')"; exit 1 ;;
+          esac
+
+      - name: Refuse stale workflow_run (head_sha != current main HEAD)
+        # Stale-deploy race guard. CI can complete out of order;
+        # the deploy workflow only rolls forward. The deploy job
+        # re-checks just before mutating ARM to close the queue
+        # window.
+        if: github.event_name == 'workflow_run'
+        id: stale
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
+          if [[ "$tip" == "$SHA" ]]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::superseded — main HEAD is $tip, this run is for $SHA"
+          fi
+
+      - name: Verify CI was green for dispatched SHA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api "/repos/${GH_REPO}/actions/workflows/ci.yml/runs?head_sha=${SHA}&event=push&status=completed&per_page=10" \
+            --jq '.workflow_runs | first | .conclusion // empty')
+          [[ "$conclusion" == "success" ]] || \
+            { echo "::error::No successful CI run found for SHA $SHA (conclusion='$conclusion')"; exit 1; }
+
+      - name: Resolve filter base (previous successful CI head_sha)
+        if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
+        id: filter-base
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          base=$(gh api "/repos/${GH_REPO}/actions/workflows/ci.yml/runs?branch=main&status=success&event=push&per_page=100" \
+            --jq "[.workflow_runs[] | select(.id < $CURRENT_RUN_ID)] | first | .head_sha // empty")
+          if [[ -z "$base" ]]; then
+            echo "first_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -e "${base}^{commit}" || \
+            { echo "::error::filter base $base not present in local checkout (fetch-depth: 0 expected)"; exit 1; }
+          echo "first_deploy=false" >> "$GITHUB_OUTPUT"
+          echo "value=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Paths filter (workflow_run only)
+        id: filter
+        if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false' && steps.filter-base.outputs.first_deploy == 'false'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          ref: ${{ steps.sha.outputs.value }}
+          base: ${{ steps.filter-base.outputs.value }}
+          # Inline scope. Worker runtime source, shared libs the
+          # worker pulls in, the worker Dockerfile, dependency
+          # manifests, and this workflow file itself.
+          filters: |
+            worker:
+              - 'src/worker/**'
+              - 'src/lib/copilot/**'
+              - 'src/lib/auth/**'
+              - 'src/lib/jobs/**'
+              - 'src/lib/logger/**'
+              - 'src/lib/observability/**'
+              - 'src/lib/security/**'
+              - 'src/lib/storage/**'
+              - 'Dockerfile.worker'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/deploy-worker.yml'
+
+      - name: Decide whether to proceed
+        id: gate
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          FILTER_HIT: ${{ steps.filter.outputs.worker }}
+          SUPERSEDED: ${{ steps.stale.outputs.superseded }}
+          FIRST_DEPLOY: ${{ steps.filter-base.outputs.first_deploy }}
+        run: |
+          set -euo pipefail
+          if [[ "$SUPERSEDED" == 'true' ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Superseded by newer main HEAD; deploy skipped."
+          elif [[ "$GH_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$FIRST_DEPLOY" == 'true' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::First-ever deploy; paths-filter bypassed."
+          elif [[ "$FILTER_HIT" == 'true' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No in-scope paths changed; deploy skipped."
+          fi
+
+  deploy:
+    needs: should-deploy
+    if: needs.should-deploy.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.should-deploy.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Refuse stale deploy (concurrency-queue race guard)
+        if: github.event_name == 'workflow_run'
+        env:
+          SHA: ${{ needs.should-deploy.outputs.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
+          [[ "$tip" == "$SHA" ]] || \
+            { echo "::error::superseded — main HEAD is $tip, refusing to deploy $SHA"; exit 1; }
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: '.node-version'
+      - run: npm ci
+        env:
+          HUSKY: '0'
+      - run: npm run lint && npm run check:guardrails
+      - run: npm run build:worker
+
+      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build + push image
+        env:
+          SHA: ${{ needs.should-deploy.outputs.sha }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          APP_NAME: ${{ vars.APP_NAME }}
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="sha-$SHA"
+          # The worker's Container App resource name is
+          # `${APP_NAME}-worker`; we use that as the image
+          # repository so the image-tag-from-name convention
+          # stays uniform across both apps.
+          IMAGE="${ACR_LOGIN_SERVER}/${APP_NAME}-worker:${IMAGE_TAG}"
+          docker buildx build --push -f Dockerfile.worker -t "$IMAGE" .
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Update Container App image
+        # Worker Container App resource name is `${APP_NAME}-worker`
+        # (see `infra/modules/copilot-worker-app.bicep`). The
+        # container inside that resource is named `copilot-worker`,
+        # but `az containerapp update --image` updates the single
+        # primary container by default; no `--container-name` is
+        # needed today. If a sidecar is ever added, this command
+        # will need an explicit `--container-name copilot-worker`.
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+        run: |
+          set -euo pipefail
+          az containerapp update \
+            --name "${APP_NAME}-worker" \
+            --resource-group "$RESOURCE_GROUP_NAME" \
+            --image "$IMAGE" \
+            --only-show-errors >/dev/null
+
+      - name: Verify new revision is healthy
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+        run: |
+          set -euo pipefail
+          APP="${APP_NAME}-worker"
+          rev=$(az containerapp show --name "$APP" --resource-group "$RESOURCE_GROUP_NAME" \
+            --query 'properties.latestRevisionName' -o tsv)
+          [[ -n "$rev" ]] || { echo "::error::could not resolve latest revision"; exit 1; }
+          echo "Latest revision: $rev"
+          for attempt in $(seq 1 30); do
+            read -r provisioning running < <(az containerapp revision show \
+              --name "$APP" --resource-group "$RESOURCE_GROUP_NAME" --revision "$rev" \
+              --query '[properties.provisioningState, properties.runningState] | join(`\t`, @)' -o tsv)
+            echo "attempt $attempt: provisioning=$provisioning running=$running"
+            case "$provisioning" in
+              Provisioned)
+                [[ "$running" == "Running" ]] && exit 0
+                ;;
+              Failed|Canceled)
+                echo "::error::revision $rev provisioning state '$provisioning'"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::revision $rev did not become healthy in 5 minutes (provisioning=$provisioning running=$running)"
+          exit 1

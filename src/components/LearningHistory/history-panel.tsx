@@ -70,13 +70,7 @@ export function HistoryPanel({
 
   return (
     <>
-      {loadError && (
-        <Banner
-          title="Failed to load history"
-          description={loadError}
-          variant="critical"
-        />
-      )}
+      {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
       <Stack direction="vertical" gap="normal">
         {selectedDate && (
           <div className={styles.selectedDateBanner}>
@@ -88,14 +82,10 @@ export function HistoryPanel({
         )}
 
         {hasGenerating && (
-          <GeneratingBanner
-            topicIds={activeTopicIds}
-            challengeIds={activeChallengeIds}
-            goalIds={activeGoalIds}
-          />
+          <GeneratingBanner topicIds={activeTopicIds} challengeIds={activeChallengeIds} goalIds={activeGoalIds} />
         )}
 
-        {filteredEntries.map(entry => (
+        {filteredEntries.map((entry) => (
           <HistoryEntryCard
             key={entry.dateKey}
             entry={entry}

@@ -53,17 +53,19 @@ type JobTraceContext = ReturnType<typeof captureTracePropagationHeaders>;
 interface CreateJobRequest {
   type: JobType;
   targetId?: string;
-  input: TopicRegenerationInput | ChallengeRegenerationInput | GoalRegenerationInput | ChatResponseInput | ChallengeEvaluationInput;
+  input:
+    | TopicRegenerationInput
+    | ChallengeRegenerationInput
+    | GoalRegenerationInput
+    | ChatResponseInput
+    | ChallengeEvaluationInput;
 }
 
 function hasTraceContext(traceContext: JobTraceContext): boolean {
   return Object.keys(traceContext).length > 0;
 }
 
-function toJobCausalityContext(
-  traceContext: JobTraceContext,
-  trigger?: ClientTriggerMetadata,
-) {
+function toJobCausalityContext(traceContext: JobTraceContext, trigger?: ClientTriggerMetadata) {
   if (!hasTraceContext(traceContext) && !trigger) {
     return undefined;
   }
@@ -93,10 +95,7 @@ export async function POST(request: NextRequest) {
  * resolve a fresh `ghu_` token from the store at run-time; if the store
  * is unwritable now, the executor will have no credentials later.
  */
-async function ensureTokenStoreSeeded(
-  userId: string,
-  jobType: JobType,
-): Promise<NextResponse | null> {
+async function ensureTokenStoreSeeded(userId: string, jobType: JobType): Promise<NextResponse | null> {
   const seedResult = await seedTokenStoreFromJwt(userId);
   if (seedResult.status === 'error') {
     log.error('Refusing to enqueue job: token-store seed failed', {
@@ -122,9 +121,7 @@ async function ensureTokenStoreSeeded(
  * an array of valid capability ids that all sit within the profile's
  * allowlist. Rejecting here keeps doomed requests off the worker.
  */
-function validateChatResponseProfile(
-  body: CreateJobRequest,
-): { ok: true } | { ok: false; response: NextResponse } {
+function validateChatResponseProfile(body: CreateJobRequest): { ok: true } | { ok: false; response: NextResponse } {
   if (body.type !== 'chat-response') return { ok: true };
   const chatInput = body.input as ChatResponseInput | undefined;
   if (!chatInput || !isChatResponseProfile(chatInput.profile)) {
@@ -132,9 +129,7 @@ function validateChatResponseProfile(
       ok: false,
       response: NextResponse.json(
         {
-          error:
-            `Invalid 'profile' for chat-response: must be one of `
-            + `${CHAT_RESPONSE_PROFILES.join(' | ')}.`,
+          error: `Invalid 'profile' for chat-response: must be one of ` + `${CHAT_RESPONSE_PROFILES.join(' | ')}.`,
         },
         { status: 400 },
       ),
@@ -149,12 +144,7 @@ function validateChatResponseProfile(
       ),
     };
   }
-  if (
-    !areCapabilitiesAllowedForProfile(
-      chatInput.profile,
-      chatInput.capabilities as CapabilitiesArg | undefined,
-    )
-  ) {
+  if (!areCapabilitiesAllowedForProfile(chatInput.profile, chatInput.capabilities as CapabilitiesArg | undefined)) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -249,10 +239,7 @@ async function handleCreateJob(request: NextRequest, userId: string) {
     job = await createWorkerJob(proxyInput);
   } catch (err) {
     log.error('Failed to create job on worker', { userId, type: finalBody.type, err });
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
 
   return NextResponse.json({
@@ -265,8 +252,7 @@ async function handleCreateJob(request: NextRequest, userId: string) {
 
 async function getWorkerDispatchCredentials() {
   const dispatchCredentialsEnabled =
-    process.env.NODE_ENV !== 'production'
-    || process.env.COPILOT_WORKER_DISPATCH_CREDENTIALS === '1';
+    process.env.NODE_ENV !== 'production' || process.env.COPILOT_WORKER_DISPATCH_CREDENTIALS === '1';
 
   if (!dispatchCredentialsEnabled) {
     return undefined;
@@ -295,9 +281,6 @@ export async function GET(request: NextRequest) {
     const authResponse = authErrorResponse(err);
     if (authResponse) return authResponse;
     log.error('Failed to list jobs from worker', { err });
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
 }

@@ -37,7 +37,7 @@ export interface WorkspaceExportChallengeMetadata {
 export function generateWorkspaceReadme(
   challenge: WorkspaceExportChallengeMetadata,
   files: WorkspaceExportFileInput[],
-  evaluation?: string
+  evaluation?: string,
 ): string {
   const fileList = files.map((f) => `- \`${f.name}\``).join('\n');
 

@@ -11,7 +11,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
-
 const createSessionMock = vi.fn();
 const octokitConstructorSpy = vi.fn();
 
@@ -51,10 +50,7 @@ vi.mock('@/lib/auth/context', () => ({
   },
 }));
 
-const STORAGE_DIR = path.join(
-  os.tmpdir(),
-  `flight-school-mt-${Date.now()}-${Math.random().toString(36).slice(2)}`
-);
+const STORAGE_DIR = path.join(os.tmpdir(), `flight-school-mt-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', STORAGE_DIR);
 
 import { getOctokitForToken } from '@/lib/github/client';
@@ -173,9 +169,7 @@ describe('multi-tenant auth/token isolation', () => {
         throw new UnauthorizedError();
       });
 
-      await expect(githubClient.getOctokitForRequest()).rejects.toBeInstanceOf(
-        UnauthorizedError
-      );
+      await expect(githubClient.getOctokitForRequest()).rejects.toBeInstanceOf(UnauthorizedError);
       // No Octokit should have been constructed from the env var.
       expect(octokitConstructorSpy).not.toHaveBeenCalled();
 
@@ -187,10 +181,7 @@ describe('multi-tenant auth/token isolation', () => {
       // Inspecting the module source is the simplest contract test.
       const fs = await import('node:fs/promises');
       const path = await import('node:path');
-      const source = await fs.readFile(
-        path.resolve(process.cwd(), 'src/lib/github/client.ts'),
-        'utf-8'
-      );
+      const source = await fs.readFile(path.resolve(process.cwd(), 'src/lib/github/client.ts'), 'utf-8');
       expect(source).not.toMatch(/child_process/);
       expect(source).not.toMatch(/execFile|execSync|spawn/);
       expect(source).not.toMatch(/process\.env\.GITHUB_TOKEN/);
@@ -243,7 +234,7 @@ describe('multi-tenant auth/token isolation', () => {
       const tWriteB = await threads.POST(
         postReq('http://test/api/threads/storage', {
           threads: [{ id: 'thread-of-user-1001', title: 'secret' }],
-        }) as never
+        }) as never,
       );
       expect(tWriteB.status).toBe(200);
 
@@ -256,7 +247,7 @@ describe('multi-tenant auth/token isolation', () => {
       const fWriteB = await focus.POST(
         postReq('http://test/api/focus/storage', {
           history: { '2024-01-01': { items: ['secret-focus'] } },
-        }) as never
+        }) as never,
       );
       expect(fWriteB.status).toBe(200);
 
@@ -278,14 +269,12 @@ describe('multi-tenant auth/token isolation', () => {
           activeFileId: 'f1',
           createdAt: 1,
           updatedAt: 1,
-        }) as never
+        }) as never,
       );
       expect(saveB.status).toBe(200);
 
       requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
-      const readA = await workspace.GET(
-        new Request('http://test/api/workspace/storage?challengeId=fizzbuzz') as never
-      );
+      const readA = await workspace.GET(new Request('http://test/api/workspace/storage?challengeId=fizzbuzz') as never);
       expect(readA.status).toBe(404);
 
       requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
@@ -302,7 +291,9 @@ describe('multi-tenant auth/token isolation', () => {
     it('all three storage routes return 401 when unauthenticated', async () => {
       const { threads, focus, workspace, workspaceList } = await loadStorageRoutes();
 
-      const fail = () => { throw new UnauthorizedError(); };
+      const fail = () => {
+        throw new UnauthorizedError();
+      };
 
       requireUserContextMock.mockImplementationOnce(fail);
       expect((await threads.GET()).status).toBe(401);
@@ -310,9 +301,7 @@ describe('multi-tenant auth/token isolation', () => {
       expect((await focus.GET()).status).toBe(401);
       requireUserContextMock.mockImplementationOnce(fail);
       expect(
-        (await workspace.GET(
-          new Request('http://test/api/workspace/storage?challengeId=x') as never
-        )).status
+        (await workspace.GET(new Request('http://test/api/workspace/storage?challengeId=x') as never)).status,
       ).toBe(401);
       requireUserContextMock.mockImplementationOnce(fail);
       expect((await workspaceList.GET()).status).toBe(401);
@@ -341,7 +330,7 @@ describe('multi-tenant auth/token isolation', () => {
           activeFileId: 'i',
           createdAt: 1,
           updatedAt: 1,
-        }) as never
+        }) as never,
       );
       requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
       await workspace.POST(
@@ -352,7 +341,7 @@ describe('multi-tenant auth/token isolation', () => {
           activeFileId: 'i',
           createdAt: 1,
           updatedAt: 1,
-        }) as never
+        }) as never,
       );
 
       // User A deletes everything.
@@ -383,15 +372,16 @@ describe('multi-tenant auth/token isolation', () => {
       const setBad = () => requireUserContextMock.mockResolvedValueOnce(ctxFor('..'));
       // ctxFor('..') yields userId='..' which fails the regex.
 
-      setBad(); expect((await threads.GET()).status).toBe(400);
-      setBad(); expect((await focus.GET()).status).toBe(400);
+      setBad();
+      expect((await threads.GET()).status).toBe(400);
+      setBad();
+      expect((await focus.GET()).status).toBe(400);
       setBad();
       expect(
-        (await workspace.GET(
-          new Request('http://test/api/workspace/storage?challengeId=x') as never
-        )).status
+        (await workspace.GET(new Request('http://test/api/workspace/storage?challengeId=x') as never)).status,
       ).toBe(400);
-      setBad(); expect((await workspaceList.GET()).status).toBe(400);
+      setBad();
+      expect((await workspaceList.GET()).status).toBe(400);
     });
 
     it('rejects path-traversal in workspace file.name with 400 and does not corrupt other users', async () => {
@@ -403,11 +393,20 @@ describe('multi-tenant auth/token isolation', () => {
         postReq('http://test/api/workspace/storage', {
           version: 1,
           challengeId: 'safechallenge',
-          files: [{ id: 'f1', name: 'solution.ts', content: 'export const safe = 1;', language: 'typescript', createdAt: '', updatedAt: '' }],
+          files: [
+            {
+              id: 'f1',
+              name: 'solution.ts',
+              content: 'export const safe = 1;',
+              language: 'typescript',
+              createdAt: '',
+              updatedAt: '',
+            },
+          ],
           activeFileId: 'f1',
           createdAt: 1,
           updatedAt: 1,
-        }) as never
+        }) as never,
       );
       expect(seedB.status).toBe(200);
 
@@ -426,11 +425,20 @@ describe('multi-tenant auth/token isolation', () => {
           postReq('http://test/api/workspace/storage', {
             version: 1,
             challengeId: 'attack',
-            files: [{ id: 'f1', name: evilName, content: 'PWNED', language: 'typescript', createdAt: '', updatedAt: '' }],
+            files: [
+              {
+                id: 'f1',
+                name: evilName,
+                content: 'PWNED',
+                language: 'typescript',
+                createdAt: '',
+                updatedAt: '',
+              },
+            ],
             activeFileId: 'f1',
             createdAt: 1,
             updatedAt: 1,
-          }) as never
+          }) as never,
         );
         expect(attack.status, `expected 400 for filename ${evilName}`).toBe(400);
       }
@@ -438,7 +446,7 @@ describe('multi-tenant auth/token isolation', () => {
       // User B's workspace must be unchanged after the attacks.
       requireUserContextMock.mockResolvedValueOnce(ctxFor('2002'));
       const readB = await workspace.GET(
-        new Request('http://test/api/workspace/storage?challengeId=safechallenge') as never
+        new Request('http://test/api/workspace/storage?challengeId=safechallenge') as never,
       );
       expect(readB.status).toBe(200);
       const bodyB = (await readB.json()) as ChallengeWorkspace;
@@ -460,11 +468,20 @@ describe('multi-tenant auth/token isolation', () => {
         postReq('http://test/api/workspace/storage', {
           version: 1,
           challengeId: 'happy',
-          files: [{ id: 'f1', name: 'foo.ts', content: 'export const x = 1;', language: 'typescript', createdAt: '', updatedAt: '' }],
+          files: [
+            {
+              id: 'f1',
+              name: 'foo.ts',
+              content: 'export const x = 1;',
+              language: 'typescript',
+              createdAt: '',
+              updatedAt: '',
+            },
+          ],
           activeFileId: 'f1',
           createdAt: 1,
           updatedAt: 1,
-        }) as never
+        }) as never,
       );
       expect(save.status).toBe(200);
 
@@ -473,9 +490,7 @@ describe('multi-tenant auth/token isolation', () => {
       // FLIGHT_SCHOOL_DATA_DIR stub does not always take effect in this suite
       // — the underlying storage utils may write to the platform default.)
       requireUserContextMock.mockResolvedValueOnce(ctxFor('3003'));
-      const read = await workspace.GET(
-        new Request('http://test/api/workspace/storage?challengeId=happy') as never
-      );
+      const read = await workspace.GET(new Request('http://test/api/workspace/storage?challengeId=happy') as never);
       expect(read.status).toBe(200);
       const body = (await read.json()) as ChallengeWorkspace;
       expect(body.files).toHaveLength(1);
@@ -485,7 +500,7 @@ describe('multi-tenant auth/token isolation', () => {
       // Another user must not see this workspace.
       requireUserContextMock.mockResolvedValueOnce(ctxFor('4004'));
       const otherRead = await workspace.GET(
-        new Request('http://test/api/workspace/storage?challengeId=happy') as never
+        new Request('http://test/api/workspace/storage?challengeId=happy') as never,
       );
       expect(otherRead.status).toBe(404);
     });

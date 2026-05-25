@@ -55,13 +55,7 @@ function createHabit(overrides: Partial<HabitWithHistory> = {}): HabitWithHistor
 
 describe('HabitHistoryCard', () => {
   it('renders check-in button for today pending habit', () => {
-    render(
-      <HabitHistoryCard
-        habit={createHabit()}
-        dateKey="2025-01-02"
-        isToday={true}
-      />
-    );
+    render(<HabitHistoryCard habit={createHabit()} dateKey="2025-01-02" isToday={true} />);
 
     expect(screen.getByRole('button', { name: 'Yes, Done!' })).toBeInTheDocument();
   });
@@ -69,13 +63,7 @@ describe('HabitHistoryCard', () => {
   it('shows error inline message when skip action fails', async () => {
     updateMock.mockRejectedValueOnce(new Error('Skip failed'));
 
-    render(
-      <HabitHistoryCard
-        habit={createHabit()}
-        dateKey="2025-01-02"
-        isToday={true}
-      />
-    );
+    render(<HabitHistoryCard habit={createHabit()} dateKey="2025-01-02" isToday={true} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 
@@ -99,7 +87,7 @@ describe('HabitHistoryCard', () => {
         })}
         dateKey="2025-01-02"
         isToday={true}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
@@ -115,13 +103,7 @@ describe('HabitHistoryCard', () => {
     });
     updateMock.mockReturnValueOnce(secondUpdate);
 
-    render(
-      <HabitHistoryCard
-        habit={createHabit()}
-        dateKey="2025-01-02"
-        isToday={true}
-      />
-    );
+    render(<HabitHistoryCard habit={createHabit()} dateKey="2025-01-02" isToday={true} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     expect(await screen.findByText('Temporary failure')).toBeInTheDocument();

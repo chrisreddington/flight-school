@@ -17,8 +17,6 @@ export function upsertMessageById(
   }
 
   const updatedMessages = [...messages];
-  updatedMessages[existingIndex] = mergeExisting
-    ? { ...updatedMessages[existingIndex], ...nextMessage }
-    : nextMessage;
+  updatedMessages[existingIndex] = mergeExisting ? { ...updatedMessages[existingIndex], ...nextMessage } : nextMessage;
   return updatedMessages;
 }

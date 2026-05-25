@@ -1,5 +1,3 @@
-
-
 /**
  * Skill Profile Types
  *

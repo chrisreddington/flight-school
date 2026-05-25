@@ -2,10 +2,10 @@
  * Worker-side job-record retention sweepers.
  *
  * These three sweepers operate exclusively on `BackgroundJob` records
- * via `jobStorage`. They are kept in the worker tree (and away from
- * `@/lib/storage/user-retention`) because once the dispatch flip in
- * Phase 2B.2 lands, the worker becomes the sole writer of the jobs
- * store and these sweeps must run inside the worker process.
+ * via `jobStorage`. They live in the worker tree (and away from
+ * `@/lib/storage/user-retention`) because the worker is the sole
+ * writer of the jobs store, so these sweeps must run inside the
+ * worker process.
  *
  * Each function accepts an explicit `nowMs` where applicable and
  * returns aggregate counts so the cron handler never inspects raw
@@ -14,7 +14,6 @@
  * @module worker/jobs/retention
  */
 
-import 'server-only';
 import { jobStorage } from '@/lib/jobs';
 import { logger } from '@/lib/logger';
 
@@ -27,10 +26,10 @@ export interface SweepResult {
   deleted: number;
   inspected: number;
   /**
-   * IDs of jobs that transitioned to `failed` (Phase 5 added so the
-   * sweep route can annotate the durable chat thread with a
+   * IDs of jobs that transitioned to `failed`. The sweep route uses
+   * these to annotate the durable chat thread with a
    * `*(Response interrupted)*` marker for any chat-response job that
-   * was streaming when the worker stalled).
+   * was streaming when the worker stalled.
    */
   sweptIds?: string[];
 }
@@ -49,10 +48,7 @@ function isTerminalStatus(status: string | undefined): boolean {
  * Mark `pending` / `running` jobs that have not progressed in
  * `staleRunningMs` as failed.
  */
-export async function sweepStaleRunningJobs(
-  nowMs: number,
-  ttlMs: number = staleRunningMs,
-): Promise<SweepResult> {
+export async function sweepStaleRunningJobs(nowMs: number, ttlMs: number = staleRunningMs): Promise<SweepResult> {
   const all = await jobStorage.getAll();
   let deleted = 0;
   let inspected = 0;
@@ -60,8 +56,7 @@ export async function sweepStaleRunningJobs(
   for (const job of all) {
     if (job.status !== 'pending' && job.status !== 'running') continue;
     inspected += 1;
-    const reference =
-      job.status === 'running' ? job.startedAt ?? job.createdAt : job.createdAt;
+    const reference = job.status === 'running' ? (job.startedAt ?? job.createdAt) : job.createdAt;
     const ts = parseTimestamp(reference);
     if (ts === null) continue;
     if (nowMs - ts <= ttlMs) continue;
@@ -117,9 +112,7 @@ function redactJobInput(input: Record<string, unknown> | undefined): Record<stri
 }
 
 function redactJobResult<T>(result: T, nowMs: number): T {
-  return result
-    ? ({ __redacted: true, redactedAt: new Date(nowMs).toISOString() } as T)
-    : result;
+  return result ? ({ __redacted: true, redactedAt: new Date(nowMs).toISOString() } as T) : result;
 }
 
 // Indirection so test harness can stub if needed; production just uses Date.now.

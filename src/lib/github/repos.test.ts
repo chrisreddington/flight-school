@@ -30,10 +30,7 @@ describe('getLanguageStats', () => {
   });
 
   it('should return empty array when no repos have languages', () => {
-    const repos = [
-      createRepo({ language: null }),
-      createRepo({ language: null }),
-    ];
+    const repos = [createRepo({ language: null }), createRepo({ language: null })];
 
     const stats = getLanguageStats(repos);
     expect(stats).toEqual([]);
@@ -133,10 +130,7 @@ describe('getLanguageStats', () => {
   });
 
   it('should include language colors from language-colors module', () => {
-    const repos = [
-      createRepo({ language: 'TypeScript' }),
-      createRepo({ language: 'JavaScript' }),
-    ];
+    const repos = [createRepo({ language: 'TypeScript' }), createRepo({ language: 'JavaScript' })];
 
     const stats = getLanguageStats(repos);
 

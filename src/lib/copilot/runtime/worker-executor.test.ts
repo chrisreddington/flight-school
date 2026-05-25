@@ -74,11 +74,23 @@ describe('executeCopilotChatInWorkerRuntime', () => {
   });
 
   it('creates separate runtimes for different users', async () => {
-    await executeCopilotChatInWorkerRuntime({ identity: { userId: '123', gitHubToken: 'ghu_123' }, prompt: 'hello' });
-    await executeCopilotChatInWorkerRuntime({ identity: { userId: '456', gitHubToken: 'ghu_456' }, prompt: 'hello' });
+    await executeCopilotChatInWorkerRuntime({
+      identity: { userId: '123', gitHubToken: 'ghu_123' },
+      prompt: 'hello',
+    });
+    await executeCopilotChatInWorkerRuntime({
+      identity: { userId: '456', gitHubToken: 'ghu_456' },
+      prompt: 'hello',
+    });
 
     expect(mocks.createCopilotUserRuntime).toHaveBeenCalledTimes(2);
-    expect(mocks.createCopilotUserRuntime).toHaveBeenNthCalledWith(1, expect.objectContaining({ userId: '123', copilotHome: '/tmp/runtimes/123' }));
-    expect(mocks.createCopilotUserRuntime).toHaveBeenNthCalledWith(2, expect.objectContaining({ userId: '456', copilotHome: '/tmp/runtimes/456' }));
+    expect(mocks.createCopilotUserRuntime).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ userId: '123', copilotHome: '/tmp/runtimes/123' }),
+    );
+    expect(mocks.createCopilotUserRuntime).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ userId: '456', copilotHome: '/tmp/runtimes/456' }),
+    );
   });
 });

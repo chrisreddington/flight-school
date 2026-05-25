@@ -97,7 +97,12 @@ export class JobEventBus {
       case 'delta':
         return { type: 'delta', content: '[oversized delta dropped]' };
       case 'tool_start':
-        return { type: 'tool_start', toolCallId: event.toolCallId, name: event.name, args: '[truncated]' };
+        return {
+          type: 'tool_start',
+          toolCallId: event.toolCallId,
+          name: event.name,
+          args: '[truncated]',
+        };
       case 'tool_complete':
         return {
           type: 'tool_complete',
@@ -268,8 +273,7 @@ export class JobEventBus {
 
     const oldestRetained = buf.oldestSeq;
     const cursorBehindBuffer = oldestRetained > 0 && afterSeq < oldestRetained - 1;
-    const includeSnapshot =
-      buf.snapshot !== null && (afterSeq === 0 || cursorBehindBuffer);
+    const includeSnapshot = buf.snapshot !== null && (afterSeq === 0 || cursorBehindBuffer);
 
     if (includeSnapshot && buf.snapshot) {
       const snap = buf.snapshot;
@@ -356,14 +360,9 @@ export class JobEventBus {
    * sequence AND the DELETE handler use to emit `done`/`cancelled`/
    * `failed` frames without racing.
    */
-  appendTerminalIfNotTerminated(
-    jobId: string,
-    event: JobStreamEvent,
-  ): SequencedJobStreamEvent | null {
+  appendTerminalIfNotTerminated(jobId: string, event: JobStreamEvent): SequencedJobStreamEvent | null {
     if (!isTerminalEvent(event)) {
-      throw new Error(
-        `appendTerminalIfNotTerminated requires a terminal event; got ${event.type}`,
-      );
+      throw new Error(`appendTerminalIfNotTerminated requires a terminal event; got ${event.type}`);
     }
     const existing = this.buffers.get(jobId);
     if (existing?.terminated) return null;

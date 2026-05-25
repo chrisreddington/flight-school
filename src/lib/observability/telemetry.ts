@@ -20,14 +20,7 @@
  * @see `.github/skills/opentelemetry/SKILL.md`
  */
 
-import {
-  context,
-  metrics,
-  SpanStatusCode,
-  trace,
-  type Attributes,
-  type Span,
-} from '@opentelemetry/api';
+import { context, metrics, SpanStatusCode, trace, type Attributes, type Span } from '@opentelemetry/api';
 
 import {
   GEN_AI_OPERATION_NAME,
@@ -160,12 +153,7 @@ export async function withSpan<T>(
  * @param status - `'ok'` or `'error'`. Errors also carry an `error.type`
  *   attribute on the span — this function only records the histogram.
  */
-export function recordAiOperation(
-  operation: string,
-  durationMs: number,
-  model: string,
-  status: OperationStatus,
-): void {
+export function recordAiOperation(operation: string, durationMs: number, model: string, status: OperationStatus): void {
   const attributes: Attributes = {
     [GEN_AI_OPERATION_NAME]: operation,
     [GEN_AI_REQUEST_MODEL]: model,

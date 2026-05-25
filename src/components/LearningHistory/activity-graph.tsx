@@ -19,27 +19,23 @@ interface ActivityGraphProps {
 }
 
 /** 52-week contribution graph */
-export const ActivityGraph = memo(function ActivityGraph({ 
-  activity,
-  selectedDate,
-  onSelectDate,
-}: ActivityGraphProps) {
+export const ActivityGraph = memo(function ActivityGraph({ activity, selectedDate, onSelectDate }: ActivityGraphProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const maxCount = Math.max(...activity.map(d => d.count), 1);
-  
+  const maxCount = Math.max(...activity.map((d) => d.count), 1);
+
   // Auto-scroll to show most recent activity (rightmost)
   useEffect(() => {
     if (wrapperRef.current) {
       wrapperRef.current.scrollLeft = wrapperRef.current.scrollWidth;
     }
   }, []);
-  
+
   // Group by weeks for grid layout
   const weeks: ActivityDay[][] = [];
   let currentWeek: ActivityDay[] = [];
   let lastWeekIndex = -1;
-  
-  activity.forEach(day => {
+
+  activity.forEach((day) => {
     if (day.weekIndex !== lastWeekIndex) {
       if (currentWeek.length > 0) weeks.push(currentWeek);
       currentWeek = [];
@@ -48,14 +44,14 @@ export const ActivityGraph = memo(function ActivityGraph({
     currentWeek.push(day);
   });
   if (currentWeek.length > 0) weeks.push(currentWeek);
-  
+
   return (
     <div className={styles.activityGraph}>
       <div className={styles.activityGraphHeader}>
         <GraphIcon size={16} />
         <span>Activity</span>
         {selectedDate && (
-          <button 
+          <button
             type="button"
             className={styles.clearSelection}
             onClick={() => onSelectDate(null)}
@@ -66,7 +62,7 @@ export const ActivityGraph = memo(function ActivityGraph({
           </button>
         )}
       </div>
-      
+
       {/* Grid - clean like GitHub, no day labels */}
       <div ref={wrapperRef} className={styles.activityGridWrapper}>
         <div className={styles.activityGrid52}>
@@ -76,7 +72,7 @@ export const ActivityGraph = memo(function ActivityGraph({
                 const intensity = day.count === 0 ? 0 : Math.ceil((day.count / maxCount) * 4);
                 const isSelected = day.date === selectedDate;
                 const isToday = day.date === getDateKey();
-                
+
                 return (
                   <button
                     key={day.date}
@@ -93,7 +89,7 @@ export const ActivityGraph = memo(function ActivityGraph({
           ))}
         </div>
       </div>
-      
+
       {/* Legend */}
       <div className={styles.activityLegend}>
         <span>Less</span>

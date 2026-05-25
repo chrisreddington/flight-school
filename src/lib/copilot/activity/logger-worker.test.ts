@@ -42,9 +42,7 @@ describe('AIActivityLoggerWorker', () => {
     // Regression: previously hydration only seeded the bus; applyUpdate
     // checked an independent in-memory map and returned null (→ 404)
     // for retained events after worker restart.
-    mocks.loadActivityEvents.mockResolvedValueOnce([
-      mkEvent({ id: 'evt-hydrated', status: 'pending' }),
-    ]);
+    mocks.loadActivityEvents.mockResolvedValueOnce([mkEvent({ id: 'evt-hydrated', status: 'pending' })]);
 
     await activityLoggerWorker.ensureHydrated('user-1');
 
@@ -55,15 +53,11 @@ describe('AIActivityLoggerWorker', () => {
 
     expect(updated).not.toBeNull();
     expect(updated?.status).toBe('success');
-    expect(activityLoggerWorker.getEvents('user-1').map((e) => e.status)).toEqual([
-      'success',
-    ]);
+    expect(activityLoggerWorker.getEvents('user-1').map((e) => e.status)).toEqual(['success']);
   });
 
   it('applyUpdate returns null when the event id is unknown or owned by another user', async () => {
-    mocks.loadActivityEvents.mockResolvedValueOnce([
-      mkEvent({ id: 'evt-1', userId: 'user-1' }),
-    ]);
+    mocks.loadActivityEvents.mockResolvedValueOnce([mkEvent({ id: 'evt-1', userId: 'user-1' })]);
     await activityLoggerWorker.ensureHydrated('user-1');
 
     expect(activityLoggerWorker.applyUpdate('user-1', 'ghost', { status: 'success' })).toBeNull();
@@ -71,11 +65,7 @@ describe('AIActivityLoggerWorker', () => {
   });
 
   it('startOperation creates a pending event, persists it, and completes via the returned closure', async () => {
-    const { eventId, complete } = activityLoggerWorker.startOperation(
-      'user-1',
-      'ask',
-      'test-op',
-    );
+    const { eventId, complete } = activityLoggerWorker.startOperation('user-1', 'ask', 'test-op');
 
     expect(eventId).toBeDefined();
     expect(mocks.appendActivityEvent).toHaveBeenCalledTimes(1);

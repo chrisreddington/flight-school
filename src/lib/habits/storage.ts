@@ -1,6 +1,6 @@
 /**
  * Habit Storage
- * 
+ *
  * Server-side API persistence for user habits.
  */
 
@@ -47,15 +47,15 @@ async function saveHabits(collection: HabitCollection): Promise<void> {
 
 /**
  * Creates a new habit.
- * 
+ *
  * @throws {Error} If max active habits exceeded
  */
 async function createNewHabit(habit: Habit): Promise<HabitWithHistory> {
   const collection = await loadHabits();
-  
+
   // Check active habit limit
   const activeCount = collection.habits.filter(
-    h => h.state === 'not-started' || h.state === 'active' || h.state === 'paused'
+    (h) => h.state === 'not-started' || h.state === 'active' || h.state === 'paused',
   ).length;
 
   if (activeCount >= MAX_ACTIVE_HABITS) {
@@ -74,7 +74,7 @@ async function createNewHabit(habit: Habit): Promise<HabitWithHistory> {
  */
 async function updateHabit(updatedHabit: HabitWithHistory): Promise<void> {
   const collection = await loadHabits();
-  const index = collection.habits.findIndex(h => h.id === updatedHabit.id);
+  const index = collection.habits.findIndex((h) => h.id === updatedHabit.id);
 
   if (index === -1) {
     throw new Error(`Habit ${updatedHabit.id} not found`);
@@ -89,7 +89,7 @@ async function updateHabit(updatedHabit: HabitWithHistory): Promise<void> {
  */
 async function getHabit(habitId: string): Promise<HabitWithHistory | null> {
   const collection = await loadHabits();
-  return collection.habits.find(h => h.id === habitId) || null;
+  return collection.habits.find((h) => h.id === habitId) || null;
 }
 
 /**
@@ -97,9 +97,7 @@ async function getHabit(habitId: string): Promise<HabitWithHistory | null> {
  */
 async function getActiveHabits(): Promise<HabitWithHistory[]> {
   const collection = await loadHabits();
-  return collection.habits.filter(
-    h => h.state === 'not-started' || h.state === 'active' || h.state === 'paused'
-  );
+  return collection.habits.filter((h) => h.state === 'not-started' || h.state === 'active' || h.state === 'paused');
 }
 
 /**
@@ -107,7 +105,7 @@ async function getActiveHabits(): Promise<HabitWithHistory[]> {
  */
 async function getCompletedHabits(): Promise<HabitWithHistory[]> {
   const collection = await loadHabits();
-  return collection.habits.filter(h => h.state === 'completed');
+  return collection.habits.filter((h) => h.state === 'completed');
 }
 
 /**
@@ -115,7 +113,7 @@ async function getCompletedHabits(): Promise<HabitWithHistory[]> {
  */
 async function getAbandonedHabits(): Promise<HabitWithHistory[]> {
   const collection = await loadHabits();
-  return collection.habits.filter(h => h.state === 'abandoned');
+  return collection.habits.filter((h) => h.state === 'abandoned');
 }
 
 /**
@@ -123,7 +121,7 @@ async function getAbandonedHabits(): Promise<HabitWithHistory[]> {
  */
 async function deleteHabit(habitId: string): Promise<void> {
   const collection = await loadHabits();
-  collection.habits = collection.habits.filter(h => h.id !== habitId);
+  collection.habits = collection.habits.filter((h) => h.id !== habitId);
   await saveHabits(collection);
 }
 

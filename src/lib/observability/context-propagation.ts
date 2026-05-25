@@ -116,10 +116,7 @@ export function captureTracePropagationHeaders(sourceContext: Context = context.
   return out;
 }
 
-function extractTraceContextFromHeaders(
-  headers: HeaderCarrier,
-  baseContext: Context = context.active(),
-): Context {
+function extractTraceContextFromHeaders(headers: HeaderCarrier, baseContext: Context = context.active()): Context {
   const carrier = toCarrier(headers);
   const extractedContext = propagation.extract(baseContext, carrier);
   const extractedSpanContext = trace.getSpan(extractedContext)?.spanContext();

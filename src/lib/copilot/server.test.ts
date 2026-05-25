@@ -23,9 +23,7 @@ vi.mock('@/lib/observability/telemetry', () => ({
   withSpan: vi.fn((_name, _attributes, callback) => callback({})),
 }));
 
-const {
-  createLoggedCoachSession,
-} = await import('./server');
+const { createLoggedCoachSession } = await import('./server');
 
 describe('logged Copilot session factories', () => {
   const fakeSession = {
@@ -66,12 +64,7 @@ describe('logged Copilot session factories', () => {
   });
 
   it('honours an empty capability list for the lightweight coach path', async () => {
-    await createLoggedCoachSession(
-      { userId: 'u1', gitHubToken: 'ghu_1' },
-      'Quick suggestion',
-      'prompt',
-      [],
-    );
+    await createLoggedCoachSession({ userId: 'u1', gitHubToken: 'ghu_1' }, 'Quick suggestion', 'prompt', []);
 
     const opts = createSessionWithMetricsMock.mock.calls[0][0];
     expect(opts.profile).toBe('coach');

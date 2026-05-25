@@ -51,16 +51,10 @@ export function encryptForTest(
   const kekId = overrides.kekId ?? 'https://example.vault.azure.net/keys/flight-school-kek';
   const alg = 'AES-256-GCM/A256KW' as const;
   const aadExpiresAt = overrides.aadExpiresAt ?? token.expiresAt;
-  const aad = Buffer.from(
-    JSON.stringify({ alg, expiresAt: aadExpiresAt, kekId, userId }),
-    'utf8',
-  );
+  const aad = Buffer.from(JSON.stringify({ alg, expiresAt: aadExpiresAt, kekId, userId }), 'utf8');
   const cipher = createCipheriv('aes-256-gcm', dek, iv, { authTagLength: 16 });
   cipher.setAAD(aad);
-  const ciphertext = Buffer.concat([
-    cipher.update(Buffer.from(JSON.stringify(token), 'utf8')),
-    cipher.final(),
-  ]);
+  const ciphertext = Buffer.concat([cipher.update(Buffer.from(JSON.stringify(token), 'utf8')), cipher.final()]);
   return {
     id: userId,
     userId,

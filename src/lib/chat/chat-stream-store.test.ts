@@ -15,7 +15,13 @@ describe('register', () => {
   it('creates a record with threadId + assistantMessageId', () => {
     chatStreamStore.register('j1', 't1', 'asst-1');
     const rec = chatStreamStore.getByJobId('j1');
-    expect(rec).toMatchObject({ jobId: 'j1', threadId: 't1', assistantMessageId: 'asst-1', content: '', lastSeq: 0 });
+    expect(rec).toMatchObject({
+      jobId: 'j1',
+      threadId: 't1',
+      assistantMessageId: 'asst-1',
+      content: '',
+      lastSeq: 0,
+    });
     expect(rec?.toolEvents).toEqual([]);
   });
 
@@ -61,7 +67,11 @@ describe('applyToolStart / applyToolComplete', () => {
   it('updates a matching tool event on complete', () => {
     chatStreamStore.register('j1', 't1', 'a');
     chatStreamStore.applyToolStart('j1', { toolCallId: 'tc-1', name: 'foo', args: {} }, 1);
-    chatStreamStore.applyToolComplete('j1', { toolCallId: 'tc-1', name: 'foo', result: { ok: true }, durationMs: 42 }, 2);
+    chatStreamStore.applyToolComplete(
+      'j1',
+      { toolCallId: 'tc-1', name: 'foo', result: { ok: true }, durationMs: 42 },
+      2,
+    );
     const rec = chatStreamStore.getByJobId('j1')!;
     expect(rec.toolEvents).toHaveLength(1);
     expect(rec.toolEvents[0]).toMatchObject({ id: 'tc-1', status: 'complete', durationMs: 42 });
@@ -88,7 +98,12 @@ describe('applySnapshot', () => {
   it('drops snapshots whose seq <= lastSeq', () => {
     chatStreamStore.register('j1', 't1', 'a');
     chatStreamStore.applyDelta('j1', 'a', 10);
-    chatStreamStore.applySnapshot('j1', { content: 'OLD', toolEvents: [], hasActionableItem: false, seq: 5 });
+    chatStreamStore.applySnapshot('j1', {
+      content: 'OLD',
+      toolEvents: [],
+      hasActionableItem: false,
+      seq: 5,
+    });
     expect(chatStreamStore.getByJobId('j1')?.content).toBe('a');
   });
 

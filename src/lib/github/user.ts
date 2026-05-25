@@ -43,7 +43,7 @@ export async function getAuthenticatedUser(octokit: Octokit): Promise<GitHubUser
 export function calculateExperienceLevel(
   yearsOnGitHub: number,
   publicRepos: number,
-  followers: number
+  followers: number,
 ): 'beginner' | 'intermediate' | 'advanced' {
   const score = yearsOnGitHub * 2 + publicRepos * 0.5 + followers * 0.1;
   if (score >= 30) return 'advanced';
@@ -58,7 +58,5 @@ export function calculateExperienceLevel(
  * @returns Years since account creation (floored)
  */
 export function calculateYearsOnGitHub(createdAt: string): number {
-  return Math.floor(
-    (nowMs() - new Date(createdAt).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-  );
+  return Math.floor((nowMs() - new Date(createdAt).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 }

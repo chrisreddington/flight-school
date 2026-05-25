@@ -23,18 +23,11 @@ interface RawChallenge {
   whyThisChallenge?: string[];
 }
 
-// JSON extraction logic moved to @/lib/utils/json-utils for reusability
-
 /**
  * Validates difficulty level.
  */
-function isValidDifficulty(
-  difficulty: unknown
-): difficulty is 'beginner' | 'intermediate' | 'advanced' {
-  return (
-    typeof difficulty === 'string' &&
-    ['beginner', 'intermediate', 'advanced'].includes(difficulty)
-  );
+function isValidDifficulty(difficulty: unknown): difficulty is 'beginner' | 'intermediate' | 'advanced' {
+  return typeof difficulty === 'string' && ['beginner', 'intermediate', 'advanced'].includes(difficulty);
 }
 
 /**
@@ -62,23 +55,17 @@ function validateChallenge(raw: unknown): DailyChallenge | null {
   }
 
   // Validate difficulty (default to intermediate if missing)
-  const difficulty = isValidDifficulty(challenge.difficulty)
-    ? challenge.difficulty
-    : 'intermediate';
+  const difficulty = isValidDifficulty(challenge.difficulty) ? challenge.difficulty : 'intermediate';
 
   // Normalize estimatedTime
   const estimatedTime = challenge.estimatedTime || '30 minutes';
   const type = challenge.type === 'debug' ? 'debug' : 'implement';
-  const brokenCode = type === 'debug' && typeof challenge.brokenCode === 'string'
-    ? challenge.brokenCode
-    : undefined;
+  const brokenCode = type === 'debug' && typeof challenge.brokenCode === 'string' ? challenge.brokenCode : undefined;
 
   // Normalize whyThisChallenge
   let whyThisChallenge: string[] = [];
   if (Array.isArray(challenge.whyThisChallenge)) {
-    whyThisChallenge = challenge.whyThisChallenge.filter(
-      (item) => typeof item === 'string'
-    );
+    whyThisChallenge = challenge.whyThisChallenge.filter((item) => typeof item === 'string');
   }
 
   return {
@@ -119,4 +106,3 @@ export function parseGeneratedChallenge(content: string): DailyChallenge | null 
 
   return validateChallenge(parsed);
 }
-

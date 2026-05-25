@@ -83,11 +83,7 @@ describe('dispatchRateLimited', () => {
       'X-RateLimit-Reason': 'session_cap',
       'Retry-After': '30',
     });
-    const detail = dispatchRateLimited(
-      response,
-      { reason: 'session_cap', max: 3 },
-      '/api/jobs',
-    );
+    const detail = dispatchRateLimited(response, { reason: 'session_cap', max: 3 }, '/api/jobs');
     expect(detail.reason).toBe('session_cap');
     expect(detail.max).toBe(3);
     expect(received?.reason).toBe('session_cap');

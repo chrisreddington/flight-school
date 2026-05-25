@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  __getSlotCount,
-  __resetSessionCapState,
-  acquireSlot,
-  TooManyConcurrentSessionsError,
-} from './session-cap';
+import { __getSlotCount, __resetSessionCapState, acquireSlot, TooManyConcurrentSessionsError } from './session-cap';
 
 describe('acquireSlot', () => {
   afterEach(() => {
@@ -17,9 +12,7 @@ describe('acquireSlot', () => {
     const r2 = await acquireSlot('user-1', 2);
     expect(__getSlotCount('user-1')).toBe(2);
 
-    await expect(acquireSlot('user-1', 2)).rejects.toBeInstanceOf(
-      TooManyConcurrentSessionsError,
-    );
+    await expect(acquireSlot('user-1', 2)).rejects.toBeInstanceOf(TooManyConcurrentSessionsError);
 
     r1();
     expect(__getSlotCount('user-1')).toBe(1);

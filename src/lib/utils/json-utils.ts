@@ -1,8 +1,8 @@
 /**
  * JSON Utilities
- * 
+ *
  * Safe JSON extraction from AI responses.
- * 
+ *
  * @module json-utils
  */
 
@@ -12,28 +12,28 @@ const log = logger.withTag('JSONUtils');
 
 /**
  * Extract JSON from AI response that may contain markdown code blocks.
- * 
+ *
  * Handles multiple formats:
  * - JSON wrapped in ```json code blocks
  * - JSON wrapped in ``` code blocks
  * - Raw JSON with nested braces
  * - Direct JSON parsing
- * 
+ *
  * SINGLE SOURCE OF TRUTH for AI response parsing.
  * Used across: focus generation, chat, evaluation, hints, README generation.
- * 
+ *
  * @template T - Expected type of parsed JSON
  * @param text - Raw AI response text
  * @param context - Optional context for logging
  * @returns Parsed JSON object or null if extraction fails
- * 
+ *
  * @example
  * ```typescript
  * const data = extractJSON<MyType>(response);
  * if (data) {
  *   // Use typed data
  * }
- * 
+ *
  * // With logging context
  * const challenge = extractJSON<DailyChallenge>(aiResponse, 'Focus Generation');
  * ```
@@ -80,7 +80,7 @@ export function extractJSON<T>(text: string, context?: string): T | null {
   if (firstBrace !== -1) {
     let braceCount = 0;
     let jsonEnd = -1;
-    
+
     for (let i = firstBrace; i < text.length; i++) {
       if (text[i] === '{') braceCount++;
       if (text[i] === '}') braceCount--;
@@ -89,7 +89,7 @@ export function extractJSON<T>(text: string, context?: string): T | null {
         break;
       }
     }
-    
+
     if (jsonEnd !== -1) {
       const potentialJson = text.substring(firstBrace, jsonEnd + 1);
       try {
@@ -108,7 +108,7 @@ export function extractJSON<T>(text: string, context?: string): T | null {
   if (firstBracket !== -1) {
     let bracketCount = 0;
     let jsonEnd = -1;
-    
+
     for (let i = firstBracket; i < text.length; i++) {
       if (text[i] === '[') bracketCount++;
       if (text[i] === ']') bracketCount--;
@@ -117,7 +117,7 @@ export function extractJSON<T>(text: string, context?: string): T | null {
         break;
       }
     }
-    
+
     if (jsonEnd !== -1) {
       const potentialJson = text.substring(firstBracket, jsonEnd + 1);
       try {

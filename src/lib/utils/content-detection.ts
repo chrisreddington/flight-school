@@ -38,5 +38,5 @@ const ACTIONABLE_PATTERNS = [
  * @returns Whether the response contains actionable suggestions
  */
 export function detectActionableContent(content: string): boolean {
-  return ACTIONABLE_PATTERNS.some(pattern => pattern.test(content));
+  return ACTIONABLE_PATTERNS.some((pattern) => pattern.test(content));
 }

@@ -9,9 +9,9 @@
  * read. Mismatched ownership returns `404 Not Found` to avoid leaking
  * job-id existence across tenants.
  *
- * NOTE: After Phase 2B.2 the DELETE no longer hard-deletes — the worker
- * marks the record cancelled and retention sweeps clear it later. This
- * preserves the synthesized-terminal SSE path for late reconnects.
+ * DELETE marks the record cancelled rather than hard-deleting; retention
+ * sweeps clear it later. This preserves the synthesized-terminal SSE
+ * path for late reconnects.
  */
 
 import { logger } from '@/lib/logger';
@@ -33,10 +33,7 @@ function captureTraceContext() {
   return Object.keys(traceHeaders).length > 0 ? traceHeaders : undefined;
 }
 
-export async function GET(
-  _request: NextRequest,
-  context: RouteContext,
-) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   let userId: string;
   let id: string;
   try {
@@ -54,17 +51,11 @@ export async function GET(
     return NextResponse.json(job);
   } catch (err) {
     log.error(`[Job ${id}] Failed to fetch from worker`, { err });
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
 }
 
-export async function DELETE(
-  _request: NextRequest,
-  context: RouteContext,
-) {
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   let userId: string;
   let id: string;
   try {
@@ -81,10 +72,7 @@ export async function DELETE(
     result = await cancelWorkerJobRecord(id, userId, captureTraceContext());
   } catch (err) {
     log.error(`[Job ${id}] Failed to cancel on worker`, { err });
-    return NextResponse.json(
-      { error: 'Job service temporarily unavailable. Please retry.' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
   }
 
   // Worker reported the job missing (or not owned by this user). Mirror

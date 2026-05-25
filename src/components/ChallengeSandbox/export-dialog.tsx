@@ -25,22 +25,8 @@
 'use client';
 
 import { apiPost } from '@/lib/api-client';
-import {
-    FileCodeIcon,
-    LockIcon,
-    RepoIcon,
-    UnlockIcon,
-} from '@primer/octicons-react';
-import {
-    Banner,
-    Button,
-    FormControl,
-    Link,
-    Spinner,
-    Stack,
-    TextInput,
-    ToggleSwitch,
-} from '@primer/react';
+import { FileCodeIcon, LockIcon, RepoIcon, UnlockIcon } from '@primer/octicons-react';
+import { Banner, Button, FormControl, Link, Spinner, Stack, TextInput, ToggleSwitch } from '@primer/react';
 import { Dialog } from '@primer/react/experimental';
 import { useCallback, useState } from 'react';
 
@@ -174,7 +160,7 @@ export function ExportToGitHubDialog({
 
     setIsExporting(true);
     setExportError(null);
-    
+
     // Start progress message rotation
     const progressMessages = [
       'Creating repository...',
@@ -187,12 +173,12 @@ export function ExportToGitHubDialog({
     ];
     let messageIndex = 0;
     setExportProgress(progressMessages[0]);
-    
+
     const timer = setInterval(() => {
       messageIndex = (messageIndex + 1) % progressMessages.length;
       setExportProgress(progressMessages[messageIndex]);
     }, 2000); // Rotate every 2 seconds
-    
+
     setProgressTimer(timer);
 
     try {
@@ -230,7 +216,18 @@ export function ExportToGitHubDialog({
       setIsExporting(false);
       setExportProgress('');
     }
-  }, [repoName, description, isPrivate, files, challenge, challengeId, evaluationSummary, hints, isRetryableError, progressTimer]);
+  }, [
+    repoName,
+    description,
+    isPrivate,
+    files,
+    challenge,
+    challengeId,
+    evaluationSummary,
+    hints,
+    isRetryableError,
+    progressTimer,
+  ]);
 
   // Initialize form when dialog opens
   if (isOpen && !repoName && !exportedRepo) {
@@ -242,12 +239,7 @@ export function ExportToGitHubDialog({
   }
 
   return (
-    <Dialog
-      title="Export to GitHub"
-      onClose={handleClose}
-      returnFocusRef={returnFocusRef}
-      width="medium"
-    >
+    <Dialog title="Export to GitHub" onClose={handleClose} returnFocusRef={returnFocusRef} width="medium">
       <div className={styles.dialogContent}>
         {exportedRepo ? (
           /* Success state */
@@ -267,13 +259,7 @@ export function ExportToGitHubDialog({
             </p>
             <Stack direction="horizontal" gap="condensed" justify="end">
               <Button onClick={handleClose}>Close</Button>
-              <Button
-                as="a"
-                href={exportedRepo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="primary"
-              >
+              <Button as="a" href={exportedRepo.url} target="_blank" rel="noopener noreferrer" variant="primary">
                 Open Repository
               </Button>
             </Stack>
@@ -286,9 +272,7 @@ export function ExportToGitHubDialog({
                 <Stack direction="vertical" gap="condensed">
                   <span>{exportError.message}</span>
                   {exportError.canRetry && (
-                    <p className={styles.hint}>
-                      This may be a temporary issue. You can try again.
-                    </p>
+                    <p className={styles.hint}>This may be a temporary issue. You can try again.</p>
                   )}
                 </Stack>
               </Banner>
@@ -301,7 +285,8 @@ export function ExportToGitHubDialog({
                 <Stack direction="vertical" gap="condensed" align="center">
                   <p className={styles.loadingTitle}>Exporting your workspace...</p>
                   <p className={styles.loadingHint}>
-                    {exportProgress || `Creating repository and committing ${files.length} file${files.length !== 1 ? 's' : ''}.`}
+                    {exportProgress ||
+                      `Creating repository and committing ${files.length} file${files.length !== 1 ? 's' : ''}.`}
                   </p>
                 </Stack>
               </Stack>
@@ -336,7 +321,9 @@ export function ExportToGitHubDialog({
                   <Stack direction="horizontal" align="center" gap="normal" justify="space-between">
                     <Stack direction="horizontal" align="center" gap="condensed">
                       {isPrivate ? <LockIcon size={16} /> : <UnlockIcon size={16} />}
-                      <span className={styles.visibilityLabel} id="repo-visibility-label">Repository</span>
+                      <span className={styles.visibilityLabel} id="repo-visibility-label">
+                        Repository
+                      </span>
                     </Stack>
                     <ToggleSwitch
                       checked={isPrivate}
@@ -348,9 +335,7 @@ export function ExportToGitHubDialog({
                     />
                   </Stack>
                   <p className={styles.visibilityCaption}>
-                    {isPrivate
-                      ? 'Only you can see this repository'
-                      : 'Anyone can see this repository'}
+                    {isPrivate ? 'Only you can see this repository' : 'Anyone can see this repository'}
                   </p>
                 </Stack>
 
@@ -363,20 +348,13 @@ export function ExportToGitHubDialog({
                       <li key={file.id}>{file.name}</li>
                     ))}
                     <li className={styles.generatedFile}>README.md (generated)</li>
-                    {hints && hints.length > 0 && (
-                      <li className={styles.generatedFile}>HINTS.md (generated)</li>
-                    )}
+                    {hints && hints.length > 0 && <li className={styles.generatedFile}>HINTS.md (generated)</li>}
                   </ul>
                 </div>
 
                 <Stack direction="horizontal" gap="condensed" justify="end">
                   <Button onClick={handleClose}>Cancel</Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleExport}
-                    disabled={!repoName.trim()}
-                    leadingVisual={RepoIcon}
-                  >
+                  <Button variant="primary" onClick={handleExport} disabled={!repoName.trim()} leadingVisual={RepoIcon}>
                     Export to GitHub
                   </Button>
                 </Stack>

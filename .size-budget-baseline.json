@@ -3,7 +3,7 @@
   "test": {
     "src/hooks/use-ai-activity.test.ts": 708,
     "src/hooks/use-custom-challenge-queue.test.ts": 807,
-    "src/hooks/use-learning-chat-stream.test.ts": 560,
+    "src/hooks/use-learning-chat-stream.test.ts": 562,
     "src/hooks/use-learning-chat.test.ts": 502,
     "src/hooks/use-threads.test.ts": 784,
     "src/lib/api-client.test.ts": 509,

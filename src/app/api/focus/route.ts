@@ -19,7 +19,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
   return withGuardedRoute(
-    { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'GET' } },
+    {
+      ...FOCUS_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: { route: '/api/focus', method: 'GET' },
+    },
     async (ctx) => NextResponse.json(await generateFocus(createSessionIdentity(ctx))),
   );
 }
@@ -35,14 +39,21 @@ export async function POST(request: NextRequest) {
   }>(request, {});
 
   return withGuardedRoute(
-    { ...FOCUS_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/focus', method: 'POST', component: body.component } },
-    async (ctx) => NextResponse.json(await generateFocus(createSessionIdentity(ctx), {
-      component: body.component,
-      skillProfile: body.skillProfile,
-      existingTopicTitles: body.existingTopicTitles,
-      reviewTopics: body.reviewTopics,
-      interleavingHint: body.interleavingHint,
-      debugMode: body.debugMode,
-    })),
+    {
+      ...FOCUS_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: { route: '/api/focus', method: 'POST', component: body.component },
+    },
+    async (ctx) =>
+      NextResponse.json(
+        await generateFocus(createSessionIdentity(ctx), {
+          component: body.component,
+          skillProfile: body.skillProfile,
+          existingTopicTitles: body.existingTopicTitles,
+          reviewTopics: body.reviewTopics,
+          interleavingHint: body.interleavingHint,
+          debugMode: body.debugMode,
+        }),
+      ),
   );
 }

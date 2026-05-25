@@ -25,8 +25,7 @@ export default function SignInPage({ searchParams }: SignInPageProps) {
           Welcome to Flight School
         </Heading>
         <Text as="p" className={styles.subtitle}>
-          Sign in with your GitHub account to access personalized challenges,
-          AI coaching, and your learning history.
+          Sign in with your GitHub account to access personalized challenges, AI coaching, and your learning history.
         </Text>
       </header>
 

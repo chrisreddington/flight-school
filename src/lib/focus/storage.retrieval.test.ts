@@ -7,13 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type {
-  FocusStorageSchema,
-  DailyChallenge,
-  DailyGoal,
-  LearningTopic,
-  CalibrationNeededItem,
-} from './types';
+import type { FocusStorageSchema, DailyChallenge, DailyGoal, LearningTopic, CalibrationNeededItem } from './types';
 
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(),
@@ -71,26 +65,24 @@ const mockTopic: LearningTopic = {
  * Build a single-day FocusStorageSchema with the supplied topic groups.
  * Defaults provide a one-challenge / one-goal day at '2024-01-15'.
  */
-function buildSchema(opts: {
-  topicGroups?: Array<
-    Array<{ data: LearningTopic; stateHistory: Array<{ state: string; timestamp: string }> }>
-  >;
-  challenges?: FocusStorageSchema['history'][string]['challenges'];
-  goals?: FocusStorageSchema['history'][string]['goals'];
-  calibrationNeeded?: CalibrationNeededItem[];
-} = {}): FocusStorageSchema {
+function buildSchema(
+  opts: {
+    topicGroups?: Array<Array<{ data: LearningTopic; stateHistory: Array<{ state: string; timestamp: string }> }>>;
+    challenges?: FocusStorageSchema['history'][string]['challenges'];
+    goals?: FocusStorageSchema['history'][string]['goals'];
+    calibrationNeeded?: CalibrationNeededItem[];
+  } = {},
+): FocusStorageSchema {
   return {
     history: {
       '2024-01-15': {
         challenges: opts.challenges ?? [
           { data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] },
         ],
-        goals: opts.goals ?? [
-          { data: mockGoal, stateHistory: [{ state: 'not-started', timestamp: TS }] },
+        goals: opts.goals ?? [{ data: mockGoal, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
+        learningTopics: opts.topicGroups ?? [
+          [{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }],
         ],
-        learningTopics:
-          opts.topicGroups ??
-          [[{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }]],
         ...(opts.calibrationNeeded ? { calibrationNeeded: opts.calibrationNeeded } : {}),
       },
     },

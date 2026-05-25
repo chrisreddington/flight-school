@@ -50,29 +50,24 @@ export function applyAddTopic(
   return true;
 }
 
-export function applyAddChallenge(
-  schema: FocusStorageSchema,
-  dateKey: string,
-  newChallenge: DailyChallenge,
-): boolean {
+export function applyAddChallenge(schema: FocusStorageSchema, dateKey: string, newChallenge: DailyChallenge): boolean {
   if (!isTodayDateKey(dateKey)) {
     log.warn('Cannot add challenge outside of today', { dateKey, newChallengeId: newChallenge.id });
     return false;
   }
   const result = addChallengeToHistory(schema.history, dateKey, newChallenge);
   if (result === 'duplicate') {
-    log.debug('Challenge already registered (idempotent)', { dateKey, challengeId: newChallenge.id });
+    log.debug('Challenge already registered (idempotent)', {
+      dateKey,
+      challengeId: newChallenge.id,
+    });
     return false;
   }
   log.debug('Challenge added', { dateKey, newChallengeId: newChallenge.id });
   return true;
 }
 
-export function applyAddGoal(
-  schema: FocusStorageSchema,
-  dateKey: string,
-  newGoal: DailyGoal,
-): boolean {
+export function applyAddGoal(schema: FocusStorageSchema, dateKey: string, newGoal: DailyGoal): boolean {
   if (!isTodayDateKey(dateKey)) {
     log.warn('Cannot add goal outside of today', { dateKey, newGoalId: newGoal.id });
     return false;
@@ -86,10 +81,7 @@ export function applyAddGoal(
   return true;
 }
 
-export function applyRemoveCalibrationItem(
-  schema: FocusStorageSchema,
-  skillId: string,
-): boolean {
+export function applyRemoveCalibrationItem(schema: FocusStorageSchema, skillId: string): boolean {
   const todayKey = getDateKey();
   const updated = removeCalibrationItemFromHistory(schema.history, todayKey, skillId);
   if (!updated) return false;
@@ -102,11 +94,7 @@ export function readCalibrationNeeded(schema: FocusStorageSchema): CalibrationNe
   return getCalibrationNeededFromHistory(schema.history, todayKey);
 }
 
-export function readTopicPosition(
-  schema: FocusStorageSchema,
-  dateKey: string,
-  topicId: string,
-): number | null {
+export function readTopicPosition(schema: FocusStorageSchema, dateKey: string, topicId: string): number | null {
   const record = schema.history[dateKey];
   if (!record || record.learningTopics.length === 0) return null;
   const activePosition = getTopicPositionFromHistory(schema.history, dateKey, topicId);

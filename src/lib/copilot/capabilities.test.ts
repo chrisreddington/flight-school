@@ -44,9 +44,8 @@ describe('buildMcpServersForCapabilities', () => {
   });
 
   it('binds the supplied token into the MCP server config', () => {
-    const servers = buildMcpServersForCapabilities(
-      [{ id: 'github' }],
-      (id) => (id === 'github' ? 'my-token' : undefined),
+    const servers = buildMcpServersForCapabilities([{ id: 'github' }], (id) =>
+      id === 'github' ? 'my-token' : undefined,
     );
     const github = servers.github as { headers?: Record<string, string> };
     expect(github.headers?.Authorization).toBe('Bearer my-token');
@@ -70,9 +69,9 @@ describe('buildMcpServersForCapabilities', () => {
   });
 
   it('throws when an MCP capability has no credential (caller-bug guard)', () => {
-    expect(() =>
-      buildMcpServersForCapabilities([{ id: 'github' }], () => undefined),
-    ).toThrow(/no credential for MCP capability 'github'/);
+    expect(() => buildMcpServersForCapabilities([{ id: 'github' }], () => undefined)).toThrow(
+      /no credential for MCP capability 'github'/,
+    );
   });
 });
 

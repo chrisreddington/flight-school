@@ -17,7 +17,9 @@ export function useDeferredEditorMount(): boolean {
     const EDITOR_IDLE_TIMEOUT_MS = 100;
     const NEXT_FRAME_DELAY_MS = 16;
     if (typeof requestIdleCallback !== 'undefined') {
-      const id = requestIdleCallback(() => setIsEditorReady(true), { timeout: EDITOR_IDLE_TIMEOUT_MS });
+      const id = requestIdleCallback(() => setIsEditorReady(true), {
+        timeout: EDITOR_IDLE_TIMEOUT_MS,
+      });
       return () => cancelIdleCallback(id);
     } else {
       const rafId = requestAnimationFrame(() => {

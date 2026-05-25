@@ -40,9 +40,7 @@ export function useChatSseSubscriptions(
   refreshThreads: () => Promise<void>,
 ): ReadonlySet<string> {
   const terminalCleanupsRef = useRef<Set<string>>(new Set());
-  const [reconnectingJobIds, setReconnectingJobIds] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
+  const [reconnectingJobIds, setReconnectingJobIds] = useState<ReadonlySet<string>>(() => new Set<string>());
 
   useEffect(() => {
     const ids = streamingThreadIdsKey ? streamingThreadIdsKey.split(',') : [];

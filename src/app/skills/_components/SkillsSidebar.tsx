@@ -94,21 +94,16 @@ export function SkillsSidebar({
           <AlertIcon size={16} /> Reset App Data
         </p>
         <p className={styles.dangerDescription}>
-          Clear all locally stored data including skill profile, focus history, chat threads, and
-          challenge history.
+          Clear all locally stored data including skill profile, focus history, chat threads, and challenge history.
         </p>
         {showResetConfirm ? (
           <Banner
             variant="critical"
             title="Are you sure?"
             description="This cannot be undone."
-            primaryAction={
-              <Banner.PrimaryAction onClick={onClearAllData}>Yes, Reset</Banner.PrimaryAction>
-            }
+            primaryAction={<Banner.PrimaryAction onClick={onClearAllData}>Yes, Reset</Banner.PrimaryAction>}
             secondaryAction={
-              <Banner.SecondaryAction onClick={() => onResetConfirmChange(false)}>
-                Cancel
-              </Banner.SecondaryAction>
+              <Banner.SecondaryAction onClick={() => onResetConfirmChange(false)}>Cancel</Banner.SecondaryAction>
             }
           />
         ) : (

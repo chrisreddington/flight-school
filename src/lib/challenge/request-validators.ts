@@ -43,7 +43,7 @@ function validateChallengeDefinition(value: unknown): string | null {
  */
 function validateWorkspaceFiles(
   value: unknown,
-  options: { required?: boolean; maxTotalSize?: number } = {}
+  options: { required?: boolean; maxTotalSize?: number } = {},
 ): string | null {
   const required = options.required ?? true;
   const maxTotalSize = options.maxTotalSize;

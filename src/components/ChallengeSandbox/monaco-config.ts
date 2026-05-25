@@ -49,11 +49,14 @@ export function configureMonacoLanguageDefaults(monaco: MonacoLike): void {
 export function initializeMonacoLanguageDefaults(): void {
   if (typeof window === 'undefined') return;
 
-  loader.init().then((monaco) => {
-    configureMonacoLanguageDefaults(monaco);
-  }).catch(() => {
-    // beforeMount and onMount apply the same config when the editor initializes.
-  });
+  loader
+    .init()
+    .then((monaco) => {
+      configureMonacoLanguageDefaults(monaco);
+    })
+    .catch(() => {
+      // beforeMount and onMount apply the same config when the editor initializes.
+    });
 }
 
 export function getMonacoTheme(colorMode?: string): 'vs' | 'vs-dark' {

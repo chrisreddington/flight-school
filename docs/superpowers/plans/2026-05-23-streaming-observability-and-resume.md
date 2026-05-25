@@ -42,7 +42,7 @@ telemetry, a latency-attribution playbook, and a phased migration.
 
 Replace the single scratchpad blob with a two-tier model:
 
-```
+```text
 users/{userId}/jobs/{jobId}/events.ndjson   (append-only, monotonic)
 users/{userId}/jobs/{jobId}/snapshot.json   (projected state, rewritten)
 ```
@@ -102,7 +102,7 @@ users/{userId}/jobs/{jobId}/snapshot.json   (projected state, rewritten)
 
 Replace the 400 ms threads polling with Server-Sent Events:
 
-```
+```http
 GET /api/jobs/{id}/stream
   Headers:
     Last-Event-ID: <seq>          (browser auto-sends on reconnect)
@@ -183,7 +183,7 @@ for chunk-level signals.
 
 ### 2.1 Span topology
 
-```
+```text
 [client] page.navigation                  (root, RUM-style, ≤ TTI)
    └─ link → api.POST /api/jobs           (HTTP server span, ≤500ms)
                 ├─ jobs.enqueue           (span, child)
@@ -320,7 +320,7 @@ Configure:
 
 ### 3.3 Span topology on the client
 
-```
+```text
 document_load                    (auto)
   ├─ resource_fetch (auto)
   ├─ route.change /habits → /chat   (custom, fired from app router events)

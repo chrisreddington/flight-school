@@ -14,11 +14,12 @@ const log = logger.withTag('Copilot Runtime Pool');
 const config = getCopilotRuntimeConfig();
 
 const pool = createPerUserRuntimePool({
-  createRuntime: (userId, context) => createCopilotUserRuntime({
-    userId,
-    gitHubToken: context.gitHubToken,
-    copilotHome: getCopilotRuntimeHome(config.homeRoot, userId),
-  }),
+  createRuntime: (userId, context) =>
+    createCopilotUserRuntime({
+      userId,
+      gitHubToken: context.gitHubToken,
+      copilotHome: getCopilotRuntimeHome(config.homeRoot, userId),
+    }),
   idleTtlMs: config.idleTtlMs,
   maxActiveRuntimes: config.maxActiveRuntimes,
   onEvent: (event) => log.info(`Runtime ${event.type}`, event),

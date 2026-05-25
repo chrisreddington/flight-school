@@ -73,10 +73,9 @@ describe('Workspace Storage', () => {
 
       const result = await workspaceStore.getWorkspace('challenge-1');
 
-      expect(apiGet).toHaveBeenCalledWith(
-        '/api/workspace/storage?challengeId=challenge-1',
-        { throwOnError: false }
-      );
+      expect(apiGet).toHaveBeenCalledWith('/api/workspace/storage?challengeId=challenge-1', {
+        throwOnError: false,
+      });
       expect(result).toEqual(mockWorkspace);
     });
 
@@ -144,10 +143,13 @@ describe('Workspace Storage', () => {
 
       await workspaceStore.saveWorkspace(mockWorkspace);
 
-      expect(apiPost).toHaveBeenCalledWith('/api/workspace/storage', expect.objectContaining({
-        challengeId: 'challenge-1',
-        files: [mockFile],
-      }));
+      expect(apiPost).toHaveBeenCalledWith(
+        '/api/workspace/storage',
+        expect.objectContaining({
+          challengeId: 'challenge-1',
+          files: [mockFile],
+        }),
+      );
     });
 
     it('should update timestamp when saving', async () => {
@@ -387,10 +389,9 @@ describe('Workspace Storage', () => {
 
       const result = await workspaceStore.getWorkspace('challenge-with-special-chars_123');
 
-      expect(apiGet).toHaveBeenCalledWith(
-        '/api/workspace/storage?challengeId=challenge-with-special-chars_123',
-        { throwOnError: false }
-      );
+      expect(apiGet).toHaveBeenCalledWith('/api/workspace/storage?challengeId=challenge-with-special-chars_123', {
+        throwOnError: false,
+      });
       expect(result).toEqual(specialWorkspace);
     });
 
@@ -399,9 +400,7 @@ describe('Workspace Storage', () => {
 
       await workspaceStore.deleteWorkspace('challenge/with/slashes');
 
-      expect(apiDelete).toHaveBeenCalledWith(
-        '/api/workspace/storage?challengeId=challenge%2Fwith%2Fslashes'
-      );
+      expect(apiDelete).toHaveBeenCalledWith('/api/workspace/storage?challengeId=challenge%2Fwith%2Fslashes');
     });
   });
 });

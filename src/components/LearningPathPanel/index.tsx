@@ -17,7 +17,7 @@ export function LearningPathPanel({ profile, onAddSkill }: LearningPathPanelProp
 
   const skillNameMap = useMemo(
     () => new Map(SKILL_PREREQUISITES.map((skill) => [skill.skillId, skill.displayName])),
-    []
+    [],
   );
 
   useEffect(() => {
@@ -46,8 +46,8 @@ export function LearningPathPanel({ profile, onAddSkill }: LearningPathPanelProp
                   {skill.prerequisites.length === 0
                     ? 'None'
                     : skill.prerequisites
-                      .map((prerequisite) => skillNameMap.get(prerequisite) ?? prerequisite)
-                      .join(', ')}
+                        .map((prerequisite) => skillNameMap.get(prerequisite) ?? prerequisite)
+                        .join(', ')}
                 </p>
                 {skill.unlocks && <p className={styles.meta}>Unlocks: {skill.unlocks}</p>}
                 <div>

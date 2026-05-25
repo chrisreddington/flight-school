@@ -20,10 +20,11 @@ describe('parseRegenerationResponse', () => {
       expected: { id: 'c3', title: 'Bug hunt' },
     },
   ])('returns the nested entity for $scenario', ({ response, expected }) => {
-    const parsed = parseRegenerationResponse<
-      { challenge: typeof expected },
-      typeof expected
-    >(response, 'challenge', 'challenge');
+    const parsed = parseRegenerationResponse<{ challenge: typeof expected }, typeof expected>(
+      response,
+      'challenge',
+      'challenge',
+    );
     expect(parsed).toEqual(expected);
   });
 
@@ -45,11 +46,7 @@ describe('parseRegenerationResponse', () => {
     },
   ])('throws with the response preview when $scenario', ({ response, previewIncludes }) => {
     expect(() =>
-      parseRegenerationResponse<{ challenge: unknown }, unknown>(
-        response,
-        'challenge',
-        'challenge',
-      ),
+      parseRegenerationResponse<{ challenge: unknown }, unknown>(response, 'challenge', 'challenge'),
     ).toThrow(previewIncludes);
   });
 

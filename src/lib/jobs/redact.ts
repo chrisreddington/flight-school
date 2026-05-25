@@ -13,7 +13,6 @@
  * @module jobs/redact
  */
 
-import 'server-only';
 import type { BackgroundJob } from './storage';
 
 /** Cap individual string fields in detail DTOs. */
@@ -37,8 +36,8 @@ export interface JobListDTO {
   /**
    * For `chat-response` jobs only: the stable assistant-message id the
    * worker is filling in. Surfaced so the client can hydrate
-   * `chatStreamStore` on a cold reload (Phase 5). Never populated for
-   * other job types to avoid leaking unrelated input shapes.
+   * `chatStreamStore` on a cold reload. Never populated for other job
+   * types to avoid leaking unrelated input shapes.
    */
   assistantMessageId?: string;
 }

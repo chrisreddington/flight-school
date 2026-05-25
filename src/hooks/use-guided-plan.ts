@@ -46,7 +46,7 @@ function writeCache(challengeId: string, plan: GuidedPlan): void {
  */
 export function useGuidedPlan(
   challengeId: string,
-  challenge: { title: string; description: string; language: string; difficulty: string }
+  challenge: { title: string; description: string; language: string; difficulty: string },
 ) {
   const [plan, setPlan] = useState<GuidedPlan | null>(null);
   const [loading, setLoading] = useState(true);

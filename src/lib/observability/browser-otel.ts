@@ -36,11 +36,7 @@ import { BatchSpanProcessor, WebTracerProvider } from '@opentelemetry/sdk-trace-
 import { INSTRUMENTATION_SCOPE_VERSION } from '@/lib/observability/semconv';
 import { stripQueryString, extractPathname } from '@/lib/observability/url-sanitize';
 
-import {
-  getCurrentPageView,
-  installRouteTracking,
-  startPageView,
-} from './route-tracking';
+import { getCurrentPageView, installRouteTracking, startPageView } from './route-tracking';
 
 const PROXY_URL = '/api/otel/v1/traces';
 const SERVICE_NAME = 'flight-school-browser';
@@ -92,10 +88,7 @@ export function initBrowserOtel(): void {
         // its span, which can interfere with incremental delivery of chat
         // tokens on some runtimes. The worker emits its own server-side
         // spans for the chat session, so we don't lose observability.
-        ignoreUrls: [
-          /\/api\/otel\/v1\/traces/,
-          /\/api\/jobs\/[^/]+\/stream(?:\?|$)/,
-        ],
+        ignoreUrls: [/\/api\/otel\/v1\/traces/, /\/api\/jobs\/[^/]+\/stream(?:\?|$)/],
         clearTimingResources: true,
         // Strip query strings from URL-shaped span attributes so we never
         // leak tokens, ids, or search terms into the trace backend.

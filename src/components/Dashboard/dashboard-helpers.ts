@@ -19,7 +19,7 @@ export function getGreeting(): string {
 
 /**
  * Generate personalized challenge based on user's top language and experience level.
- * 
+ *
  * @param profile - User's GitHub profile data (null if not loaded)
  * @returns Tailored daily challenge
  */
@@ -32,7 +32,8 @@ export function getDynamicChallenge(profile: ProfileResponse | null): DailyChall
       beginner: {
         id: 'ts-1',
         title: 'Build a Type-Safe Config Loader',
-        description: 'Create a function that loads and validates configuration from environment variables with full type safety.',
+        description:
+          'Create a function that loads and validates configuration from environment variables with full type safety.',
         difficulty: 'beginner',
         language: 'TypeScript',
         estimatedTime: '20 min',
@@ -41,7 +42,8 @@ export function getDynamicChallenge(profile: ProfileResponse | null): DailyChall
       intermediate: {
         id: 'ts-2',
         title: 'Implement a Generic Event Emitter',
-        description: 'Build a type-safe event system using generics and mapped types that provides autocomplete for event names and payloads.',
+        description:
+          'Build a type-safe event system using generics and mapped types that provides autocomplete for event names and payloads.',
         difficulty: 'intermediate',
         language: 'TypeScript',
         estimatedTime: '30 min',
@@ -50,7 +52,8 @@ export function getDynamicChallenge(profile: ProfileResponse | null): DailyChall
       advanced: {
         id: 'ts-3',
         title: 'Create a Type-Level State Machine',
-        description: 'Design a state machine where invalid transitions are caught at compile time using conditional types and template literals.',
+        description:
+          'Design a state machine where invalid transitions are caught at compile time using conditional types and template literals.',
         difficulty: 'advanced',
         language: 'TypeScript',
         estimatedTime: '45 min',
@@ -79,7 +82,8 @@ export function getDynamicChallenge(profile: ProfileResponse | null): DailyChall
       advanced: {
         id: 'js-3',
         title: 'Create a Reactive Store',
-        description: 'Build a minimal reactive state management library using Proxies with computed values and subscriptions.',
+        description:
+          'Build a minimal reactive state management library using Proxies with computed values and subscriptions.',
         difficulty: 'advanced',
         language: 'JavaScript',
         estimatedTime: '40 min',
@@ -123,7 +127,7 @@ export function getDynamicChallenge(profile: ProfileResponse | null): DailyChall
 
 /**
  * Generate personalized goal based on user's recent activity.
- * 
+ *
  * @param profile - User's GitHub profile data (null if not loaded)
  * @returns Tailored daily goal with progress tracking
  */
@@ -156,7 +160,7 @@ export function getDynamicGoal(profile: ProfileResponse | null): DailyGoal {
     return {
       id: 'commit-goal',
       title: 'Keep the momentum going',
-      description: 'You\'re making progress! A few more commits will solidify your streak.',
+      description: "You're making progress! A few more commits will solidify your streak.",
       progress: pastSevenDays.commits,
       target: '10 commits this week',
       reasoning: 'Consistent commit activity shows steady progress and builds strong coding habits.',
@@ -177,7 +181,7 @@ export function getDynamicGoal(profile: ProfileResponse | null): DailyGoal {
   return {
     id: 'streak-goal',
     title: 'Maintain your excellent pace',
-    description: 'You\'re on fire this week! Keep up the great work and help a teammate.',
+    description: "You're on fire this week! Keep up the great work and help a teammate.",
     progress: Math.min(pastSevenDays.commits, 15),
     target: '15 commits',
     reasoning: 'Your momentum is impressive! Helping others now multiplies your impact.',
@@ -186,7 +190,7 @@ export function getDynamicGoal(profile: ProfileResponse | null): DailyGoal {
 
 /**
  * Generate learning topics based on user's top programming languages.
- * 
+ *
  * @param profile - User's GitHub profile data (null if not loaded)
  * @returns List of 2 relevant learning topics
  */

@@ -15,8 +15,8 @@ export { generateLearningReadme } from './learning-readme';
 
 // Workspace export README generation
 export {
-    generateWorkspaceHintsFile,
-    generateWorkspaceReadme,
-    type WorkspaceExportChallengeMetadata,
-    type WorkspaceExportFileInput,
+  generateWorkspaceHintsFile,
+  generateWorkspaceReadme,
+  type WorkspaceExportChallengeMetadata,
+  type WorkspaceExportFileInput,
 } from './workspace-readme';

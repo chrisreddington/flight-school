@@ -78,9 +78,7 @@ let client: CopilotClient | null = null;
  */
 async function getCopilotClient(): Promise<CopilotClient> {
   if (!client) {
-    const otlpEndpoint =
-      process.env.COPILOT_OTEL_ENDPOINT ??
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    const otlpEndpoint = process.env.COPILOT_OTEL_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
     client = new CopilotClient({
       // Multitenant: never fall back to the host's ambient gh CLI identity.
@@ -185,9 +183,7 @@ function pruneChatSessions(): void {
  * @throws {Error} if `options.userId` is missing/empty (multi-tenant invariant)
  * @throws {Error} if `options.gitHubToken` is missing/empty (multi-tenant invariant)
  */
-export async function createSessionWithMetrics(
-  options: SessionOptions,
-): Promise<SessionWithMetrics> {
+export async function createSessionWithMetrics(options: SessionOptions): Promise<SessionWithMetrics> {
   if (!options.userId) {
     throw new Error('userId required for session cache key — multi-tenant invariant');
   }
@@ -197,8 +193,7 @@ export async function createSessionWithMetrics(
   const model = options.model ?? MODEL_TIERS.standard;
   const capabilities = options.capabilities;
   const capabilityFingerprint =
-    options.capabilityFingerprint ??
-    composeCapabilityFingerprint(capabilities, options.systemMessage ?? '');
+    options.capabilityFingerprint ?? composeCapabilityFingerprint(capabilities, options.systemMessage ?? '');
   const poolKey = `${options.profile}:${capabilityFingerprint}`;
   const mcpServerIds = mcpCapabilityIdsOf(capabilities);
   const sortedMcpServerIds = [...mcpServerIds].sort().join(',');
@@ -230,16 +225,13 @@ export async function createSessionWithMetrics(
       // don't ping the SDK every request for unentitled users.
       if (hasNegativeEntitlement(options.userId)) {
         recordAiOperation('createSession', Date.now() - startTime, model, 'error');
-        throw new CopilotEntitlementRequiredError(
-          'A GitHub Copilot subscription is required to use AI features.',
-        );
+        throw new CopilotEntitlementRequiredError('A GitHub Copilot subscription is required to use AI features.');
       }
 
       try {
         const copilot = await getCopilotClient();
-        const mcpServers = buildMcpServersForCapabilities(
-          capabilities,
-          (id) => (id === 'github' ? options.gitHubToken : undefined),
+        const mcpServers = buildMcpServersForCapabilities(capabilities, (id) =>
+          id === 'github' ? options.gitHubToken : undefined,
         );
         const hasMcpServers = Object.keys(mcpServers).length > 0;
         const permissionHandler = hasMcpServers ? mcpOnlyPermissionHandler : approveAll;
@@ -312,7 +304,7 @@ export async function createSessionWithMetrics(
         }
         throw error;
       }
-    }
+    },
   );
 }
 
@@ -333,7 +325,7 @@ export async function createSessionWithMetrics(
  */
 export async function getConversationSession(
   conversationId: string | undefined,
-  options: SessionOptions
+  options: SessionOptions,
 ): Promise<SessionWithMetrics> {
   if (!options.userId) {
     throw new Error('userId required for session cache key — multi-tenant invariant');
@@ -343,8 +335,7 @@ export async function getConversationSession(
   }
   const { userId, profile } = options;
   const capabilityFingerprint =
-    options.capabilityFingerprint ??
-    composeCapabilityFingerprint(options.capabilities, options.systemMessage ?? '');
+    options.capabilityFingerprint ?? composeCapabilityFingerprint(options.capabilities, options.systemMessage ?? '');
   const capabilityIds = options.capabilities.map((selection) => selection.id);
 
   if (!conversationId) {
@@ -393,19 +384,19 @@ export async function getConversationSession(
  */
 export async function shutdownAllPools(): Promise<void> {
   if (isShuttingDown) return;
-  
+
   isShuttingDown = true;
   globalForShutdown.__isShuttingDown = true;
   log.info('Shutting down...');
-  
+
   const sessions: CopilotSession[] = [];
-  
+
   // Clear conversation cache
   for (const entry of chatSessionCache.values()) {
     sessions.push(entry.session);
   }
   chatSessionCache.clear();
-  
+
   // Destroy all sessions, suppressing errors
   await Promise.allSettled(
     sessions.map(async (session) => {
@@ -414,15 +405,15 @@ export async function shutdownAllPools(): Promise<void> {
       } catch {
         // Suppress stream errors during shutdown
       }
-    })
+    }),
   );
-  
+
   log.info('Cleaned up sessions', { count: sessions.length });
 }
 
 /**
  * Warm the Copilot client on startup.
- * 
+ *
  * Session pooling doesn't work because SDK sessions retain conversation state.
  * However, warming the client ensures the first request doesn't pay auth/init cost.
  * Conversation caching handles multi-turn performance (reuses session within same thread).
@@ -430,10 +421,10 @@ export async function shutdownAllPools(): Promise<void> {
 export async function warmCopilotClient(): Promise<void> {
   log.info('Warming client connection...');
   const startTime = Date.now();
-  
+
   // Warm the singleton client (handles auth, establishes connection)
   await getCopilotClient();
-  
+
   const duration = Date.now() - startTime;
   log.info('Client warmed', { durationMs: duration });
   log.info('Conversation caching active for multi-turn chat performance');

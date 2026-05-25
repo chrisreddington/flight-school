@@ -9,7 +9,6 @@
  * any more — the web tier never reads this file. The only consumer
  * is the worker singleton in `logger-worker.ts`.
  */
-import 'server-only';
 
 import { logger } from '@/lib/logger';
 import { deleteFile, ensureDir, readFile, writeFile } from '@/lib/storage/utils';
@@ -21,8 +20,7 @@ const STORE_SUBDIR = (userId: string) => `users/${userId}/activity`;
 const STORE_FILE = 'events.json';
 const MAX_STORED_EVENTS = 400;
 
-interface StoredActivityEvent
-  extends Omit<AIActivityEvent, 'timestamp'> {
+interface StoredActivityEvent extends Omit<AIActivityEvent, 'timestamp'> {
   timestamp: string;
 }
 
@@ -77,11 +75,7 @@ async function readStoreFile(userId: string): Promise<ActivityStoreFile> {
 
 async function writeStoreFile(userId: string, payload: ActivityStoreFile): Promise<void> {
   await ensureDir(STORE_SUBDIR(userId), { mode: 0o700 });
-  await writeFile(
-    STORE_SUBDIR(userId),
-    STORE_FILE,
-    JSON.stringify(payload),
-  );
+  await writeFile(STORE_SUBDIR(userId), STORE_FILE, JSON.stringify(payload));
 }
 
 /**
@@ -99,11 +93,13 @@ function enqueueWrite(userId: string, task: () => Promise<void>): Promise<void> 
   const next = prev.catch(() => undefined).then(task);
   writeChains.set(userId, next);
   // Best-effort cleanup so the map doesn't grow unbounded.
-  void next.catch(() => undefined).finally(() => {
-    if (writeChains.get(userId) === next) {
-      writeChains.delete(userId);
-    }
-  });
+  void next
+    .catch(() => undefined)
+    .finally(() => {
+      if (writeChains.get(userId) === next) {
+        writeChains.delete(userId);
+      }
+    });
   return next;
 }
 

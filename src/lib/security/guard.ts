@@ -47,7 +47,6 @@ import { auditLog, hashUserId, type AuditEventType } from '@/lib/security/audit'
 import { guardErrorResponse } from '@/lib/security/http';
 import { checkRateLimit, RateLimitedError } from '@/lib/security/rate-limit';
 import { acquireSlot } from '@/lib/security/session-cap';
-import type { NextResponse } from 'next/server';
 
 export interface GuardOptions {
   /** Sliding-window rate limit. Skip the field to disable rate limiting. */
@@ -86,11 +85,7 @@ export async function requireGuardedUserContext(opts: GuardOptions): Promise<Gua
   const userIdHash = hashUserId(ctx.userId);
 
   if (opts.rateLimit) {
-    const { allowed, retryAfterMs } = checkRateLimit(
-      ctx.userId,
-      opts.rateLimit.limit,
-      opts.rateLimit.windowMs,
-    );
+    const { allowed, retryAfterMs } = checkRateLimit(ctx.userId, opts.rateLimit.limit, opts.rateLimit.windowMs);
     if (!allowed) {
       auditLog({
         type: 'rate-limit.blocked',
@@ -131,10 +126,7 @@ export async function requireGuardedUserContext(opts: GuardOptions): Promise<Gua
  * {@link requireGuardedUserContext} so route handlers don't have to manage
  * `release` themselves.
  */
-export async function withUserGuards<T>(
-  opts: GuardOptions,
-  work: (ctx: UserContext) => Promise<T>,
-): Promise<T> {
+export async function withUserGuards<T>(opts: GuardOptions, work: (ctx: UserContext) => Promise<T>): Promise<T> {
   const { ctx, release } = await requireGuardedUserContext(opts);
   try {
     return await work(ctx);
@@ -157,7 +149,7 @@ export async function withUserGuards<T>(
 export async function withGuardedRoute<R extends Response>(
   opts: GuardOptions,
   work: (ctx: UserContext) => Promise<R>,
-): Promise<R | NextResponse> {
+): Promise<R | Response> {
   try {
     return await withUserGuards(opts, work);
   } catch (error) {
@@ -177,9 +169,7 @@ export async function withGuardedRoute<R extends Response>(
  * issue a `redirect()` to the sign-in page (Next.js does not allow
  * `redirect()` to be called from inside a `try`/`catch`).
  */
-export async function requireGuardedRscContext(
-  eventType: AuditEventType,
-): Promise<UserContext | null> {
+export async function requireGuardedRscContext(eventType: AuditEventType): Promise<UserContext | null> {
   try {
     const { ctx, release } = await requireGuardedUserContext({ eventType });
     release();

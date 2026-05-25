@@ -17,19 +17,18 @@ describe('focus review schedule operations', () => {
       '2024-01-15': {
         challenges: [],
         goals: [],
-        learningTopics: [[{
-          data: topic,
-          stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }],
-        }]],
+        learningTopics: [
+          [
+            {
+              data: topic,
+              stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+          ],
+        ],
       },
     };
 
-    const result = markTopicReviewedInHistory(
-      history,
-      '2024-01-15',
-      'topic-1',
-      '2024-01-16T09:00:00.000Z',
-    );
+    const result = markTopicReviewedInHistory(history, '2024-01-15', 'topic-1', '2024-01-16T09:00:00.000Z');
 
     expect(result).toBe(true);
     expect(history['2024-01-15'].learningTopics[0][0].data.lastReviewedAt).toBe('2024-01-16T09:00:00.000Z');
@@ -43,10 +42,14 @@ describe('focus review schedule operations', () => {
       '2024-01-15': {
         challenges: [],
         goals: [],
-        learningTopics: [[{
-          data: topic,
-          stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }],
-        }]],
+        learningTopics: [
+          [
+            {
+              data: topic,
+              stateHistory: [{ state: 'explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+          ],
+        ],
       },
     };
 

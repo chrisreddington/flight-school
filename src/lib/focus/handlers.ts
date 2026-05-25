@@ -15,9 +15,7 @@ import {
   buildLearningTopicsPrompt,
   buildSingleTopicPrompt,
 } from '@/lib/copilot/prompts';
-import {
-  type SessionIdentity,
-} from '@/lib/copilot/session-identity';
+import { type SessionIdentity } from '@/lib/copilot/session-identity';
 import { executeCopilotCoachJob } from '@/lib/copilot/execution';
 import { isCopilotEntitlementError } from '@/lib/copilot/entitlement';
 import {
@@ -80,7 +78,7 @@ async function generateSingleComponent(
     reviewTopics?: string[];
     interleavingHint?: InterleavingHint;
     debugMode?: boolean;
-  } = {}
+  } = {},
 ): Promise<Partial<FocusResponse>> {
   const { reviewTopics, interleavingHint, debugMode } = options;
 
@@ -89,14 +87,18 @@ async function generateSingleComponent(
       return buildLearningTopicsPrompt(serializedContext, skillProfile, reviewTopics);
     }
     if (component === 'challenge') {
-      return buildChallengePrompt(serializedContext, skillProfile, interleavingHint, { forceDebug: debugMode });
+      return buildChallengePrompt(serializedContext, skillProfile, interleavingHint, {
+        forceDebug: debugMode,
+      });
     }
     return buildGoalPrompt(serializedContext, skillProfile);
   };
 
   if (skillProfile) {
     log.info(`[${component}] SkillProfile: ${skillProfile.skills.length} skills`);
-    log.info(`[${component}] Skills: ${skillProfile.skills.map(s => `${s.skillId}:${s.level}${s.notInterested ? '(excluded)' : ''}`).join(', ')}`);
+    log.info(
+      `[${component}] Skills: ${skillProfile.skills.map((s) => `${s.skillId}:${s.level}${s.notInterested ? '(excluded)' : ''}`).join(', ')}`,
+    );
   } else {
     log.info(`[${component}] No skill profile provided`);
   }
@@ -136,7 +138,7 @@ async function generateSingleTopic(
   identity: SessionIdentity,
   serializedContext: string,
   existingTopicTitles: string[],
-  skillProfile?: SkillProfile
+  skillProfile?: SkillProfile,
 ): Promise<{ learningTopic: LearningTopic }> {
   const prompt = buildSingleTopicPrompt(serializedContext, existingTopicTitles, skillProfile);
 
@@ -209,9 +211,13 @@ export async function generateFocus(
 
     log.info('Generating all components in parallel...');
     const [challengeResult, goalResult, topicsResult] = await Promise.allSettled([
-      generateSingleComponent(identity, 'challenge', serializedContext, skillProfile, { interleavingHint }),
+      generateSingleComponent(identity, 'challenge', serializedContext, skillProfile, {
+        interleavingHint,
+      }),
       generateSingleComponent(identity, 'goal', serializedContext, skillProfile),
-      generateSingleComponent(identity, 'learningTopics', serializedContext, skillProfile, { reviewTopics }),
+      generateSingleComponent(identity, 'learningTopics', serializedContext, skillProfile, {
+        reviewTopics,
+      }),
     ]);
 
     // D2: If any sub-generation failed due to missing Copilot entitlement,
@@ -225,15 +231,10 @@ export async function generateFocus(
     const totalTime = nowMs() - startTime;
 
     const focusResult: Partial<FocusResponse> = {
-      challenge: challengeResult.status === 'fulfilled'
-        ? challengeResult.value.challenge
-        : getFallbackChallenge(),
-      goal: goalResult.status === 'fulfilled'
-        ? goalResult.value.goal
-        : getFallbackGoal(),
-      learningTopics: topicsResult.status === 'fulfilled'
-        ? topicsResult.value.learningTopics
-        : getFallbackLearningTopics(),
+      challenge: challengeResult.status === 'fulfilled' ? challengeResult.value.challenge : getFallbackChallenge(),
+      goal: goalResult.status === 'fulfilled' ? goalResult.value.goal : getFallbackGoal(),
+      learningTopics:
+        topicsResult.status === 'fulfilled' ? topicsResult.value.learningTopics : getFallbackLearningTopics(),
       meta: {
         generatedAt: now(),
         aiEnabled: true,

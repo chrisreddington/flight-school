@@ -50,3 +50,6 @@ next-env.d.ts
 # Keeping this entry in case anyone adds it to the local repo
 .data/
 .playwright-cli/
+
+# Worker bundle output (produced by `npm run build:worker`)
+dist-worker/

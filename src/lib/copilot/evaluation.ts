@@ -17,11 +17,7 @@
  */
 
 import { extractJSON } from '@/lib/utils/json-utils';
-import type {
-    ChallengeDef,
-    EvaluationResult,
-    PartialEvaluationResult,
-} from './types';
+import type { ChallengeDef, EvaluationResult, PartialEvaluationResult } from './types';
 
 // =============================================================================
 // Types
@@ -46,7 +42,7 @@ export interface WorkspaceFileInput {
  * - Provide specific, actionable feedback
  * - Not give away the full solution in hints
  * - Use growth mindset language (Dweck): process-focused, "not yet" framing
- * 
+ *
  * The format outputs JSON metadata FIRST for early parsing,
  * then streams the feedback text for real-time display.
  */
@@ -125,10 +121,7 @@ IMPORTANT:
  * ]);
  * ```
  */
-export function buildEvaluationPrompt(
-  challenge: ChallengeDef,
-  files: WorkspaceFileInput[]
-): string {
+export function buildEvaluationPrompt(challenge: ChallengeDef, files: WorkspaceFileInput[]): string {
   let prompt = `Evaluate this ${challenge.language} solution for the following challenge:
 
 ## Challenge: ${challenge.title}
@@ -158,7 +151,10 @@ The solution should demonstrate: ${challenge.expectedPatterns.join(', ')}
     prompt += `
 ### Test Cases
 ${challenge.testCases
-  .map((tc, i) => `${i + 1}. Input: ${tc.input} → Expected: ${tc.expectedOutput}${tc.description ? ` (${tc.description})` : ''}`)
+  .map(
+    (tc, i) =>
+      `${i + 1}. Input: ${tc.input} → Expected: ${tc.expectedOutput}${tc.description ? ` (${tc.description})` : ''}`,
+  )
   .join('\n')}
 `;
   }
@@ -210,9 +206,7 @@ export function parseEvaluationResponse(responseText: string): EvaluationResult 
   }
 
   // Clamp score to 0-100 range to ensure deterministic bounds
-  const clampedScore = parsed.score !== undefined 
-    ? Math.max(0, Math.min(100, Math.round(parsed.score)))
-    : undefined;
+  const clampedScore = parsed.score !== undefined ? Math.max(0, Math.min(100, Math.round(parsed.score))) : undefined;
 
   return {
     isCorrect: parsed.isCorrect ?? false,
@@ -233,15 +227,13 @@ export function parseEvaluationResponse(responseText: string): EvaluationResult 
  */
 export function parsePartialEvaluation(streamingContent: string): PartialEvaluationResult | null {
   const parsed = extractJSON<Partial<EvaluationResult>>(streamingContent);
-  
+
   if (!parsed || parsed.isCorrect === undefined) {
     return null;
   }
 
   // Clamp score to 0-100 range to ensure deterministic bounds
-  const clampedScore = parsed.score !== undefined 
-    ? Math.max(0, Math.min(100, Math.round(parsed.score)))
-    : undefined;
+  const clampedScore = parsed.score !== undefined ? Math.max(0, Math.min(100, Math.round(parsed.score))) : undefined;
 
   return {
     isCorrect: parsed.isCorrect,
@@ -262,20 +254,20 @@ export function parsePartialEvaluation(streamingContent: string): PartialEvaluat
 export function extractStreamingFeedback(streamingContent: string): string {
   const marker = '---FEEDBACK---';
   const endMarker = '---END FEEDBACK---';
-  
+
   const startIdx = streamingContent.indexOf(marker);
   if (startIdx === -1) {
     return '';
   }
-  
+
   const afterMarker = streamingContent.slice(startIdx + marker.length);
   const endIdx = afterMarker.indexOf(endMarker);
-  
+
   if (endIdx === -1) {
     // Still streaming - return what we have
     return afterMarker.trim();
   }
-  
+
   // Complete
   return afterMarker.slice(0, endIdx).trim();
 }

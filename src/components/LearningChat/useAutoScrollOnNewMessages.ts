@@ -30,8 +30,7 @@ export function useAutoScrollOnNewMessages({
 
   useEffect(() => {
     const previousActiveThreadId = previousActiveThreadIdRef.current;
-    const didHydrateInitialThread =
-      previousActiveThreadId === null && activeThreadId !== null;
+    const didHydrateInitialThread = previousActiveThreadId === null && activeThreadId !== null;
     previousActiveThreadIdRef.current = activeThreadId;
 
     if (!hasInitializedRef.current) {

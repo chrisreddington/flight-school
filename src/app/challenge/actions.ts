@@ -88,11 +88,7 @@ export async function updateChallengeAction(
       return { ok: false, error: 'Description is required' };
     }
 
-    const queue = await readUserStorage<CustomChallengeQueue>(
-      QUEUE_FILENAME,
-      DEFAULT_QUEUE,
-      isCustomChallengeQueue,
-    );
+    const queue = await readUserStorage<CustomChallengeQueue>(QUEUE_FILENAME, DEFAULT_QUEUE, isCustomChallengeQueue);
     const index = queue.challenges.findIndex((c) => c.id === challengeId);
     if (index === -1) {
       return { ok: false, error: 'Failed to save changes. The challenge may no longer exist.' };

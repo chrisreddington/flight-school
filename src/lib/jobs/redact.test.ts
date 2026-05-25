@@ -56,9 +56,7 @@ describe('redactJobForList', () => {
   });
 
   it('does not surface assistantMessageId for non-chat-response job types', () => {
-    const dto = redactJobForList(
-      mkJob({ type: 'topic-regeneration', input: { assistantMessageId: 'asst-42' } }),
-    );
+    const dto = redactJobForList(mkJob({ type: 'topic-regeneration', input: { assistantMessageId: 'asst-42' } }));
     expect(dto.assistantMessageId).toBeUndefined();
   });
 
@@ -71,9 +69,7 @@ describe('redactJobForList', () => {
 describe('redactJobForDetail', () => {
   it('caps long input strings but preserves shape', () => {
     const longPrompt = 'a'.repeat(10_000);
-    const dto = redactJobForDetail(
-      mkJob({ input: { prompt: longPrompt, otherField: 'short' } }),
-    );
+    const dto = redactJobForDetail(mkJob({ input: { prompt: longPrompt, otherField: 'short' } }));
 
     const input = dto.input as { prompt: string; otherField: string };
     expect(input.prompt.length).toBeLessThan(longPrompt.length);

@@ -25,13 +25,7 @@ import type { JobResponse } from './job-types';
 import { buildJobPollCallbacks } from './operation-poll-callbacks';
 import { buildOperationState } from './operation-results';
 import { fetchActiveJobEntries } from './restore-active-jobs';
-import type {
-  ActiveOperation,
-  OperationsListener,
-  OperationsSnapshot,
-  OperationStatus,
-  OperationType,
-} from './types';
+import type { ActiveOperation, OperationsListener, OperationsSnapshot, OperationStatus, OperationType } from './types';
 
 const log = logger.withTag('OperationsManager');
 
@@ -88,15 +82,9 @@ class ActiveOperationsManager {
    * gate stale-stream cleanup on it.
    */
   private isHydrated = false;
-  private completionHandlers = new Map<
-    string,
-    (result: unknown, targetId: string) => Promise<void>
-  >();
+  private completionHandlers = new Map<string, (result: unknown, targetId: string) => Promise<void>>();
 
-  registerCompletionHandler(
-    jobType: string,
-    handler: (result: unknown, targetId: string) => Promise<void>,
-  ): void {
+  registerCompletionHandler(jobType: string, handler: (result: unknown, targetId: string) => Promise<void>): void {
     this.completionHandlers.set(jobType, handler);
   }
 
@@ -174,11 +162,9 @@ class ActiveOperationsManager {
 
       const itemType = JOB_ITEM_TYPE_BY_TYPE[type as OperationType];
       if (itemType) {
-        activeOperationsStore
-          .addEntry({ itemId: targetId, itemType, jobId, startedAt: now() })
-          .catch((err) => {
-            log.warn('Failed to persist active operation entry', { err, jobId, operationId });
-          });
+        activeOperationsStore.addEntry({ itemId: targetId, itemType, jobId, startedAt: now() }).catch((err) => {
+          log.warn('Failed to persist active operation entry', { err, jobId, operationId });
+        });
       }
 
       this.beginPolling(
@@ -343,11 +329,7 @@ class ActiveOperationsManager {
 
   getActiveChatJobForThread(threadId: string): ActiveOperation | undefined {
     for (const op of this.operations.values()) {
-      if (
-        op.meta.type === 'chat-response' &&
-        op.meta.targetId === threadId &&
-        op.status === 'in-progress'
-      ) {
+      if (op.meta.type === 'chat-response' && op.meta.targetId === threadId && op.status === 'in-progress') {
         return op;
       }
     }
@@ -407,12 +389,7 @@ class ActiveOperationsManager {
    * stream path, which posts to /api/jobs directly because polling is
    * undesirable). Idempotent on `operationId`.
    */
-  registerExistingJob(
-    jobId: string,
-    type: OperationType,
-    targetId: string,
-    assistantMessageId?: string,
-  ): void {
+  registerExistingJob(jobId: string, type: OperationType, targetId: string, assistantMessageId?: string): void {
     registerExistingChatJob(
       this.chatRegistryState(),
       (t) => JOB_ITEM_TYPE_BY_TYPE[t],

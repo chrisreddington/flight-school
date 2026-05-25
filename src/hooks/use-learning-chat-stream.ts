@@ -20,10 +20,7 @@ import type { ToolCallEvent } from '@/lib/threads';
 import { THREAD_DATA_CHANGED_EVENT, type Thread } from '@/lib/threads';
 
 import { useChatSseSubscriptions } from './use-chat-sse-subscriptions';
-import {
-  usePendingStreamReconciler,
-  type PendingStreamMessages,
-} from './use-pending-stream-reconciler';
+import { usePendingStreamReconciler, type PendingStreamMessages } from './use-pending-stream-reconciler';
 import { useOrphanedChatStreamFinalizer } from './use-orphaned-chat-stream-finalizer';
 
 const log = logger.withTag('useLearningChat');
@@ -49,10 +46,7 @@ export function isThreadStreaming(
   activeThreadId: string | null,
   pendingStreamMessages: PendingStreamMessages,
 ): boolean {
-  return (
-    activeThread?.isStreaming === true ||
-    (activeThreadId ? pendingStreamMessages.has(activeThreadId) : false)
-  );
+  return activeThread?.isStreaming === true || (activeThreadId ? pendingStreamMessages.has(activeThreadId) : false);
 }
 
 /**
@@ -91,9 +85,7 @@ export function useLearningChatStream({
     [threads],
   );
   const streamingThreadId = storageStreamingThreadIds[storageStreamingThreadIds.length - 1] ?? null;
-  const [pendingStreamMessages, setPendingStreamMessages] = useState<PendingStreamMessages>(
-    new Map(),
-  );
+  const [pendingStreamMessages, setPendingStreamMessages] = useState<PendingStreamMessages>(new Map());
 
   // Subscribe to the chat-stream store so any delta/snapshot from the SSE
   // handler triggers a re-render with the latest live content for the
@@ -107,10 +99,7 @@ export function useLearningChatStream({
     content: streamingContent,
     assistantMessageId: streamingAssistantMessageId,
     toolEvents: streamingToolEvents,
-  } = useMemo(
-    () => getStreamingContentForThread(streamRecords, activeThreadId),
-    [streamRecords, activeThreadId],
-  );
+  } = useMemo(() => getStreamingContentForThread(streamRecords, activeThreadId), [streamRecords, activeThreadId]);
 
   // Ensure operationsManager has had a chance to hydrate from the
   // server-side job list on page load.
@@ -143,24 +132,14 @@ export function useLearningChatStream({
   }, [opsSnapshot]);
 
   const allStreamingThreadIds = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...opStreamingThreadIds,
-          ...storageStreamingThreadIds,
-          ...pendingStreamMessages.keys(),
-        ]),
-      ),
+    () => Array.from(new Set([...opStreamingThreadIds, ...storageStreamingThreadIds, ...pendingStreamMessages.keys()])),
     [opStreamingThreadIds, storageStreamingThreadIds, pendingStreamMessages],
   );
 
   // Stable string key derived from sorted ids so the SSE effect below only
   // re-runs when the set of streaming threads actually changes (array
   // identity is unstable across renders even when contents match).
-  const streamingThreadIdsKey = useMemo(
-    () => [...allStreamingThreadIds].sort().join(','),
-    [allStreamingThreadIds],
-  );
+  const streamingThreadIdsKey = useMemo(() => [...allStreamingThreadIds].sort().join(','), [allStreamingThreadIds]);
   const isStreaming =
     isThreadStreaming(activeThread, activeThreadId, pendingStreamMessages) ||
     (activeThreadId !== null && opStreamingThreadIds.includes(activeThreadId));
@@ -178,11 +157,7 @@ export function useLearningChatStream({
     return pairs.sort().join(',');
   }, [opsSnapshot, allStreamingThreadIds]);
 
-  const reconnectingJobIds = useChatSseSubscriptions(
-    streamingThreadIdsKey,
-    chatSubscriptionKey,
-    refreshThreads,
-  );
+  const reconnectingJobIds = useChatSseSubscriptions(streamingThreadIdsKey, chatSubscriptionKey, refreshThreads);
   usePendingStreamReconciler(pendingStreamMessages, setPendingStreamMessages, threads);
   useOrphanedChatStreamFinalizer(isThreadsLoading, threads, pendingStreamMessages, opsSnapshot);
 
@@ -230,12 +205,9 @@ export function useLearningChatStream({
     });
   }, []);
 
-  const registerStream = useCallback(
-    (jobId: string, threadId: string, assistantMessageId: string) => {
-      chatStreamStore.register(jobId, threadId, assistantMessageId);
-    },
-    [],
-  );
+  const registerStream = useCallback((jobId: string, threadId: string, assistantMessageId: string) => {
+    chatStreamStore.register(jobId, threadId, assistantMessageId);
+  }, []);
 
   const stopStreaming = useCallback(async () => {
     const threadId = activeThreadId;
@@ -251,12 +223,11 @@ export function useLearningChatStream({
     // `*(Response stopped)*` annotation into the durable thread as part of
     // its terminal sequence. Writing here would double-tag.
     try {
-      const { jobs } = await apiGet<{ jobs: Array<{ id: string; status: string; type?: string; targetId?: string }> }>(
-        '/api/jobs',
-      );
+      const { jobs } = await apiGet<{
+        jobs: Array<{ id: string; status: string; type?: string; targetId?: string }>;
+      }>('/api/jobs');
       const runningJobs = jobs.filter(
-        (job) =>
-          job.status === 'running' && job.type === 'chat-response' && job.targetId === threadId,
+        (job) => job.status === 'running' && job.type === 'chat-response' && job.targetId === threadId,
       );
 
       await Promise.all(

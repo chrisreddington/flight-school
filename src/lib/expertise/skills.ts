@@ -18,8 +18,18 @@ import type { GitHubEvent, GitHubRepo } from '@/lib/github/types';
 const SKILL_GAP_PATTERNS = {
   testing: {
     indicators: [
-      'test', 'spec', 'jest', 'vitest', 'mocha', 'cypress', 'playwright',
-      '.test.ts', '.spec.ts', '.test.js', '.spec.js', '__tests__',
+      'test',
+      'spec',
+      'jest',
+      'vitest',
+      'mocha',
+      'cypress',
+      'playwright',
+      '.test.ts',
+      '.spec.ts',
+      '.test.js',
+      '.spec.js',
+      '__tests__',
     ],
     topicKeywords: ['testing', 'test', 'tdd', 'bdd'],
   },
@@ -71,7 +81,7 @@ export function identifySkillGaps(repos: GitHubRepo[]): string[] {
   // Check each skill gap pattern
   for (const [skill, pattern] of Object.entries(SKILL_GAP_PATTERNS)) {
     const hasTopicIndicator = pattern.topicKeywords.some(
-      (kw) => allTopics.includes(kw) || allNames.some((n) => n.includes(kw))
+      (kw) => allTopics.includes(kw) || allNames.some((n) => n.includes(kw)),
     );
 
     // If topic indicators are present, skill is likely known
@@ -81,7 +91,7 @@ export function identifySkillGaps(repos: GitHubRepo[]): string[] {
 
     // Check if any repo name suggests the skill (e.g., "my-project-tests")
     const hasNameIndicator = pattern.indicators.some((ind) =>
-      allNames.some((n) => n.includes(ind.toLowerCase().replace(/[^a-z]/g, '')))
+      allNames.some((n) => n.includes(ind.toLowerCase().replace(/[^a-z]/g, ''))),
     );
 
     if (!hasNameIndicator) {
@@ -108,9 +118,21 @@ type CommitPattern = 'conventional' | 'freeform' | 'mixed';
  * Conventional commit prefixes (semantic commit messages).
  */
 const CONVENTIONAL_PREFIXES = [
-  'feat:', 'fix:', 'docs:', 'style:', 'refactor:',
-  'perf:', 'test:', 'build:', 'ci:', 'chore:', 'revert:',
-  'feat(', 'fix(', 'docs(', 'chore(',
+  'feat:',
+  'fix:',
+  'docs:',
+  'style:',
+  'refactor:',
+  'perf:',
+  'test:',
+  'build:',
+  'ci:',
+  'chore:',
+  'revert:',
+  'feat(',
+  'fix(',
+  'docs(',
+  'chore(',
 ];
 
 /**
@@ -148,9 +170,7 @@ export function analyzeCommitPatterns(events: GitHubEvent[]): CommitPattern {
 
   let conventionalCount = 0;
   for (const msg of commitMessages) {
-    const isConventional = CONVENTIONAL_PREFIXES.some((prefix) =>
-      msg.startsWith(prefix.toLowerCase())
-    );
+    const isConventional = CONVENTIONAL_PREFIXES.some((prefix) => msg.startsWith(prefix.toLowerCase()));
     if (isConventional) {
       conventionalCount++;
     }

@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FocusStorageSchema } from './types';
-import {
-  clearFocusStorage,
-  readFocusStorage,
-  writeFocusStorage,
-} from './persistence';
+import { clearFocusStorage, readFocusStorage, writeFocusStorage } from './persistence';
 
 const mocks = vi.hoisted(() => ({
   logError: vi.fn(),
@@ -59,10 +55,7 @@ describe('focus persistence adapter', () => {
     await expect(readFocusStorage()).resolves.toEqual({ history: {} });
 
     expect(mocks.logError).not.toHaveBeenCalled();
-    expect(mocks.logWarn).toHaveBeenCalledWith(
-      'Storage read skipped (network unavailable)',
-      'Fetch is aborted',
-    );
+    expect(mocks.logWarn).toHaveBeenCalledWith('Storage read skipped (network unavailable)', 'Fetch is aborted');
   });
 
   it('should skip transient network write failures and rethrow other write failures', async () => {
@@ -88,11 +81,7 @@ describe('focus persistence adapter', () => {
   it('should coalesce concurrent reads into a single network call', async () => {
     vi.mocked(apiGet).mockResolvedValue(schema);
 
-    const [a, b, c] = await Promise.all([
-      readFocusStorage(),
-      readFocusStorage(),
-      readFocusStorage(),
-    ]);
+    const [a, b, c] = await Promise.all([readFocusStorage(), readFocusStorage(), readFocusStorage()]);
 
     expect(apiGet).toHaveBeenCalledTimes(1);
     expect(a).toBe(schema);
@@ -120,10 +109,7 @@ describe('focus persistence adapter', () => {
   it('should NOT coalesce writes (different payloads must each round-trip)', async () => {
     vi.mocked(apiPost).mockResolvedValue(undefined);
 
-    await Promise.all([
-      writeFocusStorage(schema),
-      writeFocusStorage({ history: { '2024-01-01': [] } }),
-    ]);
+    await Promise.all([writeFocusStorage(schema), writeFocusStorage({ history: { '2024-01-01': [] } })]);
 
     expect(apiPost).toHaveBeenCalledTimes(2);
   });

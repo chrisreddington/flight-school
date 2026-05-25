@@ -86,10 +86,7 @@ const DEFAULT_QUEUE: CustomChallengeQueue = {
  * @param daily - AI-generated daily challenge (may be null)
  * @returns Active challenge result with source information
  */
-export function determineActiveChallenge(
-  queue: DailyChallenge[],
-  daily: DailyChallenge | null
-): ActiveChallengeResult {
+export function determineActiveChallenge(queue: DailyChallenge[], daily: DailyChallenge | null): ActiveChallengeResult {
   // Custom queue takes priority
   if (queue.length > 0) {
     return {
@@ -220,7 +217,7 @@ class ChallengeQueueStore {
   async removeChallenge(challengeId: string): Promise<boolean> {
     const queue = await this.getStorage();
     const original = queue.challenges.length;
-    const updated = queue.challenges.filter(c => c.id !== challengeId);
+    const updated = queue.challenges.filter((c) => c.id !== challengeId);
 
     if (updated.length === original) {
       return false;
@@ -259,7 +256,7 @@ class ChallengeQueueStore {
    */
   async reorderChallenge(challengeId: string, newIndex: number): Promise<boolean> {
     const queue = await this.getStorage();
-    const currentIndex = queue.challenges.findIndex(c => c.id === challengeId);
+    const currentIndex = queue.challenges.findIndex((c) => c.id === challengeId);
 
     if (currentIndex === -1) return false;
     if (newIndex < 0 || newIndex >= queue.challenges.length) return false;
@@ -280,12 +277,9 @@ class ChallengeQueueStore {
   /**
    * Updates a challenge in the queue.
    */
-  async updateChallenge(
-    challengeId: string,
-    updates: Partial<DailyChallenge>
-  ): Promise<boolean> {
+  async updateChallenge(challengeId: string, updates: Partial<DailyChallenge>): Promise<boolean> {
     const queue = await this.getStorage();
-    const index = queue.challenges.findIndex(c => c.id === challengeId);
+    const index = queue.challenges.findIndex((c) => c.id === challengeId);
 
     if (index === -1) return false;
 
@@ -309,7 +303,7 @@ class ChallengeQueueStore {
    */
   async getById(challengeId: string): Promise<DailyChallenge | null> {
     const queue = await this.getStorage();
-    return queue.challenges.find(c => c.id === challengeId) ?? null;
+    return queue.challenges.find((c) => c.id === challengeId) ?? null;
   }
 
   /**

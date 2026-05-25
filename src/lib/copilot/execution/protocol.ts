@@ -173,9 +173,8 @@ function requireToolCalls(value: unknown): CopilotToolCallRecord[] {
   }
   return value.map((item, index) => {
     const record = requireRecord(item, `toolCalls[${index}]`);
-    const duration = record.duration === undefined
-      ? undefined
-      : requireNumber(record.duration, `toolCalls[${index}].duration`);
+    const duration =
+      record.duration === undefined ? undefined : requireNumber(record.duration, `toolCalls[${index}].duration`);
     return {
       name: requireString(record.name, `toolCalls[${index}].name`),
       args: record.args,

@@ -24,9 +24,10 @@ const log = logger.withTag('CronSweep');
 export async function POST(request: Request) {
   try {
     const payload = await verifyCronRequest(request);
-    const callerAppid = (typeof payload.appid === 'string' && payload.appid)
-      || (typeof payload.azp === 'string' && payload.azp)
-      || 'unknown';
+    const callerAppid =
+      (typeof payload.appid === 'string' && payload.appid) ||
+      (typeof payload.azp === 'string' && payload.azp) ||
+      'unknown';
 
     log.info('Cron sweep starting', { callerAppid });
 

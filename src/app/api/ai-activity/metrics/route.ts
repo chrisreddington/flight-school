@@ -10,12 +10,8 @@
 import { authErrorResponse } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import {
-  captureTracePropagationHeaders,
-  mergeTracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
+import { captureTracePropagationHeaders, mergeTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
-
 
 export interface UpdateActivityMetricsRequest {
   /** Event ID to update */
@@ -36,10 +32,7 @@ export async function PATCH(request: NextRequest) {
     const { eventId, clientMetrics } = body;
 
     if (!eventId || !clientMetrics) {
-      return NextResponse.json(
-        { error: 'eventId and clientMetrics are required' },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'eventId and clientMetrics are required' }, { status: 400 });
     }
 
     const workerConfig = getCopilotWorkerConfig();

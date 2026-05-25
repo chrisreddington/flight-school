@@ -34,13 +34,7 @@ describe('GoalCard', () => {
   it('renders goal title and description', async () => {
     getHistoryMock.mockResolvedValueOnce({});
 
-    render(
-      <GoalCard
-        goal={createGoal()}
-        dateKey="2025-01-02"
-        showHistoryActions={true}
-      />
-    );
+    render(<GoalCard goal={createGoal()} dateKey="2025-01-02" showHistoryActions={true} />);
 
     expect(await screen.findByRole('heading', { name: 'Ship feature' })).toBeInTheDocument();
     expect(screen.getByText('Implement user-facing feature')).toBeInTheDocument();
@@ -50,13 +44,7 @@ describe('GoalCard', () => {
     getHistoryMock.mockResolvedValueOnce({});
     transitionGoalMock.mockRejectedValueOnce('failure');
 
-    render(
-      <GoalCard
-        goal={createGoal()}
-        dateKey="2025-01-02"
-        showHistoryActions={true}
-      />
-    );
+    render(<GoalCard goal={createGoal()} dateKey="2025-01-02" showHistoryActions={true} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Complete' }));
 
@@ -72,13 +60,7 @@ describe('GoalCard', () => {
     });
     transitionGoalMock.mockReturnValueOnce(secondAttempt);
 
-    render(
-      <GoalCard
-        goal={createGoal()}
-        dateKey="2025-01-02"
-        showHistoryActions={true}
-      />
-    );
+    render(<GoalCard goal={createGoal()} dateKey="2025-01-02" showHistoryActions={true} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Complete' }));
     expect(await screen.findByText('Action failed. Please try again.')).toBeInTheDocument();

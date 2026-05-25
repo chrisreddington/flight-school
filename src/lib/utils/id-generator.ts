@@ -1,9 +1,9 @@
 /**
  * ID Generation Utilities
- * 
+ *
  * Centralized unique ID generation to prevent duplication across the codebase.
  * Uses timestamp + random suffix for guaranteed uniqueness.
- * 
+ *
  * @example
  * ```typescript
  * const messageId = generateId('msg');
@@ -15,11 +15,11 @@ import { nowMs } from '@/lib/utils/date-utils';
 
 /**
  * Generate a unique ID with an optional prefix.
- * 
+ *
  * Format: `{prefix}-{timestamp}-{random}`
  * - timestamp: milliseconds since epoch (ensures time-based uniqueness)
  * - random: base36 string (ensures collision resistance)
- * 
+ *
  * @param prefix - Optional prefix for the ID (default: 'id')
  * @returns A unique ID string
  */

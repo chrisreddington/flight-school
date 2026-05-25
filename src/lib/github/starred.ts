@@ -30,10 +30,7 @@ const STARRED_LIMIT = 20;
  * @param username - GitHub username
  * @returns Deduplicated array of interest signals (languages + topics)
  */
-export async function getStarredInterests(
-  octokit: Octokit,
-  username: string
-): Promise<string[]> {
+export async function getStarredInterests(octokit: Octokit, username: string): Promise<string[]> {
   try {
     const response = await octokit.rest.activity.listReposStarredByUser({
       username,

@@ -11,10 +11,7 @@
 import { handleUnauthorizedError } from '@/lib/api';
 import { requireUserContext } from '@/lib/auth/context';
 import { getCopilotWorkerConfig } from '@/lib/copilot/execution/config';
-import {
-  captureTracePropagationHeaders,
-  mergeTracePropagationHeaders,
-} from '@/lib/observability/context-propagation';
+import { captureTracePropagationHeaders, mergeTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Streaming SSE connection: hold the route open for the stream lifetime.
@@ -48,9 +45,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (cursor) forwardParams.set('cursor', cursor);
 
   const qs = forwardParams.toString();
-  const upstreamUrl = `${workerConfig.baseUrl}/api/internal/ai-activity/stream${
-    qs ? `?${qs}` : ''
-  }`;
+  const upstreamUrl = `${workerConfig.baseUrl}/api/internal/ai-activity/stream${qs ? `?${qs}` : ''}`;
 
   const headers: Record<string, string> = mergeTracePropagationHeaders(
     {

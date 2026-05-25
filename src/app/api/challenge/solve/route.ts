@@ -24,10 +24,7 @@
 import { knownApiErrorResponse, parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
 import { validateSolveRequest } from '@/lib/challenge/request-validators';
-import {
-    buildSolutionPrompt,
-    SOLUTION_GENERATION_PROMPT,
-} from '@/lib/challenge/solution-generation';
+import { buildSolutionPrompt, SOLUTION_GENERATION_PROMPT } from '@/lib/challenge/solution-generation';
 import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { executeCopilotCoachJob } from '@/lib/copilot/execution';
 import type { ChallengeDef } from '@/lib/copilot/types';
@@ -37,7 +34,6 @@ import { extractJSON } from '@/lib/utils/json-utils';
 import { NextRequest } from 'next/server';
 
 const log = logger.withTag('Solve API');
-
 
 /** Request body structure */
 interface SolveRequest {
@@ -104,7 +100,7 @@ export async function POST(request: NextRequest) {
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },
-        }
+        },
       );
     }
 
@@ -118,7 +114,7 @@ export async function POST(request: NextRequest) {
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },
-        }
+        },
       );
     }
 
@@ -138,7 +134,7 @@ export async function POST(request: NextRequest) {
       {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      }
+      },
     );
   } catch (error) {
     const knownResponse = knownApiErrorResponse(error);
@@ -156,7 +152,7 @@ export async function POST(request: NextRequest) {
       {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
-      }
+      },
     );
   }
 }

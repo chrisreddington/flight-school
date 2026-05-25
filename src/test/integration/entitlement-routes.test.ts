@@ -52,9 +52,7 @@ vi.mock('@/lib/copilot/session-identity', () => ({
 }));
 
 vi.mock('@/lib/copilot/guided-mode', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/copilot/guided-mode')>(
-    '@/lib/copilot/guided-mode',
-  );
+  const actual = await vi.importActual<typeof import('@/lib/copilot/guided-mode')>('@/lib/copilot/guided-mode');
   return {
     ...actual,
     generateGuidedPlan: hoisted.generateGuidedPlanMock,
@@ -62,9 +60,7 @@ vi.mock('@/lib/copilot/guided-mode', async () => {
 });
 
 vi.mock('@/lib/copilot/quiz', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/copilot/quiz')>(
-    '@/lib/copilot/quiz',
-  );
+  const actual = await vi.importActual<typeof import('@/lib/copilot/quiz')>('@/lib/copilot/quiz');
   return {
     ...actual,
     generateTopicQuiz: hoisted.generateTopicQuizMock,
@@ -72,9 +68,7 @@ vi.mock('@/lib/copilot/quiz', async () => {
 });
 
 vi.mock('@/lib/copilot/suggestions', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/copilot/suggestions')>(
-    '@/lib/copilot/suggestions',
-  );
+  const actual = await vi.importActual<typeof import('@/lib/copilot/suggestions')>('@/lib/copilot/suggestions');
   return {
     ...actual,
     generateWhatsNext: hoisted.generateWhatsNextMock,
@@ -135,9 +129,7 @@ afterEach(() => {
 describe('AI route entitlement mapping (D2)', () => {
   describe('POST /api/focus', () => {
     it('returns 402 copilot_required when SDK throws CopilotEntitlementRequiredError', async () => {
-      hoisted.executeCopilotCoachJobMock.mockRejectedValue(
-        new CopilotEntitlementRequiredError('Need Copilot'),
-      );
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(new CopilotEntitlementRequiredError('Need Copilot'));
       const { POST } = await import('@/app/api/focus/route');
       const res = await POST(jsonRequest('http://localhost/api/focus', { component: 'goal' }));
       expect(res.status).toBe(402);
@@ -265,9 +257,7 @@ describe('AI route entitlement mapping (D2)', () => {
 
   describe('POST /api/challenge/author', () => {
     it('returns 402 when worker stream dispatch throws CopilotEntitlementRequiredError', async () => {
-      hoisted.openCopilotAuthoringStreamMock.mockRejectedValue(
-        new CopilotEntitlementRequiredError(),
-      );
+      hoisted.openCopilotAuthoringStreamMock.mockRejectedValue(new CopilotEntitlementRequiredError());
       const { POST } = await import('@/app/api/challenge/author/route');
       const res = await POST(
         jsonRequest('http://localhost/api/challenge/author', {
@@ -293,9 +283,7 @@ describe('AI route entitlement mapping (D2)', () => {
 
   describe('POST /api/challenge/solve', () => {
     it('returns 402 when createLoggedCoachSession throws CopilotEntitlementRequiredError', async () => {
-      hoisted.executeCopilotCoachJobMock.mockRejectedValue(
-        new CopilotEntitlementRequiredError(),
-      );
+      hoisted.executeCopilotCoachJobMock.mockRejectedValue(new CopilotEntitlementRequiredError());
       const { POST } = await import('@/app/api/challenge/solve/route');
       const res = await POST(
         jsonRequest('http://localhost/api/challenge/solve', {

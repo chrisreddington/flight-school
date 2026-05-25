@@ -12,7 +12,7 @@
  *
  * Cross-process write races (web + worker writing the same `background-jobs`
  * file) are NOT solved here — that requires the worker to become the sole
- * writer (Phase 2B of the streaming architecture plan).
+ * writer.
  */
 
 import { deleteStorage } from '@/lib/storage/utils';
@@ -67,27 +67,30 @@ export const jobStorage = {
     if (!job.userId) {
       throw new Error('jobStorage.createIfAbsent: userId is required (multi-tenant invariant)');
     }
-    return withJobsMutation<
-      { created: true; job: BackgroundJob<T> } | { created: false; existing: BackgroundJob<T> }
-    >((schema) => {
-      const cleaned = cleanup(schema);
-      const byId = cleaned.jobs[job.id];
-      if (byId) {
-        return { schema: cleaned, result: { created: false, existing: byId as BackgroundJob<T> } };
-      }
-      const collision = findCollision ? findCollision(cleaned.jobs) : undefined;
-      if (collision) {
-        return { schema: cleaned, result: { created: false, existing: collision as BackgroundJob<T> } };
-      }
-      const newJob: BackgroundJob<T> = {
-        ...job,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      cleaned.jobs[job.id] = newJob as BackgroundJob;
-      log.info(`Created job (if-absent): ${job.id} (${job.type})`);
-      return { schema: cleaned, result: { created: true, job: newJob } };
-    });
+    return withJobsMutation<{ created: true; job: BackgroundJob<T> } | { created: false; existing: BackgroundJob<T> }>(
+      (schema) => {
+        const cleaned = cleanup(schema);
+        const byId = cleaned.jobs[job.id];
+        if (byId) {
+          return { schema: cleaned, result: { created: false, existing: byId as BackgroundJob<T> } };
+        }
+        const collision = findCollision ? findCollision(cleaned.jobs) : undefined;
+        if (collision) {
+          return {
+            schema: cleaned,
+            result: { created: false, existing: collision as BackgroundJob<T> },
+          };
+        }
+        const newJob: BackgroundJob<T> = {
+          ...job,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
+        cleaned.jobs[job.id] = newJob as BackgroundJob;
+        log.info(`Created job (if-absent): ${job.id} (${job.type})`);
+        return { schema: cleaned, result: { created: true, job: newJob } };
+      },
+    );
   },
 
   /** Get a job by ID. */
@@ -98,7 +101,7 @@ export const jobStorage = {
 
   /** Update a job's fields. */
   async update<T>(id: string, updates: Partial<BackgroundJob<T>>): Promise<BackgroundJob<T> | undefined> {
-    const updated = await mutateJob<T>(id, (job) => ({ ...job, ...updates } as BackgroundJob<T>));
+    const updated = await mutateJob<T>(id, (job) => ({ ...job, ...updates }) as BackgroundJob<T>);
     if (updated) log.debug(`Updated job ${id}: status=${updated.status}`);
     return updated;
   },
@@ -127,11 +130,7 @@ export const jobStorage = {
    * polling clients can distinguish credentials-expired failures from
    * generic errors.
    */
-  async markFailed(
-    id: string,
-    error: string,
-    errorCode?: JobErrorCode,
-  ): Promise<BackgroundJob | undefined> {
+  async markFailed(id: string, error: string, errorCode?: JobErrorCode): Promise<BackgroundJob | undefined> {
     return mutateJob(id, (job) => ({
       ...job,
       status: 'failed',
@@ -229,9 +228,7 @@ export const jobStorage = {
    * pending or running. Returns `{ status, transitioned }` so the caller
    * can tell whether the cancellation actually moved state forward.
    */
-  async markCancelledIfNonTerminal(
-    id: string,
-  ): Promise<{ status: JobStatus; transitioned: boolean }> {
+  async markCancelledIfNonTerminal(id: string): Promise<{ status: JobStatus; transitioned: boolean }> {
     return withJobsMutation<{ status: JobStatus; transitioned: boolean }>((schema) => {
       const job = schema.jobs[id];
       if (!job) return { schema, result: { status: 'cancelled', transitioned: false } };
@@ -257,9 +254,7 @@ export const jobStorage = {
   /** Get all pending/running jobs. */
   async getActive(): Promise<BackgroundJob[]> {
     const schema = await loadJobs();
-    return Object.values(schema.jobs).filter(
-      (job) => job.status === 'pending' || job.status === 'running',
-    );
+    return Object.values(schema.jobs).filter((job) => job.status === 'pending' || job.status === 'running');
   },
 
   /** Find the active chat-response job for a thread. */
@@ -319,12 +314,11 @@ export const jobStorage = {
   },
 
   /**
-   * @deprecated The module-level cache was removed in Phase 1 of the storage
-   * refactor; reads always hit disk. Kept as a no-op for call-site
-   * compatibility until defensive `invalidateCache()` calls are cleaned up.
+   * @deprecated Reads always hit disk; there is no in-memory cache to
+   * invalidate. Kept as a no-op for call-site compatibility until
+   * defensive `invalidateCache()` calls are cleaned up.
    */
   invalidateCache(): void {
     // intentionally empty
   },
 };
-

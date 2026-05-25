@@ -15,23 +15,22 @@ async function main(): Promise<void> {
   // command that POSTs to the cron endpoint with `CRON_SKIP_AUTH=1`; the
   // route honours the bypass only when `NODE_ENV !== 'production'`.
   const workerSecret = 'local-dev-worker-secret';
+  // Worker is a standalone Hono/Node process — addExecutable, not
+  // addNextJsApp. Mirrors the deployed image (`Dockerfile.worker` over
+  // `dist-worker/`). See decision 2 in `docs/architecture.md`.
   const copilotWorker = await builder
-    .addNextJsApp('copilot-worker', '.', { runScriptName: 'dev:worker' })
+    .addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])
     .withHttpEndpoint({ port: 3001, targetPort: 3001, isProxied: false })
-    .withEnvironment('COPILOT_WORKER_ENABLED', '1')
-    .withEnvironment('COPILOT_WORKER_MODE', '1')
     .withEnvironment('COPILOT_WORKER_SECRET', workerSecret)
-    // Distinct OTEL service name per Aspire resource so dashboards/logs/
-    // traces can tell the web tier from the worker tier. Without this both
-    // processes emit `service.name=flight-school` and every startup-side
-    // log line ("Server starting", "Copilot client warmed", token-store
-    // warnings) appears as a duplicate because the dashboard groups by
-    // service.
-    .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-worker')
-    // Suppress Next.js's built-in `AppRender.fetch` span so we don't
-    // double-count every server fetch alongside @vercel/otel's
-    // FetchInstrumentation. See .github/skills/opentelemetry/SKILL.md.
-    .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
+    // Pin the listen port explicitly. The worker reads PORT first (ACA
+    // convention), so without this an inherited PORT (e.g. dev shell set
+    // to 3000) would collide with the targetPort declared above.
+    .withEnvironment('PORT', '3001')
+    // Distinct OTEL service name so dashboards/logs/traces can tell the
+    // worker apart from the web tier — without this both processes emit
+    // `service.name=flight-school` and every startup log line appears
+    // duplicated.
+    .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-worker');
   const workerEndpoint = await copilotWorker.getEndpoint('http');
   const workerUrl = await workerEndpoint.property(EndpointProperty.Url);
 
@@ -45,29 +44,25 @@ async function main(): Promise<void> {
     .withEnvironment('OTEL_SERVICE_NAME', 'flight-school-web')
     .withEnvironment('NEXT_OTEL_FETCH_DISABLED', '1');
 
-  await flightSchool.withCommand(
-    'sweep-retention',
-    'Run retention sweep',
-    async (commandContext) => {
-      const endpoint = await flightSchool.getEndpoint('http');
-      const url = await endpoint.url();
-      try {
-        const res = await fetch(`${url}/api/cron/sweep`, { method: 'POST' });
-        const body = await res.text();
-        if (!res.ok) {
-          return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
-        }
-        const commandLogger = await commandContext.logger.get();
-        await commandLogger.logInformation(`Retention sweep complete: ${body}`);
-        return { success: true };
-      } catch (err) {
-        return {
-          success: false,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        };
+  await flightSchool.withCommand('sweep-retention', 'Run retention sweep', async (commandContext) => {
+    const endpoint = await flightSchool.getEndpoint('http');
+    const url = await endpoint.url();
+    try {
+      const res = await fetch(`${url}/api/cron/sweep`, { method: 'POST' });
+      const body = await res.text();
+      if (!res.ok) {
+        return { success: false, errorMessage: `HTTP ${res.status}: ${body}` };
       }
-    },
-  );
+      const commandLogger = await commandContext.logger.get();
+      await commandLogger.logInformation(`Retention sweep complete: ${body}`);
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
 
   await builder.build().run();
 }

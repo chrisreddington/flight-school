@@ -68,7 +68,7 @@ const KEYWORD_PATTERNS: Record<string, RegExp> = {
   flask: /\bflask\b/i,
   rails: /\brails\b/i,
   spring: /\bspring\b/i,
-  
+
   // Tools/Platforms
   docker: /\bdocker\b/i,
   kubernetes: /\bkubernetes\b|\bk8s\b/i,
@@ -80,7 +80,7 @@ const KEYWORD_PATTERNS: Record<string, RegExp> = {
   postgres: /\bpostgres(?:ql)?\b/i,
   mongodb: /\bmongo(?:db)?\b/i,
   redis: /\bredis\b/i,
-  
+
   // Concepts
   api: /\bapi\b/i,
   cli: /\bcli\b|\bcommand.?line\b/i,
@@ -102,35 +102,35 @@ const KEYWORD_PATTERNS: Record<string, RegExp> = {
 function extractExcerpt(content: string): string {
   // Remove markdown headers (#, ##, etc.)
   let cleaned = content.replace(/^#+\s+.+$/gm, '');
-  
+
   // Remove markdown links [text](url) -> text
   cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-  
+
   // Remove markdown images ![alt](url)
   cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
-  
+
   // Remove code blocks
   cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
   cleaned = cleaned.replace(/`[^`]+`/g, '');
-  
+
   // Remove badges (common pattern: [![text](image)](link))
   cleaned = cleaned.replace(/\[!\[[^\]]*\]\([^)]+\)\]\([^)]+\)/g, '');
-  
+
   // Remove HTML tags (loop to handle nested/malformed tags)
   let previousLength;
   do {
     previousLength = cleaned.length;
     cleaned = cleaned.replace(/<[^>]+>/g, '');
   } while (cleaned.length < previousLength);
-  
+
   // Collapse whitespace
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  
+
   // Take first MAX_SUMMARY_LENGTH characters, ending at word boundary
   if (cleaned.length <= MAX_SUMMARY_LENGTH) {
     return cleaned;
   }
-  
+
   const truncated = cleaned.slice(0, MAX_SUMMARY_LENGTH);
   const lastSpace = truncated.lastIndexOf(' ');
   return lastSpace > 0 ? truncated.slice(0, lastSpace) + '...' : truncated + '...';
@@ -141,13 +141,13 @@ function extractExcerpt(content: string): string {
  */
 function extractKeywords(content: string): string[] {
   const found: string[] = [];
-  
+
   for (const [keyword, pattern] of Object.entries(KEYWORD_PATTERNS)) {
     if (pattern.test(content)) {
       found.push(keyword);
     }
   }
-  
+
   return found;
 }
 
@@ -174,11 +174,7 @@ function extractKeywords(content: string): string[] {
  * // Returns: \{ excerpt: "A sample project...", keywords: ["react", "api"], found: true \}
  * ```
  */
-export async function getRepoReadmeSummary(
-  octokit: Octokit,
-  owner: string,
-  repo: string
-): Promise<ReadmeSummary> {
+export async function getRepoReadmeSummary(octokit: Octokit, owner: string, repo: string): Promise<ReadmeSummary> {
   const cacheKey = `${owner}/${repo}`;
   const now = nowMs();
 
@@ -200,13 +196,13 @@ export async function getRepoReadmeSummary(
 
     // Data comes as string when using raw format
     const content = typeof data === 'string' ? data : '';
-    
+
     // Truncate to MAX_README_SIZE for processing
     const truncatedContent = content.slice(0, MAX_README_SIZE);
-    
+
     // Extract excerpt (first meaningful content, not markdown headers)
     const excerpt = extractExcerpt(truncatedContent);
-    
+
     // Extract keywords
     const keywords = extractKeywords(truncatedContent);
 
@@ -226,7 +222,7 @@ export async function getRepoReadmeSummary(
       keywords: [],
       found: false,
     };
-    
+
     // Cache the "not found" result to avoid repeated API calls
     readmeCache.set(cacheKey, { summary, timestamp: now });
     return summary;

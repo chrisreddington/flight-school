@@ -2,10 +2,7 @@ import { ROOT_CONTEXT, SpanKind, trace } from '@opentelemetry/api';
 import { SamplingDecision } from '@opentelemetry/sdk-trace-base';
 import { describe, expect, it } from 'vitest';
 
-import {
-  createTelemetryHygieneSampler,
-  isProxyRouteSpan,
-} from './proxy-sampler';
+import { createTelemetryHygieneSampler, isProxyRouteSpan } from './proxy-sampler';
 
 describe('isProxyRouteSpan', () => {
   it('matches when spanName ends with the proxy path', () => {
@@ -14,28 +11,20 @@ describe('isProxyRouteSpan', () => {
   });
 
   it('matches when http.target starts with the proxy path', () => {
-    expect(
-      isProxyRouteSpan('POST', { 'http.target': '/api/otel/v1/traces' }),
-    ).toBe(true);
+    expect(isProxyRouteSpan('POST', { 'http.target': '/api/otel/v1/traces' })).toBe(true);
   });
 
   it('matches when url.path starts with the proxy path', () => {
-    expect(
-      isProxyRouteSpan('POST', { 'url.path': '/api/otel/v1/traces' }),
-    ).toBe(true);
+    expect(isProxyRouteSpan('POST', { 'url.path': '/api/otel/v1/traces' })).toBe(true);
   });
 
   it('matches when http.route starts with the proxy path', () => {
-    expect(
-      isProxyRouteSpan('next.route', { 'http.route': '/api/otel/v1/traces' }),
-    ).toBe(true);
+    expect(isProxyRouteSpan('next.route', { 'http.route': '/api/otel/v1/traces' })).toBe(true);
   });
 
   it('does not match unrelated spans', () => {
     expect(isProxyRouteSpan('GET /api/profile', undefined)).toBe(false);
-    expect(
-      isProxyRouteSpan('POST', { 'http.target': '/api/learning-chat/stream' }),
-    ).toBe(false);
+    expect(isProxyRouteSpan('POST', { 'http.target': '/api/learning-chat/stream' })).toBe(false);
     expect(
       isProxyRouteSpan('resolve page components', {
         'next.span.type': 'AppRender.getBodyResult',
@@ -44,9 +33,7 @@ describe('isProxyRouteSpan', () => {
   });
 
   it('does not match when only a substring (not prefix) of the path appears', () => {
-    expect(
-      isProxyRouteSpan('POST', { 'http.target': '/other/api/otel/v1/traces' }),
-    ).toBe(false);
+    expect(isProxyRouteSpan('POST', { 'http.target': '/other/api/otel/v1/traces' })).toBe(false);
   });
 });
 
@@ -68,14 +55,7 @@ describe('createTelemetryHygieneSampler', () => {
 
   it('drops the framework route span by name alone', () => {
     const sampler = createTelemetryHygieneSampler();
-    const result = sampler.shouldSample(
-      ROOT_CONTEXT,
-      traceId,
-      'POST /api/otel/v1/traces',
-      SpanKind.SERVER,
-      {},
-      [],
-    );
+    const result = sampler.shouldSample(ROOT_CONTEXT, traceId, 'POST /api/otel/v1/traces', SpanKind.SERVER, {}, []);
     expect(result.decision).toBe(SamplingDecision.NOT_RECORD);
   });
 
@@ -117,17 +97,8 @@ describe('createTelemetryHygieneSampler', () => {
     ];
     for (const name of ['GET', 'POST', 'HTTP GET', 'PUT', 'DELETE']) {
       for (const shape of startTimeShapes) {
-        const result = sampler.shouldSample(
-          ROOT_CONTEXT,
-          traceId,
-          name,
-          SpanKind.SERVER,
-          shape.attrs,
-          [],
-        );
-        expect(result.decision, `name=${name} ${shape.label}`).toBe(
-          SamplingDecision.RECORD_AND_SAMPLED,
-        );
+        const result = sampler.shouldSample(ROOT_CONTEXT, traceId, name, SpanKind.SERVER, shape.attrs, []);
+        expect(result.decision, `name=${name} ${shape.label}`).toBe(SamplingDecision.RECORD_AND_SAMPLED);
       }
     }
   });
@@ -151,14 +122,7 @@ describe('createTelemetryHygieneSampler', () => {
 
   it('does not drop CLIENT-kind spans named GET (outbound fetches)', () => {
     const sampler = createTelemetryHygieneSampler();
-    const result = sampler.shouldSample(
-      ROOT_CONTEXT,
-      traceId,
-      'GET',
-      SpanKind.CLIENT,
-      {},
-      [],
-    );
+    const result = sampler.shouldSample(ROOT_CONTEXT, traceId, 'GET', SpanKind.CLIENT, {}, []);
     expect(result.decision).toBe(SamplingDecision.RECORD_AND_SAMPLED);
   });
 
@@ -200,10 +164,7 @@ describe('createTelemetryHygieneSampler', () => {
 
   it('drops Next.js framework stub INTERNAL spans by next.span_type', () => {
     const sampler = createTelemetryHygieneSampler();
-    for (const spanType of [
-      'NextNodeServer.findPageComponents',
-      'NextNodeServer.startResponse',
-    ]) {
+    for (const spanType of ['NextNodeServer.findPageComponents', 'NextNodeServer.startResponse']) {
       const result = sampler.shouldSample(
         ROOT_CONTEXT,
         traceId,
@@ -212,9 +173,7 @@ describe('createTelemetryHygieneSampler', () => {
         { 'next.span_type': spanType },
         [],
       );
-      expect(result.decision, `span_type=${spanType}`).toBe(
-        SamplingDecision.NOT_RECORD,
-      );
+      expect(result.decision, `span_type=${spanType}`).toBe(SamplingDecision.NOT_RECORD);
     }
   });
 
@@ -232,10 +191,6 @@ describe('createTelemetryHygieneSampler', () => {
   });
 
   it('reports a stable identifier via toString', () => {
-    expect(createTelemetryHygieneSampler().toString()).toBe(
-      'TelemetryHygieneSampler',
-    );
+    expect(createTelemetryHygieneSampler().toString()).toBe('TelemetryHygieneSampler');
   });
 });
-
-

@@ -1,4 +1,3 @@
-
 /**
  * Focus Persistence Types
  *

@@ -101,7 +101,7 @@ interface UseLearningChatState {
   isThreadsLoading: UseThreadsReturn['isLoading'];
   /** Whether a message is being processed (in the active thread) */
   isStreaming: boolean;
-  /** Live streaming assistant content for the active thread (post-Phase-5: served from chatStreamStore, not the durable thread). */
+  /** Live streaming assistant content for the active thread, served from `chatStreamStore` rather than the durable thread. */
   streamingContent: string;
   /** Stable id of the in-flight assistant message in the active thread, or null when nothing is streaming. */
   streamingAssistantMessageId: string | null;
@@ -194,9 +194,7 @@ export function useLearningChat(): UseLearningChatReturn {
       explicitThreadId: string | undefined,
       repos: RepoReference[] | undefined,
     ): Promise<Thread> => {
-      const located = explicitThreadId
-        ? await threadStore.getById(explicitThreadId)
-        : activeThread;
+      const located = explicitThreadId ? await threadStore.getById(explicitThreadId) : activeThread;
       if (located) {
         const isPlaceholder = located.title === 'New Thread' && located.messages.length === 0;
         if (!isPlaceholder) return located;
@@ -205,10 +203,13 @@ export function useLearningChat(): UseLearningChatReturn {
         await refreshThreads();
         return renamed;
       }
-      return createThread({
-        title: deriveAutoTitle(message),
-        context: repos && repos.length > 0 ? { repos } : undefined,
-      }, true);
+      return createThread(
+        {
+          title: deriveAutoTitle(message),
+          context: repos && repos.length > 0 ? { repos } : undefined,
+        },
+        true,
+      );
     },
     [activeThread, createThread, refreshThreads],
   );
@@ -227,30 +228,29 @@ export function useLearningChat(): UseLearningChatReturn {
       capabilities: CapabilitiesArg | undefined,
     ): Promise<void> => {
       const assistantMessageId = crypto.randomUUID();
-      const { id: jobId } = await apiPost<{ id: string }>('/api/jobs', {
-        type: 'chat-response',
-        targetId: targetThreadId,
-        input: {
-          threadId: targetThreadId,
-          prompt: message,
-          assistantMessageId,
-          profile,
-          ...(capabilities !== undefined ? { capabilities } : {}),
-          repos: effectiveRepos.map((r) => r.fullName),
+      const { id: jobId } = await apiPost<{ id: string }>(
+        '/api/jobs',
+        {
+          type: 'chat-response',
+          targetId: targetThreadId,
+          input: {
+            threadId: targetThreadId,
+            prompt: message,
+            assistantMessageId,
+            profile,
+            ...(capabilities !== undefined ? { capabilities } : {}),
+            repos: effectiveRepos.map((r) => r.fullName),
+          },
         },
-      }, {
-        clientTrigger: createLearningChatSendTrigger(targetThreadId, assistantMessageId),
-      });
+        {
+          clientTrigger: createLearningChatSendTrigger(targetThreadId, assistantMessageId),
+        },
+      );
 
       // Seed the chat-stream store BEFORE registering with operationsManager
       // so the SSE-attach effect finds a pre-existing record.
       registerStream(jobId, targetThreadId, assistantMessageId);
-      operationsManager.registerExistingJob(
-        jobId,
-        'chat-response',
-        targetThreadId,
-        assistantMessageId,
-      );
+      operationsManager.registerExistingJob(jobId, 'chat-response', targetThreadId, assistantMessageId);
       await refreshThreads();
     },
     [refreshThreads, registerStream],
@@ -288,13 +288,7 @@ export function useLearningChat(): UseLearningChatReturn {
         clearPendingStream(thread.id);
       }
     },
-    [
-      clearPendingStream,
-      markStreamPending,
-      resolveTargetThread,
-      startChatJob,
-      updateActiveThread,
-    ]
+    [clearPendingStream, markStreamPending, resolveTargetThread, startChatJob, updateActiveThread],
   );
 
   return {

@@ -1,7 +1,7 @@
 /**
  * Proxy gating suite.
  *
- * Verifies the Auth.js-backed Next.js 16 proxy (formerly `middleware`):
+ * Verifies the Auth.js-backed Next.js 16 proxy:
  * - Returns 401 JSON for unauthenticated `/api/*` requests
  * - Redirects unauthenticated UI requests to `/sign-in` with a callbackUrl
  * - Lets public paths (`/api/health`, `/api/auth/*`, `/_next`, assets) through
@@ -80,10 +80,12 @@ describe('proxy gating', () => {
     expect(response.status).toBe(200);
   });
 
-  it('allows unauthenticated /api/internal/* requests to reach route-specific auth', async () => {
+  it('redirects unauthenticated /api/internal/* requests (no Next routes there post-extraction)', async () => {
     const res = await proxy(makeRequest('/api/internal/copilot/execute'));
     const response = res as Response;
-    expect(response.status).toBe(200);
+    // After worker extraction, /api/internal/* exists only on the Hono worker.
+    // Any browser-side hit through Next's proxy must redirect to sign-in.
+    expect(response.status).toBe(401);
   });
 
   it('allows unauthenticated /_next/* and static assets', async () => {
@@ -109,32 +111,5 @@ describe('proxy gating', () => {
     const response = res as Response;
     const loc = new URL(response.headers.get('location') as string);
     expect(loc.searchParams.get('callbackUrl')).toBe('/dashboard?tab=focus');
-  });
-
-  it('blocks non-worker routes when running in worker mode', async () => {
-    vi.stubEnv('COPILOT_WORKER_MODE', '1');
-
-    const root = (await proxy(makeRequest('/'))) as Response;
-    const profile = (await proxy(makeRequest('/api/profile'))) as Response;
-    const auth = (await proxy(makeRequest('/api/auth/signin'))) as Response;
-
-    expect(root.status).toBe(404);
-    expect(profile.status).toBe(404);
-    expect(auth.status).toBe(404);
-    expect(root.headers.get('set-cookie')).toBeNull();
-    expect(profile.headers.get('set-cookie')).toBeNull();
-    expect(auth.headers.get('set-cookie')).toBeNull();
-  });
-
-  it('keeps worker health and internal routes reachable in worker mode', async () => {
-    vi.stubEnv('COPILOT_WORKER_MODE', '1');
-
-    const health = (await proxy(makeRequest('/api/health'))) as Response;
-    const internal = (await proxy(makeRequest('/api/internal/copilot/execute'))) as Response;
-
-    expect(health.status).toBe(200);
-    expect(internal.status).toBe(200);
-    expect(health.headers.get('set-cookie')).toBeNull();
-    expect(internal.headers.get('set-cookie')).toBeNull();
   });
 });

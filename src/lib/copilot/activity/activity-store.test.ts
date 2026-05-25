@@ -16,11 +16,7 @@ vi.mock('@/lib/storage/utils', () => ({
   deleteFile: mocks.deleteFile,
 }));
 
-import {
-  appendActivityEvent,
-  clearActivityEvents,
-  loadActivityEvents,
-} from './activity-store';
+import { appendActivityEvent, clearActivityEvents, loadActivityEvents } from './activity-store';
 
 function mkEvent(overrides: Partial<AIActivityEvent> = {}): AIActivityEvent {
   return {
@@ -45,11 +41,7 @@ describe('activity-store', () => {
     await appendActivityEvent(mkEvent());
 
     expect(mocks.ensureDir).toHaveBeenCalledWith('users/user-1/activity', { mode: 0o700 });
-    expect(mocks.writeFile).toHaveBeenCalledWith(
-      'users/user-1/activity',
-      'events.json',
-      expect.any(String),
-    );
+    expect(mocks.writeFile).toHaveBeenCalledWith('users/user-1/activity', 'events.json', expect.any(String));
     const written = JSON.parse(mocks.writeFile.mock.calls[0][2]) as {
       events: Array<{ id: string; timestamp: string }>;
     };
@@ -139,24 +131,22 @@ describe('activity-store', () => {
 
     // After the first write resolves, the second read should see the
     // first event so the second writer can merge with it.
-    mocks.readFile
-      .mockResolvedValueOnce(null)
-      .mockImplementationOnce(async () => {
-        return JSON.stringify({
-          version: 1,
-          events: [
-            {
-              id: 'evt-1',
-              userId: 'user-1',
-              timestamp: '2026-05-24T00:00:01.000Z',
-              type: 'ask',
-              operation: 'ask',
-              latencyMs: 0,
-              status: 'pending',
-            },
-          ],
-        });
+    mocks.readFile.mockResolvedValueOnce(null).mockImplementationOnce(async () => {
+      return JSON.stringify({
+        version: 1,
+        events: [
+          {
+            id: 'evt-1',
+            userId: 'user-1',
+            timestamp: '2026-05-24T00:00:01.000Z',
+            type: 'ask',
+            operation: 'ask',
+            latencyMs: 0,
+            status: 'pending',
+          },
+        ],
       });
+    });
 
     const first = appendActivityEvent(mkEvent({ id: 'evt-1' }));
     const second = appendActivityEvent(mkEvent({ id: 'evt-2' }));
@@ -176,9 +166,9 @@ describe('activity-store', () => {
     await Promise.all([first, second]);
 
     expect(mocks.writeFile).toHaveBeenCalledTimes(2);
-    const final = JSON.parse(
-      mocks.writeFile.mock.calls.at(-1)![2] as string,
-    ) as { events: Array<{ id: string }> };
+    const final = JSON.parse(mocks.writeFile.mock.calls.at(-1)![2] as string) as {
+      events: Array<{ id: string }>;
+    };
     expect(final.events.map((e) => e.id)).toEqual(['evt-1', 'evt-2']);
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Shared Focus Item Components
- * 
+ *
  * Single source of truth for rendering Challenges, Goals, and Topics
  * across Dashboard and History pages.
  */

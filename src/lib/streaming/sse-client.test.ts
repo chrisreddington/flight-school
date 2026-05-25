@@ -74,8 +74,7 @@ function createFakeFetch(): FakeFetchHandle {
     calls,
     enqueue: (resp) => queue.push(resp),
     enqueueOk: (sse) => queue.push({ chunks: [sse] }),
-    enqueueError: (err) =>
-      queue.push({ chunks: [], throwAfterChunks: err ?? new Error('network failure') }),
+    enqueueError: (err) => queue.push({ chunks: [], throwAfterChunks: err ?? new Error('network failure') }),
   };
 }
 
@@ -262,9 +261,7 @@ describe('consumeSSE', () => {
     });
     // Attach the rejection handler before running timers so the
     // unhandled-rejection tracker never sees it.
-    const assertion = expect(promise).rejects.toBeInstanceOf(
-      SSEReconnectExhaustedError,
-    );
+    const assertion = expect(promise).rejects.toBeInstanceOf(SSEReconnectExhaustedError);
 
     // Drain pending microtasks + timers.
     await vi.runAllTimersAsync();
@@ -437,9 +434,7 @@ describe('consumeSSE', () => {
       nowMs: () => 1, // already past budget after first failure
       random: () => 0,
     });
-    const assertion = expect(promise).rejects.toBeInstanceOf(
-      SSEReconnectExhaustedError,
-    );
+    const assertion = expect(promise).rejects.toBeInstanceOf(SSEReconnectExhaustedError);
 
     await vi.runAllTimersAsync();
     await assertion;

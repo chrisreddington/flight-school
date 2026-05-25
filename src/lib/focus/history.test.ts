@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DailyChallenge, DailyGoal, FocusHistory, FocusResponse, LearningTopic } from './types';
 import { MAX_HISTORY_ENTRIES } from './types';
-import {
-  getTodaysFocusFromHistory,
-  pruneHistory,
-  saveFocusToHistory,
-} from './history';
+import { getTodaysFocusFromHistory, pruneHistory, saveFocusToHistory } from './history';
 
 vi.mock('@/lib/utils/date-utils', () => ({
   now: vi.fn(() => '2024-01-15T12:00:00.000Z'),
@@ -59,41 +55,47 @@ describe('focus history operations', () => {
     const replacementTopic = { ...topic, id: 'topic-4', title: 'Replacement topic' };
     const history: FocusHistory = {
       '2024-01-15': {
-        challenges: [{
-          data: challenge,
-          stateHistory: [{ state: 'not-started', timestamp: '2024-01-15T10:00:00.000Z' }],
-        }],
-        goals: [{
-          data: goal,
-          stateHistory: [{ state: 'not-started', timestamp: '2024-01-15T11:00:00.000Z' }],
-        }],
-        learningTopics: [[
+        challenges: [
           {
-            data: { ...exploredTopic, replacedByTopicId: replacementTopic.id },
-            stateHistory: [
-              { state: 'not-explored', timestamp: '2024-01-15T09:00:00.000Z' },
-              { state: 'explored', timestamp: '2024-01-15T10:00:00.000Z' },
-            ],
+            data: challenge,
+            stateHistory: [{ state: 'not-started', timestamp: '2024-01-15T10:00:00.000Z' }],
           },
+        ],
+        goals: [
           {
-            data: skippedTopic,
-            stateHistory: [
-              { state: 'not-explored', timestamp: '2024-01-15T09:00:00.000Z' },
-              { state: 'skipped', timestamp: '2024-01-15T10:00:00.000Z' },
-            ],
+            data: goal,
+            stateHistory: [{ state: 'not-started', timestamp: '2024-01-15T11:00:00.000Z' }],
           },
-          {
-            data: replacementTopic,
-            stateHistory: [{ state: 'not-explored', timestamp: '2024-01-15T12:00:00.000Z' }],
-          },
-          {
-            data: topic,
-            stateHistory: [
-              { state: 'not-explored', timestamp: '2024-01-15T09:00:00.000Z' },
-              { state: 'explored', timestamp: '2024-01-15T10:00:00.000Z' },
-            ],
-          },
-        ]],
+        ],
+        learningTopics: [
+          [
+            {
+              data: { ...exploredTopic, replacedByTopicId: replacementTopic.id },
+              stateHistory: [
+                { state: 'not-explored', timestamp: '2024-01-15T09:00:00.000Z' },
+                { state: 'explored', timestamp: '2024-01-15T10:00:00.000Z' },
+              ],
+            },
+            {
+              data: skippedTopic,
+              stateHistory: [
+                { state: 'not-explored', timestamp: '2024-01-15T09:00:00.000Z' },
+                { state: 'skipped', timestamp: '2024-01-15T10:00:00.000Z' },
+              ],
+            },
+            {
+              data: replacementTopic,
+              stateHistory: [{ state: 'not-explored', timestamp: '2024-01-15T12:00:00.000Z' }],
+            },
+            {
+              data: topic,
+              stateHistory: [
+                { state: 'not-explored', timestamp: '2024-01-15T09:00:00.000Z' },
+                { state: 'explored', timestamp: '2024-01-15T10:00:00.000Z' },
+              ],
+            },
+          ],
+        ],
       },
     };
 
@@ -106,9 +108,7 @@ describe('focus history operations', () => {
   it('should append changed focus components without duplicating unchanged components', () => {
     const history = saveFocusToHistory({}, '2024-01-15', {
       ...focusResponse,
-      calibrationNeeded: [
-        { skillId: 'typescript', displayName: 'TypeScript', suggestedLevel: 'intermediate' },
-      ],
+      calibrationNeeded: [{ skillId: 'typescript', displayName: 'TypeScript', suggestedLevel: 'intermediate' }],
     });
     const updatedHistory = saveFocusToHistory(history, '2024-01-15', {
       ...focusResponse,

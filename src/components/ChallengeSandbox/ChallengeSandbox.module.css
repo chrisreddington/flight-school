@@ -143,7 +143,9 @@
   font: inherit;
   font-size: var(--text-body-size-small);
   font-weight: var(--base-text-weight-semibold);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .descriptionToggle:hover {
@@ -211,17 +213,17 @@
   font-weight: var(--base-text-weight-medium);
 }
 
-.difficultyBadge[data-difficulty="beginner"] {
+.difficultyBadge[data-difficulty='beginner'] {
   background-color: var(--bgColor-success-muted);
   color: var(--fgColor-success);
 }
 
-.difficultyBadge[data-difficulty="intermediate"] {
+.difficultyBadge[data-difficulty='intermediate'] {
   background-color: var(--bgColor-attention-muted);
   color: var(--fgColor-attention);
 }
 
-.difficultyBadge[data-difficulty="advanced"] {
+.difficultyBadge[data-difficulty='advanced'] {
   background-color: var(--bgColor-danger-muted);
   color: var(--fgColor-danger);
 }
@@ -720,12 +722,24 @@
   opacity: 0;
 }
 
-.resultReveal[data-delay="0"] { animation-delay: 0ms; }
-.resultReveal[data-delay="1"] { animation-delay: 150ms; }
-.resultReveal[data-delay="2"] { animation-delay: 300ms; }
-.resultReveal[data-delay="3"] { animation-delay: 450ms; }
-.resultReveal[data-delay="4"] { animation-delay: 600ms; }
-.resultReveal[data-delay="5"] { animation-delay: 750ms; }
+.resultReveal[data-delay='0'] {
+  animation-delay: 0ms;
+}
+.resultReveal[data-delay='1'] {
+  animation-delay: 150ms;
+}
+.resultReveal[data-delay='2'] {
+  animation-delay: 300ms;
+}
+.resultReveal[data-delay='3'] {
+  animation-delay: 450ms;
+}
+.resultReveal[data-delay='4'] {
+  animation-delay: 600ms;
+}
+.resultReveal[data-delay='5'] {
+  animation-delay: 750ms;
+}
 
 /* Streaming feedback text with typewriter cursor */
 .feedbackStreaming {
@@ -744,7 +758,9 @@
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* Hide cursor when reveal is complete */

@@ -53,17 +53,14 @@ export function DifficultyBadge({
   variant = 'label',
 }: DifficultyBadgeProps) {
   const label = SKILL_LEVEL_LABELS[difficulty];
-  const labelVariant = (difficulty === 'beginner' ? 'success' 
-    : difficulty === 'intermediate' ? 'attention' 
-    : 'danger') as 'success' | 'attention' | 'danger';
+  const labelVariant = (
+    difficulty === 'beginner' ? 'success' : difficulty === 'intermediate' ? 'attention' : 'danger'
+  ) as 'success' | 'attention' | 'danger';
 
   // CSS-based variant for custom styling contexts (uses CSS gap for spacing)
   if (variant === 'css') {
     return (
-      <span
-        className={`${styles.badge} ${className || ''}`}
-        data-difficulty={difficulty}
-      >
+      <span className={`${styles.badge} ${className || ''}`} data-difficulty={difficulty}>
         {showIcon && <FlameIcon size={12} />}
         {label}
       </span>
@@ -73,7 +70,11 @@ export function DifficultyBadge({
   // Default: Primer Label variant (use span wrapper for icon spacing)
   return (
     <Label variant={labelVariant} size={size} className={className}>
-      {showIcon && <span className={styles.labelIconWrapper}><FlameIcon size={12} /></span>}
+      {showIcon && (
+        <span className={styles.labelIconWrapper}>
+          <FlameIcon size={12} />
+        </span>
+      )}
       {label}
     </Label>
   );

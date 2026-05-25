@@ -4,7 +4,7 @@
  *
  * Every exported async function in a `'use server'` file (or function
  * with a per-function `'use server'` directive) must either:
- *   - call `requireGuardedUserContext` (the Phase 3 guard core), or
+ *   - call `requireGuardedUserContext`, or
  *   - carry a `// public-action:` comment with justification.
  *
  * Name-based allowlists are explicitly not acceptable; the only escape
@@ -19,8 +19,7 @@ const SCAN_ROOTS = ['src/app', 'src/lib'];
 const TOP_USE_SERVER = /^\s*['"]use server['"];?/;
 const FUNCTION_USE_SERVER_PATTERN = /['"]use server['"]\s*;?/;
 const PUBLIC_ACTION_COMMENT = /\/\/\s*public-action:/;
-const EXPORTED_ASYNC_PATTERN =
-  /export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async\s*\()/g;
+const EXPORTED_ASYNC_PATTERN = /export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async\s*\()/g;
 const GUARD_CALL_PATTERN = /\brequireGuardedUserContext\s*\(/;
 
 function walk(absoluteDir) {
@@ -82,10 +81,11 @@ function checkFile(absolutePath) {
     // An exported async function is a server action when either:
     //   - the whole file has a top-level `'use server'` directive, OR
     //   - the function body opens with its own `'use server'` directive.
-    const firstBodyLine = body
-      .slice(1)
-      .split('\n')
-      .find((line) => line.trim().length > 0) ?? '';
+    const firstBodyLine =
+      body
+        .slice(1)
+        .split('\n')
+        .find((line) => line.trim().length > 0) ?? '';
     const functionLevelDirective = FUNCTION_USE_SERVER_PATTERN.test(firstBodyLine.trim());
     if (!fileIsServerAction && !functionLevelDirective) continue;
 

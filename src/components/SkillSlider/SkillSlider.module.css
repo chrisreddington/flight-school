@@ -41,7 +41,9 @@
   border: 2px solid var(--bgColor-accent-emphasis, #0969da);
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  transition: transform 100ms ease, box-shadow 100ms ease;
+  transition:
+    transform 100ms ease,
+    box-shadow 100ms ease;
 }
 
 .slider::-webkit-slider-thumb:hover {
@@ -88,7 +90,9 @@
   font-weight: var(--base-text-weight-medium, 500);
   color: var(--fgColor-muted, #656d76);
   cursor: pointer;
-  transition: background-color 100ms ease, color 100ms ease;
+  transition:
+    background-color 100ms ease,
+    color 100ms ease;
 }
 
 .levelLabel:hover:not(:disabled) {
@@ -122,11 +126,11 @@
   .container {
     transition: none;
   }
-  
+
   .slider::-webkit-slider-thumb {
     transition: none;
   }
-  
+
   .levelLabel {
     transition: none;
   }

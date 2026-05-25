@@ -29,6 +29,11 @@ Flight School is a sample implementation showing how to build AI-powered develop
 > `COPILOT_WORKER_URL` is unset, AI routes fail fast. See
 > [Multi-tenant Architecture](docs/architecture-multitenant.md) for details.
 
+> [!TIP]
+> **New here?** Start with [`docs/architecture.md`](docs/architecture.md) — a
+> story-level walkthrough of the system, with diagrams for the chat-turn,
+> background-job, and local Aspire dev-loop flows, plus links into the code.
+
 ## Getting Started
 
 Flight School is multi-tenant: it authenticates each developer via a
@@ -181,8 +186,12 @@ The chat and challenge evaluation experiences stream feedback in real-time using
 
 ## OpenTelemetry + Aspire Dashboard
 
-Flight School now registers OpenTelemetry via `@vercel/otel` in `src/instrumentation.ts`.
-When running with Aspire Dashboard, traces and metrics include:
+Flight School registers OpenTelemetry from two processes: the **web** tier uses
+`@vercel/otel` in `src/instrumentation.ts`; the **worker** tier (standalone
+Hono/Node) uses `@opentelemetry/sdk-node` in `src/worker/lifecycle/otel.ts`,
+started from `src/worker/bootstrap.ts` before any handler loads. Both export
+to the same OTLP endpoint Aspire injects. When running with Aspire Dashboard,
+traces and metrics include:
 
 - Next.js API request timelines
 - GitHub API request spans (including rate-limit headers when available)
@@ -206,7 +215,7 @@ By default, the dashboard listens on:
 
 This repository includes a TypeScript Aspire AppHost:
 
-- `apphost.ts` orchestrates the Next.js app with `addNextJsApp(...)`
+- `apphost.ts` orchestrates the Next.js web app with `addNextJsApp(...)` and the standalone Copilot worker (Hono/Node) with `addExecutable(...)`
 - `aspire.config.json` configures the TypeScript AppHost profile
 - AppHost includes an Azure Container Apps environment (`addAzureContainerAppEnvironment("aca-env")`)
 
@@ -294,7 +303,7 @@ Flight School stores your data **outside the repository** in your user data dire
 
 ### Storage Structure
 
-```
+```text
 ~/.local/share/flight-school/    # or %LOCALAPPDATA%\flight-school\ on Windows
 ├── profile-cache.json           # GitHub profile cache
 ├── focus-storage.json           # Daily focus content + state

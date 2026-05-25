@@ -23,15 +23,12 @@ export interface StreamingMessageState {
 /**
  * Merge a live streaming assistant message into the persisted message list.
  *
- * The durable thread no longer holds a partial assistant message during
- * streaming (Phase 5), so the UI is responsible for blending the live
- * buffer in at render time. Returns `messages` unchanged whenever there
- * is nothing to synthesise, which keeps the consuming `useMemo` stable.
+ * The durable thread does not hold a partial assistant message during
+ * streaming, so the UI blends the live buffer in at render time.
+ * Returns `messages` unchanged whenever there is nothing to synthesise,
+ * which keeps the consuming `useMemo` stable.
  */
-export function mergeStreamingMessage(
-  messages: Message[],
-  state: StreamingMessageState,
-): Message[] {
+export function mergeStreamingMessage(messages: Message[], state: StreamingMessageState): Message[] {
   if (!state.isStreaming) return messages;
   if (!state.assistantMessageId) return messages;
 

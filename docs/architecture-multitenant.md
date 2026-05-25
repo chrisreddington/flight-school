@@ -1,5 +1,14 @@
 # Multi-tenant Architecture
 
+> [!TIP]
+> **Start with [`docs/architecture.md`](architecture.md)** for the
+> story-level overview, system diagrams, and the five load-bearing
+> decisions. This document is the threat-model-grade deep dive: it
+> enumerates the multi-tenant invariants the rest of the system has to
+> uphold (per-request Octokit, per-session Copilot identity, token store
+> CAS / AAD binding / DEK cache, no tokens on the public session,
+> background jobs, etc.).
+
 > [!WARNING]
 > **Exploratory project — not a reference architecture.** Flight School is a
 > single-developer experiment; this document captures the current state, not
@@ -29,7 +38,7 @@ flowchart LR
         Exec["copilot/execution/<br/>worker dispatch"]
     end
 
-    subgraph WorkerProc["Worker (Next.js, COPILOT_WORKER_MODE=1)"]
+    subgraph WorkerProc["Worker (standalone Hono/Node, not Next.js)"]
         WRoute["/api/internal/copilot/*<br/>(bearer-auth)"]
         Sess["createLogged*Session(<br/>{ userId, gitHubToken })"]
         Client["CopilotClient<br/>(per-user pool)"]
@@ -76,11 +85,10 @@ dispatches `executeCopilotChat()` to the private worker over HTTP:
   `CopilotWorkerRequiredError` and `/api/copilot` fails fast. The web
   process never runs the SDK in-process for public chat.
 - The web process posts to `/api/internal/copilot/execute` on the worker
-  with a bearer secret and a timeout.
-- Auth.js middleware allows `/api/internal/*` through so the route-specific
-  bearer-secret gate (not session auth) can run.
-- The public web Container App does **not** set `COPILOT_WORKER_ENABLED`;
-  only the private worker app does.
+  with a bearer secret and a timeout. The worker is a standalone Node
+  process (Hono, not Next.js) listening only inside the private
+  ingress — `src/proxy.ts` rejects any browser-side hit on
+  `/api/internal/*` because no Next route exists at those paths.
 
 ### Per-user runtime pool on the worker
 
@@ -173,7 +181,7 @@ and `/api/workspace/storage` (plus `/api/workspace/storage/list`) — are
 workspace route both resolve the caller's identity via `requireUserContext()`
 and rewrite the storage path to live under a per-user subdirectory:
 
-```
+```text
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/threads.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/focus-storage.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/workspaces/{challengeId}/...

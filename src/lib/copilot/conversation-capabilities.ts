@@ -43,8 +43,7 @@ const globalForConversationCaps = globalThis as typeof globalThis & {
 };
 
 const conversationCapsCache =
-  globalForConversationCaps.__chatConversationCapsCache
-  ?? new Map<string, CachedConversationCaps>();
+  globalForConversationCaps.__chatConversationCapsCache ?? new Map<string, CachedConversationCaps>();
 if (!globalForConversationCaps.__chatConversationCapsCache) {
   globalForConversationCaps.__chatConversationCapsCache = conversationCapsCache;
 }
@@ -61,9 +60,7 @@ function pruneConversationCaps(): void {
     }
   }
   if (conversationCapsCache.size <= CONVERSATION_CAPS_MAX) return;
-  const sorted = [...conversationCapsCache.entries()].sort(
-    (a, b) => a[1].lastUsed - b[1].lastUsed,
-  );
+  const sorted = [...conversationCapsCache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
   const overflow = sorted.slice(0, conversationCapsCache.size - CONVERSATION_CAPS_MAX);
   for (const [key] of overflow) {
     conversationCapsCache.delete(key);

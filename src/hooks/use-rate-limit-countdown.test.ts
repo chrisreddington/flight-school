@@ -5,10 +5,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  RATE_LIMITED_EVENT,
-  type RateLimitedEventDetail,
-} from '@/lib/api/rate-limit-event';
+import { RATE_LIMITED_EVENT, type RateLimitedEventDetail } from '@/lib/api/rate-limit-event';
 
 import { useRateLimitCountdown } from './use-rate-limit-countdown';
 

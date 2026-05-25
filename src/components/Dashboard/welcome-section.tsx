@@ -9,7 +9,7 @@ interface WelcomeSectionProps {
 
 export function WelcomeSection({ displayName, isLoading = false }: WelcomeSectionProps) {
   const showName = displayName !== 'Developer';
-  
+
   return (
     <div className={styles.welcomeSection}>
       <Heading as="h1" className={styles.welcomeHeading}>
@@ -18,7 +18,8 @@ export function WelcomeSection({ displayName, isLoading = false }: WelcomeSectio
           <SkeletonBox height="1.2em" width="80px" className={styles.skeletonInline} />
         ) : (
           displayName
-        )}! 👋
+        )}
+        ! 👋
       </Heading>
       <p className={styles.welcomeSubtext}>
         Ready to level up your skills? Here&apos;s what&apos;s lined up for you today.

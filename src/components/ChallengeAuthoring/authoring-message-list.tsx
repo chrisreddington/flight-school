@@ -69,8 +69,7 @@ export function AuthoringMessageList({
         </div>
         <h2 className={styles.emptyChatTitle}>Describe your challenge</h2>
         <p className={styles.emptyChatDescription}>
-          Tell me what kind of challenge you want to create. I&apos;ll ask
-          clarifying questions and help you design it.
+          Tell me what kind of challenge you want to create. I&apos;ll ask clarifying questions and help you design it.
         </p>
       </div>
     );
@@ -81,19 +80,9 @@ export function AuthoringMessageList({
       <ul className={styles.messageList} aria-label="Conversation">
         {messages.map((message) => (
           <li key={message.id} className={styles.message}>
-            <div className={styles.messageAvatar}>
-              {renderAvatar(message.role, userAvatarUrl, styles)}
-            </div>
-            <div
-              className={`${styles.messageContent} ${
-                message.role === 'user' ? styles.messageContentUser : ''
-              }`}
-            >
-              {message.role === 'assistant' ? (
-                <MarkdownContent content={message.content} />
-              ) : (
-                message.content
-              )}
+            <div className={styles.messageAvatar}>{renderAvatar(message.role, userAvatarUrl, styles)}</div>
+            <div className={`${styles.messageContent} ${message.role === 'user' ? styles.messageContentUser : ''}`}>
+              {message.role === 'assistant' ? <MarkdownContent content={message.content} /> : message.content}
             </div>
           </li>
         ))}
@@ -131,12 +120,7 @@ export function AuthoringMessageList({
       {/* Create Challenge button - only shown when a challenge is ready */}
       {pendingChallenge && !isStreaming && (
         <div className={styles.createChallengeBar}>
-          <Stack
-            direction="horizontal"
-            align="center"
-            justify="space-between"
-            gap="normal"
-          >
+          <Stack direction="horizontal" align="center" justify="space-between" gap="normal">
             <span className={styles.challengeReadyText}>
               ✨ Challenge ready: <strong>{pendingChallenge.title}</strong>
             </span>

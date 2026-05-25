@@ -19,7 +19,11 @@ import styles from './MarkdownContent.module.css';
 
 // Lazy load markdown rendering to reduce initial bundle
 const ReactMarkdown = dynamic(() => import('react-markdown'), {
-  loading: () => <div className={styles.loadingFallback}><Spinner size="small" /></div>,
+  loading: () => (
+    <div className={styles.loadingFallback}>
+      <Spinner size="small" />
+    </div>
+  ),
 });
 
 /**
@@ -40,10 +44,7 @@ interface MarkdownContentProps {
  * <MarkdownContent content="**Bold** and `code`" />
  * ```
  */
-export function MarkdownContent({
-  content,
-  className,
-}: MarkdownContentProps) {
+export function MarkdownContent({ content, className }: MarkdownContentProps) {
   return (
     <div className={`${styles.content} ${className || ''}`}>
       <ReactMarkdown
@@ -52,7 +53,7 @@ export function MarkdownContent({
           code({ className: codeClassName, children, ...props }) {
             const match = /language-(\w+)/.exec(codeClassName || '');
             const codeString = String(children).replace(/\n$/, '');
-            
+
             // For code blocks, use a simple pre+code with language indicator
             if (match) {
               return (
@@ -66,7 +67,7 @@ export function MarkdownContent({
                 </div>
               );
             }
-            
+
             // Inline code
             return (
               <code className={styles.inlineCode} {...props}>

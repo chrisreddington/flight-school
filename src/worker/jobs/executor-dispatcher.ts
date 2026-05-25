@@ -19,12 +19,7 @@ import {
   executeTopicRegeneration,
 } from './executors/regeneration';
 
-export async function executeWorkerJob({
-  jobId,
-  type,
-  input,
-  userId,
-}: DispatchJobExecutionRequest): Promise<void> {
+export async function executeWorkerJob({ jobId, type, input, userId }: DispatchJobExecutionRequest): Promise<void> {
   if (type === 'topic-regeneration') {
     return executeTopicRegeneration(jobId, input as TopicRegenerationInput, userId);
   }

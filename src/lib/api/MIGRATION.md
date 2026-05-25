@@ -5,7 +5,7 @@
 Before: storage routes (`/api/threads/storage`, `/api/focus/storage`,
 `/api/workspace/storage`) wrote a single shared file at the storage root:
 
-```
+```text
 {FLIGHT_SCHOOL_DATA_DIR}/threads.json
 {FLIGHT_SCHOOL_DATA_DIR}/focus-storage.json
 {FLIGHT_SCHOOL_DATA_DIR}/workspaces/{challengeId}/...
@@ -18,7 +18,7 @@ After: every storage route resolves the authenticated user via
 `requireUserContext()` and rewrites the path to live under a per-user
 subdirectory:
 
-```
+```text
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/threads.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/focus-storage.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/workspaces/{challengeId}/...

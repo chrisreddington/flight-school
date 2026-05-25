@@ -43,15 +43,12 @@ describe('handleApiError', () => {
       { message: 'Conflict detected', expectedStatus: 409 },
       { message: 'Request timeout', expectedStatus: 429 },
       { message: 'Rate limit exceeded', expectedStatus: 429 },
-    ])(
-      'should map "$message" to status $expectedStatus',
-      async ({ message, expectedStatus }) => {
-        const error = new Error(message);
-        const response = handleApiError(error, 'TEST', startTime);
+    ])('should map "$message" to status $expectedStatus', async ({ message, expectedStatus }) => {
+      const error = new Error(message);
+      const response = handleApiError(error, 'TEST', startTime);
 
-        expect(response.status).toBe(expectedStatus);
-      }
-    );
+      expect(response.status).toBe(expectedStatus);
+    });
 
     it('should default to 500 for unknown errors', async () => {
       const error = new Error('Something unexpected happened');
@@ -119,11 +116,7 @@ describe('handleApiError', () => {
       const error = new Error('Test error');
       handleApiError(error, 'GET /api/test', startTime);
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error after'),
-        'Test error',
-        'GET /api/test'
-      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error after'), 'Test error', 'GET /api/test');
     });
 
     it('should include timing in log', () => {
@@ -133,7 +126,7 @@ describe('handleApiError', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('500ms'),
         expect.any(String),
-        expect.any(String)
+        expect.any(String),
       );
     });
   });

@@ -19,7 +19,10 @@ interface SelectedTopic {
   dateKey: string;
 }
 
-function findLatestTopicRecord(history: FocusHistory, topicId: string): { dateKey: string; description: string } | null {
+function findLatestTopicRecord(
+  history: FocusHistory,
+  topicId: string,
+): { dateKey: string; description: string } | null {
   const sortedDateKeys = Object.keys(history).sort((a, b) => b.localeCompare(a));
 
   for (const dateKey of sortedDateKeys) {
@@ -121,12 +124,7 @@ export function ReviewDueWidget() {
         </header>
 
         {quizError && (
-          <Banner
-            title="Quiz Error"
-            description={quizError}
-            variant="critical"
-            onDismiss={() => setQuizError(null)}
-          />
+          <Banner title="Quiz Error" description={quizError} variant="critical" onDismiss={() => setQuizError(null)} />
         )}
 
         <Stack direction="vertical" gap="condensed">
@@ -155,7 +153,12 @@ export function ReviewDueWidget() {
 
       {selectedTopic && (
         <div className={styles.quizOverlay}>
-          <div className={styles.quizPanel} role="dialog" aria-modal="true" aria-label={`Practice Quiz: ${selectedTopic.topicTitle}`}>
+          <div
+            className={styles.quizPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Practice Quiz: ${selectedTopic.topicTitle}`}
+          >
             <TopicQuiz
               topicTitle={selectedTopic.topicTitle}
               topicDescription={selectedTopic.topicDescription}

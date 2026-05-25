@@ -1,10 +1,7 @@
 import { now } from '@/lib/utils/date-utils';
 import type { LoggedCopilotSession } from '@/lib/copilot/logged-session';
 import type { CopilotChatExecutionRequest, CopilotChatExecutionResult } from '@/lib/copilot/execution/types';
-import {
-  getConversationCapabilities,
-  rememberConversationCapabilities,
-} from '@/lib/copilot/conversation-capabilities';
+import { getConversationCapabilities, rememberConversationCapabilities } from '@/lib/copilot/conversation-capabilities';
 import { resolveProfile, type ResolvedProfile } from '@/lib/copilot/profiles';
 
 export type RuntimeSessionFactory = (
@@ -22,10 +19,7 @@ export async function executeChatWithSessionFactory(
   const resolved = resolveProfile(request.profile, {
     prompt: request.prompt,
     capabilities: request.capabilities,
-    conversationCapabilities: getConversationCapabilities(
-      request.identity.userId,
-      request.conversationId,
-    ),
+    conversationCapabilities: getConversationCapabilities(request.identity.userId, request.conversationId),
   });
   const loggedSession = await createChatSession(request, resolved);
 

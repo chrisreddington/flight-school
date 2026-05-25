@@ -7,13 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type {
-  FocusResponse,
-  FocusStorageSchema,
-  DailyChallenge,
-  DailyGoal,
-  LearningTopic,
-} from './types';
+import type { FocusResponse, FocusStorageSchema, DailyChallenge, DailyGoal, LearningTopic } from './types';
 
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(),
@@ -85,13 +79,9 @@ function buildExistingDay(): FocusStorageSchema {
   return {
     history: {
       '2024-01-15': {
-        challenges: [
-          { data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] },
-        ],
+        challenges: [{ data: mockChallenge, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
         goals: [{ data: mockGoal, stateHistory: [{ state: 'not-started', timestamp: TS }] }],
-        learningTopics: [
-          [{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }],
-        ],
+        learningTopics: [[{ data: mockTopic, stateHistory: [{ state: 'not-explored', timestamp: TS }] }]],
       },
     },
   };
@@ -162,26 +152,17 @@ describe('focusStore.saveSelfExplanation', () => {
     vi.mocked(apiGet).mockResolvedValue({
       history: {
         '2024-01-15': {
-          challenges: [
-            { data: mockChallenge, stateHistory: [{ state: 'completed', timestamp: TS }] },
-          ],
+          challenges: [{ data: mockChallenge, stateHistory: [{ state: 'completed', timestamp: TS }] }],
           goals: [],
           learningTopics: [],
         },
       },
     });
 
-    await focusStore.saveSelfExplanation(
-      '2024-01-15',
-      'challenge',
-      'challenge-1',
-      '  I learned CI pipelines.  ',
-    );
+    await focusStore.saveSelfExplanation('2024-01-15', 'challenge', 'challenge-1', '  I learned CI pipelines.  ');
 
     const saved = lastSavedSchema();
-    expect(saved.history['2024-01-15'].challenges[0].data.selfExplanation).toBe(
-      'I learned CI pipelines.',
-    );
+    expect(saved.history['2024-01-15'].challenges[0].data.selfExplanation).toBe('I learned CI pipelines.');
   });
 
   it('persists the explanation onto the matching topic', async () => {
@@ -190,19 +171,12 @@ describe('focusStore.saveSelfExplanation', () => {
         '2024-01-15': {
           challenges: [],
           goals: [],
-          learningTopics: [
-            [{ data: mockTopic, stateHistory: [{ state: 'explored', timestamp: TS }] }],
-          ],
+          learningTopics: [[{ data: mockTopic, stateHistory: [{ state: 'explored', timestamp: TS }] }]],
         },
       },
     });
 
-    await focusStore.saveSelfExplanation(
-      '2024-01-15',
-      'topic',
-      'topic-1',
-      'I should revisit GitHub workflows.',
-    );
+    await focusStore.saveSelfExplanation('2024-01-15', 'topic', 'topic-1', 'I should revisit GitHub workflows.');
 
     const saved = lastSavedSchema();
     expect(saved.history['2024-01-15'].learningTopics[0][0].data.selfExplanation).toBe(

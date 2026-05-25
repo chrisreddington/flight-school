@@ -8,15 +8,11 @@ describe('stripQueryString', () => {
   });
 
   it('removes the query string', () => {
-    expect(stripQueryString('https://example.com/foo?token=secret')).toBe(
-      'https://example.com/foo',
-    );
+    expect(stripQueryString('https://example.com/foo?token=secret')).toBe('https://example.com/foo');
   });
 
   it('removes both query and fragment', () => {
-    expect(stripQueryString('https://example.com/foo?a=1#section')).toBe(
-      'https://example.com/foo',
-    );
+    expect(stripQueryString('https://example.com/foo?a=1#section')).toBe('https://example.com/foo');
   });
 
   it('handles relative URLs', () => {

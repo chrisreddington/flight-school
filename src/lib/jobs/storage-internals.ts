@@ -22,10 +22,7 @@ export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancel
  * the UI can route credentials-related failures to a re-auth CTA instead of
  * rendering a generic error string.
  */
-export type JobErrorCode =
-  | 'credentials_missing'
-  | 'credentials_refresh_failed'
-  | 'unknown';
+export type JobErrorCode = 'credentials_missing' | 'credentials_refresh_failed' | 'unknown';
 
 interface JobCausalityContext extends TracePropagationHeaders {
   capturedAt: string;
@@ -80,9 +77,9 @@ function validateSchema(data: unknown): data is JobsStorageSchema {
 }
 
 /**
- * Always reads from disk. The module-level cache was removed in Phase 1 of
- * the streaming architecture refactor — it caused cross-process stale reads
- * that surfaced as "worker dispatch failed" after the first job.
+ * Always reads from disk. A module-level cache would cause cross-process
+ * stale reads — the worker and web processes both load and mutate this
+ * file, so each call must see the latest committed state.
  */
 export async function loadJobs(): Promise<JobsStorageSchema> {
   try {

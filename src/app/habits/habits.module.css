@@ -72,7 +72,9 @@
   border: 1px solid var(--borderColor-muted, #d8dee4);
   border-radius: var(--borderRadius-medium, 6px);
   padding: var(--base-size-16, 16px);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .habitCard:hover {

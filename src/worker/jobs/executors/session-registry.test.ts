@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  getRegisteredSession,
-  requestCancellation,
-  registerSession,
-  unregisterSession,
-} from './session-registry';
+import { getRegisteredSession, requestCancellation, registerSession, unregisterSession } from './session-registry';
 
 describe('job executor session registry', () => {
   it('returns a registered session until it is unregistered', () => {

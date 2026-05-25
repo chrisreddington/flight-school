@@ -12,9 +12,7 @@ import type {
 } from './types';
 import { CopilotWorkerRequiredError } from './worker-required-error';
 
-export async function executeCopilotChat(
-  request: CopilotChatExecutionRequest,
-): Promise<CopilotChatExecutionResult> {
+export async function executeCopilotChat(request: CopilotChatExecutionRequest): Promise<CopilotChatExecutionResult> {
   const workerConfig = requireWorker();
   return executeCopilotChatViaWorker(workerConfig, request);
 }
@@ -27,9 +25,7 @@ export async function executeCopilotChat(
  * see `.github/skills/copilot-sdk-worker-only/SKILL.md`. Callers build a
  * prompt, hand it to this primitive, and parse the structured response.
  */
-export async function executeCopilotCoachJob(
-  request: CopilotCoachJobRequest,
-): Promise<CopilotCoachJobResult> {
+export async function executeCopilotCoachJob(request: CopilotCoachJobRequest): Promise<CopilotCoachJobResult> {
   const workerConfig = requireWorker();
   return executeCopilotCoachJobViaWorker(workerConfig, request);
 }
@@ -54,7 +50,4 @@ export async function openCopilotAuthoringStreamViaWorker(
   return openCopilotAuthoringStream(workerConfig, body, options);
 }
 
-export type {
-  CopilotCoachJobRequest,
-  CopilotCoachJobResult,
-} from './types';
+export type { CopilotCoachJobRequest, CopilotCoachJobResult } from './types';

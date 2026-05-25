@@ -23,17 +23,13 @@ interface SkillsListProps {
   onRemoveSkill: (skillId: string) => void;
 }
 
-export function SkillsList({
-  profile,
-  onSkillChange,
-  onRemoveSkill,
-}: SkillsListProps): React.JSX.Element {
+export function SkillsList({ profile, onSkillChange, onRemoveSkill }: SkillsListProps): React.JSX.Element {
   if (profile?.skills.length === 0) {
     return (
       <div className={styles.emptyState}>
         <p>
-          No skills configured yet. Skills will be detected automatically from your GitHub
-          activity, or you can add them manually.
+          No skills configured yet. Skills will be detected automatically from your GitHub activity, or you can add them
+          manually.
         </p>
         <Link href="/">Return to Dashboard</Link>
       </div>
@@ -57,9 +53,7 @@ export function SkillsList({
                 skillName={skill.displayName || skill.skillId}
                 value={skill.level}
                 notInterested={skill.notInterested}
-                onChange={(level, notInterested) =>
-                  onSkillChange(skill.skillId, level, notInterested)
-                }
+                onChange={(level, notInterested) => onSkillChange(skill.skillId, level, notInterested)}
               />
               <Button
                 variant="danger"

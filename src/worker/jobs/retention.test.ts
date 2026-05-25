@@ -56,17 +56,17 @@ describe('sweepStaleRunningJobs', () => {
 
     expect(result).toEqual({ deleted: 1, inspected: 2, sweptIds: ['stale'] });
     expect(mocks.markFailed).toHaveBeenCalledTimes(1);
-    expect(mocks.markFailed).toHaveBeenCalledWith(
-      'stale',
-      expect.stringContaining('stale-running TTL'),
-      'unknown',
-    );
+    expect(mocks.markFailed).toHaveBeenCalledWith('stale', expect.stringContaining('stale-running TTL'), 'unknown');
   });
 
   it('falls back to createdAt for pending jobs', async () => {
     const now = Date.UTC(2024, 0, 10);
     mocks.getAll.mockResolvedValue([
-      makeJob({ id: 'stale-pending', status: 'pending', createdAt: new Date(now - 5000).toISOString() }),
+      makeJob({
+        id: 'stale-pending',
+        status: 'pending',
+        createdAt: new Date(now - 5000).toISOString(),
+      }),
     ]);
 
     const result = await sweepStaleRunningJobs(now, 1000);

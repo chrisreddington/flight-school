@@ -20,25 +20,18 @@ import { useBreadcrumbContext } from '@/contexts/breadcrumb-context';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import {
-    BugIcon,
-    ChevronRightIcon,
-    CopilotIcon,
-    FlameIcon,
-    HistoryIcon,
-    HomeIcon,
-    MortarBoardIcon,
-    PersonIcon,
-    RocketIcon,
-    StarIcon,
+  BugIcon,
+  ChevronRightIcon,
+  CopilotIcon,
+  FlameIcon,
+  HistoryIcon,
+  HomeIcon,
+  MortarBoardIcon,
+  PersonIcon,
+  RocketIcon,
+  StarIcon,
 } from '@primer/octicons-react';
-import {
-    ActionList,
-    ActionMenu,
-    Avatar,
-    Label,
-    Spinner,
-    Stack,
-} from '@primer/react';
+import { ActionList, ActionMenu, Avatar, Label, Spinner, Stack } from '@primer/react';
 import Link from 'next/link';
 import styles from './AppHeader.module.css';
 
@@ -68,23 +61,25 @@ export function AppHeader() {
               <span className={styles.logoIcon}>
                 <RocketIcon size={28} />
               </span>
-              <span className={styles.logoText}>
-                Flight School
-              </span>
+              <span className={styles.logoText}>Flight School</span>
             </Stack>
           </Link>
-          
-          <a 
-            href="https://github.com/github/copilot-sdk" 
-            target="_blank" 
+
+          <a
+            href="https://github.com/github/copilot-sdk"
+            target="_blank"
             rel="noopener noreferrer"
             className={styles.sdkBadgeLink}
           >
-            <Label variant="accent" size="small">Copilot SDK Demo</Label>
+            <Label variant="accent" size="small">
+              Copilot SDK Demo
+            </Label>
           </a>
-          
+
           {isDebugMode && (
-            <Label variant="danger" size="small">Debug</Label>
+            <Label variant="danger" size="small">
+              Debug
+            </Label>
           )}
 
           {/* Breadcrumbs - validated against current path in context */}
@@ -125,60 +120,69 @@ export function AppHeader() {
                     <Spinner size="small" />
                   </div>
                 ) : (
-                  <Avatar
-                    src={avatarUrl}
-                    size={32}
-                    alt=""
-                    className={styles.avatar}
-                  />
+                  <Avatar src={avatarUrl} size={32} alt="" className={styles.avatar} />
                 )}
               </button>
             </ActionMenu.Anchor>
             <ActionMenu.Overlay width="medium">
               <ActionList>
                 <ActionList.Item inert>
-                  <ActionList.LeadingVisual><PersonIcon /></ActionList.LeadingVisual>
+                  <ActionList.LeadingVisual>
+                    <PersonIcon />
+                  </ActionList.LeadingVisual>
                   @{username}
                 </ActionList.Item>
                 <ActionList.Divider />
                 <ActionList.Group title="Learning">
                   <ActionList.LinkItem href="/">
-                    <ActionList.LeadingVisual><HomeIcon /></ActionList.LeadingVisual>
+                    <ActionList.LeadingVisual>
+                      <HomeIcon />
+                    </ActionList.LeadingVisual>
                     Dashboard
                     <ActionList.Description>Your learning overview</ActionList.Description>
                   </ActionList.LinkItem>
                   <ActionList.LinkItem href="/skills">
-                    <ActionList.LeadingVisual><MortarBoardIcon /></ActionList.LeadingVisual>
+                    <ActionList.LeadingVisual>
+                      <MortarBoardIcon />
+                    </ActionList.LeadingVisual>
                     Skills
                     <ActionList.Description>Calibrate your skill levels</ActionList.Description>
                   </ActionList.LinkItem>
                   <ActionList.LinkItem href="/habits">
-                    <ActionList.LeadingVisual><FlameIcon /></ActionList.LeadingVisual>
+                    <ActionList.LeadingVisual>
+                      <FlameIcon />
+                    </ActionList.LeadingVisual>
                     Habits
                     <ActionList.Description>Track your learning habits</ActionList.Description>
                   </ActionList.LinkItem>
                   <ActionList.LinkItem href="/history">
-                    <ActionList.LeadingVisual><HistoryIcon /></ActionList.LeadingVisual>
+                    <ActionList.LeadingVisual>
+                      <HistoryIcon />
+                    </ActionList.LeadingVisual>
                     History
                     <ActionList.Description>View past learning items</ActionList.Description>
                   </ActionList.LinkItem>
                 </ActionList.Group>
                 <ActionList.Divider />
-                <ActionList.LinkItem 
-                  href="https://github.com/chrisreddington/flight-school" 
-                  target="_blank" 
+                <ActionList.LinkItem
+                  href="https://github.com/chrisreddington/flight-school"
+                  target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <ActionList.LeadingVisual><StarIcon /></ActionList.LeadingVisual>
+                  <ActionList.LeadingVisual>
+                    <StarIcon />
+                  </ActionList.LeadingVisual>
                   Flight School
                   <ActionList.Description>Star or contribute on GitHub</ActionList.Description>
                 </ActionList.LinkItem>
-                <ActionList.LinkItem 
-                  href="https://github.com/github/copilot-sdk" 
-                  target="_blank" 
+                <ActionList.LinkItem
+                  href="https://github.com/github/copilot-sdk"
+                  target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <ActionList.LeadingVisual><CopilotIcon /></ActionList.LeadingVisual>
+                  <ActionList.LeadingVisual>
+                    <CopilotIcon />
+                  </ActionList.LeadingVisual>
                   Copilot SDK
                   <ActionList.Description>Build your own AI apps</ActionList.Description>
                 </ActionList.LinkItem>
@@ -186,11 +190,11 @@ export function AppHeader() {
                   <>
                     <ActionList.Divider />
                     <ActionList.Item onSelect={toggleDebugMode}>
-                      <ActionList.LeadingVisual><BugIcon /></ActionList.LeadingVisual>
+                      <ActionList.LeadingVisual>
+                        <BugIcon />
+                      </ActionList.LeadingVisual>
                       Debug Mode
-                      <ActionList.TrailingVisual>
-                        {isDebugMode ? 'On' : 'Off'}
-                      </ActionList.TrailingVisual>
+                      <ActionList.TrailingVisual>{isDebugMode ? 'On' : 'Off'}</ActionList.TrailingVisual>
                     </ActionList.Item>
                   </>
                 )}

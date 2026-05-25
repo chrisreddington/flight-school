@@ -49,9 +49,7 @@ describe('toPublicActivityEvent', () => {
   });
 
   it('truncates output.text to a hard ceiling', () => {
-    const dto = toPublicActivityEvent(
-      mkEvent({ output: { text: 'x'.repeat(2000) } }),
-    );
+    const dto = toPublicActivityEvent(mkEvent({ output: { text: 'x'.repeat(2000) } }));
     expect(dto.output?.text!.length).toBeLessThanOrEqual(501); // 500 + ellipsis
   });
 
@@ -76,19 +74,17 @@ describe('toPublicActivityEvent', () => {
 
   it('ignores includeFull outside NODE_ENV=development', () => {
     process.env.NODE_ENV = 'production';
-    const dto = toPublicActivityEvent(
-      mkEvent({ output: { fullResponse: 'secret' } }),
-      { includeFull: true },
-    );
+    const dto = toPublicActivityEvent(mkEvent({ output: { fullResponse: 'secret' } }), {
+      includeFull: true,
+    });
     expect(dto.output?.fullResponse).toBeUndefined();
   });
 
   it('allows fullResponse only when includeFull AND NODE_ENV=development', () => {
     process.env.NODE_ENV = 'development';
-    const dto = toPublicActivityEvent(
-      mkEvent({ output: { fullResponse: 'visible-in-dev' } }),
-      { includeFull: true },
-    );
+    const dto = toPublicActivityEvent(mkEvent({ output: { fullResponse: 'visible-in-dev' } }), {
+      includeFull: true,
+    });
     expect(dto.output?.fullResponse).toBe('visible-in-dev');
   });
 });

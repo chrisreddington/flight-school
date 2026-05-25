@@ -45,11 +45,7 @@ export async function resolveUserScopedPath(filename: string): Promise<{ path: s
  * Authentication errors propagate — callers in Server Components should let
  * them bubble so the page renders the auth-required UI.
  */
-export async function readUserStorage<T>(
-  filename: string,
-  defaultSchema: T,
-  guard: SchemaGuard<T>,
-): Promise<T> {
+export async function readUserStorage<T>(filename: string, defaultSchema: T, guard: SchemaGuard<T>): Promise<T> {
   const { path } = await resolveUserScopedPath(filename);
   return readStorage<T>(path, defaultSchema, guard);
 }
@@ -59,11 +55,7 @@ export async function readUserStorage<T>(
  * it with `guard`. Throws if validation fails so Server Actions surface the
  * error rather than silently corrupting the file.
  */
-export async function writeUserStorage<T>(
-  filename: string,
-  data: T,
-  guard: SchemaGuard<T>,
-): Promise<void> {
+export async function writeUserStorage<T>(filename: string, data: T, guard: SchemaGuard<T>): Promise<void> {
   if (!guard(data)) {
     log.error('Refusing to write invalid storage payload', { filename });
     throw new Error(`Invalid storage schema for ${filename}`);

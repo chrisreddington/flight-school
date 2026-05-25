@@ -33,13 +33,13 @@ interface ThreadSidebarProps {
 
 /**
  * Sidebar component for managing learning chat threads.
- * 
+ *
  * Displays a list of threads with options to create new ones,
  * select existing threads, and delete threads.
- * 
+ *
  * PERF: Memoized to prevent re-renders when parent state changes.
  * Only re-renders when threads, activeThreadId, or streamingThreadIds change.
- * 
+ *
  * @example
  * ```tsx
  * <ThreadSidebar
@@ -63,9 +63,9 @@ export const ThreadSidebar = memo(function ThreadSidebar({
   onToggleCollapsed,
 }: ThreadSidebarProps) {
   // Sort threads by updatedAt (most recent first)
-  const sortedThreads = useMemo(() => 
-    [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-    [threads]
+  const sortedThreads = useMemo(
+    () => [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [threads],
   );
 
   const handleDeleteClick = (e: React.MouseEvent | React.KeyboardEvent, threadId: string) => {
@@ -88,12 +88,7 @@ export const ThreadSidebar = memo(function ThreadSidebar({
             </Tooltip>
           )}
           <Tooltip text="New thread" direction="e">
-            <IconButton
-              icon={PlusIcon}
-              aria-label="New thread"
-              variant="invisible"
-              onClick={onNewThread}
-            />
+            <IconButton icon={PlusIcon} aria-label="New thread" variant="invisible" onClick={onNewThread} />
           </Tooltip>
         </Stack>
       </aside>
@@ -142,12 +137,7 @@ export const ThreadSidebar = memo(function ThreadSidebar({
           ) : sortedThreads.length === 0 ? (
             <div className={styles.emptyState}>
               <p className={styles.emptyStateText}>No conversations yet</p>
-              <Button
-                variant="primary"
-                size="small"
-                leadingVisual={PlusIcon}
-                onClick={onNewThread}
-              >
+              <Button variant="primary" size="small" leadingVisual={PlusIcon} onClick={onNewThread}>
                 Start a conversation
               </Button>
             </div>
@@ -167,9 +157,7 @@ export const ThreadSidebar = memo(function ThreadSidebar({
                         <Truncate title={thread.title} inline maxWidth={isStreaming ? 150 : 180}>
                           {thread.title}
                         </Truncate>
-                        {isStreaming && (
-                          <Spinner size="small" />
-                        )}
+                        {isStreaming && <Spinner size="small" />}
                       </Stack>
                       <span className={styles.threadMeta}>
                         <RelativeTime date={new Date(thread.updatedAt)} />
@@ -193,4 +181,3 @@ export const ThreadSidebar = memo(function ThreadSidebar({
     </aside>
   );
 });
-

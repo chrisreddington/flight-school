@@ -226,19 +226,19 @@
   outline-offset: 1px;
 }
 
-.activityCell52[data-intensity="1"] {
+.activityCell52[data-intensity='1'] {
   background-color: #9be9a8;
 }
 
-.activityCell52[data-intensity="2"] {
+.activityCell52[data-intensity='2'] {
   background-color: #40c463;
 }
 
-.activityCell52[data-intensity="3"] {
+.activityCell52[data-intensity='3'] {
   background-color: #30a14e;
 }
 
-.activityCell52[data-intensity="4"] {
+.activityCell52[data-intensity='4'] {
   background-color: #216e39;
 }
 
@@ -933,19 +933,19 @@
   background-color: var(--bgColor-neutral-muted, #ebedf0);
 }
 
-.activityCell[data-intensity="1"] {
+.activityCell[data-intensity='1'] {
   background-color: var(--bgColor-success-muted, #9be9a8);
 }
 
-.activityCell[data-intensity="2"] {
+.activityCell[data-intensity='2'] {
   background-color: var(--bgColor-success-emphasis, #40c463);
 }
 
-.activityCell[data-intensity="3"] {
+.activityCell[data-intensity='3'] {
   background-color: #30a14e;
 }
 
-.activityCell[data-intensity="4"] {
+.activityCell[data-intensity='4'] {
   background-color: #216e39;
 }
 

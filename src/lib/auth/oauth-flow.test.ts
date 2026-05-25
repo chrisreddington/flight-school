@@ -35,9 +35,7 @@ interface JwtParams {
   profile?: unknown;
 }
 
-const jwtCallback = authConfig.callbacks?.jwt as
-  | ((p: JwtParams) => Promise<JWT>)
-  | undefined;
+const jwtCallback = authConfig.callbacks?.jwt as ((p: JwtParams) => Promise<JWT>) | undefined;
 
 interface SessionParams {
   session: Record<string, unknown> & { user?: Record<string, unknown> };
@@ -155,12 +153,11 @@ describe('Auth.js jwt callback', () => {
 
   it('keeps the existing refresh token when GitHub omits a new one', async () => {
     const nowSec = Math.floor(Date.now() / 1000);
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ access_token: 'ghu_new', expires_in: 100 }),
-        { status: 200 },
-      ),
-    ) as unknown as typeof fetch;
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ access_token: 'ghu_new', expires_in: 100 }), { status: 200 }),
+      ) as unknown as typeof fetch;
 
     const token: JWT = {
       accessToken: 'ghu_old',
@@ -195,9 +192,7 @@ describe('Auth.js jwt callback', () => {
 
   it('marks the token with RefreshAccessTokenError on HTTP failure', async () => {
     const nowSec = Math.floor(Date.now() / 1000);
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue(new Response('boom', { status: 500 })) as unknown as typeof fetch;
+    global.fetch = vi.fn().mockResolvedValue(new Response('boom', { status: 500 })) as unknown as typeof fetch;
 
     const result = await jwtCallback!({
       token: {

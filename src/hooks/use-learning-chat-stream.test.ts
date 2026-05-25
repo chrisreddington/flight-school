@@ -3,11 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveOperation } from '@/lib/operations/types';
 import type { Thread } from '@/lib/threads';
 import { chatStreamStore } from '@/lib/chat/chat-stream-store';
-import {
-  combineStreamingThreadIds,
-  isThreadStreaming,
-  useLearningChatStream,
-} from './use-learning-chat-stream';
+import { combineStreamingThreadIds, isThreadStreaming, useLearningChatStream } from './use-learning-chat-stream';
 
 vi.mock('@/lib/utils/id-generator', () => ({
   generateMessageId: vi.fn(() => 'msg-finalized'),
@@ -144,35 +140,35 @@ const sseSubscriptions: FakeSSESubscription[] = [];
 
 vi.mock('@/lib/streaming/sse-client', () => {
   return {
-    consumeSSE: vi.fn(async (opts: {
-      buildUrl: () => string;
-      signal: AbortSignal;
-      onMessage: (frame: { id?: string; data: string }) =>
-        | void
-        | { terminal?: boolean };
-    }) => {
-      const url = opts.buildUrl();
-      const sub: FakeSSESubscription = {
-        url,
-        closed: false,
-        push: (frame) => {
-          if (sub.closed) return;
-          const result = opts.onMessage(frame);
-          if (result?.terminal) {
-            sub.closed = true;
-          }
-        },
-      };
-      const onAbort = (): void => {
-        sub.closed = true;
-      };
-      if (opts.signal.aborted) {
-        sub.closed = true;
-      } else {
-        opts.signal.addEventListener('abort', onAbort, { once: true });
-      }
-      sseSubscriptions.push(sub);
-    }),
+    consumeSSE: vi.fn(
+      async (opts: {
+        buildUrl: () => string;
+        signal: AbortSignal;
+        onMessage: (frame: { id?: string; data: string }) => void | { terminal?: boolean };
+      }) => {
+        const url = opts.buildUrl();
+        const sub: FakeSSESubscription = {
+          url,
+          closed: false,
+          push: (frame) => {
+            if (sub.closed) return;
+            const result = opts.onMessage(frame);
+            if (result?.terminal) {
+              sub.closed = true;
+            }
+          },
+        };
+        const onAbort = (): void => {
+          sub.closed = true;
+        };
+        if (opts.signal.aborted) {
+          sub.closed = true;
+        } else {
+          opts.signal.addEventListener('abort', onAbort, { once: true });
+        }
+        sseSubscriptions.push(sub);
+      },
+    ),
     SSEReconnectExhaustedError: class extends Error {
       constructor(message: string) {
         super(message);
@@ -198,7 +194,10 @@ describe('learning chat stream helpers', () => {
   it('should combine storage-backed streaming IDs with pending stream IDs', () => {
     const combined = combineStreamingThreadIds(
       ['thread-1', 'thread-2'],
-      new Map([['thread-2', 'user-message-2'], ['thread-3', 'user-message-3']]),
+      new Map([
+        ['thread-2', 'user-message-2'],
+        ['thread-3', 'user-message-3'],
+      ]),
     );
 
     expect(combined).toEqual(['thread-1', 'thread-2', 'thread-3']);
@@ -233,9 +232,7 @@ function mkChatOp(jobId: string, threadId: string): ActiveOperation {
 }
 
 function setChatOps(ops: ActiveOperation[]) {
-  operationsState.setChatMessages(
-    new Map(ops.map((op) => [op.meta.jobId ?? op.id, op])),
-  );
+  operationsState.setChatMessages(new Map(ops.map((op) => [op.meta.jobId ?? op.id, op])));
 }
 
 // (origEventSource removed; tests no longer need to mutate globalThis.EventSource.)
@@ -274,7 +271,11 @@ describe('useLearningChatStream (renderHook)', () => {
   });
 
   it('calls operationsManager.initialize exactly once across rerenders', async () => {
-    const { rerender } = renderChatStream({ threads: [], activeThread: null, activeThreadId: null });
+    const { rerender } = renderChatStream({
+      threads: [],
+      activeThread: null,
+      activeThreadId: null,
+    });
     await waitFor(() => expect(operationsState.initializeMock.calls).toBe(1));
     rerender({ threads: [], activeThread: null, activeThreadId: null });
     rerender({ threads: [createThread()], activeThread: null, activeThreadId: null });
@@ -398,7 +399,7 @@ describe('useLearningChatStream (renderHook)', () => {
     await waitFor(() => expect(operationsState.completeMock.calls).toEqual(['j1']));
   });
 
-  it('does NOT refresh threads on every delta — only on terminal frames (Phase 5: store carries deltas)', async () => {
+  it('does NOT refresh threads on every delta — only on terminal frames', async () => {
     const thread = streamingThread('t1');
     setChatOps([mkChatOp('j1', 't1')]);
     const { refreshThreads } = renderChatStream({
@@ -425,7 +426,11 @@ describe('useLearningChatStream (renderHook)', () => {
   it('closes all open EventSources and unsubscribes from operationsManager on unmount', async () => {
     const thread = streamingThread('t1');
     setChatOps([mkChatOp('j1', 't1')]);
-    const view = renderChatStream({ threads: [thread], activeThread: thread, activeThreadId: 't1' });
+    const view = renderChatStream({
+      threads: [thread],
+      activeThread: thread,
+      activeThreadId: 't1',
+    });
 
     await waitFor(() => expect(sseSubscriptions).toHaveLength(1));
     expect(operationsState.listeners.size).toBeGreaterThan(0);
@@ -443,9 +448,7 @@ describe('useLearningChatStream (renderHook)', () => {
     const tBridge: Thread = createThread({
       id: 't1',
       isStreaming: false,
-      messages: [
-        { id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' },
-      ],
+      messages: [{ id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' }],
     });
     const { result, rerender } = renderChatStream({
       threads: [tBridge],
@@ -459,7 +462,12 @@ describe('useLearningChatStream (renderHook)', () => {
       ...tBridge,
       messages: [
         ...tBridge.messages,
-        { id: 'asst-1', role: 'assistant', content: 'Hello!', timestamp: '2026-01-01T00:00:01.000Z' },
+        {
+          id: 'asst-1',
+          role: 'assistant',
+          content: 'Hello!',
+          timestamp: '2026-01-01T00:00:01.000Z',
+        },
       ],
     };
     rerender({ threads: [tSettled], activeThread: tSettled, activeThreadId: 't1' });
@@ -471,9 +479,7 @@ describe('useLearningChatStream (renderHook)', () => {
     const tBridge: Thread = createThread({
       id: 't1',
       isStreaming: false,
-      messages: [
-        { id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' },
-      ],
+      messages: [{ id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' }],
     });
     const { result, rerender } = renderChatStream({
       threads: [tBridge],
@@ -495,9 +501,7 @@ describe('useLearningChatStream (renderHook)', () => {
       id: 't1',
       isStreaming: true,
       updatedAt: new Date(Date.now() - 10_000).toISOString(),
-      messages: [
-        { id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' },
-      ],
+      messages: [{ id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' }],
     });
     // operationsState.hydrated defaults to true; no chat op present so
     // the thread is considered orphaned by the safety net.
@@ -515,9 +519,7 @@ describe('useLearningChatStream (renderHook)', () => {
       id: 't1',
       isStreaming: true,
       updatedAt: new Date(Date.now() - 10_000).toISOString(),
-      messages: [
-        { id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' },
-      ],
+      messages: [{ id: 'user-1', role: 'user', content: 'Hi', timestamp: '2026-01-01T00:00:00.000Z' }],
     });
     renderChatStream({ threads: [stale], activeThread: stale, activeThreadId: 't1' });
     await Promise.resolve();

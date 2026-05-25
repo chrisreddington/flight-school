@@ -10,22 +10,9 @@ type Boundary =
   | 'withGuardedRoute'
   | 'createStorageRoute'
   | 'getOctokitForRequest'
-  | 'verifyCronRequest'
-  | 'internalWorkerSecret';
+  | 'verifyCronRequest';
 
 const ROUTE_BOUNDARIES: Record<string, Boundary> = {
-  'internal/copilot/authoring/route.ts': 'internalWorkerSecret',
-  'internal/copilot/coach/route.ts': 'internalWorkerSecret',
-  'internal/copilot/execute/route.ts': 'internalWorkerSecret',
-  'internal/ai-activity/route.ts': 'internalWorkerSecret',
-  'internal/ai-activity/event/route.ts': 'internalWorkerSecret',
-  'internal/ai-activity/event/[id]/route.ts': 'internalWorkerSecret',
-  'internal/ai-activity/stream/route.ts': 'internalWorkerSecret',
-  'internal/jobs/route.ts': 'internalWorkerSecret',
-  'internal/jobs/sweep/route.ts': 'internalWorkerSecret',
-  'internal/jobs/user-data/route.ts': 'internalWorkerSecret',
-  'internal/jobs/[id]/route.ts': 'internalWorkerSecret',
-  'internal/jobs/[id]/stream/route.ts': 'internalWorkerSecret',
   'ai-activity/metrics/route.ts': 'requireUserContext',
   'ai-activity/route.ts': 'requireUserContext',
   'ai-activity/stream/route.ts': 'requireUserContext',
@@ -72,7 +59,6 @@ const SOURCE_MARKERS: Record<Boundary, string | null> = {
   createStorageRoute: 'createStorageRoute(',
   getOctokitForRequest: 'getOctokitForRequest(',
   verifyCronRequest: 'verifyCronRequest(',
-  internalWorkerSecret: 'COPILOT_WORKER_SECRET',
 };
 
 function routeFiles(dir = API_ROUTE_ROOT): string[] {
@@ -113,11 +99,7 @@ describe('API route auth inventory', () => {
           for (const fromClause of handlerMatch) {
             const importPath = fromClause.match(/@\/lib\/[^'"]+/)?.[0];
             if (!importPath) continue;
-            const handlerPath = path.join(
-              process.cwd(),
-              'src',
-              importPath.replace('@/', ''),
-            ) + '.ts';
+            const handlerPath = path.join(process.cwd(), 'src', importPath.replace('@/', '')) + '.ts';
             try {
               const handlerSource = readFileSync(handlerPath, 'utf8');
               if (handlerSource.includes(marker)) return null;

@@ -23,8 +23,11 @@ param location string = 'uksouth'
 @maxLength(20)
 param appName string = 'flightschool'
 
-@description('Container image tag to deploy (e.g. "sha-abc123" or "latest").')
-param imageTag string = 'latest'
+@description('Container image tag for the web (Next.js) app. Required. Use immutable tags (e.g. sha-<commit>); never "latest" in production.')
+param webImageTag string
+
+@description('Container image tag for the worker (Hono/Node) app. Required. Use immutable tags.')
+param workerImageTag string
 
 @description('Login server of the container registry that holds the image (e.g. "ghcr.io/owner" or "myacr.azurecr.io").')
 param acrLoginServer string
@@ -120,7 +123,7 @@ module copilotWorker 'modules/copilot-worker-app.bicep' = {
     location: location
     appName: appName
     tags: tags
-    imageTag: imageTag
+    imageTag: workerImageTag
     acrLoginServer: acrLoginServer
     containerAppEnvironmentId: env.outputs.environmentId
     keyVaultName: keyVault.outputs.keyVaultName
@@ -135,7 +138,7 @@ module containerApp 'modules/container-app.bicep' = {
     location: location
     appName: appName
     tags: tags
-    imageTag: imageTag
+    imageTag: webImageTag
     acrLoginServer: acrLoginServer
     containerAppEnvironmentId: env.outputs.environmentId
     keyVaultName: keyVault.outputs.keyVaultName

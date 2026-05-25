@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -34,8 +34,14 @@ const nextConfig: NextConfig = {
   // uncached (no-store) or tagged for revalidation. Enforced by
   // scripts/check-server-fetch-tenancy.mjs at CI time.
   cacheComponents: true,
-  // Keep copilot-sdk as a server-only external — it uses import.meta.resolve
-  // internally which Turbopack cannot handle when bundling.
+  // Keep `@github/copilot-sdk` as a server-only external. The package uses
+  // `import.meta.resolve` internally which Turbopack cannot handle, and we
+  // never want it bundled into the web image — runtime fail-loud net: if
+  // a future code path slips a `require('@github/copilot-sdk')` through
+  // every static gate (`scripts/check-copilot-sdk-boundary.mjs`,
+  // `scripts/check-web-image-copilot-free.mjs`), startup will crash with
+  // "Cannot find module" instead of silently double-executing SDK logic
+  // in the web container.
   serverExternalPackages: ['@github/copilot-sdk'],
 };
 

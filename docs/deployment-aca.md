@@ -12,43 +12,204 @@ This doc covers the **container image** half of deploying Flight School. The
 full Azure Container Apps deployment (infra, identity, secrets wiring) is
 tracked in P8.
 
-## Current Copilot runtime limitation
+## Current Copilot runtime architecture
 
-The current container runs the Next.js app and the Copilot SDK's auto-managed
-CLI runtime in the same app process/container. User identity is isolated at the
-SDK session level by passing the authenticated user's GitHub token into each
-session, but Copilot CLI process state is shared per app replica.
+The platform deploys **two container images** built from the same monorepo:
 
-That is acceptable for this exploratory ACA lab, but it is not the target shape
-for a public multi-user platform. The target architecture is an internal worker
-service with a per-user Copilot runtime pool, described in
-[`docs/superpowers/specs/2026-05-22-copilot-worker-pool-design.md`](superpowers/specs/2026-05-22-copilot-worker-pool-design.md).
-The current code has this split in place:
-`src/lib/copilot/execution/` handles chat worker transport,
-`src/app/api/jobs/dispatcher.ts` dispatches async jobs to the worker, and
-`/api/internal/jobs/{execute,cancel}` is the worker-owned background job boundary.
-Service Bus/KEDA durable workers remain future work.
+1. **Web image** — Next.js app served from `Dockerfile`. Handles browser
+   traffic, OAuth, Octokit calls. Has no Copilot SDK reachable from its
+   import graph.
+2. **Worker image** — standalone Hono/Node process built from
+   `Dockerfile.worker` over `dist-worker/*.mjs` (esbuild bundle, no Next
+   runtime). Owns the per-user Copilot runtime pool, the SDK, the CLI
+   subprocesses, and all `/api/internal/*` routes.
 
-## Building the image
+The split is enforced in CI by
+[`scripts/check-worker-next-free.mjs`](../scripts/check-worker-next-free.mjs)
+(no `next/*` reachable from the worker entrypoint) and
+[`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
+(no `@github/copilot-sdk` reachable outside the worker).
 
-The repo ships a multi-stage `Dockerfile` at the root. It produces a
-Next.js standalone server image based on `node:20-slim` for test environments.
+The worker is a **single-replica** service: the in-process scheduler,
+runtime pool, and local job storage all assume one process. Until a
+durable queue (Service Bus / KEDA) lands, the ACA worker app must be
+declared with `maxReplicas = 1`.
+
+## Building the images
+
+The two images are independently versioned: each carries its own tag,
+so a code change in the web tree triggers a web-only rebuild and
+deploy without rebuilding the worker, and vice versa. The Bicep
+template expects both `webImageTag` and `workerImageTag` as required
+parameters with no defaults — operators must pass each tag explicitly,
+which keeps deployments deterministic and prevents a stale or `latest`
+tag from quietly rolling out.
+
+For a manual local build (e.g. testing a one-off image), pick a tag
+per image:
 
 ```bash
-docker build -t flight-school .
+WEB_TAG=sha-$(git rev-parse HEAD)
+WORKER_TAG=sha-$(git rev-parse HEAD)
+REGISTRY=<acrLoginServer>
+APPNAME=<appName>
+
+# Web (Next.js)
+docker build -t "${REGISTRY}/${APPNAME}:${WEB_TAG}" .
+docker push  "${REGISTRY}/${APPNAME}:${WEB_TAG}"
+
+# Worker (Hono/Node, no Next)
+docker build -t "${REGISTRY}/${APPNAME}-worker:${WORKER_TAG}" -f Dockerfile.worker .
+docker push  "${REGISTRY}/${APPNAME}-worker:${WORKER_TAG}"
 ```
 
-Build stages:
+After pushing, roll the running Container App over to the new image
+with a single `az containerapp update --image` call — see
+[Manual rollback / forward-fix](#manual-rollback--forward-fix)
+below.
 
-1. **`deps`** – installs the full dependency tree with `npm ci`. We do *not*
-   prune `@github/copilot`: it ships a Node CLI binary plus native prebuilds
-   (ripgrep, sharp, tree-sitter) that the Copilot SDK spawns at runtime via
-   `import.meta.resolve`. Pruning it breaks every SDK-backed feature.
+The worker image is intentionally minimal: `npm run build:worker`
+emits `dist-worker/{bootstrap,server-main}.mjs` plus a generated
+`dist-worker/package.json` listing only the externalised runtime
+packages (`@github/copilot`, `@github/copilot-*` platform variants,
+`@hono/node-server`, `@azure/cosmos`, OTel SDK, …). The runtime stage
+runs `npm install --omit=dev` inside `dist-worker/` and starts via
+`CMD ["node", "bootstrap.mjs"]`.
+
+## Deployment model (three workflows, two responsibilities)
+
+CD splits cleanly along the line between **image rollouts** (cheap,
+frequent, app-scoped) and **infra reconciliation** (rare, environment-
+scoped, Bicep-owned). Three workflows, one shared concurrency group:
+
+| Workflow | Trigger scope | What it does | What it does NOT do |
+|---|---|---|---|
+| [`deploy-web.yml`](../.github/workflows/deploy-web.yml) | web sources, `Dockerfile`, web deps, own workflow file | builds + pushes web image, runs `az containerapp update --image`, polls revision health | touch Bicep, touch env vars, touch worker |
+| [`deploy-worker.yml`](../.github/workflows/deploy-worker.yml) | worker sources, `Dockerfile.worker`, worker deps, own workflow file | builds + pushes worker image, runs `az containerapp update --image`, polls revision health | touch Bicep, touch env vars, touch web |
+| [`deploy-infra.yml`](../.github/workflows/deploy-infra.yml) | `infra/main.bicep`, `infra/main.parameters.json`, `infra/modules/**`, own workflow file | reads each app's current image from Azure (or accepts bootstrap inputs), runs `az deployment sub create` | build or push any image |
+
+All three workflows share the concurrency group
+`deploy-aca-${{ github.ref_name }}` with `cancel-in-progress: false`.
+The serialisation matters because an infra apply reads each app's
+current image tag and re-asserts it; if a parallel app rollout
+changed the image between the read and the apply, the apply would
+silently roll the image back. The shared group makes that race
+impossible at the cost of running deploys sequentially — an
+acceptable trade for the deploy volume of this project.
+
+The image-update pattern is the
+[documented approach for ACA CD](https://learn.microsoft.com/en-us/azure/container-apps/github-actions#image-based-deployment-strategy):
+Bicep provisions configuration once; subsequent rollouts mutate only
+the image. Coupling every image rollout to a full Bicep apply was
+the over-engineered original design and is now gone.
+
+### Bootstrap (greenfield environment)
+
+`az containerapp update --image` requires the Container App to
+already exist. For a first-ever deploy:
+
+1. Push initial web and worker images to ACR by hand (see
+   [Building the images](#building-the-images) above for the exact
+   commands).
+2. Dispatch `deploy-infra.yml` manually with three inputs:
+   - `sha` — the commit SHA the images were built from
+   - `webImageTag` — the tag you just pushed for the web image
+   - `workerImageTag` — the tag you just pushed for the worker image
+3. The infra workflow's `Resolve image tags` step detects the
+   override inputs, skips the live-state read (which would fail
+   against a non-existent Container App), and runs Bicep with the
+   tags you supplied. Bicep provisions the Container Apps with the
+   correct image references on the first revision.
+4. Subsequent deploys flow through `deploy-web.yml` /
+   `deploy-worker.yml` automatically on every push to `main`.
+
+### Manual rollback / forward-fix
+
+Three rollback shapes are supported, each via a single workflow
+dispatch:
+
+| What broke | Workflow to dispatch | Inputs |
+|---|---|---|
+| Web code only | `deploy-web.yml` | `sha` = last-known-good web commit |
+| Worker code only | `deploy-worker.yml` | `sha` = last-known-good worker commit |
+| Infra change (env var, scaling, identity) | `deploy-infra.yml` | `sha` = last-known-good infra commit |
+| Web + worker (combined) | dispatch both app workflows; infra is left untouched | per-app rollback SHAs |
+
+The app workflows do **not** re-run Bicep, so a code rollback never
+disturbs env vars, scaling rules, or secret bindings. The infra
+workflow does **not** rebuild images, so an infra rollback never
+risks changing what code is running — it re-reads each app's
+current tag from Azure and reapplies Bicep with those exact tags.
+
+If both code and infra need to roll back together, dispatch the app
+workflows first; they advance the running image to the rollback
+build. Then dispatch the infra workflow; its live-state tag read
+picks up the rolled-back images and Bicep reconciles the rest.
+Inverting the order would cause the infra apply's tag read to see
+the broken images.
+
+
+
+### Web image (`Dockerfile`) stages
+
+The web image runs Next.js only — the Copilot SDK and CLI live in the
+worker image. The runner stage ships zero `@github/*` packages.
+
+1. **`deps`** – installs the full dependency tree with `npm ci`. This
+   includes the `@github/copilot*` packages because they are declared
+   runtime dependencies in `package.json` (needed by the worker image
+   and for TypeScript compilation), but they are never copied forward
+   into the runner.
 2. **`builder`** – runs `npm run build`, producing `.next/standalone` thanks to
-   `output: 'standalone'` in `next.config.ts`.
+   `output: 'standalone'` in `next.config.ts`. The Next.js tracer
+   includes only the modules actually reachable from a value-imported
+   server entry; SDK execution lives in the worker, so the standalone
+   trace excludes the `@github/*` namespace.
 3. **`runner`** – a clean `node:20-slim` image with only the standalone server,
-   static assets, `public/`, and the `@github/*` packages copied in. Runs as
-   the non-root `node` user under `tini` for clean signal handling.
+   static assets, and `public/`. Runs as the non-root `node` user under
+   `tini` for clean signal handling. The `@github/copilot*` packages are
+   deliberately **not** copied into this stage — SDK execution lives in
+   the worker image.
+
+> The web image is provably free of the `@github/*` namespace, enforced
+> by four CI gates running on every PR:
+>
+> 1. [`scripts/check-copilot-sdk-boundary.mjs`](../scripts/check-copilot-sdk-boundary.mjs)
+>    bans SDK imports outside worker scopes at the source level.
+> 2. `scripts/check-web-image-copilot-free.mjs` Assertion A lints the
+>    `Dockerfile`: it bans any `COPY ... @github` anywhere in the file
+>    and applies a positive allowlist to every runner-stage COPY source
+>    (only `/app/.next/**` and `/app/public[/**]` are admitted; relative,
+>    glob, variable, traversal, and broad-tree sources all fail).
+> 3. Assertion B walks `.next/standalone/**` after build and fails if any
+>    `node_modules/@github/*` directory exists.
+> 4. Assertion C scans every built `.js`/`.mjs`/`.cjs` for runtime
+>    `require`/`import` edges into `@github/copilot*`. The
+>    `serverExternalPackages` entry in `next.config.ts` is the runtime
+>    fail-loud net — if all four gates were bypassed, the container would
+>    crash at startup with "Cannot find module".
+
+### Worker image notes
+
+`Dockerfile.worker` builds in two stages: the `build` stage runs
+`npm ci` + `npm run build:worker`, and the `runtime` stage copies only
+`dist-worker/` then runs `npm install --omit=dev` to pull the
+externalised native prebuilds for the current platform
+(`@github/copilot-{linux,linuxmusl,darwin,win32}-{x64,arm64}`,
+`@img/sharp-*`, `tree-sitter-*`). Target image size: < 200 MB.
+
+The Hono worker configures HTTP server timeouts explicitly to support
+long SSE streams (previously handled by Next's `maxDuration = 300`):
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `server.keepAliveTimeout` | 310 s | > 300 s SSE budget |
+| `server.headersTimeout` | 320 s | must exceed keepAlive |
+| `server.requestTimeout` | 0 (disabled) | rely on SSE heartbeat for liveness |
+
+**ACA ingress idle timeout (default 240 s) must be raised above 300 s
+or paired with a shorter SSE heartbeat** — otherwise long authoring /
+job streams disconnect at the ingress proxy.
 
 ## Running locally
 
@@ -75,11 +236,14 @@ out-of-the-box.
 
 ## Image footprint
 
-Most of the image is `node_modules/@github/copilot` (~100 MB of prebuilds for
-multiple architectures). We deliberately keep all of them so the same image
-can run on both amd64 and arm64 Container Apps environments. If size becomes
-a real problem, strip non-target `prebuilds/` directories in a future
-revision — but verify the SDK still spawns the CLI before shipping that.
+Most of the **worker** image is `node_modules/@github/copilot` (~100 MB
+of prebuilds for multiple architectures). We deliberately keep all of
+them so the same worker image can run on both amd64 and arm64 Container
+Apps environments. If size becomes a real problem, strip non-target
+`prebuilds/` directories in a future revision — but verify the SDK
+still spawns the CLI before shipping that. The web image does not
+spawn the CLI and is a future candidate for dropping these packages
+entirely (see the "Web image" note above).
 
 ## Next steps (P8)
 
@@ -135,7 +299,7 @@ commands). Canonical list lives in [`.env.example`](../.env.example).
 | Audit events (`copilot.session.create`, rate-limit denials, cap hits) | Application Insights traces, filterable on `eventType`. User IDs are hashed with `AUDIT_SALT`. |
 | Revision health | `az containerapp revision list` — startup/readiness probes hit `/api/health` (owned by another phase). |
 | Worker health | `az containerapp show -n <appName>-worker` — internal ingress only; probes also hit `/api/health`. |
-| Cost / scaling | ACA portal; web HTTP scaler at 50 req/replica, worker HTTP scaler at 20 req/replica. |
+| Cost / scaling | ACA portal; web HTTP scaler at 50 req/replica. Worker is fixed single replica (`maxReplicas=1` — in-process scheduler, restart-sweep, job store, and per-user runtime pool all assume one process; see `infra/modules/copilot-worker-app.bicep`). |
 
 ### 4. Rate-limit tuning
 

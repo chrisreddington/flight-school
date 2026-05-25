@@ -47,11 +47,7 @@ const depsCache = new Map<string, CachedDeps>();
  * @param repo - Repository name
  * @returns Array of dependency names (up to MAX_DEPS)
  */
-export async function getRepoDependencies(
-  octokit: Octokit,
-  owner: string,
-  repo: string
-): Promise<string[]> {
+export async function getRepoDependencies(octokit: Octokit, owner: string, repo: string): Promise<string[]> {
   const cacheKey = `${owner}/${repo}`;
   const cached = depsCache.get(cacheKey);
   if (cached && nowMs() - cached.timestamp < DEPS_CACHE_TTL_MS) {
@@ -67,11 +63,7 @@ export async function getRepoDependencies(
 // Internal helpers
 // =============================================================================
 
-async function fetchDeps(
-  octokit: Octokit,
-  owner: string,
-  repo: string
-): Promise<string[]> {
+async function fetchDeps(octokit: Octokit, owner: string, repo: string): Promise<string[]> {
   const parsers: Array<{ path: string; parse: (content: string) => string[] }> = [
     { path: 'package.json', parse: parsePackageJson },
     { path: 'requirements.txt', parse: parseRequirementsTxt },
@@ -128,8 +120,14 @@ function parseGoMod(content: string): string[] {
 
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
-    if (trimmed === 'require (') { inRequire = true; continue; }
-    if (trimmed === ')') { inRequire = false; continue; }
+    if (trimmed === 'require (') {
+      inRequire = true;
+      continue;
+    }
+    if (trimmed === ')') {
+      inRequire = false;
+      continue;
+    }
     if (inRequire || trimmed.startsWith('require ')) {
       const parts = trimmed.replace(/^require\s+/, '').split(/\s+/);
       if (parts[0] && !parts[0].startsWith('//')) {
@@ -151,7 +149,10 @@ function parseCargoToml(content: string): string[] {
       inDeps = true;
       continue;
     }
-    if (trimmed.startsWith('[')) { inDeps = false; continue; }
+    if (trimmed.startsWith('[')) {
+      inDeps = false;
+      continue;
+    }
     if (inDeps && trimmed && !trimmed.startsWith('#')) {
       const name = trimmed.split('=')[0].trim();
       if (name) deps.push(name);

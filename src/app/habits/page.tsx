@@ -38,11 +38,7 @@ export default async function HabitsPage() {
   return (
     <div className={layoutStyles.root}>
       <AppHeader />
-      <HabitsClient
-        initialActive={active}
-        initialCompleted={completed}
-        initialAbandoned={abandoned}
-      />
+      <HabitsClient initialActive={active} initialCompleted={completed} initialAbandoned={abandoned} />
     </div>
   );
 }

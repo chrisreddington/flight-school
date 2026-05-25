@@ -15,9 +15,12 @@ export interface GuidedPlan {
   totalSteps: number;
 }
 
-export function getGuidedPlanFallback(
-  challenge: { title: string; description: string; language: string; difficulty: string }
-): GuidedPlan {
+export function getGuidedPlanFallback(challenge: {
+  title: string;
+  description: string;
+  language: string;
+  difficulty: string;
+}): GuidedPlan {
   const steps: GuidedStep[] = [
     {
       stepNumber: 1,

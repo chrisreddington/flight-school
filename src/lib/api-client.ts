@@ -1,12 +1,12 @@
 /**
  * Centralized API client for consistent error handling and request patterns.
- * 
+ *
  * Features:
  * - Automatic retry with exponential backoff
  * - Request deduplication for GET requests
  * - Configurable timeouts
  * - Type-safe error handling
- * 
+ *
  * @example
  * ```typescript
  * const profile = await apiGet<ProfileResponse>('/api/profile');
@@ -14,18 +14,9 @@
  * ```
  */
 
-import {
-  COPILOT_REQUIRED_EVENT,
-  type CopilotRequiredEventDetail,
-} from '@/lib/copilot/required-event';
-import {
-  encodeClientTriggerHeaders,
-  type ClientTriggerMetadata,
-} from '@/lib/observability/trigger-metadata';
-import {
-  dispatchRateLimited,
-  RateLimitedClientError,
-} from '@/lib/api/rate-limit-event';
+import { COPILOT_REQUIRED_EVENT, type CopilotRequiredEventDetail } from '@/lib/copilot/required-event';
+import { encodeClientTriggerHeaders, type ClientTriggerMetadata } from '@/lib/observability/trigger-metadata';
+import { dispatchRateLimited, RateLimitedClientError } from '@/lib/api/rate-limit-event';
 import { signOut } from 'next-auth/react';
 
 interface ApiRequestOptions extends RequestInit {
@@ -46,7 +37,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly context?: Record<string, unknown>
+    public readonly context?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -57,10 +48,7 @@ export class ApiError extends Error {
  * Dispatch the `copilot-required` window event so the global banner can
  * surface a 402 from any fetch site.
  */
-function dispatchCopilotRequired(
-  body: unknown,
-  endpoint: string,
-): CopilotRequiredEventDetail {
+function dispatchCopilotRequired(body: unknown, endpoint: string): CopilotRequiredEventDetail {
   const detail: CopilotRequiredEventDetail = {
     message:
       body && typeof body === 'object' && typeof (body as { message?: unknown }).message === 'string'
@@ -82,11 +70,7 @@ function dispatchCopilotRequired(
  * True when a 402 body has the `copilot_required` shape AI routes return.
  */
 function isCopilotRequiredBody(body: unknown): boolean {
-  return (
-    typeof body === 'object' &&
-    body !== null &&
-    (body as { error?: unknown }).error === 'copilot_required'
-  );
+  return typeof body === 'object' && body !== null && (body as { error?: unknown }).error === 'copilot_required';
 }
 
 async function redirectToSignInAfterAuthFailure(): Promise<void> {
@@ -160,10 +144,7 @@ function buildRequestHeaders(
 /**
  * Core API request function with retry, timeout, and deduplication.
  */
-async function apiRequest<T>(
-  url: string,
-  options: ApiRequestOptions = {}
-): Promise<T> {
+async function apiRequest<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
   const {
     timeout = 30000,
     retries = 0,
@@ -175,7 +156,7 @@ async function apiRequest<T>(
 
   const cacheKey = getCacheKey(url, options);
   const method = options.method ?? 'GET';
-  
+
   // Return cached promise for duplicate GET requests
   if (method === 'GET') {
     const pending = pendingRequests.get(cacheKey);
@@ -251,11 +232,7 @@ async function apiRequest<T>(
               const context = {
                 ...(data.meta && typeof data.meta === 'object' ? data.meta : {}),
                 ...(typeof data === 'object' && data !== null
-                  ? Object.fromEntries(
-                      Object.entries(data).filter(
-                        ([k]) => k !== 'error' && k !== 'meta',
-                      ),
-                    )
+                  ? Object.fromEntries(Object.entries(data).filter(([k]) => k !== 'error' && k !== 'meta'))
                   : {}),
               };
               throw new ApiError(errorMessage, response.status, context);
@@ -270,9 +247,7 @@ async function apiRequest<T>(
           // Don't retry on abort or client errors (4xx)
           if (
             error instanceof Error &&
-            (error.name === 'AbortError' ||
-              ((error as ApiError).status >= 400 &&
-                (error as ApiError).status < 500))
+            (error.name === 'AbortError' || ((error as ApiError).status >= 400 && (error as ApiError).status < 500))
           ) {
             throw error;
           }
@@ -308,16 +283,13 @@ async function apiRequest<T>(
  * @param options - Request options (timeout, retries, throwOnError)
  * @returns Promise resolving to the typed API response
  */
-export function apiGet<T>(
-  url: string,
-  options?: Omit<ApiRequestOptions, 'method' | 'body'>
-): Promise<T> {
+export function apiGet<T>(url: string, options?: Omit<ApiRequestOptions, 'method' | 'body'>): Promise<T> {
   return apiRequest<T>(url, { ...options, method: 'GET' });
 }
 
 /**
  * Perform a POST request.
- * 
+ *
  * @param url - API endpoint URL
  * @param data - Request body data
  * @param options - Request options
@@ -326,7 +298,7 @@ export function apiGet<T>(
 export function apiPost<T>(
   url: string,
   data?: unknown,
-  options?: Omit<ApiRequestOptions, 'method' | 'body'>
+  options?: Omit<ApiRequestOptions, 'method' | 'body'>,
 ): Promise<T> {
   return apiRequest<T>(url, {
     ...options,
@@ -342,9 +314,6 @@ export function apiPost<T>(
  * @param options - Request options (timeout, retries, throwOnError)
  * @returns Promise resolving to the typed API response
  */
-export function apiDelete<T>(
-  url: string,
-  options?: Omit<ApiRequestOptions, 'method'>
-): Promise<T> {
+export function apiDelete<T>(url: string, options?: Omit<ApiRequestOptions, 'method'>): Promise<T> {
   return apiRequest<T>(url, { ...options, method: 'DELETE' });
 }

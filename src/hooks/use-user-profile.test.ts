@@ -40,7 +40,7 @@ describe('useUserProfile core logic', () => {
     it('should invalidate cache from yesterday', () => {
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       const today = new Date().toISOString().split('T')[0];
-      
+
       const cachedData = {
         date: yesterday,
         profile: { user: { login: 'testuser' } },
@@ -182,7 +182,7 @@ describe('useUserProfile core logic', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-        })
+        }),
       );
     });
 
@@ -193,7 +193,7 @@ describe('useUserProfile core logic', () => {
         fetch('/api/profile/storage', {
           method: 'POST',
           body: '{}',
-        })
+        }),
       ).rejects.toThrow('Network error');
     });
   });
@@ -283,7 +283,13 @@ describe('useUserProfile core logic', () => {
         ...existing,
         repos: [],
         pastSevenDays: { commits: 0, pullRequests: 0, reposUpdated: 0 },
-        meta: { cached: true, aiEnabled: true, method: 'cache-normalized', totalTimeMs: 0, authMethod: 'none' as const },
+        meta: {
+          cached: true,
+          aiEnabled: true,
+          method: 'cache-normalized',
+          totalTimeMs: 0,
+          authMethod: 'none' as const,
+        },
       };
 
       expect(normalized.user.login).toBe('realuser');

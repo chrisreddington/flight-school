@@ -23,7 +23,7 @@ describe('calculateExperienceLevel', () => {
     'should return $expected for $years years, $repos repos, $followers followers',
     ({ years, repos, followers, expected }) => {
       expect(calculateExperienceLevel(years, repos, followers)).toBe(expected);
-    }
+    },
   );
 });
 
@@ -31,7 +31,7 @@ describe('calculateYearsOnGitHub', () => {
   it('should return 0 for accounts created less than a year ago', () => {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    
+
     expect(calculateYearsOnGitHub(sixMonthsAgo.toISOString())).toBe(0);
   });
 
@@ -39,14 +39,14 @@ describe('calculateYearsOnGitHub', () => {
     // 18 months ago = 1.5 years → should return 1
     const eighteenMonthsAgo = new Date();
     eighteenMonthsAgo.setMonth(eighteenMonthsAgo.getMonth() - 18);
-    
+
     expect(calculateYearsOnGitHub(eighteenMonthsAgo.toISOString())).toBe(1);
   });
 
   it('should calculate years correctly for multi-year accounts', () => {
     const threeYearsAgo = new Date();
     threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
-    
+
     // Allow for slight timing variance
     const result = calculateYearsOnGitHub(threeYearsAgo.toISOString());
     expect(result).toBeGreaterThanOrEqual(2);
@@ -56,7 +56,7 @@ describe('calculateYearsOnGitHub', () => {
   it('should handle exact year boundaries', () => {
     const exactlyOneYearAgo = new Date();
     exactlyOneYearAgo.setFullYear(exactlyOneYearAgo.getFullYear() - 1);
-    
+
     // Due to leap year handling (365.25), this should be 0 or 1
     const result = calculateYearsOnGitHub(exactlyOneYearAgo.toISOString());
     expect(result).toBeGreaterThanOrEqual(0);
@@ -66,7 +66,7 @@ describe('calculateYearsOnGitHub', () => {
   it('should return 0 for future dates', () => {
     const nextYear = new Date();
     nextYear.setFullYear(nextYear.getFullYear() + 1);
-    
+
     // Future date should return negative, which floors to negative
     // Actually implementation returns the floor, so future = negative floor
     const result = calculateYearsOnGitHub(nextYear.toISOString());
@@ -76,7 +76,7 @@ describe('calculateYearsOnGitHub', () => {
   it('should handle 10+ year old accounts', () => {
     const tenYearsAgo = new Date();
     tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
-    
+
     const result = calculateYearsOnGitHub(tenYearsAgo.toISOString());
     expect(result).toBeGreaterThanOrEqual(9);
     expect(result).toBeLessThanOrEqual(10);

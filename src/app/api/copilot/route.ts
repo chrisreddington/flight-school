@@ -12,10 +12,7 @@
 
 import { parseJsonBody } from '@/lib/api';
 import { nowMs } from '@/lib/utils/date-utils';
-import {
-    type CopilotChatRequest,
-    validateCopilotChatRequest,
-} from '@/lib/copilot/api-requests';
+import { type CopilotChatRequest, validateCopilotChatRequest } from '@/lib/copilot/api-requests';
 import { executeCopilotChat } from '@/lib/copilot/execution';
 import { createSessionIdentity } from '@/lib/copilot/session-identity';
 import { logger } from '@/lib/logger';
@@ -45,7 +42,11 @@ export async function POST(request: NextRequest) {
     const { prompt, profile, capabilities, conversationId } = parseResult.data;
 
     return await withGuardedRoute(
-      { ...CHAT_GUARD, eventType: 'copilot.session.create', auditMetadata: { route: '/api/copilot' } },
+      {
+        ...CHAT_GUARD,
+        eventType: 'copilot.session.create',
+        auditMetadata: { route: '/api/copilot' },
+      },
       async (ctx) => {
         const identity = createSessionIdentity(ctx);
         const result = await executeCopilotChat({
@@ -67,9 +68,6 @@ export async function POST(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
     log.error(`Error after ${totalTime}ms:`, errorMessage);
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

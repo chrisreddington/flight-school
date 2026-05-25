@@ -49,10 +49,7 @@ IMPORTANT:
 /**
  * Builds the solution generation prompt for a specific challenge.
  */
-export function buildSolutionPrompt(
-  challenge: ChallengeDef,
-  files: Array<{ name: string; content: string }>
-): string {
+export function buildSolutionPrompt(challenge: ChallengeDef, files: Array<{ name: string; content: string }>): string {
   let prompt = `Generate a complete, working solution for this ${challenge.language} coding challenge:
 
 ## Challenge: ${challenge.title}
@@ -73,7 +70,10 @@ The solution should demonstrate: ${challenge.expectedPatterns.join(', ')}
     prompt += `
 ### Test Cases to Satisfy
 ${challenge.testCases
-  .map((tc, i) => `${i + 1}. Input: ${tc.input} → Expected: ${tc.expectedOutput}${tc.description ? ` (${tc.description})` : ''}`)
+  .map(
+    (tc, i) =>
+      `${i + 1}. Input: ${tc.input} → Expected: ${tc.expectedOutput}${tc.description ? ` (${tc.description})` : ''}`,
+  )
   .join('\n')}
 `;
   }

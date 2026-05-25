@@ -12,63 +12,71 @@ const todayDateKey = '2026-01-03';
 function createHistory(): FocusHistory {
   return {
     '2026-01-02': {
-      challenges: [{
-        data: {
-          id: 'challenge-1',
-          title: 'TypeScript Arrays',
-          description: 'Practice map and filter',
-          difficulty: 'beginner',
-          language: 'TypeScript',
-          estimatedTime: '30 minutes',
-          whyThisChallenge: ['practice fundamentals'],
+      challenges: [
+        {
+          data: {
+            id: 'challenge-1',
+            title: 'TypeScript Arrays',
+            description: 'Practice map and filter',
+            difficulty: 'beginner',
+            language: 'TypeScript',
+            estimatedTime: '30 minutes',
+            whyThisChallenge: ['practice fundamentals'],
+          },
+          stateHistory: [
+            { state: 'not-started', timestamp: '2026-01-02T09:00:00.000Z' },
+            { state: 'completed', timestamp: '2026-01-02T10:00:00.000Z' },
+          ],
         },
-        stateHistory: [
-          { state: 'not-started', timestamp: '2026-01-02T09:00:00.000Z' },
-          { state: 'completed', timestamp: '2026-01-02T10:00:00.000Z' },
-        ],
-      }],
-      goals: [{
-        data: {
-          id: 'goal-1',
-          title: 'Ship a refactor',
-          description: 'Make a module easier to maintain',
-          progress: 1,
-          target: '1 refactor',
-          reasoning: 'Keep the codebase lean',
+      ],
+      goals: [
+        {
+          data: {
+            id: 'goal-1',
+            title: 'Ship a refactor',
+            description: 'Make a module easier to maintain',
+            progress: 1,
+            target: '1 refactor',
+            reasoning: 'Keep the codebase lean',
+          },
+          stateHistory: [
+            { state: 'not-started', timestamp: '2026-01-02T08:00:00.000Z' },
+            { state: 'completed', timestamp: '2026-01-02T11:00:00.000Z' },
+          ],
         },
-        stateHistory: [
-          { state: 'not-started', timestamp: '2026-01-02T08:00:00.000Z' },
-          { state: 'completed', timestamp: '2026-01-02T11:00:00.000Z' },
+      ],
+      learningTopics: [
+        [
+          {
+            data: {
+              id: 'topic-1',
+              title: 'React memoization',
+              description: 'Understand memo boundaries',
+              type: 'concept',
+              relatedTo: 'React',
+            },
+            stateHistory: [{ state: 'not-explored', timestamp: '2026-01-02T07:00:00.000Z' }],
+          },
         ],
-      }],
-      learningTopics: [[{
-        data: {
-          id: 'topic-1',
-          title: 'React memoization',
-          description: 'Understand memo boundaries',
-          type: 'concept',
-          relatedTo: 'React',
-        },
-        stateHistory: [
-          { state: 'not-explored', timestamp: '2026-01-02T07:00:00.000Z' },
-        ],
-      }]],
+      ],
     },
     [todayDateKey]: {
       challenges: [],
       goals: [],
-      learningTopics: [[{
-        data: {
-          id: 'topic-2',
-          title: 'Accessibility checks',
-          description: 'Review keyboard navigation',
-          type: 'best-practice',
-          relatedTo: 'a11y',
-        },
-        stateHistory: [
-          { state: 'skipped', timestamp: '2026-01-03T09:00:00.000Z' },
+      learningTopics: [
+        [
+          {
+            data: {
+              id: 'topic-2',
+              title: 'Accessibility checks',
+              description: 'Review keyboard navigation',
+              type: 'best-practice',
+              relatedTo: 'a11y',
+            },
+            stateHistory: [{ state: 'skipped', timestamp: '2026-01-03T09:00:00.000Z' }],
+          },
         ],
-      }]],
+      ],
     },
   };
 }
@@ -86,12 +94,14 @@ function createHabit(): HabitWithHistory {
     currentDay: 1,
     skipsUsed: 0,
     state: 'active',
-    checkIns: [{
-      date: '2026-01-02',
-      value: 20,
-      completed: true,
-      timestamp: '2026-01-02T12:00:00.000Z',
-    }],
+    checkIns: [
+      {
+        date: '2026-01-02',
+        value: 20,
+        completed: true,
+        timestamp: '2026-01-02T12:00:00.000Z',
+      },
+    ],
   };
 }
 
@@ -99,14 +109,14 @@ describe('LearningHistory view model', () => {
   it('should build sorted entries with focus items and habit check-ins', () => {
     const entries = buildHistoryEntries(createHistory(), { habits: [createHabit()] }, todayDateKey);
 
-    expect(entries.map(entry => entry.dateKey)).toEqual([todayDateKey, '2026-01-02']);
-    expect(entries.find(entry => entry.dateKey === '2026-01-02')?.items.map(item => item.type)).toEqual([
+    expect(entries.map((entry) => entry.dateKey)).toEqual([todayDateKey, '2026-01-02']);
+    expect(entries.find((entry) => entry.dateKey === '2026-01-02')?.items.map((item) => item.type)).toEqual([
       'habit',
       'challenge',
       'goal',
       'topic',
     ]);
-    expect(entries.find(entry => entry.dateKey === '2026-01-02')).toMatchObject({
+    expect(entries.find((entry) => entry.dateKey === '2026-01-02')).toMatchObject({
       totalCount: 4,
       completedCount: 3,
       skippedCount: 0,
@@ -128,10 +138,12 @@ describe('LearningHistory view model', () => {
       totalGoalsCompleted: 1,
     });
 
-    expect(viewModel.filteredEntries).toEqual([expect.objectContaining({
-      dateKey: todayDateKey,
-      items: [],
-    })]);
+    expect(viewModel.filteredEntries).toEqual([
+      expect.objectContaining({
+        dateKey: todayDateKey,
+        items: [],
+      }),
+    ]);
     expect(viewModel.stats).toEqual({
       total: 2,
       completed: 0,
@@ -167,7 +179,7 @@ describe('LearningHistory view model', () => {
     });
 
     expect(Array.from(viewModel.groupedEntries.keys())).toContain('January 2026');
-    expect(viewModel.activityData.find(day => day.date === '2026-01-02')?.count).toBe(4);
+    expect(viewModel.activityData.find((day) => day.date === '2026-01-02')?.count).toBe(4);
     expect(viewModel.hasNoInsightsHistory).toBe(false);
   });
 

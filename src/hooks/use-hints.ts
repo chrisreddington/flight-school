@@ -84,7 +84,7 @@ export function useHints(options: UseHintsOptions): UseHintsReturn {
             question,
             currentCode: getCurrentCodeRef.current(),
           },
-          { timeout: HINT_TIMEOUT_MS, signal: controller.signal }
+          { timeout: HINT_TIMEOUT_MS, signal: controller.signal },
         );
 
         if (!data.success) {
@@ -112,7 +112,7 @@ export function useHints(options: UseHintsOptions): UseHintsReturn {
         setIsLoadingHint(false);
       }
     },
-    [challenge, isLoadingHint]
+    [challenge, isLoadingHint],
   );
 
   const stopHint = useCallback(() => {

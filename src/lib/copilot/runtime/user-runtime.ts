@@ -75,9 +75,8 @@ async function createRuntimeSession(
   request: CopilotChatExecutionRequest,
   resolved: ResolvedProfile,
 ): Promise<CopilotSession> {
-  const mcpServers = buildMcpServersForCapabilities(
-    resolved.capabilities,
-    (id) => (id === 'github' ? request.identity.gitHubToken : undefined),
+  const mcpServers = buildMcpServersForCapabilities(resolved.capabilities, (id) =>
+    id === 'github' ? request.identity.gitHubToken : undefined,
   );
   const hasMcp = Object.keys(mcpServers).length > 0;
 
@@ -116,10 +115,7 @@ async function createRuntimeSession(
   });
 }
 
-function createRuntimeSessionMetrics(
-  resolved: ResolvedProfile,
-  sessionCreateMs: number,
-): SessionCreationMetrics {
+function createRuntimeSessionMetrics(resolved: ResolvedProfile, sessionCreateMs: number): SessionCreationMetrics {
   return {
     poolKey: `worker:${resolved.profileId}:${resolved.capabilityFingerprint}`,
     createdNew: true,

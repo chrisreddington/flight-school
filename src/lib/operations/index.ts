@@ -36,105 +36,93 @@ import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
 const log = logger.withTag('OperationsHandlers');
 
 // Topic regeneration handler - persists new topic when job completes
-operationsManager.registerCompletionHandler(
-  'topic-regeneration',
-  async (result: unknown, targetId: string) => {
-    const typedResult = result as { learningTopic?: LearningTopic };
-    if (!typedResult?.learningTopic) {
-      log.warn('Topic regeneration completed but no topic returned');
-      return;
-    }
-    
-    const dateKey = getDateKey();
-    if (!isTodayDateKey(dateKey)) {
-      log.warn('Topic regeneration completed for non-today date', { targetId, dateKey });
-      return;
-    }
-    const position = await focusStore.getTopicPosition(dateKey, targetId);
-
-    // Try to mark as skipped (works for 'not-explored' topics)
-    // For 'explored' topics, this will silently fail (explored is terminal state)
-    await focusStore.transitionTopic(dateKey, targetId, 'skipped', 'dashboard');
-
-    // Add the new topic at the same position
-    await focusStore.addTopic(dateKey, typedResult.learningTopic, position ?? undefined);
-    
-    // Mark explored topics as replaced (so they don't show on dashboard)
-    // This preserves "explored" state in history while hiding from dashboard
-    await focusStore.markTopicReplaced(dateKey, targetId, typedResult.learningTopic.id);
-    
-    log.info(`Topic added via registered handler: ${typedResult.learningTopic.id} (replaced: ${targetId})`);
-    
-    // Notify React components that focus data has changed
-    notifyFocusDataChanged();
+operationsManager.registerCompletionHandler('topic-regeneration', async (result: unknown, targetId: string) => {
+  const typedResult = result as { learningTopic?: LearningTopic };
+  if (!typedResult?.learningTopic) {
+    log.warn('Topic regeneration completed but no topic returned');
+    return;
   }
-);
 
-operationsManager.registerCompletionHandler(
-  'challenge-regeneration',
-  async (result: unknown, targetId: string) => {
-    const typedResult = result as { challenge?: DailyChallenge };
-    if (!typedResult?.challenge) {
-      log.warn('Challenge regeneration completed but no challenge returned');
-      return;
-    }
-
-    const dateKey = getDateKey();
-    if (!isTodayDateKey(dateKey)) {
-      log.warn('Challenge regeneration completed for non-today date', { targetId, dateKey });
-      return;
-    }
-
-    await focusStore.transitionChallenge(dateKey, targetId, 'skipped', 'dashboard');
-    await focusStore.addChallenge(dateKey, typedResult.challenge);
-    log.info(`Challenge added via registered handler: ${typedResult.challenge.id} (skipped: ${targetId})`);
-    
-    // Notify React components that focus data has changed
-    notifyFocusDataChanged();
+  const dateKey = getDateKey();
+  if (!isTodayDateKey(dateKey)) {
+    log.warn('Topic regeneration completed for non-today date', { targetId, dateKey });
+    return;
   }
-);
+  const position = await focusStore.getTopicPosition(dateKey, targetId);
 
-operationsManager.registerCompletionHandler(
-  'goal-regeneration',
-  async (result: unknown, targetId: string) => {
-    const typedResult = result as { goal?: DailyGoal };
-    if (!typedResult?.goal) {
-      log.warn('Goal regeneration completed but no goal returned');
-      return;
-    }
+  // Try to mark as skipped (works for 'not-explored' topics)
+  // For 'explored' topics, this will silently fail (explored is terminal state)
+  await focusStore.transitionTopic(dateKey, targetId, 'skipped', 'dashboard');
 
-    const dateKey = getDateKey();
-    if (!isTodayDateKey(dateKey)) {
-      log.warn('Goal regeneration completed for non-today date', { targetId, dateKey });
-      return;
-    }
+  // Add the new topic at the same position
+  await focusStore.addTopic(dateKey, typedResult.learningTopic, position ?? undefined);
 
-    await focusStore.transitionGoal(dateKey, targetId, 'skipped', 'dashboard');
-    await focusStore.addGoal(dateKey, typedResult.goal);
-    log.info(`Goal added via registered handler: ${typedResult.goal.id} (skipped: ${targetId})`);
-    
-    // Notify React components that focus data has changed
-    notifyFocusDataChanged();
+  // Mark explored topics as replaced (so they don't show on dashboard)
+  // This preserves "explored" state in history while hiding from dashboard
+  await focusStore.markTopicReplaced(dateKey, targetId, typedResult.learningTopic.id);
+
+  log.info(`Topic added via registered handler: ${typedResult.learningTopic.id} (replaced: ${targetId})`);
+
+  // Notify React components that focus data has changed
+  notifyFocusDataChanged();
+});
+
+operationsManager.registerCompletionHandler('challenge-regeneration', async (result: unknown, targetId: string) => {
+  const typedResult = result as { challenge?: DailyChallenge };
+  if (!typedResult?.challenge) {
+    log.warn('Challenge regeneration completed but no challenge returned');
+    return;
   }
-);
+
+  const dateKey = getDateKey();
+  if (!isTodayDateKey(dateKey)) {
+    log.warn('Challenge regeneration completed for non-today date', { targetId, dateKey });
+    return;
+  }
+
+  await focusStore.transitionChallenge(dateKey, targetId, 'skipped', 'dashboard');
+  await focusStore.addChallenge(dateKey, typedResult.challenge);
+  log.info(`Challenge added via registered handler: ${typedResult.challenge.id} (skipped: ${targetId})`);
+
+  // Notify React components that focus data has changed
+  notifyFocusDataChanged();
+});
+
+operationsManager.registerCompletionHandler('goal-regeneration', async (result: unknown, targetId: string) => {
+  const typedResult = result as { goal?: DailyGoal };
+  if (!typedResult?.goal) {
+    log.warn('Goal regeneration completed but no goal returned');
+    return;
+  }
+
+  const dateKey = getDateKey();
+  if (!isTodayDateKey(dateKey)) {
+    log.warn('Goal regeneration completed for non-today date', { targetId, dateKey });
+    return;
+  }
+
+  await focusStore.transitionGoal(dateKey, targetId, 'skipped', 'dashboard');
+  await focusStore.addGoal(dateKey, typedResult.goal);
+  log.info(`Goal added via registered handler: ${typedResult.goal.id} (skipped: ${targetId})`);
+
+  // Notify React components that focus data has changed
+  notifyFocusDataChanged();
+});
 
 // Import thread notification
 import type { ChatResponseResult } from '@/lib/jobs';
 import { notifyThreadDataChanged } from '@/lib/threads';
 
 // Chat response handler - notifies UI when chat job completes
-operationsManager.registerCompletionHandler(
-  'chat-response',
-  async (result: unknown) => {
-    const typedResult = result as ChatResponseResult;
-    if (!typedResult?.threadId) {
-      log.warn('Chat response completed but no threadId returned');
-      return;
-    }
-
-    log.info(`Chat response completed via registered handler for thread: ${typedResult.threadId}`);
-    
-    // Notify React components that thread data has changed
-    notifyThreadDataChanged(typedResult.threadId);
+operationsManager.registerCompletionHandler('chat-response', async (result: unknown) => {
+  const typedResult = result as ChatResponseResult;
+  if (!typedResult?.threadId) {
+    log.warn('Chat response completed but no threadId returned');
+    return;
   }
-);
+
+  log.info(`Chat response completed via registered handler for thread: ${typedResult.threadId}`);
+
+  // Notify React components that thread data has changed
+  notifyThreadDataChanged(typedResult.threadId);
+});

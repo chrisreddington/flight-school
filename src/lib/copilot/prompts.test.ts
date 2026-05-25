@@ -265,9 +265,7 @@ describe('Edge Cases', () => {
 
   it('should handle skills with only notInterested entries', () => {
     const profile: SkillProfile = {
-      skills: [
-        { skillId: 'cobol', level: 'beginner', source: 'manual', notInterested: true },
-      ],
+      skills: [{ skillId: 'cobol', level: 'beginner', source: 'manual', notInterested: true }],
       lastUpdated: '2026-01-21T10:00:00.000Z',
     };
     const prompt = buildChallengePrompt('context', profile);

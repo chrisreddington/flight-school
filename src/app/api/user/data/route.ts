@@ -17,7 +17,7 @@
  *   - the Auth.js session token store (sign-out handles that)
  *   - SDK on-disk session-state under `~/.copilot/session-state/{id}/`,
  *     because those are keyed by session id (not user id) and are
- *     covered by Phase C's compaction sweeper
+ *     covered by the session-state retention sweeper
  *
  * Cross-user deletion is impossible by construction: every operation is
  * filtered by the server-resolved `userId` from {@link requireUserContext}.
@@ -76,7 +76,9 @@ function assertSameOrigin(request: NextRequest): void {
     throw new Response(JSON.stringify({ error: 'Invalid Origin header' }), { status: 400 });
   }
   if (url.host !== host) {
-    throw new Response(JSON.stringify({ error: 'Cross-origin requests are not allowed' }), { status: 403 });
+    throw new Response(JSON.stringify({ error: 'Cross-origin requests are not allowed' }), {
+      status: 403,
+    });
   }
 }
 
@@ -126,10 +128,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
     if (typeof body.confirmLogin !== 'string' || body.confirmLogin !== login) {
-      return NextResponse.json(
-        { error: 'confirmLogin does not match the authenticated user.' },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'confirmLogin does not match the authenticated user.' }, { status: 400 });
     }
 
     log.info(`[user ${userId}] Deleting all server-side data on user request`);
@@ -161,10 +160,7 @@ export async function DELETE(request: NextRequest) {
       } catch (rollbackErr) {
         log.error(`[user ${userId}] Tombstone rollback failed`, { err: rollbackErr });
       }
-      return NextResponse.json(
-        { error: 'Job service temporarily unavailable. Please retry.' },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: 'Job service temporarily unavailable. Please retry.' }, { status: 503 });
     }
 
     // Clear this user's slice of the activity buffer via the worker.

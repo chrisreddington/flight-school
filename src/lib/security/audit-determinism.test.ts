@@ -21,9 +21,7 @@ vi.mock('@/lib/auth/context', () => ({
 }));
 
 import { __resetAuditState, hashUserId } from '@/lib/security/audit';
-import {
-  __resetRateLimitState,
-} from '@/lib/security/rate-limit';
+import { __resetRateLimitState } from '@/lib/security/rate-limit';
 import { __resetSessionCapState } from '@/lib/security/session-cap';
 import { withUserGuards } from '@/lib/security/guard';
 

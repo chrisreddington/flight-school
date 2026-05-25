@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  __resetRateLimitState,
-  checkRateLimit,
-  RateLimitedError,
-} from './rate-limit';
+import { __resetRateLimitState, checkRateLimit, RateLimitedError } from './rate-limit';
 
 describe('checkRateLimit', () => {
   afterEach(() => {

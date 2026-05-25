@@ -33,13 +33,9 @@ export function ProfileNav() {
         {PROFILE_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isCurrent = pathname === item.href;
-          
+
           return (
-            <NavList.Item
-              key={item.href}
-              href={item.href}
-              aria-current={isCurrent ? 'page' : undefined}
-            >
+            <NavList.Item key={item.href} href={item.href} aria-current={isCurrent ? 'page' : undefined}>
               <NavList.LeadingVisual>
                 <Icon size={16} />
               </NavList.LeadingVisual>

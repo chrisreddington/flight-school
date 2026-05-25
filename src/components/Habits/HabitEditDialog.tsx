@@ -3,14 +3,7 @@
 import { updateHabitAction } from '@/app/habits/actions';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { logger } from '@/lib/logger';
-import {
-  Banner,
-  Dialog,
-  FormControl,
-  Stack,
-  TextInput,
-  Textarea,
-} from '@primer/react';
+import { Banner, Dialog, FormControl, Stack, TextInput, Textarea } from '@primer/react';
 import { useCallback, useRef, useState } from 'react';
 
 interface HabitEditDialogProps {
@@ -95,13 +88,7 @@ export function HabitEditDialog({ habit, isOpen, onClose, onUpdated }: HabitEdit
       ]}
     >
       <Stack direction="vertical" gap="normal">
-        {error && (
-          <Banner
-            title="Error"
-            description={error}
-            variant="critical"
-          />
-        )}
+        {error && <Banner title="Error" description={error} variant="critical" />}
 
         <FormControl required>
           <FormControl.Label>Title</FormControl.Label>

@@ -3,25 +3,15 @@
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { DifficultyBadge } from '@/components/DifficultyBadge';
 import {
-    CopilotIcon,
-    GitCommitIcon,
-    GitPullRequestIcon,
-    PersonIcon,
-    PulseIcon,
-    RepoIcon,
-    SyncIcon
+  CopilotIcon,
+  GitCommitIcon,
+  GitPullRequestIcon,
+  PersonIcon,
+  PulseIcon,
+  RepoIcon,
+  SyncIcon,
 } from '@primer/octicons-react';
-import {
-    Banner,
-    Heading,
-    IconButton,
-    Label,
-    ProgressBar,
-    RelativeTime,
-    Spinner,
-    Stack,
-    Tooltip
-} from '@primer/react';
+import { Banner, Heading, IconButton, Label, ProgressBar, RelativeTime, Spinner, Stack, Tooltip } from '@primer/react';
 import type { CSSProperties } from 'react';
 import { memo } from 'react';
 import styles from './Dashboard.module.css';
@@ -32,7 +22,11 @@ interface ProfileActivitySectionProps {
   onRefresh: () => void;
 }
 
-export const ProfileActivitySection = memo(function ProfileActivitySection({ profile, isLoading, onRefresh }: ProfileActivitySectionProps) {
+export const ProfileActivitySection = memo(function ProfileActivitySection({
+  profile,
+  isLoading,
+  onRefresh,
+}: ProfileActivitySectionProps) {
   if (isLoading) {
     return (
       <section className={styles.card}>
@@ -46,7 +40,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             </Heading>
           </Stack>
         </Stack>
-        
+
         <div className={styles.sectionLoadingCenter}>
           <Spinner size="small" />
         </div>
@@ -67,12 +61,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             </Heading>
           </Stack>
           <Tooltip text="Refresh data">
-            <IconButton 
-              icon={SyncIcon} 
-              variant="invisible" 
-              aria-label="Refresh profile data"
-              onClick={onRefresh}
-            />
+            <IconButton icon={SyncIcon} variant="invisible" aria-label="Refresh profile data" onClick={onRefresh} />
           </Tooltip>
         </Stack>
         <Banner variant="warning" title="Couldn't load profile">
@@ -85,7 +74,12 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
   const isDemo = profile.meta?.aiEnabled === false;
   const { stats, user } = profile;
   const pastSevenDays = profile.pastSevenDays || { commits: 0, pullRequests: 0, reposUpdated: 0 };
-  const recentActivity = (pastSevenDays as { recentActivity?: Array<{ description: string; repo: string; date: string }> }).recentActivity || [];
+  const recentActivity =
+    (
+      pastSevenDays as {
+        recentActivity?: Array<{ description: string; repo: string; date: string }>;
+      }
+    ).recentActivity || [];
 
   return (
     <section className={styles.card}>
@@ -101,12 +95,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
           {isDemo && <Label size="small">Demo</Label>}
         </Stack>
         <Tooltip text="Refresh data">
-          <IconButton 
-            icon={SyncIcon} 
-            variant="invisible" 
-            aria-label="Refresh profile data"
-            onClick={onRefresh}
-          />
+          <IconButton icon={SyncIcon} variant="invisible" aria-label="Refresh profile data" onClick={onRefresh} />
         </Tooltip>
       </Stack>
 
@@ -135,10 +124,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             <div key={lang.name} className={styles.languageRow}>
               <Stack direction="horizontal" align="center" justify="space-between">
                 <Stack direction="horizontal" align="center" gap="condensed">
-                  <span
-                    className={styles.languageDot}
-                    style={{ backgroundColor: lang.color }}
-                  />
+                  <span className={styles.languageDot} style={{ backgroundColor: lang.color }} />
                   <span className={styles.languageName}>{lang.name}</span>
                 </Stack>
                 <span className={styles.languagePercent}>{lang.percentage}%</span>
@@ -190,9 +176,7 @@ export const ProfileActivitySection = memo(function ProfileActivitySection({ pro
             {recentActivity.slice(0, 3).map((activity, idx) => (
               <div key={idx} className={styles.activityItem}>
                 <Stack direction="horizontal" align="center" gap="condensed">
-                  <span className={styles.activityDescription}>
-                    {activity.description}
-                  </span>
+                  <span className={styles.activityDescription}>{activity.description}</span>
                   <span className={styles.activityRepo}>in {activity.repo}</span>
                 </Stack>
                 <RelativeTime date={new Date(activity.date)} className={styles.activityTime} />

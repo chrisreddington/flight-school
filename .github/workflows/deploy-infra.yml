@@ -1,0 +1,354 @@
+name: Deploy infra (Azure Container Apps Bicep apply)
+
+# Reconciles the Bicep template against Azure. App image tags are
+# owned by `deploy-web.yml` and `deploy-worker.yml`; this workflow
+# preserves whatever tag each app is currently running by reading
+# the live values from Azure and passing them as parameters, so a
+# routine infra apply is image-set neutral.
+#
+# Bootstrap: a greenfield environment has no Container Apps to
+# read tags from. Operator pushes initial images to ACR by hand,
+# then `workflow_dispatch` this workflow with the `webImageTag`
+# and `workerImageTag` inputs filled in. See
+# `docs/deployment-aca.md` for the full runbook.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy.'
+        required: true
+        type: string
+      webImageTag:
+        description: 'Override web image tag (bootstrap only). Leave blank to keep the currently-deployed tag.'
+        required: false
+        type: string
+      workerImageTag:
+        description: 'Override worker image tag (bootstrap only). Leave blank to keep the currently-deployed tag.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shared with deploy-web.yml and deploy-worker.yml. The race that
+  # forces serialisation: this workflow reads each app's current
+  # image tag, then submits a Bicep apply that re-asserts those
+  # tags. If an app workflow's `containerapp update` lands between
+  # the read and the apply, this workflow would silently roll the
+  # image back. Sharing the concurrency group makes that impossible.
+  group: deploy-aca-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  should-deploy:
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+      sha: ${{ steps.sha.outputs.value }}
+      sha_short: ${{ steps.sha.outputs.short }}
+    steps:
+      - name: Validate required vars
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          LOCATION: ${{ vars.LOCATION }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+                   ACR_LOGIN_SERVER ACR_NAME APP_NAME RESOURCE_GROUP_NAME LOCATION; do
+            [[ -z "${!v:-}" ]] && missing+=("$v")
+          done
+          (( ${#missing[@]} )) && { echo "::error::Missing vars: ${missing[*]}"; exit 1; }
+          [[ "$ACR_LOGIN_SERVER" != "${ACR_NAME}.azurecr.io" ]] && \
+            { echo "::error::ACR_LOGIN_SERVER does not match \${ACR_NAME}.azurecr.io"; exit 1; }
+          true
+
+      - name: Resolve deploy SHA
+        id: sha
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          case "$GH_EVENT_NAME" in
+            workflow_run)      sha="$WR_HEAD_SHA"  ;;
+            workflow_dispatch) sha="$INPUT_SHA"    ;;
+            *)                 echo "::error::unsupported event"; exit 1 ;;
+          esac
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || \
+            { echo "::error::invalid SHA: '$sha' (must be 40-hex)"; exit 1; }
+          echo "value=$sha" >> "$GITHUB_OUTPUT"
+          # Short SHA for the ARM deployment name. Subscription-scope
+          # deployment names are capped at 64 chars; 12 hex chars
+          # retain collision resistance while leaving headroom for
+          # the prefix + run_id + run_attempt suffix.
+          echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout deploy SHA
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.sha.outputs.value }}
+          fetch-depth: 0
+
+      - name: Verify SHA is reachable from origin/main
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status=$(gh api "/repos/${GH_REPO}/compare/main...${SHA}" --jq '.status')
+          case "$status" in
+            identical|behind) ;;
+            *) echo "::error::SHA $SHA is not reachable from main (compare status='$status')"; exit 1 ;;
+          esac
+
+      - name: Refuse stale workflow_run
+        if: github.event_name == 'workflow_run'
+        id: stale
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
+          if [[ "$tip" == "$SHA" ]]; then
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::superseded — main HEAD is $tip, this run is for $SHA"
+          fi
+
+      - name: Verify CI was green for dispatched SHA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api "/repos/${GH_REPO}/actions/workflows/ci.yml/runs?head_sha=${SHA}&event=push&status=completed&per_page=10" \
+            --jq '.workflow_runs | first | .conclusion // empty')
+          [[ "$conclusion" == "success" ]] || \
+            { echo "::error::No successful CI run found for SHA $SHA (conclusion='$conclusion')"; exit 1; }
+
+      - name: Resolve filter base
+        if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false'
+        id: filter-base
+        env:
+          SHA: ${{ steps.sha.outputs.value }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          base=$(gh api "/repos/${GH_REPO}/actions/workflows/ci.yml/runs?branch=main&status=success&event=push&per_page=100" \
+            --jq "[.workflow_runs[] | select(.id < $CURRENT_RUN_ID)] | first | .head_sha // empty")
+          if [[ -z "$base" ]]; then
+            echo "first_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -e "${base}^{commit}" || \
+            { echo "::error::filter base $base not present in local checkout (fetch-depth: 0 expected)"; exit 1; }
+          echo "first_deploy=false" >> "$GITHUB_OUTPUT"
+          echo "value=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Paths filter (workflow_run only)
+        id: filter
+        if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false' && steps.filter-base.outputs.first_deploy == 'false'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          ref: ${{ steps.sha.outputs.value }}
+          base: ${{ steps.filter-base.outputs.value }}
+          # Inline scope. Bicep template, runtime parameters, and
+          # this workflow file. Infra docs (`infra/README.md`)
+          # deliberately do NOT trigger a deploy.
+          filters: |
+            infra:
+              - 'infra/main.bicep'
+              - 'infra/main.parameters.json'
+              - 'infra/modules/**'
+              - '.github/workflows/deploy-infra.yml'
+
+      - name: Decide whether to proceed
+        id: gate
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          FILTER_HIT: ${{ steps.filter.outputs.infra }}
+          SUPERSEDED: ${{ steps.stale.outputs.superseded }}
+          FIRST_DEPLOY: ${{ steps.filter-base.outputs.first_deploy }}
+        run: |
+          set -euo pipefail
+          if [[ "$SUPERSEDED" == 'true' ]]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Superseded by newer main HEAD; deploy skipped."
+          elif [[ "$GH_EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$FIRST_DEPLOY" == 'true' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::First-ever deploy; paths-filter bypassed."
+          elif [[ "$FILTER_HIT" == 'true' ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No in-scope paths changed; deploy skipped."
+          fi
+
+  deploy:
+    needs: should-deploy
+    if: needs.should-deploy.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # Subscription-scope ARM deployment names are capped at 64
+      # chars. `infra` (5) + `-` (1) + sha_short (12) + `-` (1) +
+      # run_id (≤20) + `-` (1) + run_attempt (≤2) = 42 max.
+      DEPLOY_NAME: infra-${{ needs.should-deploy.outputs.sha_short }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.should-deploy.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Refuse stale deploy (concurrency-queue race guard)
+        # Closes the window between the queue-time stale check and
+        # this job actually running. `workflow_dispatch` bypasses
+        # the guard so an operator can re-apply infra without
+        # being blocked by a newer main HEAD.
+        if: github.event_name == 'workflow_run'
+        env:
+          SHA: ${{ needs.should-deploy.outputs.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tip=$(gh api "/repos/${GH_REPO}/branches/main" --jq '.commit.sha')
+          [[ "$tip" == "$SHA" ]] || \
+            { echo "::error::superseded — main HEAD is $tip, refusing to deploy $SHA"; exit 1; }
+
+      - name: Validate parameters.json
+        # Fail-fast guard before any Azure call. Rejects
+        # placeholder values and the legacy `imageTag` key —
+        # either indicates a stale rollback SHA from before the
+        # web/worker tag split.
+        run: |
+          set -euo pipefail
+          f=infra/main.parameters.json
+          if grep -iE '"<[^"]+>"|REPLACE_ME|your-[a-z0-9-]+|TODO' "$f" >/dev/null; then
+            echo "::error::$f contains placeholder values"; exit 1
+          fi
+          if grep -E '"imageTag"\s*:' "$f" >/dev/null; then
+            echo "::error::$f still defines legacy 'imageTag' — remove it (CD passes webImageTag/workerImageTag explicitly)."; exit 1
+          fi
+
+      - uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve image tags (live state or bootstrap inputs)
+        # Steady-state: read each app's current template image
+        # tag from Azure so the Bicep apply preserves it. The
+        # template image is what Bicep last wrote, which is the
+        # right input for re-applying Bicep — the active revision
+        # may differ if a prior rollout failed readiness, but
+        # re-applying with the template tag is image-set neutral.
+        #
+        # Bootstrap: a fresh environment has no Container Apps to
+        # read from. The `workflow_dispatch` inputs `webImageTag`
+        # and `workerImageTag` let the operator pass explicit tags
+        # for the initial apply.
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          INPUT_WEB_IMAGE_TAG: ${{ inputs.webImageTag }}
+          INPUT_WORKER_IMAGE_TAG: ${{ inputs.workerImageTag }}
+        run: |
+          set -euo pipefail
+
+          resolve_tag() {
+            local resource_name="$1" container_name="$2" override="$3"
+            if [[ -n "$override" ]]; then
+              echo "$override"
+              return
+            fi
+            local image
+            image=$(az containerapp show \
+              --name "$resource_name" \
+              --resource-group "$RESOURCE_GROUP_NAME" \
+              --query "properties.template.containers[?name=='$container_name'].image | [0]" \
+              -o tsv 2>/dev/null || true)
+            if [[ -z "$image" || "$image" == "None" ]]; then
+              echo "::error::Container App '$resource_name' (container '$container_name') has no template image. For a first-ever deploy, dispatch this workflow with the webImageTag and workerImageTag inputs filled in — see docs/deployment-aca.md." >&2
+              exit 1
+            fi
+            local expected_prefix="${ACR_LOGIN_SERVER}/${resource_name}:"
+            if [[ "$image" != "${expected_prefix}"* ]]; then
+              echo "::error::image '$image' does not match expected prefix '$expected_prefix'" >&2
+              exit 1
+            fi
+            echo "${image##*:}"
+          }
+
+          WEB_TAG=$(resolve_tag "$APP_NAME" "$APP_NAME" "$INPUT_WEB_IMAGE_TAG")
+          WORKER_TAG=$(resolve_tag "${APP_NAME}-worker" "copilot-worker" "$INPUT_WORKER_IMAGE_TAG")
+          echo "Resolved web tag: $WEB_TAG"
+          echo "Resolved worker tag: $WORKER_TAG"
+          echo "WEB_IMAGE_TAG=$WEB_TAG"     >> "$GITHUB_ENV"
+          echo "WORKER_IMAGE_TAG=$WORKER_TAG" >> "$GITHUB_ENV"
+
+      - name: Deploy via Bicep
+        env:
+          LOCATION: ${{ vars.LOCATION }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+        run: |
+          set -euo pipefail
+          az deployment sub create \
+            --name "$DEPLOY_NAME" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters @infra/main.parameters.json \
+            --parameters \
+              appName="$APP_NAME" \
+              resourceGroupName="$RESOURCE_GROUP_NAME" \
+              acrLoginServer="$ACR_LOGIN_SERVER" \
+              location="$LOCATION" \
+              webImageTag="$WEB_IMAGE_TAG" \
+              workerImageTag="$WORKER_IMAGE_TAG" \
+            --only-show-errors
+
+      - name: Cancel in-flight deployment on runner cancellation
+        if: cancelled()
+        run: |
+          az deployment sub cancel --name "$DEPLOY_NAME" --only-show-errors || true

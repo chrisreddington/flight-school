@@ -19,11 +19,7 @@ type JobPollingDecision =
   | { kind: 'timed-out'; error: string }
   | { kind: 'continue' };
 
-export function getJobPollingDecision({
-  job,
-  elapsedMs,
-  timeoutMs,
-}: JobPollingDecisionOptions): JobPollingDecision {
+export function getJobPollingDecision({ job, elapsedMs, timeoutMs }: JobPollingDecisionOptions): JobPollingDecision {
   if (!job) return { kind: 'missing', error: 'Job not found' };
   if (job.status === 'completed') return { kind: 'completed' };
   if (job.status === 'cancelled') return { kind: 'cancelled' };

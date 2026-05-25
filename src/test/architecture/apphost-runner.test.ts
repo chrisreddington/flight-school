@@ -2,9 +2,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 
-const packageJson = JSON.parse(
-  readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
-) as {
+const packageJson = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')) as {
   devDependencies?: Record<string, string>;
 };
 

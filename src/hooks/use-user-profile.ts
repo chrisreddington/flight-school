@@ -1,6 +1,6 @@
 /**
  * useUserProfile Hook
- * 
+ *
  * Fetches and caches the authenticated user's GitHub profile and activity data.
  * Uses server-side JSON storage for day-based persistence with manual refresh capability.
  */
@@ -30,17 +30,17 @@ async function getCachedProfile(): Promise<ProfileResponse | null> {
   try {
     const response = await fetch('/api/profile/storage');
     if (!response.ok) return null;
-    
-    const data = await response.json() as ProfileStorageSchema | null;
+
+    const data = (await response.json()) as ProfileStorageSchema | null;
     if (!data) return null;
-    
+
     // Check if cache is from today
     const todayKey = getDateKey();
     if (data.date !== todayKey) return null;
-    
+
     // Invalidate cache if it's missing authMethod (old schema)
     if (!data.profile?.meta?.authMethod) return null;
-    
+
     return data.profile;
   } catch {
     return null;
@@ -138,12 +138,12 @@ export function useUserProfile(): UseUserProfileResult {
       // Use centralized API client with automatic retry and error handling
       const profile = await apiGet<ProfileResponse>('/api/profile');
       const normalized = normalizeProfileResponse(profile);
-      
+
       // Save to server-side storage
       if (normalized) {
         await setCachedProfile(normalized);
       }
-      
+
       setData(normalized);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load profile';

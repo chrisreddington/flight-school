@@ -5,12 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import {
-  checkInHabit,
-  skipHabitDay,
-  getRemainingSkips,
-  isPendingToday,
-} from './state-machine';
+import { checkInHabit, skipHabitDay, getRemainingSkips, isPendingToday } from './state-machine';
 import type { HabitWithHistory, TimeTrackingConfig, CountTrackingConfig, BinaryTrackingConfig } from './types';
 
 // Mock date utilities
@@ -91,7 +86,7 @@ describe('checkInHabit', () => {
         const habit = createTimeHabit(minRequired);
         const result = checkInHabit(habit, minutes);
         expect(result.checkIns[0].completed).toBe(expected);
-      }
+      },
     );
   });
 
@@ -101,14 +96,11 @@ describe('checkInHabit', () => {
       { count: 5, target: 3, expected: true },
       { count: 2, target: 3, expected: false },
       { count: 0, target: 3, expected: false },
-    ])(
-      'should return completed=$expected when count=$count and target=$target',
-      ({ count, target, expected }) => {
-        const habit = createCountHabit(target);
-        const result = checkInHabit(habit, count);
-        expect(result.checkIns[0].completed).toBe(expected);
-      }
-    );
+    ])('should return completed=$expected when count=$count and target=$target', ({ count, target, expected }) => {
+      const habit = createCountHabit(target);
+      const result = checkInHabit(habit, count);
+      expect(result.checkIns[0].completed).toBe(expected);
+    });
   });
 
   describe('state transitions', () => {
@@ -125,10 +117,10 @@ describe('checkInHabit', () => {
     });
 
     it('should transition to completed when totalDays reached', () => {
-      const habit = createTestHabit({ 
-        state: 'active', 
-        currentDay: 6, 
-        totalDays: 7 
+      const habit = createTestHabit({
+        state: 'active',
+        currentDay: 6,
+        totalDays: 7,
       });
       const result = checkInHabit(habit, true);
       expect(result.state).toBe('completed');
@@ -139,7 +131,14 @@ describe('checkInHabit', () => {
   describe('error handling', () => {
     it('should throw if already checked in for the date', () => {
       const habit = createTestHabit({
-        checkIns: [{ date: '2026-01-24', value: true, completed: true, timestamp: '2026-01-24T10:00:00.000Z' }],
+        checkIns: [
+          {
+            date: '2026-01-24',
+            value: true,
+            completed: true,
+            timestamp: '2026-01-24T10:00:00.000Z',
+          },
+        ],
       });
 
       expect(() => checkInHabit(habit, true)).toThrow('Already checked in for 2026-01-24');
@@ -210,7 +209,7 @@ describe('skipHabitDay', () => {
       } else {
         expect(() => skipHabitDay(habit)).not.toThrow();
       }
-    }
+    },
   );
 });
 
@@ -229,7 +228,7 @@ describe('getRemainingSkips', () => {
     ({ skipsUsed, allowedSkips, expected }) => {
       const habit = createTestHabit({ skipsUsed, allowedSkips });
       expect(getRemainingSkips(habit)).toBe(expected);
-    }
+    },
   );
 });
 

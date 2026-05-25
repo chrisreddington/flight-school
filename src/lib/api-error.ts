@@ -25,7 +25,6 @@
 
 import { nowMs } from '@/lib/utils/date-utils';
 import { logger } from '@/lib/logger';
-import { NextResponse } from 'next/server';
 
 interface ApiErrorOptions {
   responseMessage?: string;
@@ -33,20 +32,20 @@ interface ApiErrorOptions {
 }
 
 /**
- * Handle an API error and convert it into a JSON {@link NextResponse}.
+ * Handle an API error and convert it into a JSON {@link Response}.
  *
  * @param error - The caught error
  * @param contextTag - Logging context (e.g., "GET /api/profile")
  * @param startTime - Request start time in milliseconds
  * @param options - Optional status code and message overrides
- * @returns NextResponse with error details and status code
+ * @returns Web-standard response with error details and status code
  */
 export function handleApiError(
   error: unknown,
   contextTag: string,
   startTime: number,
-  options: ApiErrorOptions = {}
-) {
+  options: ApiErrorOptions = {},
+): Response {
   const totalTime = nowMs() - startTime;
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -77,12 +76,12 @@ export function handleApiError(
     statusCode = errorStatus;
   }
 
-  return NextResponse.json(
+  return Response.json(
     {
       success: false as const,
       error: options.responseMessage ?? errorMessage,
       meta: { totalTimeMs: totalTime },
     },
-    { status: statusCode }
+    { status: statusCode },
   );
 }

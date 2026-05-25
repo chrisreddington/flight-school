@@ -15,7 +15,6 @@
  * @module copilot/activity/dto
  */
 
-import 'server-only';
 import type { AIActivityEvent, AIActivityOutput } from './types';
 
 /** Truncate a string to N chars, appending an ellipsis when clipped. */
@@ -33,10 +32,7 @@ function clamp(input: string | undefined, maxChars: number): string | undefined 
  *  - `toolResult` is dropped (may contain repository content).
  *  - Stable shape fields (`embedding`, `tokens`, `toolsUsed`) pass through.
  */
-function redactOutput(
-  output: AIActivityOutput | undefined,
-  includeFull: boolean,
-): AIActivityOutput | undefined {
+function redactOutput(output: AIActivityOutput | undefined, includeFull: boolean): AIActivityOutput | undefined {
   if (!output) return undefined;
   return {
     text: clamp(output.text, 500),
@@ -59,7 +55,9 @@ interface PublicMetadata {
 function redactMetadata(input: AIActivityEvent['input']): AIActivityEvent['input'] {
   if (!input) return undefined;
   const safeMetadata: PublicMetadata | undefined = input.metadata
-    ? { toolName: typeof input.metadata.toolName === 'string' ? input.metadata.toolName : undefined }
+    ? {
+        toolName: typeof input.metadata.toolName === 'string' ? input.metadata.toolName : undefined,
+      }
     : undefined;
   return {
     prompt: clamp(input.prompt, 200),

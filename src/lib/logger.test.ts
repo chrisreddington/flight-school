@@ -48,10 +48,7 @@ describe('logger', () => {
     it('should log messages with data', () => {
       const data = { key: 'value', count: 42 };
       logger.info('With data', data);
-      expect(consoleSpy.info).toHaveBeenCalledWith(
-        expect.stringContaining('With data'),
-        data
-      );
+      expect(consoleSpy.info).toHaveBeenCalledWith(expect.stringContaining('With data'), data);
     });
   });
 
@@ -105,7 +102,7 @@ describe('logger', () => {
       const taggedLogger = logger.withTag('Storage');
       taggedLogger.info('First message');
       taggedLogger.warn('Second message');
-      
+
       expect(consoleSpy.info).toHaveBeenCalledWith(expect.stringContaining('[Storage]'));
       expect(consoleSpy.warn).toHaveBeenCalledWith(expect.stringContaining('[Storage]'));
     });
@@ -114,11 +111,8 @@ describe('logger', () => {
       const taggedLogger = logger.withTag('Test');
       const data = { id: 123 };
       taggedLogger.error('Failed', data);
-      
-      expect(consoleSpy.error).toHaveBeenCalledWith(
-        expect.stringContaining('[Test]'),
-        data
-      );
+
+      expect(consoleSpy.error).toHaveBeenCalledWith(expect.stringContaining('[Test]'), data);
     });
   });
 
@@ -149,12 +143,9 @@ describe('logger', () => {
       vi.stubEnv('NEXT_PUBLIC_DEBUG', 'false');
     });
 
-    it.each(['info', 'warn', 'error'] as const)(
-      'should always log %s level in production',
-      (level) => {
-        logger[level](`${level} message`);
-        expect(consoleSpy[level]).toHaveBeenCalled();
-      }
-    );
+    it.each(['info', 'warn', 'error'] as const)('should always log %s level in production', (level) => {
+      logger[level](`${level} message`);
+      expect(consoleSpy[level]).toHaveBeenCalled();
+    });
   });
 });

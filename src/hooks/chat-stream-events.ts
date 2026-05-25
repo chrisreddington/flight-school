@@ -1,9 +1,9 @@
 /**
  * Chat Stream Event Helpers
  *
- * Wire-format type for chat SSE frames plus pure dispatch helpers
- * extracted from `useLearningChatStream`. Kept in the hooks layer so we
- * do not cross the `@/worker/jobs/streaming/*` boundary.
+ * Wire-format type for chat SSE frames plus pure dispatch helpers.
+ * Lives in the hooks layer so the UI does not cross the
+ * `@/worker/jobs/streaming/*` boundary.
  *
  * The `SSEStreamEvent` shape MUST stay in sync with
  * `src/worker/jobs/streaming/types.ts`.
@@ -20,7 +20,12 @@ export type SSEStreamEvent =
   | { type: 'delta'; content: string }
   | { type: 'tool_start'; toolCallId: string; name: string; args: unknown }
   | { type: 'tool_complete'; toolCallId: string; name: string; result: unknown; durationMs: number }
-  | { type: 'state_snapshot'; content: string; toolEvents: ToolCallEvent[]; hasActionableItem: boolean }
+  | {
+      type: 'state_snapshot';
+      content: string;
+      toolEvents: ToolCallEvent[];
+      hasActionableItem: boolean;
+    }
   | { type: 'done'; content: string; toolEvents: ToolCallEvent[]; hasActionableItem: boolean }
   | { type: 'cancelled'; content: string; toolEvents: ToolCallEvent[] }
   | { type: 'failed'; message: string };
@@ -63,10 +68,10 @@ export function buildTerminalHandler(
         operationsManager.completeExistingJob(jobId);
       })
       .catch((err: unknown) => {
-        log.warn(
-          'refreshThreads failed during terminal cleanup; leaving live record in place for retry',
-          { jobId, err },
-        );
+        log.warn('refreshThreads failed during terminal cleanup; leaving live record in place for retry', {
+          jobId,
+          err,
+        });
         terminalCleanupsRef.current.delete(jobId);
       });
   };

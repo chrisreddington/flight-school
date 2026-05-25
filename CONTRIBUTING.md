@@ -103,10 +103,42 @@ The fastest way to get started is using GitHub Codespaces, which provides a full
 | `npm run dev` | Start development server at localhost:3000 |
 | `npm run build` | Create production build |
 | `npm run lint` | Run ESLint |
+| `npm run lint:md` | Run markdownlint-cli2 across the repo |
+| `npm run format` | Run Prettier `--write` over the repo |
+| `npm run format:check` | Verify formatting without writing |
+| `npm run verify:fast` | Lint + markdownlint + Prettier check (pre-commit hook scope) |
+| `npm run verify` | Full local CI: lint, format, tsc, tests, guardrails, build (pre-push hook scope) |
 | `npm test` | Run all tests (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run test:coverage` | Generate coverage report |
 | `npm run debt:check` | Run all tech debt checks |
+
+### Local quality gates
+
+Three layers, fastest first. The goal is to give AI/human contributors fast
+feedback locally and reserve GitHub Actions as the final authority.
+
+1. **Pre-commit (~few seconds)** — `.husky/pre-commit` runs `lint-staged`,
+   which auto-fixes ESLint, Prettier, and markdownlint issues on staged
+   files only. Failures block the commit.
+2. **Pre-push (~1–2 min)** — `.husky/pre-push` runs the full battery:
+   `npm run lint`, `tsc --noEmit`, `npm test`, `npm run check:guardrails`,
+   and `npm run build`. Failures block the push so CI never sees a known-red
+   commit.
+3. **CI (final gate)** — `.github/workflows/ci.yml` runs `build-and-test`
+   plus a parallel `lint-gaps` job that adds `actionlint` (workflow YAML +
+   embedded shellcheck) and `markdownlint-cli2`. Both jobs are required.
+
+Escape hatch: `git commit --no-verify` / `git push --no-verify` skip the
+local hooks when you need to capture a WIP state. Don't push unverified
+work to `main`.
+
+**Why no super-linter?** This repo is single-language (TS/Next.js) with
+strong existing static analysis (ESLint, tsc, Prettier, knip, depcheck,
+ts-prune, madge, plus 8 custom guardrail scripts). The github/super-linter
+action would mostly re-run our existing ESLint inside a 2–3 GB Docker
+image. The two gaps that matter — workflow YAML and markdown — are
+covered cheaper and faster by focused single-purpose actions.
 
 ### Tech Debt Analysis Tools
 
@@ -119,7 +151,7 @@ The fastest way to get started is using GitHub Codespaces, which provides a full
 
 ### Project Structure
 
-```
+```text
 src/
 ├── app/           # Next.js App Router (pages and API routes)
 ├── components/    # React components (each in own folder)
@@ -149,7 +181,8 @@ Use descriptive branch names:
 ### Commit Messages
 
 Write clear, descriptive commit messages:
-```
+
+```text
 feat: add multi-file workspace support to challenge sandbox
 
 - Support multiple files in evaluation API

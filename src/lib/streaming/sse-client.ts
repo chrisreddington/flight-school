@@ -152,9 +152,7 @@ class ConnectionClosedWithoutTerminalError extends Error {
  */
 export class SSEReconnectExhaustedError extends Error {
   constructor(durationMs: number) {
-    super(
-      `SSE reconnect exhausted after ${Math.round(durationMs / 1_000)}s of failed retries`,
-    );
+    super(`SSE reconnect exhausted after ${Math.round(durationMs / 1_000)}s of failed retries`);
     this.name = 'SSEReconnectExhaustedError';
   }
 }

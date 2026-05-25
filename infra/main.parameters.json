@@ -8,15 +8,6 @@
     "appName": {
       "value": "flightschool"
     },
-    "imageTag": {
-      "value": "latest"
-    },
-    "acrLoginServer": {
-      "value": "ghcr.io/<your-org>"
-    },
-    "githubAppId": {
-      "value": "<your-github-app-client-id>"
-    },
     "environment": {
       "value": "prod"
     }

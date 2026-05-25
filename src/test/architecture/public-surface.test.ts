@@ -20,10 +20,7 @@ const ALLOWED_EXPORTS: Record<string, string[]> = {
     'getTokenStore',
     'createDefaultTokenStore',
   ],
-  'src/lib/copilot/server.ts': [
-    'createLoggedCoachSession',
-    'wrapSessionWithLogging',
-  ],
+  'src/lib/copilot/server.ts': ['createLoggedCoachSession', 'wrapSessionWithLogging'],
   'src/lib/copilot/sessions.ts': [
     'CHAT_MODEL',
     'createSessionWithMetrics',

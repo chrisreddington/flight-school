@@ -112,7 +112,14 @@ describe('useCustomChallengeQueue — initial load', () => {
 
 describe('useCustomChallengeQueue — active challenge priority', () => {
   it.each<[string, DailyChallenge[], DailyChallenge | null, string | null, string, number]>([
-    ['custom queue takes priority over daily', [challenge('c1'), challenge('c2')], dailyChallenge, 'c1', 'custom-queue', 2],
+    [
+      'custom queue takes priority over daily',
+      [challenge('c1'), challenge('c2')],
+      dailyChallenge,
+      'c1',
+      'custom-queue',
+      2,
+    ],
     ['falls back to daily when queue is empty', [], dailyChallenge, 'daily-1', 'daily', 0],
     ['reports source=none when both are missing', [], null, null, 'none', 0],
   ])('%s', async (_label, queue, daily, expectedId, expectedSource, expectedRemaining) => {
@@ -245,7 +252,10 @@ describe('useCustomChallengeQueue — updateChallenge', () => {
 
     let outcome: boolean | undefined;
     await act(async () => {
-      outcome = await result.current.updateChallenge('c1', { title: 'Updated', difficulty: 'expert' });
+      outcome = await result.current.updateChallenge('c1', {
+        title: 'Updated',
+        difficulty: 'expert',
+      });
     });
 
     expect(outcome).toBe(true);

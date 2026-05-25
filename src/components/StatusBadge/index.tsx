@@ -49,7 +49,7 @@ interface ConversationBadgeProps {
  *
  * Terminology: We use "conversation" consistently for user-facing text.
  * Internally the SDK uses "session" but users think in terms of conversations.
- * 
+ *
  * Note: Session creation time is INCLUDED in server metrics, not separate.
  */
 export function ConversationBadge({ reused, createTimeMs }: ConversationBadgeProps): React.ReactElement {
@@ -103,15 +103,15 @@ interface TtftBadgesProps {
 
 /**
  * Shows TTFT metrics in logical server→client flow.
- * 
+ *
  * - Server: SDK processing time (includes session creation if new)
  * - TTFT: Client-side timing (Server + network latency)
- * 
+ *
  * Order shows the flow: token generated on server → received by client
  */
 export function TtftBadges({ clientMs, serverMs }: TtftBadgesProps): React.ReactElement | null {
   if (clientMs == null && serverMs == null) return null;
-  
+
   return (
     <>
       {serverMs != null && (

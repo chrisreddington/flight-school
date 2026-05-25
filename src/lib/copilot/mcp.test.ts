@@ -25,13 +25,7 @@ describe('getMcpServerConfig', () => {
     const config = getMcpServerConfig({ token: 'tok' });
 
     expect(config.tools).toEqual(
-      expect.arrayContaining([
-        'get_me',
-        'list_user_repositories',
-        'get_file_contents',
-        'search_code',
-        'search_users',
-      ])
+      expect.arrayContaining(['get_me', 'list_user_repositories', 'get_file_contents', 'search_code', 'search_users']),
     );
   });
 
@@ -54,8 +48,6 @@ describe('getMcpServerConfig', () => {
   });
 
   it('throws when called without a token', () => {
-    expect(() => getMcpServerConfig({ token: '' })).toThrow(
-      'MCP config requires a GitHub token'
-    );
+    expect(() => getMcpServerConfig({ token: '' })).toThrow('MCP config requires a GitHub token');
   });
 });

@@ -16,11 +16,7 @@ import { logger } from '@/lib/logger';
 import { nowMs } from '@/lib/utils/date-utils';
 
 import { activityBus } from './activity-bus';
-import {
-  appendActivityEvent,
-  clearActivityEvents,
-  loadActivityEvents,
-} from './activity-store';
+import { appendActivityEvent, clearActivityEvents, loadActivityEvents } from './activity-store';
 import type {
   AIActivityEvent,
   AIActivityInput,
@@ -100,12 +96,7 @@ class AIActivityLoggerWorker {
    * Build a NEW event with status `pending`, broadcast it via the bus,
    * and persist it. Returns the event so callers can grab the assigned id.
    */
-  createPending(
-    userId: string,
-    type: AIActivityType,
-    operation: string,
-    input?: AIActivityInput,
-  ): AIActivityEvent {
+  createPending(userId: string, type: AIActivityType, operation: string, input?: AIActivityInput): AIActivityEvent {
     const event: AIActivityEvent = {
       id: this.generateId(),
       userId,

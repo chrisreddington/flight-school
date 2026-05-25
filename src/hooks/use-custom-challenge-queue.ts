@@ -26,11 +26,7 @@
  */
 
 import type { ActiveChallengeResult } from '@/lib/challenge/custom-queue';
-import {
-  challengeQueueStore,
-  determineActiveChallenge,
-  MAX_CUSTOM_QUEUE_SIZE,
-} from '@/lib/challenge/custom-queue';
+import { challengeQueueStore, determineActiveChallenge, MAX_CUSTOM_QUEUE_SIZE } from '@/lib/challenge/custom-queue';
 import { focusStore } from '@/lib/focus';
 import type { DailyChallenge } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
@@ -81,9 +77,7 @@ interface UseCustomChallengeQueueResult {
  * @param dailyChallenge - The AI-generated daily challenge (for fallback)
  * @returns Queue state and CRUD operations
  */
-export function useCustomChallengeQueue(
-  dailyChallenge: DailyChallenge | null
-): UseCustomChallengeQueueResult {
+export function useCustomChallengeQueue(dailyChallenge: DailyChallenge | null): UseCustomChallengeQueueResult {
   // State synced with server storage
   const [queue, setQueue] = useState<DailyChallenge[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,24 +122,30 @@ export function useCustomChallengeQueue(
   }, [registerQueuedChallenges]);
 
   // Add a challenge
-  const addChallenge = useCallback(async (challenge: DailyChallenge): Promise<boolean> => {
-    const result = await challengeQueueStore.addChallenge(challenge);
-    if (result) {
-      const dateKey = getDateKey();
-      await focusStore.addChallenge(dateKey, { ...challenge, isCustom: true });
-      await refreshFromStorage();
-    }
-    return result;
-  }, [refreshFromStorage]);
+  const addChallenge = useCallback(
+    async (challenge: DailyChallenge): Promise<boolean> => {
+      const result = await challengeQueueStore.addChallenge(challenge);
+      if (result) {
+        const dateKey = getDateKey();
+        await focusStore.addChallenge(dateKey, { ...challenge, isCustom: true });
+        await refreshFromStorage();
+      }
+      return result;
+    },
+    [refreshFromStorage],
+  );
 
   // Remove a challenge
-  const removeChallenge = useCallback(async (challengeId: string): Promise<boolean> => {
-    const result = await challengeQueueStore.removeChallenge(challengeId);
-    if (result) {
-      await refreshFromStorage();
-    }
-    return result;
-  }, [refreshFromStorage]);
+  const removeChallenge = useCallback(
+    async (challengeId: string): Promise<boolean> => {
+      const result = await challengeQueueStore.removeChallenge(challengeId);
+      if (result) {
+        await refreshFromStorage();
+      }
+      return result;
+    },
+    [refreshFromStorage],
+  );
 
   // Reorder a challenge
   const reorderChallenge = useCallback(
@@ -156,7 +156,7 @@ export function useCustomChallengeQueue(
       }
       return result;
     },
-    [refreshFromStorage]
+    [refreshFromStorage],
   );
 
   // Update a challenge
@@ -168,7 +168,7 @@ export function useCustomChallengeQueue(
       }
       return result;
     },
-    [refreshFromStorage]
+    [refreshFromStorage],
   );
 
   // Advance queue (complete/skip active custom challenge)
@@ -199,32 +199,35 @@ export function useCustomChallengeQueue(
   }, [isLoading, queue, dailyChallenge]);
 
   // Memoize the return object to prevent unnecessary re-renders in consumers
-  return useMemo(() => ({
-    queue,
-    queueCount: queue.length,
-    isQueueFull: queue.length >= MAX_CUSTOM_QUEUE_SIZE,
-    maxQueueSize: MAX_CUSTOM_QUEUE_SIZE,
-    activeChallenge: activeResult.challenge,
-    activeSource: activeResult.source,
-    queueRemaining: activeResult.queueRemaining,
-    addChallenge,
-    removeChallenge,
-    reorderChallenge,
-    updateChallenge,
-    advanceQueue,
-    clearQueue,
-    getById,
-    isLoading,
-  }), [
-    queue,
-    activeResult,
-    addChallenge,
-    removeChallenge,
-    reorderChallenge,
-    updateChallenge,
-    advanceQueue,
-    clearQueue,
-    getById,
-    isLoading,
-  ]);
+  return useMemo(
+    () => ({
+      queue,
+      queueCount: queue.length,
+      isQueueFull: queue.length >= MAX_CUSTOM_QUEUE_SIZE,
+      maxQueueSize: MAX_CUSTOM_QUEUE_SIZE,
+      activeChallenge: activeResult.challenge,
+      activeSource: activeResult.source,
+      queueRemaining: activeResult.queueRemaining,
+      addChallenge,
+      removeChallenge,
+      reorderChallenge,
+      updateChallenge,
+      advanceQueue,
+      clearQueue,
+      getById,
+      isLoading,
+    }),
+    [
+      queue,
+      activeResult,
+      addChallenge,
+      removeChallenge,
+      reorderChallenge,
+      updateChallenge,
+      advanceQueue,
+      clearQueue,
+      getById,
+      isLoading,
+    ],
+  );
 }

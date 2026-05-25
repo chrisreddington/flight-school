@@ -93,7 +93,12 @@ const PHPTemplates: FileTemplate[] = [
 /** Common templates available for all languages */
 const CommonTemplates: FileTemplate[] = [
   { label: 'New README', filename: 'README.md', icon: 'file-code' },
-  { label: 'New workflow', filename: 'ci.yml', icon: 'workflow', subdirectory: '.github/workflows' },
+  {
+    label: 'New workflow',
+    filename: 'ci.yml',
+    icon: 'workflow',
+    subdirectory: '.github/workflows',
+  },
 ];
 
 // =============================================================================
@@ -156,9 +161,9 @@ export function getFileTemplatesForLanguage(language: string): FileTemplate[] {
  *
  * @example
  * ```ts
- * const path = getFilePathFromTemplate({ 
- *   filename: 'ci.yml', 
- *   subdirectory: '.github/workflows' 
+ * const path = getFilePathFromTemplate({
+ *   filename: 'ci.yml',
+ *   subdirectory: '.github/workflows'
  * });
  * // Returns: '.github/workflows/ci.yml'
  * ```

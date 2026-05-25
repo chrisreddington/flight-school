@@ -1,6 +1,6 @@
 /**
  * Habit Card Component
- * 
+ *
  * Displays a user-created habit with streak tracking and daily check-ins.
  * Supports three tracking modes: time, count, and binary.
  */
@@ -10,8 +10,29 @@ import { checkInHabit, isPendingToday, getRemainingSkips, skipHabitDay, undoChec
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { getDateKey } from '@/lib/utils/date-utils';
 import { logger } from '@/lib/logger';
-import { CheckIcon, FlameIcon, KebabHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, SkipIcon, StopIcon, TrashIcon, UndoIcon } from '@primer/octicons-react';
-import { ActionList, ActionMenu, Button, Heading, IconButton, Label, ProgressBar, Stack, useConfirm } from '@primer/react';
+import {
+  CheckIcon,
+  FlameIcon,
+  KebabHorizontalIcon,
+  PauseIcon,
+  PencilIcon,
+  PlayIcon,
+  SkipIcon,
+  StopIcon,
+  TrashIcon,
+  UndoIcon,
+} from '@primer/octicons-react';
+import {
+  ActionList,
+  ActionMenu,
+  Button,
+  Heading,
+  IconButton,
+  Label,
+  ProgressBar,
+  Stack,
+  useConfirm,
+} from '@primer/react';
 import { InlineMessage } from '@primer/react/experimental';
 import { useCallback, useEffect, useState } from 'react';
 import { HabitEditDialog } from '../Habits/HabitEditDialog';
@@ -30,7 +51,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  
+
   const confirm = useConfirm();
 
   const dateKey = getDateKey();
@@ -53,7 +74,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
   }, []);
 
   const handlePause = useCallback(() => {
-    setIsPaused(prev => !prev);
+    setIsPaused((prev) => !prev);
   }, []);
 
   const handleCheckIn = useCallback(async () => {
@@ -72,7 +93,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
 
       const updated = checkInHabit(habit, value, dateKey);
       await habitStore.update(updated);
-      
+
       // Reset UI
       setStartTime(null);
       setElapsedTime(0);
@@ -155,7 +176,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
   }, [habit, confirm, onUpdate]);
 
   const handleIncrement = useCallback(() => {
-    setCurrentValue(prev => prev + 1);
+    setCurrentValue((prev) => prev + 1);
   }, []);
 
   // Format time for display
@@ -163,7 +184,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    
+
     if (minutes === 0) {
       return `${seconds}s`;
     }
@@ -181,9 +202,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
       return (
         <>
           <Stack direction="horizontal" justify="space-between">
-            <span className={styles.progressLabel}>
-              {isGoalReached ? 'Goal Reached!' : 'Today\'s Session:'}
-            </span>
+            <span className={styles.progressLabel}>{isGoalReached ? 'Goal Reached!' : "Today's Session:"}</span>
             <span className={styles.progressValue}>
               {isGoalReached ? (
                 <span className={styles.textSuccess}>
@@ -223,9 +242,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
       );
     } else {
       // Binary mode - just yes/no
-      return (
-        <p className={styles.description}>Did you complete this today?</p>
-      );
+      return <p className={styles.description}>Did you complete this today?</p>;
     }
   };
 
@@ -294,20 +311,20 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
   const renderStreak = () => {
     const days = Array.from({ length: habit.totalDays }, (_, i) => {
       const dayNumber = i + 1; // Days are 1-indexed
-      
+
       // Check if we've reached this day yet
       if (dayNumber > habit.currentDay) {
         return { symbol: '○', filled: false }; // Future day
       }
-      
+
       // Find check-in for this day (match by day number, not date)
       // Days are sequential from start, so day 1 = first check-in, day 2 = second, etc.
       const checkIn = habit.checkIns[i];
-      
+
       if (!checkIn) {
         return { symbol: '○', filled: false }; // No check-in yet
       }
-      
+
       // Show ✓ for any check-in (celebrating showing up!)
       // Only show ○ if explicitly skipped (value === false)
       if (checkIn.value === false) {
@@ -320,7 +337,10 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
     return (
       <div className={styles.streakGrid}>
         {days.map((day, dayIndex) => (
-          <span key={`${habit.id}-day-${dayIndex}`} className={day.filled ? styles.streakDayFilled : styles.streakDayEmpty}>
+          <span
+            key={`${habit.id}-day-${dayIndex}`}
+            className={day.filled ? styles.streakDayFilled : styles.streakDayEmpty}
+          >
             {day.symbol}
           </span>
         ))}
@@ -346,16 +366,22 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
             <ActionMenu.Overlay>
               <ActionList>
                 <ActionList.Item onSelect={() => setIsEditDialogOpen(true)}>
-                  <ActionList.LeadingVisual><PencilIcon /></ActionList.LeadingVisual>
+                  <ActionList.LeadingVisual>
+                    <PencilIcon />
+                  </ActionList.LeadingVisual>
                   Edit
                 </ActionList.Item>
                 <ActionList.Divider />
                 <ActionList.Item onSelect={handleStop}>
-                  <ActionList.LeadingVisual><StopIcon /></ActionList.LeadingVisual>
+                  <ActionList.LeadingVisual>
+                    <StopIcon />
+                  </ActionList.LeadingVisual>
                   Stop Habit
                 </ActionList.Item>
                 <ActionList.Item variant="danger" onSelect={handleDelete}>
-                  <ActionList.LeadingVisual><TrashIcon /></ActionList.LeadingVisual>
+                  <ActionList.LeadingVisual>
+                    <TrashIcon />
+                  </ActionList.LeadingVisual>
                   Delete
                 </ActionList.Item>
               </ActionList>

@@ -1,19 +1,19 @@
 /**
  * API Validation Utilities
- * 
+ *
  * Composable validation helpers for API request bodies.
  * Reduces boilerplate and standardizes error messages.
- * 
+ *
  * @module api/validation-utils
  */
 
 /**
  * Validates that a value is an object.
- * 
+ *
  * @param value - Value to validate
  * @param fieldName - Field name for error message
  * @returns Error message if invalid, null if valid
- * 
+ *
  * @example
  * ```typescript
  * const error = validateObject(body, 'Request body');
@@ -39,10 +39,7 @@ export function validateObject(value: unknown, fieldName: string): string | null
  * const error = validateRequiredString(title, 'title');
  * ```
  */
-export function validateRequiredString(
-  value: unknown,
-  fieldName: string
-): string | null {
+export function validateRequiredString(value: unknown, fieldName: string): string | null {
   if (!value || typeof value !== 'string' || value.trim().length === 0) {
     return `${fieldName} is required`;
   }

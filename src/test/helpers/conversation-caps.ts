@@ -8,6 +8,5 @@
  * name in one place.
  */
 export function clearConversationCapsCache(): void {
-  (globalThis as { __chatConversationCapsCache?: Map<string, unknown> })
-    .__chatConversationCapsCache?.clear();
+  (globalThis as { __chatConversationCapsCache?: Map<string, unknown> }).__chatConversationCapsCache?.clear();
 }

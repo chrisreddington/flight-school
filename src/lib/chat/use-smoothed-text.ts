@@ -31,8 +31,7 @@ const SNAP_THRESHOLD = 800;
  */
 const CATCHUP_DIVISOR = 8;
 
-const isBrowserEnv =
-  typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
+const isBrowserEnv = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
 
 /**
  * Returns a smoothed substring of `target` that grows steadily over

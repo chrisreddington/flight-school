@@ -18,8 +18,8 @@ reference environment for Flight School on **Azure Container Apps (ACA)**.
 | Container Apps managed environment `cae-<appName>` | Consumption workload profile |
 | Cosmos DB (NoSQL, **serverless**) | DB `flightschool`, container `sessions` (partition key `/userId`, 30-day TTL) for future server-side session/token store |
 | Key Vault `kv-<appName>-<hash>` | RBAC-enabled; holds Auth.js, GitHub App, Cosmos, and App Insights secrets |
-| Container App `<appName>` | The Next.js + Copilot CLI workload (1 vCPU / 2 GiB, 1–5 replicas) |
-| Container App `<appName>-worker` | Private internal Copilot worker app using the same image (1 vCPU / 2 GiB, 1–3 replicas) |
+| Container App `<appName>` | Public Next.js web app — browser traffic, OAuth, Octokit, and SSE proxy to the worker (1 vCPU / 2 GiB, 1–5 replicas) — pulls image `<acrLoginServer>/<appName>:<webImageTag>` (built from `Dockerfile`). The web image does not execute the Copilot SDK or CLI and ships zero `@github/*` packages, enforced by `npm run check:web-image`. |
+| Container App `<appName>-worker` | Private internal Copilot worker — owns the Copilot SDK, the CLI subprocesses, the per-user runtime pool, and `/api/internal/*` (1 vCPU / 2 GiB, **single replica**) — pulls image `<acrLoginServer>/<appName>-worker:<workerImageTag>` (built from `Dockerfile.worker`) |
 
 The Container App runs with a **system-assigned managed identity** that is
 granted the **Key Vault Secrets User** role on the Key Vault so it can resolve
@@ -28,9 +28,9 @@ secret references at runtime.
 ## Architecture notes
 
 - **Ingress** is external on target port 3000, transport `auto`, with
-  `stickySessions.affinity: 'sticky'` so an SSE stream from the Copilot CLI
-  subprocess stays pinned to the replica that owns it. `clientCertificateMode`
-  is `ignore`.
+  `stickySessions.affinity: 'sticky'` so an SSE stream proxied from the
+  worker stays pinned to the web replica that opened the upstream
+  connection. `clientCertificateMode` is `ignore`.
 - **Idle / request timeout.** ACA's HTTP edge currently caps a single request
   at **~240 s** (4 minutes). That's fine for short Copilot turns but a long
   agentic run that streams for longer than 4 minutes will be cut by the edge
@@ -39,8 +39,9 @@ secret references at runtime.
   known limitation and mitigate at the app layer (heartbeats / resume tokens /
   reconnect). If/when Microsoft surfaces a configurable idle timeout on
   `ingress`, set it here.
-- **Sizing.** 1 vCPU / 2 GiB per replica gives the Copilot CLI Node subprocess
-  enough headroom; bump if you see OOMs in App Insights.
+- **Sizing.** 1 vCPU / 2 GiB per replica. The web tier is mostly Next.js
+  + Octokit; the worker tier hosts the Copilot CLI Node subprocesses and
+  needs the headroom. Bump either if you see OOMs in App Insights.
 - **Min replicas = 1** to avoid cold-start latency on the first SSE byte. Max 5
   with an HTTP concurrency scaler at 50 concurrent requests/replica.
 - **Cosmos = serverless** to keep idle cost near zero until P9 turns on the
@@ -55,9 +56,27 @@ secret references at runtime.
 2. An Azure subscription you can deploy into; you need `Owner` or
    `Contributor` **plus** `User Access Administrator` (the deployment creates
    a role assignment on the Key Vault).
-3. A container image pushed to a registry the Container App can pull from
-   (GHCR, ACR, etc.). The full image reference used at runtime is
-   `${acrLoginServer}/${appName}:${imageTag}`.
+3. **Two** container images pushed to a registry the Container Apps can pull from
+   (GHCR, ACR, etc.). Each image is **independently tagged** — there is no
+   shared `imageTag` parameter. The full image references used at runtime are:
+   - **Web:** `${acrLoginServer}/${appName}:${webImageTag}` — built from
+     `Dockerfile` at the repo root.
+   - **Worker:** `${acrLoginServer}/${appName}-worker:${workerImageTag}` —
+     built from `Dockerfile.worker`. The Bicep template requires both
+     `webImageTag` and `workerImageTag` as explicit parameters with no
+     defaults, so deployments are always deterministic. CD splits the
+     work across three workflows:
+     [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
+     and
+     [`.github/workflows/deploy-worker.yml`](../.github/workflows/deploy-worker.yml)
+     build their image and call `az containerapp update --image`;
+     [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
+     reads each app's current tag from Azure and runs
+     `az deployment sub create`. All three share the
+     `deploy-aca-${{ github.ref_name }}` concurrency group. See
+     [`docs/deployment-aca.md`](../docs/deployment-aca.md) for the
+     equivalent manual `docker build` / push commands and the
+     bootstrap / rollback runbooks.
 4. A **GitHub App** (not OAuth App) — see the next section.
 
 ## GitHub App setup
@@ -92,7 +111,10 @@ $EDITOR infra/main.parameters.local.json
 ```
 
 Set `acrLoginServer` (e.g. `ghcr.io/your-org`), `appName`, `location`,
-`imageTag`, and `githubAppId`.
+and `githubAppId`. The `webImageTag` and `workerImageTag` parameters
+are supplied as `--parameters` overrides on the `az deployment sub create`
+command line, not in the JSON file, so each image can be promoted
+independently.
 
 ### 2. Deploy the infrastructure
 
@@ -190,17 +212,44 @@ update it now to the real FQDN.
 
 ## Redeploying with a new image tag
 
+The CI workflows ([`deploy-web.yml`](../.github/workflows/deploy-web.yml),
+[`deploy-worker.yml`](../.github/workflows/deploy-worker.yml)) handle
+routine image rollouts automatically by running `az containerapp update --image`
+— no Bicep apply needed, no operator action needed. For a manual
+rollout (e.g. testing a one-off build, or rolling back to an older
+SHA), push the image (see
+[Building the images](../docs/deployment-aca.md#building-the-images))
+and update the single Container App over to it:
+
 ```bash
-az deployment sub create \
-  --name flightschool-$(date +%Y%m%d-%H%M%S) \
-  --location uksouth \
-  --template-file infra/main.bicep \
-  --parameters @infra/main.parameters.local.json \
-  --parameters imageTag=sha-abc1234
+APP=<appName>
+RG=<resourceGroupName>
+ACR=<acrLoginServer>
+TAG=sha-<full-sha-from-git>
+
+# Web rollout
+az containerapp update \
+  --name "$APP" --resource-group "$RG" \
+  --image "${ACR}/${APP}:${TAG}"
+
+# Worker rollout
+az containerapp update \
+  --name "${APP}-worker" --resource-group "$RG" \
+  --image "${ACR}/${APP}-worker:${TAG}"
 ```
 
-This creates a new ACA revision with the new image; traffic shifts to it
-once it passes the readiness probe (single-revision mode, 100% traffic).
+The image-update path never touches Bicep, so env vars, scaling
+rules, and secret bindings stay exactly as they were. To roll back
+to a known-good tag, run the same command with an older SHA-pinned
+tag — image immutability in ACR guarantees the bits haven't moved.
+
+For infra changes (env var wiring, scaling parameters, identity
+bindings), use [`deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
+instead — it reads each app's current image tag from Azure and runs
+`az deployment sub create` against `infra/main.bicep` without
+disturbing the running images. See
+[Deployment model](../docs/deployment-aca.md#deployment-model-three-workflows-two-responsibilities)
+for the bootstrap and combined-rollback runbooks.
 
 ## Rotating secrets
 

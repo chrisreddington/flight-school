@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  __resetCursorStoreForTests,
-  evictCursor,
-  getCursor,
-  setCursor,
-} from './cursor-store';
+import { __resetCursorStoreForTests, evictCursor, getCursor, setCursor } from './cursor-store';
 
 beforeEach(() => {
   __resetCursorStoreForTests();

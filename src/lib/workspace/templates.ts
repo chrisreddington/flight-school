@@ -153,15 +153,7 @@ function generateFileId(): string {
  * @returns True if TDD-related keywords are found
  */
 function isTddChallenge(description: string): boolean {
-  const tddKeywords = [
-    'test',
-    'tdd',
-    'test-driven',
-    'unit test',
-    'testing',
-    'write tests',
-    'test case',
-  ];
+  const tddKeywords = ['test', 'tdd', 'test-driven', 'unit test', 'testing', 'write tests', 'test case'];
   const lowerDescription = description.toLowerCase();
   return tddKeywords.some((keyword) => lowerDescription.includes(keyword));
 }
@@ -182,7 +174,7 @@ function generateStarterCode(challenge: ChallengeDef): string {
   }
 
   const extension = getLanguageExtension(challenge.language);
-  
+
   // Language-specific starters
   const starters: Record<string, string> = {
     ts: `// ${challenge.title}

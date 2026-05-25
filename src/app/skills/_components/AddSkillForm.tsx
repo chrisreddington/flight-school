@@ -43,8 +43,12 @@ export function AddSkillForm({ onSuccess, onCancel }: AddSkillFormProps) {
             aria-label="New skill name"
             disabled={isPending}
           />
-          <Button type="submit" disabled={isPending}>{isPending ? 'Adding…' : 'Add'}</Button>
-          <Button type="button" variant="invisible" onClick={onCancel} disabled={isPending}>Cancel</Button>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? 'Adding…' : 'Add'}
+          </Button>
+          <Button type="button" variant="invisible" onClick={onCancel} disabled={isPending}>
+            Cancel
+          </Button>
         </Stack>
         {state.error && <FormControl.Validation variant="error">{state.error}</FormControl.Validation>}
       </FormControl>

@@ -12,15 +12,15 @@
 'use client';
 
 import {
-    BeakerIcon,
-    FileCodeIcon,
-    FileIcon,
-    GearIcon,
-    PlusIcon,
-    RepoIcon,
-    ToolsIcon,
-    WorkflowIcon,
-    XIcon,
+  BeakerIcon,
+  FileCodeIcon,
+  FileIcon,
+  GearIcon,
+  PlusIcon,
+  RepoIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  XIcon,
 } from '@primer/octicons-react';
 import { ActionList, ActionMenu, Button, IconButton, TextInput, Tooltip } from '@primer/react';
 import React, { useCallback, useRef, useState } from 'react';
@@ -81,16 +81,16 @@ function getTemplateIcon(iconId: FileTemplate['icon']): React.ReactNode {
 /** Gets an appropriate icon for a file based on its name. */
 function getFileIcon(filename: string): React.ReactNode {
   const lower = filename.toLowerCase();
-  
+
   if (lower.includes('.test.') || lower.includes('.spec.') || lower.includes('_test.')) {
     return <BeakerIcon size={14} />;
   }
-  
+
   const codeExtensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.go', '.rs', '.rb'];
   if (codeExtensions.some((ext) => lower.endsWith(ext))) {
     return <FileCodeIcon size={14} />;
   }
-  
+
   return <FileIcon size={14} />;
 }
 
@@ -109,16 +109,7 @@ interface FileTabProps {
   disabled?: boolean;
 }
 
-function FileTab({
-  file,
-  isActive,
-  isOnly,
-  onSelect,
-  onClose,
-  onRename,
-  onNavigate,
-  disabled,
-}: FileTabProps) {
+function FileTab({ file, isActive, isOnly, onSelect, onClose, onRename, onNavigate, disabled }: FileTabProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(file.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -139,19 +130,25 @@ function FileTab({
     setIsEditing(false);
   }, [editValue, file.name, onRename]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleRenameSubmit();
-    } else if (e.key === 'Escape') {
-      setEditValue(file.name);
-      setIsEditing(false);
-    }
-  }, [handleRenameSubmit, file.name]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        handleRenameSubmit();
+      } else if (e.key === 'Escape') {
+        setEditValue(file.name);
+        setIsEditing(false);
+      }
+    },
+    [handleRenameSubmit, file.name],
+  );
 
-  const handleCloseClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onClose();
-  }, [onClose]);
+  const handleCloseClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onClose();
+    },
+    [onClose],
+  );
 
   if (isEditing) {
     return (
@@ -239,30 +236,33 @@ export function FileManager({
 }: FileManagerProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const tabListRef = useRef<HTMLDivElement>(null);
-  
+
   // Get language-specific file templates
   const fileTemplates = getFileTemplatesForLanguage(language);
 
   // Keyboard navigation between tabs
-  const handleNavigate = useCallback((direction: 'left' | 'right') => {
-    const currentIndex = files.findIndex((f) => f.id === activeFileId);
-    const delta = direction === 'left' ? -1 : 1;
-    const newIndex = (currentIndex + delta + files.length) % files.length;
-    onSelectFile(files[newIndex].id);
-  }, [files, activeFileId, onSelectFile]);
+  const handleNavigate = useCallback(
+    (direction: 'left' | 'right') => {
+      const currentIndex = files.findIndex((f) => f.id === activeFileId);
+      const delta = direction === 'left' ? -1 : 1;
+      const newIndex = (currentIndex + delta + files.length) % files.length;
+      onSelectFile(files[newIndex].id);
+    },
+    [files, activeFileId, onSelectFile],
+  );
 
-  const handleAddFile = useCallback((template: FileTemplate) => {
-    const fullPath = getFilePathFromTemplate(template);
-    onAddFile(fullPath);
-    setMenuOpen(false);
-  }, [onAddFile]);
+  const handleAddFile = useCallback(
+    (template: FileTemplate) => {
+      const fullPath = getFilePathFromTemplate(template);
+      onAddFile(fullPath);
+      setMenuOpen(false);
+    },
+    [onAddFile],
+  );
 
   return (
     <div className={styles.container} role="tablist" aria-label="Workspace files">
-      <div 
-        ref={tabListRef}
-        className={styles.tabs}
-      >
+      <div ref={tabListRef} className={styles.tabs}>
         {files.map((file) => (
           <FileTab
             key={file.id}
@@ -277,7 +277,7 @@ export function FileManager({
           />
         ))}
       </div>
-      
+
       <div className={styles.actions}>
         <ActionMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <ActionMenu.Anchor>
@@ -292,19 +292,10 @@ export function FileManager({
           <ActionMenu.Overlay>
             <ActionList>
               {fileTemplates.map((template, index) => (
-                <ActionList.Item 
-                  key={index} 
-                  onSelect={() => handleAddFile(template)}
-                >
-                  <ActionList.LeadingVisual>
-                    {getTemplateIcon(template.icon)}
-                  </ActionList.LeadingVisual>
+                <ActionList.Item key={index} onSelect={() => handleAddFile(template)}>
+                  <ActionList.LeadingVisual>{getTemplateIcon(template.icon)}</ActionList.LeadingVisual>
                   {template.label}
-                  {template.subdirectory && (
-                    <ActionList.Description>
-                      {template.subdirectory}/
-                    </ActionList.Description>
-                  )}
+                  {template.subdirectory && <ActionList.Description>{template.subdirectory}/</ActionList.Description>}
                 </ActionList.Item>
               ))}
             </ActionList>
@@ -312,12 +303,7 @@ export function FileManager({
         </ActionMenu>
 
         {onExport && (
-          <Button
-            size="small"
-            onClick={onExport}
-            leadingVisual={RepoIcon}
-            className={styles.exportButton}
-          >
+          <Button size="small" onClick={onExport} leadingVisual={RepoIcon} className={styles.exportButton}>
             Export to GitHub
           </Button>
         )}

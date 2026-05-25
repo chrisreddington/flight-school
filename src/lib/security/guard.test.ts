@@ -17,11 +17,7 @@ vi.mock('@/lib/auth/context', () => ({
 import { __resetAuditState } from './audit';
 import { withUserGuards } from './guard';
 import { RateLimitedError, __resetRateLimitState } from './rate-limit';
-import {
-  TooManyConcurrentSessionsError,
-  __getSlotCount,
-  __resetSessionCapState,
-} from './session-cap';
+import { TooManyConcurrentSessionsError, __getSlotCount, __resetSessionCapState } from './session-cap';
 
 describe('withUserGuards', () => {
   beforeEach(() => {
@@ -45,18 +41,11 @@ describe('withUserGuards', () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const work = vi.fn(async () => 'ok');
 
-    const result = await withUserGuards(
-      { eventType: 'copilot.session.create' },
-      work,
-    );
+    const result = await withUserGuards({ eventType: 'copilot.session.create' }, work);
 
     expect(result).toBe('ok');
-    expect(work).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: '42', login: 'octocat' }),
-    );
-    const auditCalls = infoSpy.mock.calls.filter((c) =>
-      String(c[0]).includes('audit: copilot.session.create'),
-    );
+    expect(work).toHaveBeenCalledWith(expect.objectContaining({ userId: '42', login: 'octocat' }));
+    const auditCalls = infoSpy.mock.calls.filter((c) => String(c[0]).includes('audit: copilot.session.create'));
     expect(auditCalls.length).toBe(1);
   });
 
@@ -66,9 +55,7 @@ describe('withUserGuards', () => {
       rateLimit: { limit: 1, windowMs: 60_000 },
     };
     await withUserGuards(opts, async () => 'first');
-    await expect(withUserGuards(opts, async () => 'second')).rejects.toBeInstanceOf(
-      RateLimitedError,
-    );
+    await expect(withUserGuards(opts, async () => 'second')).rejects.toBeInstanceOf(RateLimitedError);
   });
 
   it('throws TooManyConcurrentSessionsError when the cap is reached', async () => {
@@ -83,9 +70,7 @@ describe('withUserGuards', () => {
 
     const inflight = withUserGuards(opts, async () => hold);
     await Promise.resolve();
-    await expect(withUserGuards(opts, async () => 'no')).rejects.toBeInstanceOf(
-      TooManyConcurrentSessionsError,
-    );
+    await expect(withUserGuards(opts, async () => 'no')).rejects.toBeInstanceOf(TooManyConcurrentSessionsError);
     release();
     await inflight;
     expect(__getSlotCount('42')).toBe(0);
@@ -111,13 +96,7 @@ describe('withUserGuards', () => {
       rateLimit: { limit: 1, windowMs: 60_000 },
     };
     await withUserGuards(opts, async () => 'first');
-    await expect(
-      withUserGuards(opts, async () => 'second'),
-    ).rejects.toBeInstanceOf(RateLimitedError);
-    expect(
-      infoSpy.mock.calls.some((c) =>
-        String(c[0]).includes('audit: rate-limit.blocked'),
-      ),
-    ).toBe(true);
+    await expect(withUserGuards(opts, async () => 'second')).rejects.toBeInstanceOf(RateLimitedError);
+    expect(infoSpy.mock.calls.some((c) => String(c[0]).includes('audit: rate-limit.blocked'))).toBe(true);
   });
 });

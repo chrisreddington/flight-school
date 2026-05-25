@@ -80,10 +80,7 @@ export class RateLimitedClientError extends Error {
  * RFC 7231 §7.1.3. Returns {@link DEFAULT_RETRY_AFTER_SECONDS} when the
  * value is missing, malformed, or in the past.
  */
-export function parseRetryAfter(
-  value: string | null | undefined,
-  now: number = Date.now(),
-): number {
+export function parseRetryAfter(value: string | null | undefined, now: number = Date.now()): number {
   if (!value) return DEFAULT_RETRY_AFTER_SECONDS;
   const trimmed = value.trim();
   if (!trimmed) return DEFAULT_RETRY_AFTER_SECONDS;
@@ -91,9 +88,7 @@ export function parseRetryAfter(
   // delta-seconds: a non-negative integer
   if (/^\d+$/.test(trimmed)) {
     const seconds = Number.parseInt(trimmed, 10);
-    return Number.isFinite(seconds) && seconds > 0
-      ? seconds
-      : DEFAULT_RETRY_AFTER_SECONDS;
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_RETRY_AFTER_SECONDS;
   }
 
   // HTTP-date
@@ -114,25 +109,17 @@ export function parseRetryAfter(
  * @returns The dispatched detail, so the caller can also throw a typed
  *   {@link RateLimitedClientError} if it wants per-call handling.
  */
-export function dispatchRateLimited(
-  response: Response,
-  body: unknown,
-  route?: string,
-): RateLimitedEventDetail {
+export function dispatchRateLimited(response: Response, body: unknown, route?: string): RateLimitedEventDetail {
   const headerReason = response.headers.get(RATE_LIMIT_REASON_HEADER);
   const bodyReason =
-    body && typeof body === 'object' && 'reason' in body
-      ? (body as { reason?: unknown }).reason
-      : undefined;
+    body && typeof body === 'object' && 'reason' in body ? (body as { reason?: unknown }).reason : undefined;
   const reason: RateLimitReason =
-    headerReason === 'session_cap' || bodyReason === 'session_cap'
-      ? 'session_cap'
-      : 'rate_limit';
+    headerReason === 'session_cap' || bodyReason === 'session_cap' ? 'session_cap' : 'rate_limit';
 
   const retryAfterSeconds = parseRetryAfter(response.headers.get('Retry-After'));
   const max =
     body && typeof body === 'object' && typeof (body as { max?: unknown }).max === 'number'
-      ? ((body as { max: number }).max)
+      ? (body as { max: number }).max
       : undefined;
 
   const detail: RateLimitedEventDetail = {

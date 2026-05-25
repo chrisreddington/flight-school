@@ -99,12 +99,7 @@ export async function buildTokenEnvelope(
  * Build the canonical Additional Authenticated Data (AAD) for an AES-GCM
  * envelope. Emits a JSON object with deterministic lexicographic key order.
  */
-function buildAAD(parts: {
-  userId: string;
-  alg: typeof ENVELOPE_ALG;
-  kekId: string;
-  expiresAt: number;
-}): Buffer {
+function buildAAD(parts: { userId: string; alg: typeof ENVELOPE_ALG; kekId: string; expiresAt: number }): Buffer {
   const canonical = {
     alg: parts.alg,
     expiresAt: parts.expiresAt,

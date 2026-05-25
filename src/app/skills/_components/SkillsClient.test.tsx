@@ -1,14 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-const { addSkillActionMock, skillsGetMock, skillsSaveMock, calibrationNeededMock, routerRefreshMock } =
-  vi.hoisted(() => ({
+const { addSkillActionMock, skillsGetMock, skillsSaveMock, calibrationNeededMock, routerRefreshMock } = vi.hoisted(
+  () => ({
     addSkillActionMock: vi.fn(),
     skillsGetMock: vi.fn(),
     skillsSaveMock: vi.fn(),
     calibrationNeededMock: vi.fn(),
     routerRefreshMock: vi.fn(),
-  }));
+  }),
+);
 
 vi.mock('@/contexts/breadcrumb-context', () => ({ useBreadcrumb: vi.fn() }));
 vi.mock('next/navigation', () => ({

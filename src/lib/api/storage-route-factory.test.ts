@@ -14,7 +14,7 @@ import path from 'path';
 
 const TEST_STORAGE_DIR = path.join(
   os.tmpdir(),
-  `flight-school-srf-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  `flight-school-srf-${Date.now()}-${Math.random().toString(36).slice(2)}`,
 );
 vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_STORAGE_DIR);
 
@@ -42,16 +42,10 @@ interface Schema {
 const DEFAULT_SCHEMA: Schema = { items: [] };
 
 function isSchema(data: unknown): data is Schema {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    Array.isArray((data as { items?: unknown }).items)
-  );
+  return typeof data === 'object' && data !== null && Array.isArray((data as { items?: unknown }).items);
 }
 
-function buildRoute(options?: {
-  transformRead?: (userId: string, data: Schema) => Promise<Schema> | Schema;
-}) {
+function buildRoute(options?: { transformRead?: (userId: string, data: Schema) => Promise<Schema> | Schema }) {
   return createStorageRoute<Schema>({
     filename: 'items.json',
     defaultSchema: DEFAULT_SCHEMA,
@@ -126,7 +120,7 @@ describe('createStorageRoute (per-user partitioning)', () => {
     expect(contentA.items).not.toContain('secret-from-bob');
   });
 
-  it('DELETE only clears the caller\'s file, not other users\'', async () => {
+  it("DELETE only clears the caller's file, not other users'", async () => {
     const { POST, DELETE, GET } = buildRoute();
 
     requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });

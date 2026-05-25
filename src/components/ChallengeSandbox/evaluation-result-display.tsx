@@ -28,10 +28,7 @@ import styles from './ChallengeSandbox.module.css';
  * Error codes that should surface the re-auth call-to-action instead of
  * a generic error message.
  */
-const CREDENTIALS_EXPIRED_CODES: readonly EvaluationErrorCode[] = [
-  'credentials_missing',
-  'credentials_refresh_failed',
-];
+const CREDENTIALS_EXPIRED_CODES: readonly EvaluationErrorCode[] = ['credentials_missing', 'credentials_refresh_failed'];
 
 /** Props for EvaluationResultDisplay */
 interface EvaluationResultDisplayProps {
@@ -63,18 +60,8 @@ function StepNarration({ step }: { step: string }) {
  * Shows badge/lists immediately when partial result arrives,
  * then streams feedback text as it comes in.
  */
-export function EvaluationResultDisplay({
-  evaluation,
-}: EvaluationResultDisplayProps) {
-  const {
-    isLoading,
-    partialResult,
-    streamingFeedback,
-    result,
-    error,
-    errorCode,
-    currentStep,
-  } = evaluation;
+export function EvaluationResultDisplay({ evaluation }: EvaluationResultDisplayProps) {
+  const { isLoading, partialResult, streamingFeedback, result, error, errorCode, currentStep } = evaluation;
 
   // Credentials-expired UX takes precedence: route the user to re-auth
   // instead of showing a generic error.
@@ -120,9 +107,7 @@ export function EvaluationResultDisplay({
         <div className={styles.emptyIcon}>
           <BeakerIcon size={24} />
         </div>
-        <p className={styles.emptyText}>
-          Run your code to see evaluation results
-        </p>
+        <p className={styles.emptyText}>Run your code to see evaluation results</p>
       </div>
     );
   }
@@ -157,8 +142,8 @@ export function EvaluationResultDisplay({
 
       {/* Perfect score completion message */}
       {isPerfectScore && (
-        <div 
-          className={`${styles.completionBanner} ${styles.resultReveal}`} 
+        <div
+          className={`${styles.completionBanner} ${styles.resultReveal}`}
           data-delay="0"
           role="status"
           aria-live="polite"
@@ -194,7 +179,7 @@ export function EvaluationResultDisplay({
 
       {/* Feedback text - streams in real-time or shows final */}
       {feedbackText && (
-        <div 
+        <div
           className={`${styles.feedback} ${isStreamingFeedback ? styles.feedbackStreaming : ''}`}
           role="region"
           aria-live="polite"

@@ -25,11 +25,7 @@
 
 import { useEffect, useState } from 'react';
 
-import {
-  RATE_LIMITED_EVENT,
-  type RateLimitedEventDetail,
-  type RateLimitReason,
-} from '@/lib/api/rate-limit-event';
+import { RATE_LIMITED_EVENT, type RateLimitedEventDetail, type RateLimitReason } from '@/lib/api/rate-limit-event';
 
 export interface UseRateLimitCountdownResult {
   /** True while a cooldown is active. */
@@ -56,8 +52,7 @@ export function useRateLimitCountdown(): UseRateLimitCountdownResult {
       if (!detail) return;
       setState((current) =>
         // Take the longest active cooldown if multiple events fire close together.
-        current.retryInSeconds === null ||
-        detail.retryAfterSeconds > current.retryInSeconds
+        current.retryInSeconds === null || detail.retryAfterSeconds > current.retryInSeconds
           ? { retryInSeconds: detail.retryAfterSeconds, reason: detail.reason }
           : current,
       );
@@ -84,4 +79,3 @@ export function useRateLimitCountdown(): UseRateLimitCountdownResult {
     reason: state.reason,
   };
 }
-

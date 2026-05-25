@@ -30,19 +30,30 @@ no update is required.
 Before editing anything, identify which authoritative docs describe the
 area you touched. The canonical owners in this repo are:
 
+> [!IMPORTANT]
+> If your change touches an **architectural boundary** — auth, the
+> Copilot worker dispatch, background jobs, storage, observability,
+> Aspire resource graph — [`docs/architecture.md`](../../../docs/architecture.md)
+> is in scope by default. It is the index doc that links everything
+> else, so a drifted system diagram or stale code pointer there is
+> louder than a stale rule in a deeper reference.
+
 | Area touched | Authoritative doc(s) |
 | --- | --- |
+| Architectural data flow, system shape, dev-loop story, anything cross-cutting | [`docs/architecture.md`](../../../docs/architecture.md) |
 | OTel exporters, samplers, attributes, browser bootstrap, env vars | [`.github/skills/opentelemetry/SKILL.md`](../opentelemetry/SKILL.md) |
-| Aspire AppHost, resource graph, env injection, dev workflow | [`.github/skills/aspire-debugging/SKILL.md`](../aspire-debugging/SKILL.md), [`apphost.ts`](../../../apphost.ts) |
-| Auth, multi-tenant token flow, per-request Octokit | [`docs/architecture-multitenant.md`](../../../docs/architecture-multitenant.md), [`.github/copilot-instructions.md`](../../copilot-instructions.md) |
-| Copilot SDK sessions, MCP wiring, session persistence | [`docs/copilot-sdk-persistence.md`](../../../docs/copilot-sdk-persistence.md), [`.github/skills/copilot-sdk/SKILL.md`](../copilot-sdk/SKILL.md) |
-| Deployment to Azure Container Apps | [`docs/deployment-aca.md`](../../../docs/deployment-aca.md) |
+| Aspire AppHost, resource graph, env injection, dev workflow | [`apphost.ts`](../../../apphost.ts), [`docs/architecture.md`](../../../docs/architecture.md) (local-dev section), [`.github/skills/aspire-debugging/SKILL.md`](../aspire-debugging/SKILL.md) |
+| Auth, multi-tenant token flow, per-request Octokit | [`docs/architecture.md`](../../../docs/architecture.md) (story), [`docs/architecture-multitenant.md`](../../../docs/architecture-multitenant.md) (deep dive), [`.github/copilot-instructions.md`](../../copilot-instructions.md) |
+| Copilot SDK sessions, MCP wiring, session persistence | [`docs/copilot-sdk-persistence.md`](../../../docs/copilot-sdk-persistence.md), [`.github/skills/copilot-sdk/SKILL.md`](../copilot-sdk/SKILL.md), [`.github/skills/copilot-sdk-worker-only/SKILL.md`](../copilot-sdk-worker-only/SKILL.md) |
+| Copilot worker boundary, per-user runtime pool, job executors | [`docs/architecture.md`](../../../docs/architecture.md) (decisions 2–4), [`.github/skills/copilot-sdk-worker-only/SKILL.md`](../copilot-sdk-worker-only/SKILL.md) |
+| Per-user storage layout, token store envelope, retention sweeps | [`docs/architecture.md`](../../../docs/architecture.md) (storage section), [`docs/architecture-multitenant.md`](../../../docs/architecture-multitenant.md) |
+| Deployment to Azure Container Apps | [`docs/deployment-aca.md`](../../../docs/deployment-aca.md), [`infra/README.md`](../../../infra/README.md) |
 | Documentation rules themselves | [`.github/instructions/documentation.instructions.md`](../../instructions/documentation.instructions.md) |
 | TypeScript conventions, anti-patterns | [`.github/instructions/typescript.instructions.md`](../../instructions/typescript.instructions.md) |
 | Testing patterns (Vitest, Playwright) | [`.github/instructions/testing.instructions.md`](../../instructions/testing.instructions.md) |
-| Architectural data flow, environment variables, commands | [`.github/copilot-instructions.md`](../../copilot-instructions.md) |
+| Architectural data flow, environment variables, commands | [`.github/copilot-instructions.md`](../../copilot-instructions.md), [`docs/architecture.md`](../../../docs/architecture.md) |
 | Tech-debt tooling, scripts | [`.github/copilot-instructions.md`](../../copilot-instructions.md) |
-| User-facing setup, dev-loop commands | [`README.md`](../../../README.md), [`CONTRIBUTING.md`](../../../CONTRIBUTING.md) |
+| User-facing setup, dev-loop commands | [`README.md`](../../../README.md), [`docs/architecture.md`](../../../docs/architecture.md) (local-dev section), [`CONTRIBUTING.md`](../../../CONTRIBUTING.md) |
 
 If your change spans more than one row, every owning doc is in scope.
 

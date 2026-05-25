@@ -19,35 +19,16 @@ interface ChatHeaderProps {
  * with save/cancel controls.
  */
 export function ChatHeader({ activeThread, titleEditing }: ChatHeaderProps) {
-  const {
-    isEditing,
-    editingTitle,
-    inputRef,
-    setEditingTitle,
-    startEdit,
-    save,
-    cancel,
-    handleKeyDown,
-  } = titleEditing;
+  const { isEditing, editingTitle, inputRef, setEditingTitle, startEdit, save, cancel, handleKeyDown } = titleEditing;
 
   return (
     <div className={styles.header}>
-      <Stack
-        direction="horizontal"
-        align="center"
-        gap="condensed"
-        className={styles.headerContent}
-      >
+      <Stack direction="horizontal" align="center" gap="condensed" className={styles.headerContent}>
         <span className={styles.headerIcon}>
           <CopilotIcon size={20} />
         </span>
         {isEditing ? (
-          <Stack
-            direction="horizontal"
-            align="center"
-            gap="condensed"
-            className={styles.titleEditContainer}
-          >
+          <Stack direction="horizontal" align="center" gap="condensed" className={styles.titleEditContainer}>
             <TextInput
               ref={inputRef}
               value={editingTitle}
@@ -59,22 +40,10 @@ export function ChatHeader({ activeThread, titleEditing }: ChatHeaderProps) {
               className={styles.titleInput}
             />
             <Tooltip text="Save" direction="s">
-              <IconButton
-                icon={CheckIcon}
-                aria-label="Save title"
-                variant="invisible"
-                size="small"
-                onClick={save}
-              />
+              <IconButton icon={CheckIcon} aria-label="Save title" variant="invisible" size="small" onClick={save} />
             </Tooltip>
             <Tooltip text="Cancel" direction="s">
-              <IconButton
-                icon={XIcon}
-                aria-label="Cancel edit"
-                variant="invisible"
-                size="small"
-                onClick={cancel}
-              />
+              <IconButton icon={XIcon} aria-label="Cancel edit" variant="invisible" size="small" onClick={cancel} />
             </Tooltip>
           </Stack>
         ) : (

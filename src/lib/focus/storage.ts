@@ -82,9 +82,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
   }
 
   /** Persist the schema only when the mutator reports a change occurred. */
-  private async withSchema(
-    mutate: (schema: FocusStorageSchema) => boolean,
-  ): Promise<void> {
+  private async withSchema(mutate: (schema: FocusStorageSchema) => boolean): Promise<void> {
     const schema = await this.getStorage();
     if (mutate(schema)) {
       await this.setStorage(schema);
@@ -127,41 +125,23 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     newState: ChallengeState,
     source?: string,
   ): Promise<void> {
-    return this.withSchema((schema) =>
-      applyChallengeTransition(schema, dateKey, challengeId, newState, source),
-    );
+    return this.withSchema((schema) => applyChallengeTransition(schema, dateKey, challengeId, newState, source));
   }
 
-  async transitionGoal(
-    dateKey: string,
-    goalId: string,
-    newState: GoalState,
-    source?: string,
-  ): Promise<void> {
-    return this.withSchema((schema) =>
-      applyGoalTransition(schema, dateKey, goalId, newState, source),
-    );
+  async transitionGoal(dateKey: string, goalId: string, newState: GoalState, source?: string): Promise<void> {
+    return this.withSchema((schema) => applyGoalTransition(schema, dateKey, goalId, newState, source));
   }
 
   async markTopicExplored(dateKey: string, topicId: string, source?: string): Promise<void> {
-    return this.withSchema((schema) =>
-      applyTopicTransition(schema, dateKey, topicId, 'explored', source),
-    );
+    return this.withSchema((schema) => applyTopicTransition(schema, dateKey, topicId, 'explored', source));
   }
 
   async markTopicReviewed(dateKey: string, topicId: string): Promise<void> {
     return this.withSchema((schema) => applyTopicReviewed(schema, dateKey, topicId));
   }
 
-  async transitionTopic(
-    dateKey: string,
-    topicId: string,
-    newState: TopicState,
-    source?: string,
-  ): Promise<void> {
-    return this.withSchema((schema) =>
-      applyTopicTransition(schema, dateKey, topicId, newState, source),
-    );
+  async transitionTopic(dateKey: string, topicId: string, newState: TopicState, source?: string): Promise<void> {
+    return this.withSchema((schema) => applyTopicTransition(schema, dateKey, topicId, newState, source));
   }
 
   async saveSelfExplanation(
@@ -170,9 +150,7 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     itemId: string,
     text: string,
   ): Promise<void> {
-    return this.withSchema((schema) =>
-      applySelfExplanation(schema, dateKey, itemType, itemId, text),
-    );
+    return this.withSchema((schema) => applySelfExplanation(schema, dateKey, itemType, itemId, text));
   }
 
   async markTopicReplaced(dateKey: string, oldTopicId: string, newTopicId: string): Promise<void> {

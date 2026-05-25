@@ -5,9 +5,7 @@ import type { AuthoringMessage } from './authoring-chat';
 import { AuthoringMessageList } from './authoring-message-list';
 
 vi.mock('@/components/MarkdownContent', () => ({
-  MarkdownContent: ({ content }: { content: string }) => (
-    <div data-testid="markdown">{content}</div>
-  ),
+  MarkdownContent: ({ content }: { content: string }) => <div data-testid="markdown">{content}</div>,
 }));
 
 const mockPendingChallenge: DailyChallenge = {
@@ -44,7 +42,7 @@ function renderMessageList(props: Partial<React.ComponentProps<typeof AuthoringM
       pendingChallenge={null}
       onCreateChallenge={vi.fn()}
       {...props}
-    />
+    />,
   );
 }
 

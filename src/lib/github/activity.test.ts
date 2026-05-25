@@ -7,12 +7,7 @@ import { calculateActivityMetrics } from './activity';
 import type { GitHubEvent } from './types';
 
 // Helper to create test events
-function createEvent(
-  type: string,
-  repo: string,
-  daysAgo: number,
-  payload?: GitHubEvent['payload']
-): GitHubEvent {
+function createEvent(type: string, repo: string, daysAgo: number, payload?: GitHubEvent['payload']): GitHubEvent {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
   return {

@@ -42,10 +42,7 @@ function appendSkill(profile: SkillProfile, displayName: string): SkillProfile |
  * error string when validation fails so the form can surface it via
  * `useActionState`.
  */
-export async function addSkillAction(
-  _previous: AddSkillState,
-  formData: FormData,
-): Promise<AddSkillState> {
+export async function addSkillAction(_previous: AddSkillState, formData: FormData): Promise<AddSkillState> {
   const { release } = await requireGuardedUserContext({
     ...SKILLS_ACTION_GUARD,
     auditMetadata: { ...SKILLS_ACTION_GUARD.auditMetadata, action: 'addSkill' },

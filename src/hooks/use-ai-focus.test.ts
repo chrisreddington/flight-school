@@ -26,11 +26,11 @@ describe('useAIFocus core logic', () => {
   describe('abort controller management', () => {
     it('should abort previous request when new one starts', () => {
       const abortControllers = new Map<string, AbortController>();
-      
+
       // Simulate starting a request
       const controller1 = new AbortController();
       abortControllers.set('challenge', controller1);
-      
+
       // Simulate starting another request for same component (should abort previous)
       const existingController = abortControllers.get('challenge');
       if (existingController) {
@@ -39,19 +39,19 @@ describe('useAIFocus core logic', () => {
       }
       const controller2 = new AbortController();
       abortControllers.set('challenge', controller2);
-      
+
       expect(controller1.signal.aborted).toBe(true);
       expect(controller2.signal.aborted).toBe(false);
     });
 
     it('should allow multiple concurrent component fetches', () => {
       const abortControllers = new Map<string, AbortController>();
-      
+
       // Start fetches for all three components
       abortControllers.set('challenge', new AbortController());
       abortControllers.set('goal', new AbortController());
       abortControllers.set('learningTopics', new AbortController());
-      
+
       expect(abortControllers.size).toBe(3);
       expect(abortControllers.get('challenge')?.signal.aborted).toBe(false);
       expect(abortControllers.get('goal')?.signal.aborted).toBe(false);
@@ -60,19 +60,19 @@ describe('useAIFocus core logic', () => {
 
     it('should abort all when stopAll is called', () => {
       const abortControllers = new Map<string, AbortController>();
-      
+
       // Start fetches
       abortControllers.set('challenge', new AbortController());
       abortControllers.set('goal', new AbortController());
       abortControllers.set('learningTopics', new AbortController());
-      
+
       // Stop all
       const controllers = Array.from(abortControllers.values());
       for (const controller of abortControllers.values()) {
         controller.abort();
       }
       abortControllers.clear();
-      
+
       expect(controllers[0].signal.aborted).toBe(true);
       expect(controllers[1].signal.aborted).toBe(true);
       expect(controllers[2].signal.aborted).toBe(true);
@@ -83,31 +83,31 @@ describe('useAIFocus core logic', () => {
   describe('loading state management', () => {
     it('should track loading components correctly', () => {
       let loadingComponents: string[] = [];
-      
+
       // Add component to loading
       const addLoading = (component: string) => {
-        loadingComponents = [...loadingComponents.filter(c => c !== component), component];
+        loadingComponents = [...loadingComponents.filter((c) => c !== component), component];
       };
-      
+
       // Remove component from loading
       const removeLoading = (component: string) => {
-        loadingComponents = loadingComponents.filter(c => c !== component);
+        loadingComponents = loadingComponents.filter((c) => c !== component);
       };
-      
+
       // Start loading all
       addLoading('challenge');
       addLoading('goal');
       addLoading('learningTopics');
       expect(loadingComponents).toEqual(['challenge', 'goal', 'learningTopics']);
-      
+
       // Complete challenge
       removeLoading('challenge');
       expect(loadingComponents).toEqual(['goal', 'learningTopics']);
-      
+
       // Complete goal
       removeLoading('goal');
       expect(loadingComponents).toEqual(['learningTopics']);
-      
+
       // Complete learningTopics
       removeLoading('learningTopics');
       expect(loadingComponents).toEqual([]);
@@ -115,14 +115,14 @@ describe('useAIFocus core logic', () => {
 
     it('should not duplicate loading components', () => {
       let loadingComponents: string[] = [];
-      
+
       const addLoading = (component: string) => {
-        loadingComponents = [...loadingComponents.filter(c => c !== component), component];
+        loadingComponents = [...loadingComponents.filter((c) => c !== component), component];
       };
-      
+
       addLoading('challenge');
       addLoading('challenge'); // Add again
-      
+
       expect(loadingComponents).toEqual(['challenge']);
     });
   });
@@ -133,18 +133,18 @@ describe('useAIFocus core logic', () => {
         const base = prev || {};
         return { ...base, ...result };
       };
-      
+
       let data: Record<string, unknown> | null = null;
-      
+
       // Add challenge
       data = mergeData(data, 'challenge', { challenge: { id: 'c1', title: 'Challenge' } });
       expect(data.challenge).toBeDefined();
-      
+
       // Add goal
       data = mergeData(data, 'goal', { goal: { id: 'g1', title: 'Goal' } });
       expect(data.challenge).toBeDefined();
       expect(data.goal).toBeDefined();
-      
+
       // Add topics
       data = mergeData(data, 'learningTopics', { learningTopics: [{ id: 't1', title: 'Topic' }] });
       expect(data.challenge).toBeDefined();
@@ -158,14 +158,14 @@ describe('useAIFocus core logic', () => {
         goal: null,
         learningTopics: [],
       };
-      
+
       const mergeComponent = (prev: typeof existingData, key: string, value: unknown) => ({
         ...prev,
         [key]: value,
       });
-      
+
       const updated = mergeComponent(existingData, 'goal', { id: 'g1', title: 'New Goal' });
-      
+
       expect(updated.challenge.title).toBe('Existing Challenge');
       expect((updated.goal as { title: string }).title).toBe('New Goal');
     });
@@ -174,11 +174,11 @@ describe('useAIFocus core logic', () => {
   describe('skip and replace flow', () => {
     it('should track skipping topic IDs', () => {
       const skippingTopicIds = new Set<string>();
-      
+
       // Start skipping
       skippingTopicIds.add('topic-123');
       expect(skippingTopicIds.has('topic-123')).toBe(true);
-      
+
       // Complete skipping
       skippingTopicIds.delete('topic-123');
       expect(skippingTopicIds.has('topic-123')).toBe(false);
@@ -188,12 +188,12 @@ describe('useAIFocus core logic', () => {
       const skippingTopicIds = new Set<string>();
       const skippingChallengeIds = new Set<string>();
       const skippingGoalIds = new Set<string>();
-      
+
       // Skip topic, challenge, and goal concurrently
       skippingTopicIds.add('topic-1');
       skippingChallengeIds.add('challenge-1');
       skippingGoalIds.add('goal-1');
-      
+
       expect(skippingTopicIds.size).toBe(1);
       expect(skippingChallengeIds.size).toBe(1);
       expect(skippingGoalIds.size).toBe(1);
@@ -206,7 +206,7 @@ describe('useAIFocus interface contract', () => {
     // This test documents the expected interface contract
     // The actual hook returns this shape
     type FocusComponent = 'challenge' | 'goal' | 'learningTopics';
-    
+
     interface UseAIFocusResult {
       data: unknown;
       loadingComponents: FocusComponent[];
@@ -228,7 +228,7 @@ describe('useAIFocus interface contract', () => {
       stopTopicSkip: () => void;
       stopAll: () => void;
     }
-    
+
     // Type check - this will fail compilation if interface doesn't match
     const mockResult: UseAIFocusResult = {
       data: null,
@@ -251,7 +251,7 @@ describe('useAIFocus interface contract', () => {
       stopTopicSkip: () => {},
       stopAll: () => {},
     };
-    
+
     expect(mockResult).toBeDefined();
     expect(mockResult.loadingComponents).toEqual([]);
     expect(mockResult.skippingTopicIds).toBeInstanceOf(Set);

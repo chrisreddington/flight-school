@@ -5,10 +5,7 @@ import type { EvaluationResult, PartialEvaluationResult } from '@/lib/copilot/ty
  * route credentials-expired errors to a re-auth CTA instead of a generic
  * error banner.
  */
-export type EvaluationErrorCode =
-  | 'credentials_missing'
-  | 'credentials_refresh_failed'
-  | 'unknown';
+export type EvaluationErrorCode = 'credentials_missing' | 'credentials_refresh_failed' | 'unknown';
 
 export interface EvaluationState {
   isLoading: boolean;
@@ -50,10 +47,7 @@ export const initialEvaluationState: EvaluationState = {
  * Returns `null` for statuses (e.g. `cancelled`, missing) that should leave
  * the existing state untouched.
  */
-export function applyProgress(
-  progress: EvaluationProgressResponse,
-  prev: EvaluationState
-): EvaluationState | null {
+export function applyProgress(progress: EvaluationProgressResponse, prev: EvaluationState): EvaluationState | null {
   if (progress.status === 'streaming' || progress.status === 'pending') {
     return {
       ...prev,

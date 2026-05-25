@@ -457,7 +457,16 @@
   padding: 2px 6px;
   background-color: var(--bgColor-muted, #f6f8fa);
   border-radius: var(--borderRadius-small, 3px);
-  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-family: var(
+    --fontStack-monospace,
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace
+  );
   font-size: 0.9em;
 }
 
@@ -535,7 +544,16 @@
   color: var(--fgColor-muted, #656d76);
   display: block;
   margin-top: var(--base-size-8, 8px);
-  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-family: var(
+    --fontStack-monospace,
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace
+  );
   font-size: 11px;
   max-height: 60px;
   overflow: hidden;
@@ -759,7 +777,16 @@
   border-radius: var(--borderRadius-small, 3px);
   border: 1px solid var(--borderColor-default, #d0d7de);
   font-size: var(--text-body-size-small, 12px);
-  font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace);
+  font-family: var(
+    --fontStack-monospace,
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace
+  );
   box-shadow: inset 0 -1px 0 var(--borderColor-default, #d0d7de);
 }
 

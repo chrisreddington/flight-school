@@ -61,7 +61,9 @@ export function useEvaluation(options: UseEvaluationOptions): UseEvaluationRetur
 
   // Keep the latest file accessor without re-creating `evaluate`'s identity.
   const getFilesRef = useRef(getFiles);
-  useEffect(() => { getFilesRef.current = getFiles; }, [getFiles]);
+  useEffect(() => {
+    getFilesRef.current = getFiles;
+  }, [getFiles]);
 
   const stopPollingInterval = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -72,12 +74,13 @@ export function useEvaluation(options: UseEvaluationOptions): UseEvaluationRetur
 
   useEffect(() => stopPollingInterval, [stopPollingInterval]);
 
-  const fetchProgress = useCallback(() =>
-    apiGet<EvaluationProgressResponse | null>(
-      `/api/evaluations/${challengeId}`,
-      { throwOnError: false }
-    ),
-  [challengeId]);
+  const fetchProgress = useCallback(
+    () =>
+      apiGet<EvaluationProgressResponse | null>(`/api/evaluations/${challengeId}`, {
+        throwOnError: false,
+      }),
+    [challengeId],
+  );
 
   const startPolling = useCallback(() => {
     stopPollingInterval();

@@ -24,7 +24,7 @@ function scaffoldFromStep(stepNumber: number): ScaffoldLevel {
 
 function normalizePlan(
   parsed: RawGuidedPlan | null,
-  challenge: { title: string; description: string; language: string; difficulty: string }
+  challenge: { title: string; description: string; language: string; difficulty: string },
 ): GuidedPlan {
   const fallback = getGuidedPlanFallback(challenge);
   if (!parsed?.steps || parsed.steps.length === 0) {
@@ -60,7 +60,7 @@ function normalizePlan(
 export async function generateGuidedPlan(
   identity: SessionIdentity,
   challenge: { title: string; description: string; language: string; difficulty: string },
-  profileContext: string
+  profileContext: string,
 ): Promise<GuidedPlan> {
   const prompt = `Challenge: ${challenge.title} (${challenge.language}, ${challenge.difficulty})
 Description: ${challenge.description}

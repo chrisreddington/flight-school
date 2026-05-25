@@ -21,16 +21,10 @@ export function pruneHistory(history: FocusHistory): FocusHistory {
   return Object.fromEntries(pruned);
 }
 
-export function getTodaysFocusFromHistory(
-  history: FocusHistory,
-  todayKey: string,
-): FocusResponse | null {
+export function getTodaysFocusFromHistory(history: FocusHistory, todayKey: string): FocusResponse | null {
   const record = history[todayKey];
 
-  if (!record ||
-      record.challenges.length === 0 ||
-      record.goals.length === 0 ||
-      record.learningTopics.length === 0) {
+  if (!record || record.challenges.length === 0 || record.goals.length === 0 || record.learningTopics.length === 0) {
     return null;
   }
 
@@ -82,11 +76,7 @@ export function getTodaysFocusFromHistory(
   };
 }
 
-export function saveFocusToHistory(
-  history: FocusHistory,
-  todayKey: string,
-  focus: FocusResponse,
-): FocusHistory {
+export function saveFocusToHistory(history: FocusHistory, todayKey: string, focus: FocusResponse): FocusHistory {
   if (!history[todayKey]) {
     history[todayKey] = {
       challenges: [],
@@ -98,8 +88,8 @@ export function saveFocusToHistory(
 
   const isValidChallenge = focus.challenge?.id && focus.challenge?.title;
   const isValidGoal = focus.goal?.id && focus.goal?.title;
-  const hasValidTopics = focus.learningTopics?.length > 0 &&
-    focus.learningTopics.every((topic) => topic.id && topic.title);
+  const hasValidTopics =
+    focus.learningTopics?.length > 0 && focus.learningTopics.every((topic) => topic.id && topic.title);
 
   if (isValidChallenge) {
     const lastChallenge = record.challenges[record.challenges.length - 1];
@@ -119,15 +109,15 @@ export function saveFocusToHistory(
 
   if (hasValidTopics) {
     const lastTopics = record.learningTopics[record.learningTopics.length - 1];
-    const topicsChanged = !lastTopics || !isEqual(
-      lastTopics.map((topic) => topic.data),
-      focus.learningTopics,
-    );
+    const topicsChanged =
+      !lastTopics ||
+      !isEqual(
+        lastTopics.map((topic) => topic.data),
+        focus.learningTopics,
+      );
 
     if (topicsChanged) {
-      const statefulTopics = focus.learningTopics.map((topic) =>
-        createStatefulTopic(topic),
-      );
+      const statefulTopics = focus.learningTopics.map((topic) => createStatefulTopic(topic));
       record.learningTopics.push(statefulTopics);
     }
   }

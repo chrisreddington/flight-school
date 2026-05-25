@@ -63,9 +63,7 @@ export function AuthoringInputForm({
             type="submit"
             variant="primary"
             disabled={!inputValue.trim() || rateLimited}
-            aria-label={
-              rateLimited ? `Sending paused. Retry in ${retryInSeconds}s` : 'Send'
-            }
+            aria-label={rateLimited ? `Sending paused. Retry in ${retryInSeconds}s` : 'Send'}
           >
             {rateLimited ? `Retry in ${retryInSeconds}s` : 'Send'}
           </Button>

@@ -1,5 +1,5 @@
 /**
- * Next.js 16 proxy (formerly `middleware`): gates the app behind Auth.js.
+ * Next.js 16 proxy: gates the app behind Auth.js.
  *
  * - Public paths (auth endpoints, health, sign-in, Next internals, static
  *   assets) are always allowed.
@@ -20,40 +20,19 @@ if (!process.env.AUTH_SECRET) {
   throw new Error(
     'AUTH_SECRET is not set. Generate one with `openssl rand -base64 32` and ' +
       'add it (plus AUTH_GITHUB_ID and AUTH_GITHUB_SECRET) to .env.local. See ' +
-      'docs/migrations/2025-multitenant-auth.md.'
+      'docs/migrations/2025-multitenant-auth.md.',
   );
 }
 
 const { auth } = NextAuth(edgeAuthConfig);
 
-const PUBLIC_PREFIXES = [
-  '/api/auth',
-  '/api/health',
-  '/api/internal',
-  '/sign-in',
-  '/_next',
-  '/favicon.ico',
-];
-
-const WORKER_ALLOWED_PREFIXES = [
-  '/api/health',
-  '/api/internal',
-  '/_next',
-  '/favicon.ico',
-];
+const PUBLIC_PREFIXES = ['/api/auth', '/api/health', '/sign-in', '/_next', '/favicon.ico'];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return true;
   }
   // Common static asset extensions served from /public.
-  return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
-}
-
-function isWorkerAllowedPath(pathname: string): boolean {
-  if (WORKER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-    return true;
-  }
   return /\.(?:png|jpe?g|gif|svg|webp|ico|css|js|map|txt|woff2?|ttf)$/i.test(pathname);
 }
 
@@ -70,10 +49,7 @@ const authProxy = auth((req) => {
   }
 
   if (pathname.startsWith('/api/')) {
-    return NextResponse.json(
-      { error: 'Authentication required' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
   const signInUrl = new URL('/sign-in', nextUrl.origin);
@@ -85,18 +61,12 @@ const authProxy = auth((req) => {
 });
 
 export default function proxy(...args: Parameters<typeof authProxy>) {
-  const [req] = args;
-  const pathname = req.nextUrl.pathname;
-  if (process.env.COPILOT_WORKER_MODE === '1') {
-    return isWorkerAllowedPath(pathname)
-      ? NextResponse.next()
-      : NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   return authProxy(...args);
 }
 
 export const config = {
   // Match everything except Next internals and obvious static asset files.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff2?|ttf)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|woff2?|ttf)$).*)',
+  ],
 };

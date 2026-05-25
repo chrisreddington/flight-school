@@ -11,10 +11,7 @@
 import { authErrorResponse, parseJsonBody, validationErrorResponse } from '@/lib/api';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { handleApiError } from '@/lib/api-error';
-import {
-  type CreateRepoRequest,
-  validateCreateRepoRequest,
-} from '@/lib/github/api-requests';
+import { type CreateRepoRequest, validateCreateRepoRequest } from '@/lib/github/api-requests';
 import { getOctokitForRequest } from '@/lib/github/client';
 import { generateLearningReadme } from '@/lib/github/readme';
 import { createRepository, getFileShaWithRetry, updateRepoFile } from '@/lib/github/repos';
@@ -53,8 +50,6 @@ interface ErrorResponse {
   meta?: Record<string, unknown>;
 }
 
-
-
 /**
  * POST /api/repos/create
  *
@@ -73,9 +68,7 @@ interface ErrorResponse {
  * });
  * ```
  */
-export async function POST(
-  request: NextRequest
-): Promise<NextResponse<RepoResponse | ErrorResponse>> {
+export async function POST(request: NextRequest): Promise<Response> {
   const startTime = nowMs();
   log.info('POST request started');
 
@@ -105,11 +98,11 @@ export async function POST(
     // request data so it can run concurrently with repository creation.
     const readmePromise = req.topic
       ? (log.info(`Generating README for topic: ${req.topic}`),
-         generateLearningReadme(identity, {
-           repoName: req.name,
-           topic: req.topic,
-           description: req.description,
-         }))
+        generateLearningReadme(identity, {
+          repoName: req.name,
+          topic: req.topic,
+          description: req.description,
+        }))
       : null;
 
     // Create the repository (runs in parallel with README generation above)
@@ -153,7 +146,7 @@ export async function POST(
 
     // Get the SHA of the existing README (created by auto_init)
     const [owner, repoName] = repo.fullName.split('/');
-    
+
     const sha = await getFileShaWithRetry(octokit, owner, repoName, 'README.md');
 
     // Update the README with AI-generated content
@@ -164,7 +157,7 @@ export async function POST(
       'README.md',
       readmeContent,
       `docs: Add learning-focused README for ${req.topic}`,
-      sha ?? undefined
+      sha ?? undefined,
     );
 
     log.info('README updated with AI-generated content');

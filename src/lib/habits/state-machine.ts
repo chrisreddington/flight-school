@@ -1,6 +1,6 @@
 /**
  * Habit State Machine
- * 
+ *
  * State transitions and business logic for habit tracking.
  * Handles check-ins, skip management, and streak calculations.
  */
@@ -40,7 +40,7 @@ function meetsRequirement(habit: Habit, value: number | boolean): boolean {
 
 /**
  * Records a daily check-in for a habit.
- * 
+ *
  * @param habit - The habit to check in
  * @param value - Value for today (minutes, count, or true/false)
  * @param dateKey - Optional date key (defaults to today)
@@ -49,10 +49,10 @@ function meetsRequirement(habit: Habit, value: number | boolean): boolean {
 export function checkInHabit(
   habit: HabitWithHistory,
   value: number | boolean,
-  dateKey: string = getDateKey()
+  dateKey: string = getDateKey(),
 ): HabitWithHistory {
   // Check if already checked in today
-  const existingCheckIn = habit.checkIns.find(c => c.date === dateKey);
+  const existingCheckIn = habit.checkIns.find((c) => c.date === dateKey);
   if (existingCheckIn) {
     throw new Error(`Already checked in for ${dateKey}`);
   }
@@ -90,19 +90,16 @@ export function checkInHabit(
 
 /**
  * Skips today's check-in.
- * 
+ *
  * @param habit - The habit to skip
  * @param dateKey - Optional date key (defaults to today)
  * @returns Updated habit with skip recorded
- * 
+ *
  * @throws {Error} If no skips remaining
  */
-export function skipHabitDay(
-  habit: HabitWithHistory,
-  dateKey: string = getDateKey()
-): HabitWithHistory {
+export function skipHabitDay(habit: HabitWithHistory, dateKey: string = getDateKey()): HabitWithHistory {
   // Check if already checked in/skipped today
-  const existingCheckIn = habit.checkIns.find(c => c.date === dateKey);
+  const existingCheckIn = habit.checkIns.find((c) => c.date === dateKey);
   if (existingCheckIn) {
     throw new Error(`Already checked in for ${dateKey}`);
   }
@@ -152,26 +149,23 @@ export function getRemainingSkips(habit: Habit): number {
  * @returns True if no check-in exists for the date
  */
 export function isPendingToday(habit: HabitWithHistory, dateKey: string = getDateKey()): boolean {
-  return !habit.checkIns.some(c => c.date === dateKey);
+  return !habit.checkIns.some((c) => c.date === dateKey);
 }
 
 /**
  * Undoes a check-in for a specific date.
  * Only allows undoing the most recent check-in to maintain data integrity.
- * 
+ *
  * @param habit - The habit to undo check-in for
  * @param dateKey - Date to undo (defaults to today)
  * @returns Updated habit with check-in removed
- * 
+ *
  * @throws {Error} If no check-in exists for the date
  * @throws {Error} If trying to undo a check-in that isn't the most recent
  */
-export function undoCheckIn(
-  habit: HabitWithHistory,
-  dateKey: string = getDateKey()
-): HabitWithHistory {
-  const checkInIndex = habit.checkIns.findIndex(c => c.date === dateKey);
-  
+export function undoCheckIn(habit: HabitWithHistory, dateKey: string = getDateKey()): HabitWithHistory {
+  const checkInIndex = habit.checkIns.findIndex((c) => c.date === dateKey);
+
   if (checkInIndex === -1) {
     throw new Error(`No check-in found for ${dateKey}`);
   }
@@ -182,17 +176,17 @@ export function undoCheckIn(
   }
 
   const checkIn = habit.checkIns[checkInIndex];
-  
+
   // Reverse the state changes
   const newCurrentDay = Math.max(0, habit.currentDay - 1);
-  
+
   // If this was a skip, reverse the skipsUsed counter
   const wasSkip = checkIn.value === false;
   const newSkipsUsed = wasSkip ? Math.max(0, habit.skipsUsed - 1) : habit.skipsUsed;
-  
+
   // Revert state if we're back to day 0
-  const newState: HabitState = newCurrentDay === 0 ? 'not-started' : 
-    (habit.state === 'completed' ? 'active' : habit.state);
+  const newState: HabitState =
+    newCurrentDay === 0 ? 'not-started' : habit.state === 'completed' ? 'active' : habit.state;
 
   // Remove the check-in
   const newCheckIns = habit.checkIns.filter((_, i) => i !== checkInIndex);

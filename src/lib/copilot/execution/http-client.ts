@@ -5,10 +5,7 @@ import type {
   CopilotCoachJobResult,
 } from './types';
 import type { CopilotWorkerConfig } from './config';
-import {
-  parseCopilotWorkerChatResult,
-  parseCopilotWorkerCoachResult,
-} from './protocol';
+import { parseCopilotWorkerChatResult, parseCopilotWorkerCoachResult } from './protocol';
 
 const WORKER_CHAT_PATH = '/api/internal/copilot/execute';
 const WORKER_COACH_PATH = '/api/internal/copilot/coach';

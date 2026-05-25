@@ -123,10 +123,7 @@ function isNoiseSpan(span: ReadableSpan): boolean {
 export class BubbleFilteringSpanExporter implements SpanExporter {
   constructor(private readonly delegate: SpanExporter) {}
 
-  export(
-    spans: ReadableSpan[],
-    resultCallback: (result: ExportResult) => void,
-  ): void {
+  export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
     const keep = spans.filter((span) => !isNoiseSpan(span));
     if (keep.length === 0) {
       resultCallback({ code: ExportResultCode.SUCCESS });

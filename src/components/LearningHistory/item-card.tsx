@@ -58,31 +58,35 @@ export const ItemCard = memo(function ItemCard({
 }: ItemCardProps) {
   // Track user's explicit collapsed preference (null = follow automatic state)
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
-  
+
   // Compute effective collapsed state:
   // - Items that are completed/skipped should collapse by default
   // - User can override by clicking (userCollapsed takes precedence)
   const shouldAutoCollapse = item.status === 'completed' || item.status === 'skipped';
   const isCollapsed = userCollapsed !== null ? userCollapsed : shouldAutoCollapse;
-  
-  const statusIcon = item.status === 'completed' 
-    ? <CheckCircleIcon size={14} className={styles.statusCompleted} />
-    : item.status === 'skipped' 
-    ? <SkipIcon size={14} className={styles.statusSkipped} />
-    : null;
 
-  const typeIcon = item.type === 'challenge' 
-    ? <CodeIcon size={14} />
-    : item.type === 'goal' 
-    ? <CheckIcon size={14} />
-    : item.type === 'topic' 
-    ? <BookIcon size={14} />
-    : <CalendarIcon size={14} />;
+  const statusIcon =
+    item.status === 'completed' ? (
+      <CheckCircleIcon size={14} className={styles.statusCompleted} />
+    ) : item.status === 'skipped' ? (
+      <SkipIcon size={14} className={styles.statusSkipped} />
+    ) : null;
+
+  const typeIcon =
+    item.type === 'challenge' ? (
+      <CodeIcon size={14} />
+    ) : item.type === 'goal' ? (
+      <CheckIcon size={14} />
+    ) : item.type === 'topic' ? (
+      <BookIcon size={14} />
+    ) : (
+      <CalendarIcon size={14} />
+    );
 
   const timeStr = formatTime(item.timestamp);
   const isInactive = item.status === 'skipped';
   const isCollapsible = item.status === 'skipped' || item.status === 'completed';
-  
+
   // Get item title and ID
   const itemTitle = item.data.title;
   const itemId = item.data.id;
@@ -90,16 +94,16 @@ export const ItemCard = memo(function ItemCard({
   const handleToggle = useCallback(() => {
     if (isCollapsible) {
       // Toggle from current state
-      setUserCollapsed(prev => prev !== null ? !prev : !shouldAutoCollapse);
+      setUserCollapsed((prev) => (prev !== null ? !prev : !shouldAutoCollapse));
     }
   }, [isCollapsible, shouldAutoCollapse]);
 
   return (
-    <div 
+    <div
       className={`${styles.itemCard} ${isInactive ? styles.itemCardInactive : ''} ${isCollapsed ? styles.itemCardCollapsed : ''}`}
       data-item-id={itemId}
     >
-      <button 
+      <button
         type="button"
         className={`${styles.itemCardHeader} ${isCollapsible ? styles.itemCardHeaderClickable : ''}`}
         onClick={handleToggle}

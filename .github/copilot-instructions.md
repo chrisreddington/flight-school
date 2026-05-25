@@ -11,7 +11,13 @@
 
 ## Architecture Overview
 
-Next.js 16 App Router application on React 19.2 with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes (or Server Components / Server Actions) to protect credentials. Public Copilot chat execution is routed to a mandatory private worker service.
+> For the full story (with diagrams, sequence flows, Aspire local-dev,
+> and storage/observability layout), see
+> [`docs/architecture.md`](../docs/architecture.md). The deep
+> multi-tenant invariants live in
+> [`docs/architecture-multitenant.md`](../docs/architecture-multitenant.md).
+
+Next.js 16 App Router application on React 19.2 with Primer React UI. All API calls to GitHub and AI providers happen server-side in `/api` routes (or Server Components / Server Actions) to protect credentials. Public Copilot chat execution is routed to a mandatory private worker service — a **standalone Hono/Node process** (not Next.js) that hosts the Copilot SDK and the per-user runtime pool. The Next-free boundary is enforced by [`scripts/check-worker-next-free.mjs`](../scripts/check-worker-next-free.mjs).
 
 **Data Flow**: Dashboard → `/api/profile` (Octokit direct) → `/api/focus` (Copilot SDK creative generation) → UI
 
@@ -118,12 +124,17 @@ must sign in through the same OAuth flow as production. The
 ### Copilot SDK: per-session GitHub identity
 
 The `CopilotClient` lives inside the worker (`src/worker/jobs/executors/`).
-**Web/API never invoke the SDK in-process**. All AI work — chat, coach, hints,
-authoring, evaluation — is dispatched to the worker through
-`src/lib/copilot/execution/` (`executeCopilotChat`, `executeCopilotCoachJob`,
-`openCopilotAuthoringStreamViaWorker`). See
-`.github/skills/copilot-sdk-worker-only/SKILL.md`. The boundary script
-`scripts/check-copilot-sdk-boundary.mjs` enforces this.
+The worker is a **standalone Hono/Node process** — `src/worker/bootstrap.ts`
+is the Node entrypoint, `src/worker/server-main.ts` boots the Hono app at
+`src/worker/http/app.ts`, and `src/worker/lifecycle/` holds OTel/warmup/
+restart-sweep/shutdown. **Web/API never invoke the SDK in-process**. All
+AI work — chat, coach, hints, authoring, evaluation — is dispatched to the
+worker through `src/lib/copilot/execution/` (`executeCopilotChat`,
+`executeCopilotCoachJob`, `openCopilotAuthoringStreamViaWorker`). See
+`.github/skills/copilot-sdk-worker-only/SKILL.md`. Two CI scripts enforce
+the boundary: `scripts/check-copilot-sdk-boundary.mjs` (SDK reachability)
+and `scripts/check-worker-next-free.mjs` (no `next/*` reachable from the
+worker entrypoint).
 
 ```typescript
 import { executeCopilotCoachJob } from '@/lib/copilot/execution';

@@ -1,0 +1,4 @@
+# Fast pre-commit gate: lint + auto-fix staged files only.
+# Heavy checks (tsc, tests, build, guardrails) run in pre-push.
+# Escape hatch: `git commit --no-verify`.
+npx lint-staged

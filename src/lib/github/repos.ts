@@ -8,12 +8,7 @@
 import type { Octokit } from 'octokit';
 import { now, nowMs } from '@/lib/utils/date-utils';
 import { getLanguageColor } from './language-colors';
-import type {
-    CreateRepoInput,
-    CreatedRepo,
-    GitHubRepo,
-    LanguageStat,
-} from './types';
+import type { CreateRepoInput, CreatedRepo, GitHubRepo, LanguageStat } from './types';
 
 // =============================================================================
 // Repo State
@@ -53,7 +48,7 @@ export async function getUserRepositories(
     sort?: 'created' | 'updated' | 'pushed' | 'full_name';
     perPage?: number;
     maxPages?: number;
-  }
+  },
 ): Promise<GitHubRepo[]> {
   const perPage = options?.perPage || 100;
   const maxPages = options?.maxPages || 10; // Safety limit: 1000 repos max
@@ -85,7 +80,7 @@ export async function getUserRepositories(
         pushedAt: repo.pushed_at ?? now(),
         isPrivate: repo.private,
         topics: repo.topics || [],
-      }))
+      })),
     );
 
     if (data.length < perPage) {
@@ -117,7 +112,7 @@ export async function getUserRepositories(
 export async function getRepoLanguageBytes(
   octokit: Octokit,
   owner: string,
-  repo: string
+  repo: string,
 ): Promise<Record<string, number>> {
   const cacheKey = `${owner}/${repo}`;
   const now = nowMs();
@@ -148,11 +143,7 @@ export async function getRepoLanguageBytes(
  * @param repo - Repository name
  * @returns Repository state (exists, hasCommits)
  */
-export async function getRepositoryState(
-  octokit: Octokit,
-  owner: string,
-  repo: string
-): Promise<RepoState> {
+export async function getRepositoryState(octokit: Octokit, owner: string, repo: string): Promise<RepoState> {
   try {
     const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
 
@@ -222,10 +213,7 @@ export function getLanguageStats(repos: GitHubRepo[], limit = 5): LanguageStat[]
  * console.log(`Created: ${repo.htmlUrl}`);
  * ```
  */
-export async function createRepository(
-  octokit: Octokit,
-  input: CreateRepoInput
-): Promise<CreatedRepo> {
+export async function createRepository(octokit: Octokit, input: CreateRepoInput): Promise<CreatedRepo> {
   try {
     const { data } = await octokit.rest.repos.createForAuthenticatedUser({
       name: input.name,
@@ -256,11 +244,11 @@ export async function createRepository(
     // Re-throw with clearer message for common errors
     const status = (error as { status?: number })?.status;
     const message = error instanceof Error ? error.message : String(error);
-    
+
     if (status === 422 && message.toLowerCase().includes('name already exists')) {
       throw new Error(`Repository name "${input.name}" already exists on your account`);
     }
-    
+
     throw error;
   }
 }
@@ -294,7 +282,7 @@ export async function updateRepoFile(
   path: string,
   content: string,
   message: string,
-  sha?: string
+  sha?: string,
 ): Promise<{ commitSha: string }> {
   // Content must be base64 encoded
   const encodedContent = Buffer.from(content).toString('base64');
@@ -327,7 +315,7 @@ export async function getFileShaWithRetry(
   owner: string,
   repo: string,
   path: string,
-  options: { maxRetries?: number; baseDelayMs?: number } = {}
+  options: { maxRetries?: number; baseDelayMs?: number } = {},
 ): Promise<string | null> {
   const maxRetries = options.maxRetries ?? 3;
   const baseDelayMs = options.baseDelayMs ?? 200;

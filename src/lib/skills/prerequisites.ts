@@ -26,30 +26,110 @@ const MINIMUM_PREREQUISITE_LEVEL: SkillLevel = 'intermediate';
 
 export const SKILL_PREREQUISITES: SkillNode[] = [
   // Foundations
-  { skillId: 'javascript', displayName: 'JavaScript', prerequisites: [], unlocks: 'TypeScript, React, Node.js' },
+  {
+    skillId: 'javascript',
+    displayName: 'JavaScript',
+    prerequisites: [],
+    unlocks: 'TypeScript, React, Node.js',
+  },
   { skillId: 'html', displayName: 'HTML', prerequisites: [], unlocks: 'CSS, React' },
   { skillId: 'css', displayName: 'CSS', prerequisites: ['html'], unlocks: 'React, Vue' },
-  { skillId: 'python', displayName: 'Python', prerequisites: [], unlocks: 'FastAPI, Machine Learning' },
+  {
+    skillId: 'python',
+    displayName: 'Python',
+    prerequisites: [],
+    unlocks: 'FastAPI, Machine Learning',
+  },
 
   // Intermediate
-  { skillId: 'typescript', displayName: 'TypeScript', prerequisites: ['javascript'], unlocks: 'React, Next.js, Node.js' },
-  { skillId: 'react', displayName: 'React', prerequisites: ['javascript', 'html', 'css'], unlocks: 'Next.js' },
-  { skillId: 'nodejs', displayName: 'Node.js', prerequisites: ['javascript'], unlocks: 'Express, REST APIs' },
+  {
+    skillId: 'typescript',
+    displayName: 'TypeScript',
+    prerequisites: ['javascript'],
+    unlocks: 'React, Next.js, Node.js',
+  },
+  {
+    skillId: 'react',
+    displayName: 'React',
+    prerequisites: ['javascript', 'html', 'css'],
+    unlocks: 'Next.js',
+  },
+  {
+    skillId: 'nodejs',
+    displayName: 'Node.js',
+    prerequisites: ['javascript'],
+    unlocks: 'Express, REST APIs',
+  },
   { skillId: 'sql', displayName: 'SQL', prerequisites: [], unlocks: 'PostgreSQL, SQLite, ORM' },
   { skillId: 'git', displayName: 'Git', prerequisites: [], unlocks: 'GitHub Actions, CI/CD' },
-  { skillId: 'testing', displayName: 'Testing', prerequisites: ['javascript'], unlocks: 'TDD, CI/CD' },
+  {
+    skillId: 'testing',
+    displayName: 'Testing',
+    prerequisites: ['javascript'],
+    unlocks: 'TDD, CI/CD',
+  },
 
   // Advanced
-  { skillId: 'nextjs', displayName: 'Next.js', prerequisites: ['react', 'typescript'], unlocks: 'Full-stack React' },
-  { skillId: 'docker', displayName: 'Docker', prerequisites: ['nodejs'], unlocks: 'Kubernetes, CI/CD' },
-  { skillId: 'graphql', displayName: 'GraphQL', prerequisites: ['nodejs', 'javascript'], unlocks: 'Apollo, Relay' },
-  { skillId: 'rust', displayName: 'Rust', prerequisites: ['javascript'], unlocks: 'Systems Programming, WASM' },
-  { skillId: 'go', displayName: 'Go', prerequisites: ['javascript'], unlocks: 'Backend Services, CLI Tools' },
-  { skillId: 'kubernetes', displayName: 'Kubernetes', prerequisites: ['docker'], unlocks: 'Cloud-native Architecture' },
-  { skillId: 'ci-cd', displayName: 'CI/CD', prerequisites: ['git', 'testing'], unlocks: 'DevOps, Deployment' },
-  { skillId: 'machine-learning', displayName: 'Machine Learning', prerequisites: ['python'], unlocks: 'Deep Learning, MLOps' },
-  { skillId: 'rest-api', displayName: 'REST APIs', prerequisites: ['nodejs', 'javascript'], unlocks: 'Microservices' },
-  { skillId: 'postgresql', displayName: 'PostgreSQL', prerequisites: ['sql'], unlocks: 'Database Design' },
+  {
+    skillId: 'nextjs',
+    displayName: 'Next.js',
+    prerequisites: ['react', 'typescript'],
+    unlocks: 'Full-stack React',
+  },
+  {
+    skillId: 'docker',
+    displayName: 'Docker',
+    prerequisites: ['nodejs'],
+    unlocks: 'Kubernetes, CI/CD',
+  },
+  {
+    skillId: 'graphql',
+    displayName: 'GraphQL',
+    prerequisites: ['nodejs', 'javascript'],
+    unlocks: 'Apollo, Relay',
+  },
+  {
+    skillId: 'rust',
+    displayName: 'Rust',
+    prerequisites: ['javascript'],
+    unlocks: 'Systems Programming, WASM',
+  },
+  {
+    skillId: 'go',
+    displayName: 'Go',
+    prerequisites: ['javascript'],
+    unlocks: 'Backend Services, CLI Tools',
+  },
+  {
+    skillId: 'kubernetes',
+    displayName: 'Kubernetes',
+    prerequisites: ['docker'],
+    unlocks: 'Cloud-native Architecture',
+  },
+  {
+    skillId: 'ci-cd',
+    displayName: 'CI/CD',
+    prerequisites: ['git', 'testing'],
+    unlocks: 'DevOps, Deployment',
+  },
+  {
+    skillId: 'machine-learning',
+    displayName: 'Machine Learning',
+    prerequisites: ['python'],
+    unlocks: 'Deep Learning, MLOps',
+  },
+  {
+    skillId: 'rest-api',
+    displayName: 'REST APIs',
+    prerequisites: ['nodejs', 'javascript'],
+    unlocks: 'Microservices',
+  },
+  {
+    skillId: 'postgresql',
+    displayName: 'PostgreSQL',
+    prerequisites: ['sql'],
+    unlocks: 'Database Design',
+  },
 ];
 
 function isIntermediateOrAdvanced(level: SkillLevel | undefined): boolean {
@@ -81,8 +161,6 @@ export function getNextAchievableSkills(profile: SkillProfile): SkillNode[] {
       return false;
     }
 
-    return skillNode.prerequisites.every((prerequisite) =>
-      skillLevels.has(prerequisite)
-    );
+    return skillNode.prerequisites.every((prerequisite) => skillLevels.has(prerequisite));
   });
 }

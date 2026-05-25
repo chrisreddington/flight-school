@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  const histogramRecords: Array<{ name: string; value: number; attributes?: Record<string, unknown> }> = [];
-  const counterRecords: Array<{ name: string; value: number; attributes?: Record<string, unknown> }> = [];
+  const histogramRecords: Array<{
+    name: string;
+    value: number;
+    attributes?: Record<string, unknown>;
+  }> = [];
+  const counterRecords: Array<{
+    name: string;
+    value: number;
+    attributes?: Record<string, unknown>;
+  }> = [];
 
   return {
     counterRecords,
@@ -48,10 +56,7 @@ vi.mock('@opentelemetry/api', () => ({
   },
 }));
 
-import {
-  recordAiStreamMetrics,
-  recordJobQueueWait,
-} from './telemetry';
+import { recordAiStreamMetrics, recordJobQueueWait } from './telemetry';
 
 describe('telemetry stream and queue metrics', () => {
   beforeEach(() => {
@@ -72,36 +77,42 @@ describe('telemetry stream and queue metrics', () => {
       terminalState: 'completed',
     });
 
-    expect(mocks.histogramRecords).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        name: 'gen_ai.client.operation.time_to_first_chunk',
-        value: 0.18,
-      }),
-      expect.objectContaining({
-        name: 'flight_school.ai.stream.delta_count',
-        value: 12,
-      }),
-      expect.objectContaining({
-        name: 'flight_school.ai.stream.delta_bytes',
-        value: 960,
-      }),
-    ]));
-    expect(mocks.counterRecords).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        name: 'flight_school.ai.stream.tool_calls',
-        value: 2,
-      }),
-    ]));
+    expect(mocks.histogramRecords).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'gen_ai.client.operation.time_to_first_chunk',
+          value: 0.18,
+        }),
+        expect.objectContaining({
+          name: 'flight_school.ai.stream.delta_count',
+          value: 12,
+        }),
+        expect.objectContaining({
+          name: 'flight_school.ai.stream.delta_bytes',
+          value: 960,
+        }),
+      ]),
+    );
+    expect(mocks.counterRecords).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'flight_school.ai.stream.tool_calls',
+          value: 2,
+        }),
+      ]),
+    );
   });
 
   it('records worker queue wait metric by job type', () => {
     recordJobQueueWait(420, 'chat-response');
 
-    expect(mocks.histogramRecords).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        name: 'flight_school.jobs.queue_wait',
-        value: 0.42,
-      }),
-    ]));
+    expect(mocks.histogramRecords).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'flight_school.jobs.queue_wait',
+          value: 0.42,
+        }),
+      ]),
+    );
   });
 });

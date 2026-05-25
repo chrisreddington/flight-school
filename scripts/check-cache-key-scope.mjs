@@ -21,8 +21,7 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const SCAN_ROOTS = ['src'];
 
-const TAG_API_PATTERN =
-  /\b(?:cacheTag|revalidateTag|updateTag)\s*\(\s*(['"`])([^'"`\n]+)\1/g;
+const TAG_API_PATTERN = /\b(?:cacheTag|revalidateTag|updateTag)\s*\(\s*(['"`])([^'"`\n]+)\1/g;
 
 const USE_CACHE_DIRECTIVE_PATTERN = /(^|\n)\s*['"`]use cache['"`]\s*;?/g;
 
@@ -65,9 +64,10 @@ function checkFile(absolutePath) {
   USE_CACHE_DIRECTIVE_PATTERN.lastIndex = 0;
   let directiveMatch;
   while ((directiveMatch = USE_CACHE_DIRECTIVE_PATTERN.exec(source)) !== null) {
-    const hasScopedTag = /cacheTag\s*\(\s*['"`](?:public:|[^'"`\n]*\$\{[^}]*\b(?:userId|sessionId|installationId|owner)\b[^}]*\})/.test(
-      source,
-    );
+    const hasScopedTag =
+      /cacheTag\s*\(\s*['"`](?:public:|[^'"`\n]*\$\{[^}]*\b(?:userId|sessionId|installationId|owner)\b[^}]*\})/.test(
+        source,
+      );
     if (!hasScopedTag) {
       offenders.push({
         tag: "'use cache' directive without a tenant-scoped cacheTag()",
@@ -119,8 +119,8 @@ function main() {
     }
     console.error(
       '\nRule: every cacheTag/revalidateTag/updateTag literal must either be\n' +
-      'tenant-scoped (interpolated userId/sessionId/installationId/owner) or\n' +
-      'prefixed `public:` with PR-description justification.',
+        'tenant-scoped (interpolated userId/sessionId/installationId/owner) or\n' +
+        'prefixed `public:` with PR-description justification.',
     );
     process.exit(1);
   }
