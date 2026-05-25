@@ -273,26 +273,31 @@ describe('useUserProfile — refetch bypass', () => {
     expect(result.current.data?.user.login).toBe('fresh-from-bypass');
   });
 
-  it('only flips isLoading off after all overlapping refetch calls settle', async () => {
-    // Regression for the ref-counted guard in `refetch()`. Two refetches
-    // are dispatched back-to-back so both increment the in-flight count
-    // before either settles. With the guard, only the last-to-finish
-    // call clears the indicator; without the guard, the first call's
-    // `finally` would have already flipped `isManuallyRefetching` to
-    // false while the second is still in flight.
+  it('keeps isLoading true between divergent refetch settlements', async () => {
+    // Regression for the ref-counted guard in `refetch()`. Two rapid
+    // refetches settle at DIFFERENT times even though their underlying
+    // network fetch is shared:
     //
-    // NOTE: Reviewers asked whether this test should force *divergent*
-    // settle times (call 1 settles, indicator stays true, call 2 settles
-    // later). That scenario is architecturally impossible in production:
-    // `src/lib/api-client.ts` deduplicates concurrent GETs on the same
-    // URL via its `pendingRequests` Map, so a rapid second `refetch()`
-    // joins call 1's in-flight network promise rather than starting a
-    // new one. Both refetch calls therefore always resolve on the same
-    // microtask cycle. The race the guard defends against is the order
-    // in which their two `finally` blocks run on that shared settle —
-    // exactly what this test exercises.
-    const cached = makeProfile({ login: 'cached' });
+    //   - Call 2's `cancelQueries` aborts call 1's retryer with
+    //     `revert: true`. TanStack's `fetchQuery` catch returns the
+    //     reverted `state.data` immediately, so call 1's wrapper promise
+    //     resolves on the next microtask.
+    //   - Call 2's `fetchQuery` then runs through `apiGet` which dedupes
+    //     onto call 1's still-pending /api/profile network promise (see
+    //     `src/lib/api-client.ts` `pendingRequests` Map). Call 2's wrapper
+    //     promise therefore waits until the shared network promise resolves.
+    //
+    // Without the ref-counter, call 1's `finally` would flip the indicator
+    // to false the moment its wrapper resolved, leaving a visible "loading
+    // off → loading on" flash while call 2 is still in flight. With the
+    // counter, the indicator stays true until both wrappers settle.
+    const initial = makeProfile({ login: 'initial' });
     const fresh = makeProfile({ login: 'fresh' });
+
+    let resolveLive!: (value: ProfileResponse) => void;
+    const liveGate = new Promise<ProfileResponse>((resolve) => {
+      resolveLive = resolve;
+    });
 
     fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
       const target = typeof url === 'string' ? url : url.toString();
@@ -300,11 +305,12 @@ describe('useUserProfile — refetch bypass', () => {
 
       if (target.includes('/api/profile/storage')) {
         if (method === 'POST') return okJson({});
-        return okJson({ date: getDateKey(), profile: cached });
+        return okJson({ date: getDateKey(), profile: initial });
       }
 
       if (target.includes('/api/profile')) {
-        return okJson(fresh);
+        const value = await liveGate;
+        return okJson(value);
       }
 
       return okJson({});
@@ -313,25 +319,40 @@ describe('useUserProfile — refetch bypass', () => {
     const { wrapper } = createQueryTestWrapper();
     const { result } = renderHook(() => useUserProfile(), { wrapper });
 
-    await waitFor(() => expect(result.current.data?.user.login).toBe('cached'));
+    await waitFor(() => expect(result.current.data?.user.login).toBe('initial'));
 
-    // Dispatch both refetches before awaiting either. Both increment
-    // the ref count to 2, set the indicator true, and join the same
-    // bypass fetchQuery via TanStack's dedupe.
+    // Dispatch call 1 and wait until its bypass fetch is actually awaiting
+    // the gate inside the mock. Only then will call 2's `cancelQueries`
+    // land on an in-flight retryer and trigger the revert path.
     let firstRefetch!: Promise<void>;
-    let secondRefetch!: Promise<void>;
     act(() => {
       firstRefetch = result.current.refetch();
+    });
+    await waitFor(() => {
+      const bypassCalls = fetchMock.mock.calls.filter(
+        (call) => String(call[0]).endsWith('/api/profile') && (call[1] as RequestInit | undefined)?.method !== 'POST',
+      );
+      expect(bypassCalls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Dispatch call 2 — its `cancelQueries` will revert call 1.
+    let secondRefetch!: Promise<void>;
+    act(() => {
       secondRefetch = result.current.refetch();
     });
 
+    // Call 1 settles first (revert path resolves to the cached value).
+    // Counter goes 2→1; loading must stay true because call 2 is in flight.
+    await act(async () => {
+      await firstRefetch;
+    });
     expect(result.current.isLoading).toBe(true);
 
+    // Release the shared network promise. Call 2 now settles. Counter 1→0.
+    resolveLive(fresh);
     await act(async () => {
-      await Promise.all([firstRefetch, secondRefetch]);
+      await secondRefetch;
     });
-
-    // Indicator flips off only after both settle.
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data?.user.login).toBe('fresh');
   });
