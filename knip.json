@@ -4,5 +4,5 @@
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/test/**"],
   "ignoreBinaries": ["aspire", "wait-on"],
-  "ignoreDependencies": ["eslint-plugin-react-hooks"]
+  "ignoreDependencies": ["eslint-plugin-react-hooks", "tsx"]
 }
