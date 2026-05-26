@@ -23,27 +23,13 @@ Next.js 16 App Router application on React 19.2 with Primer React UI. All API ca
 
 ### Next 16 / React 19.2 build flags
 
-`next.config.ts` enables React Compiler. A second flag, `cacheComponents`,
-is currently disabled pending an upstream fix:
+`next.config.ts` enables two opt-in features that the rest of the codebase
+must respect:
 
 - **`reactCompiler: true`** — the compiler auto-memoises components, so don't add `useMemo` / `useCallback` / `React.memo` unless a profile shows it's needed. If a Primer component breaks the compiler's Rules of React, opt that file out with `"use no memo"` and leave a `TODO:` comment.
-- **`experimental.cacheComponents` — TEMPORARILY DISABLED.** Next 16.2.6
-  has an unresolved `InvariantError: Expected workUnitAsyncStorage to have
-  a store` that fires during the static prerender pass for client-component
-  pages (`/`, `/sign-in`). The error is on Next's ignore-listed frames
-  with the literal *"This is a bug in Next.js"* message, and our
-  `ErrorBoundary` catches it as a real render failure. The flag will be
-  re-enabled when we upgrade to a Next release that ships a fix. Until
-  then, treat dynamic-IO rules below as **best-practice**, not
-  load-bearing — they keep us PPR-ready for re-enablement.
+- **`experimental.cacheComponents: true`** — Partial Prerender mode. Any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
 
-**Dynamic IO rules (kept current for re-enablement).** Any dynamic IO
-(cookies, request body, `usePathname`, `useSearchParams`, uncached
-`fetch`) should live below a `<Suspense>` boundary. Root layout already
-wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's
-`usePathname()` call.
-
-**Route-segment config remains forbidden.** Do not add
+**Route-segment config is forbidden under `cacheComponents`.** Do not add
 `export const dynamic = '…'` or `export const runtime = 'nodejs'` to any
 route — Next 16 infers dynamism from the route's actual API use, and Node
 is the project-wide default. CI guard `scripts/check-server-fetch-tenancy.mjs`

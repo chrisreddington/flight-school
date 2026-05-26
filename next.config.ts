@@ -30,17 +30,10 @@ const nextConfig: NextConfig = {
     // Optimize package imports - reduces bundle size by tree-shaking
     optimizePackageImports: ['@primer/react', '@primer/octicons-react', 'react-markdown', 'react-syntax-highlighter'],
   },
-  // Next 16 dynamic-IO model (Partial Prerender). Temporarily disabled:
-  // Next 16.2.6 has an unresolved InvariantError ("Expected
-  // workUnitAsyncStorage to have a store") that fires during the static
-  // prerender pass for client-component pages in this app (`/`, `/sign-in`).
-  // The error is upstream — stack lands on Next's ignore-listed frames with
-  // the literal "This is a bug in Next.js" message — and our ErrorBoundary
-  // catches it as a real render failure, blocking the UX. Re-enable when we
-  // upgrade to a Next release that ships a fix.
-  // The `scripts/check-server-fetch-tenancy.mjs` CI guard continues to
-  // enforce the no-untagged-fetch rule independently of this flag.
-  // cacheComponents: true,
+  // Next 16 dynamic-IO model: every server fetch must be either explicitly
+  // uncached (no-store) or tagged for revalidation. Enforced by
+  // scripts/check-server-fetch-tenancy.mjs at CI time.
+  cacheComponents: true,
   // Keep `@github/copilot-sdk` as a server-only external. The package uses
   // `import.meta.resolve` internally which Turbopack cannot handle, and we
   // never want it bundled into the web image — runtime fail-loud net: if
