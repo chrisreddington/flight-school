@@ -3,42 +3,29 @@
 import { HabitCard } from '@/components/FocusItem';
 import { HabitCreationDialog } from '@/components/Habits/HabitCreationDialog';
 import { habitStore } from '@/lib/habits';
-import { logger } from '@/lib/logger';
 import { Banner, Button, Stack } from '@primer/react';
 import { PlusIcon } from '@primer/octicons-react';
-import { useEffect, useState } from 'react';
-import type { HabitWithHistory } from '@/lib/habits/types';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import styles from './Dashboard.module.css';
 
+const ACTIVE_HABITS_KEY = ['habits', 'active'] as const;
+
 export function HabitsSection() {
-  const [habits, setHabits] = useState<HabitWithHistory[]>([]);
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadHabits = async () => {
-    setLoadError(null);
-    try {
-      const active = await habitStore.getActive();
-      setHabits(active);
-    } catch (error) {
-      logger.error('Failed to load habits', { error }, 'HabitsSection');
-      setLoadError('Failed to load habits. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const habitsQuery = useQuery({
+    queryKey: ACTIVE_HABITS_KEY,
+    queryFn: () => habitStore.getActive(),
+  });
 
-  useEffect(() => {
-    loadHabits();
-  }, []);
+  const habits = habitsQuery.data ?? [];
+  const isLoading = habitsQuery.isPending;
+  const loadError = habitsQuery.error ? 'Failed to load habits. Please try again.' : null;
 
-  const handleCreated = () => {
-    loadHabits();
-  };
-
-  const handleUpdate = () => {
-    loadHabits();
+  const refreshHabits = () => {
+    queryClient.invalidateQueries({ queryKey: ACTIVE_HABITS_KEY });
   };
 
   if (isLoading) {
@@ -71,12 +58,12 @@ export function HabitsSection() {
             </Button>
           </Stack>
           {habits.map((habit) => (
-            <HabitCard key={habit.id} habit={habit} onUpdate={handleUpdate} />
+            <HabitCard key={habit.id} habit={habit} onUpdate={refreshHabits} />
           ))}
         </Stack>
       )}
 
-      <HabitCreationDialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} onCreated={handleCreated} />
+      <HabitCreationDialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} onCreated={refreshHabits} />
     </>
   );
 }

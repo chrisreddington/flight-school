@@ -2,10 +2,14 @@
  * useUserProfile Hook
  *
  * Fetches and caches the authenticated user's GitHub profile and activity data.
- * Uses server-side JSON storage for day-based persistence with manual refresh capability.
+ * Server-side JSON storage acts as a day-keyed cache; the React state machine
+ * is provided by TanStack Query.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+'use client';
+
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useRef, useState } from 'react';
 
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { apiGet } from '@/lib/api-client';
@@ -34,9 +38,7 @@ async function getCachedProfile(): Promise<ProfileResponse | null> {
     const data = (await response.json()) as ProfileStorageSchema | null;
     if (!data) return null;
 
-    // Check if cache is from today
-    const todayKey = getDateKey();
-    if (data.date !== todayKey) return null;
+    if (data.date !== getDateKey()) return null;
 
     // Invalidate cache if it's missing authMethod (old schema)
     if (!data.profile?.meta?.authMethod) return null;
@@ -112,58 +114,118 @@ function normalizeProfileResponse(profile: ProfileResponse | null): ProfileRespo
   };
 }
 
+/**
+ * Fetch + cache the user's profile.
+ *
+ * @remarks
+ * Cache resolution happens inside `queryFn` (not `initialData`) because
+ * `getCachedProfile` is async — `initialData` requires a synchronous value.
+ * Running on the client only also avoids SSR hydration mismatch.
+ *
+ * `bypassCache: true` is used by manual `refetch()` (routed through
+ * `queryClient.fetchQuery`) to force a fresh `/api/profile` request even
+ * when the day-keyed server cache is warm.
+ */
+async function fetchUserProfile({ bypassCache }: { bypassCache: boolean }): Promise<ProfileResponse | null> {
+  if (!bypassCache) {
+    const cached = await getCachedProfile();
+    if (cached) return normalizeProfileResponse(cached);
+  }
+
+  try {
+    const profile = await apiGet<ProfileResponse>('/api/profile');
+    const normalized = normalizeProfileResponse(profile);
+    if (normalized) {
+      await setCachedProfile(normalized);
+    }
+    return normalized;
+  } catch (err) {
+    logger.error(
+      'Error loading profile',
+      { message: err instanceof Error ? err.message : String(err) },
+      'useUserProfile',
+    );
+    throw err;
+  }
+}
+
+// Bounded staleness: the server-side day cache owns the canonical TTL
+// (entries expire at midnight). A finite client-side stale window lets
+// TanStack's own freshness machinery re-enter `getCachedProfile()` after
+// roughly an hour of foreground activity, which catches the date-key
+// rollover for long-lived tabs without flooding the cache endpoint on
+// every subscriber mount. Window-focus refetches (TanStack default) cover
+// users returning to the tab after midnight.
+const PROFILE_STALE_TIME_MS = 60 * 60 * 1000;
+
 export function useUserProfile(): UseUserProfileResult {
-  // SSR-safe: Always start with null/loading state for consistent hydration
-  // Cache is checked in useEffect after hydration completes
-  const [data, setData] = useState<ProfileResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Tracks an in-flight manual `refetch()` so `isLoading` reflects the
+  // explicit cache-bypass refetch the same way it did before the TanStack
+  // migration. `fetchQuery` below routes the bypass through TanStack's
+  // own pipeline so success/failure both update `query.data` / `query.error`
+  // for free; this state only drives the loading indicator.
+  const [isManuallyRefetching, setIsManuallyRefetching] = useState(false);
+  // Ref-counted concurrent-refetch guard. If a user clicks refresh twice
+  // in rapid succession, call 2's `cancelQueries` aborts call 1's fetch;
+  // call 1's `finally` would otherwise flip the indicator off while call 2
+  // is still in flight, producing a transient `isLoading: false` flash.
+  // Only the LAST in-flight refetch clears the indicator.
+  const inflightRefetchCount = useRef(0);
 
-  const fetchProfile = useCallback(async (bypassCache = false) => {
-    // Check cache validity (from today)
-    if (!bypassCache) {
-      const cached = await getCachedProfile();
-      if (cached) {
-        const normalized = normalizeProfileResponse(cached);
-        setData(normalized);
-        setIsLoading(false);
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Use centralized API client with automatic retry and error handling
-      const profile = await apiGet<ProfileResponse>('/api/profile');
-      const normalized = normalizeProfileResponse(profile);
-
-      // Save to server-side storage
-      if (normalized) {
-        await setCachedProfile(normalized);
-      }
-
-      setData(normalized);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load profile';
-      setError(message);
-      logger.error('Error loading profile', { message }, 'useUserProfile');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const query = useQuery({
+    queryKey: ['profile'],
+    staleTime: PROFILE_STALE_TIME_MS,
+    // Explicit opt-in: the global QueryProvider disables window-focus
+    // refetches, but this query needs them as the backstop that catches
+    // the server-side day-cache rollover when a long-lived tab returns
+    // to the foreground after midnight. The cache-check endpoint inside
+    // the queryFn is a single cheap JSON read.
+    refetchOnWindowFocus: true,
+    queryFn: () => fetchUserProfile({ bypassCache: false }),
+  });
 
   const refetch = useCallback(async () => {
-    await fetchProfile(true);
-  }, [fetchProfile]);
+    inflightRefetchCount.current += 1;
+    setIsManuallyRefetching(true);
+    try {
+      // Cancel any in-flight non-bypass query for this key first.
+      // Without this, `fetchQuery` would dedupe and return the existing
+      // promise (which was kicked off with `bypassCache: false`), so the
+      // bypass intent would be lost in the narrow window where the user
+      // clicks refresh before initial mount finishes.
+      await queryClient.cancelQueries({ queryKey: ['profile'] });
+      // `fetchQuery` with `staleTime: 0` then runs the bypass queryFn
+      // through TanStack's observer pipeline, so success populates
+      // `query.data` and failure populates `query.error`.
+      await queryClient.fetchQuery({
+        queryKey: ['profile'],
+        queryFn: () => fetchUserProfile({ bypassCache: true }),
+        staleTime: 0,
+      });
+    } catch {
+      // fetchUserProfile already logged; the error is surfaced via
+      // `query.error` thanks to the fetchQuery pipeline. A rapid second
+      // `refetch()` will also land here when its cancelQueries aborts
+      // this call's fetchQuery — that's expected and handled by the
+      // ref-counted indicator below.
+    } finally {
+      inflightRefetchCount.current -= 1;
+      if (inflightRefetchCount.current === 0) {
+        setIsManuallyRefetching(false);
+      }
+    }
+  }, [queryClient]);
 
-  // Check cache after hydration to avoid SSR mismatch
-  useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
-
-  return { data, isLoading, error, refetch };
+  return {
+    data: query.data ?? null,
+    // `isPending` (initial load only) instead of `isFetching` (every
+    // background refetch) — matches the pre-migration semantics and
+    // prevents loading-state flashes on subsequent subscriber mounts.
+    isLoading: query.isPending || isManuallyRefetching,
+    error: query.error instanceof Error ? query.error.message : query.error ? 'Failed to load profile' : null,
+    refetch,
+  };
 }
 
 /**

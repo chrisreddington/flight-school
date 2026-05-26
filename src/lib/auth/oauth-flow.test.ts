@@ -25,7 +25,27 @@ vi.mock('next-auth/providers/github', () => ({
   default: vi.fn(() => ({ id: 'github', name: 'GitHub' })),
 }));
 
+// Token store stays out of these tests: each call returns `null` so the
+// coordinator falls through to its refresh path, and writes are accepted but
+// ignored. The coordinator's own logic is covered by
+// refresh-coordinator.test.ts.
+const { tokenStoreGetMock, tokenStoreSetMock } = vi.hoisted(() => ({
+  tokenStoreGetMock: vi.fn().mockResolvedValue(null),
+  tokenStoreSetMock: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('@/lib/auth/token-store', () => ({
+  getTokenStore: () => ({
+    getToken: tokenStoreGetMock,
+    setToken: vi.fn(),
+    setTokenIfNewer: tokenStoreSetMock,
+    deleteToken: vi.fn(),
+    cleanupExpired: vi.fn(),
+  }),
+}));
+
 import { authConfig } from '@/lib/auth/config';
+import { __resetRefreshCoordinatorForTests } from '@/lib/auth/refresh-coordinator';
 
 type JWT = Record<string, unknown>;
 
@@ -54,6 +74,9 @@ describe('Auth.js jwt callback', () => {
   beforeEach(() => {
     process.env.AUTH_GITHUB_ID = 'client_id_xyz';
     process.env.AUTH_GITHUB_SECRET = 'client_secret_xyz';
+    __resetRefreshCoordinatorForTests();
+    tokenStoreGetMock.mockResolvedValue(null);
+    tokenStoreSetMock.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -130,6 +153,7 @@ describe('Auth.js jwt callback', () => {
     global.fetch = fetchSpy as unknown as typeof fetch;
 
     const token: JWT = {
+      userId: '12345',
       accessToken: 'ghu_expired',
       refreshToken: 'ghr_use_me',
       expiresAt: nowSec - 10, // already expired
@@ -160,6 +184,7 @@ describe('Auth.js jwt callback', () => {
       ) as unknown as typeof fetch;
 
     const token: JWT = {
+      userId: '12345',
       accessToken: 'ghu_old',
       refreshToken: 'ghr_keep',
       expiresAt: nowSec - 1,
@@ -182,6 +207,7 @@ describe('Auth.js jwt callback', () => {
 
     const result = await jwtCallback!({
       token: {
+        userId: '12345',
         accessToken: 'ghu_old',
         refreshToken: 'ghr_bad',
         expiresAt: nowSec - 5,
@@ -196,12 +222,33 @@ describe('Auth.js jwt callback', () => {
 
     const result = await jwtCallback!({
       token: {
+        userId: '12345',
         accessToken: 'ghu_old',
         refreshToken: 'ghr_bad',
         expiresAt: nowSec - 5,
       },
     });
     expect(result.error).toBe('RefreshAccessTokenError');
+  });
+
+  it('marks the token with RefreshAccessTokenError when the JWT lacks a userId', async () => {
+    // Defensive guard: legacy JWTs minted before userId was added cannot be
+    // coordinated by refresh-coordinator (it keys on userId), so we force a
+    // re-auth rather than silently bypassing the lock.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await jwtCallback!({
+      token: {
+        accessToken: 'ghu_old',
+        refreshToken: 'ghr_present',
+        expiresAt: nowSec - 5,
+      },
+    });
+
+    expect(result.error).toBe('RefreshAccessTokenError');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns RefreshTokenMissing when expired but no refresh token is stored', async () => {

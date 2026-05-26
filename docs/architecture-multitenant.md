@@ -325,10 +325,24 @@ first step after `markRunning`. The resolver:
 
 1. Looks up the stored token from the configured `TokenStore`.
 2. If the cached access token is within `REFRESH_LEEWAY_MS` of expiry,
-   exchanges the refresh token for a new `ghu_` access token via
-   `refreshGitHubAccessToken` (shared with the Auth.js JWT callback) and
-   re-persists the rotated pair.
+   delegates to `refreshGitHubTokenForUser(userId, refreshToken)`
+   (`src/lib/auth/refresh-coordinator.ts`), which is shared with the
+   Auth.js JWT callback. The coordinator coalesces concurrent refreshes
+   for the same user and, before hitting GitHub, checks the token store
+   for an already-rotated credential so racing callers don't redeem the
+   same refresh token twice (GitHub invalidates it on first use).
 3. Returns the fresh access token.
+
+**Refresh-token rotation race.** GitHub rotates the refresh token on
+every successful exchange. Without coordination, N concurrent
+authenticated requests (RSC render + OTel beacons + page subresources)
+each redeem the same token; only the first succeeds, the rest hit
+`bad_refresh_token` and force a sign-out. The coordinator's two layers
+(in-flight Promise map keyed by `userId`, then a token-store read that
+detects a rotated refresh token) eliminate the single-process race.
+Cross-replica coordination relies on layer 2 only — the persistent
+store is shared, so a replica that arrives late after another replica
+rotated picks up the new credential without re-redeeming.
 
 **Failure modes.**
 

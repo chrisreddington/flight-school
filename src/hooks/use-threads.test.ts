@@ -7,6 +7,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { Thread } from '@/lib/threads';
+import { createQueryTestWrapper } from '@/test/query-test-wrapper';
 import { useThreads } from './use-threads';
 
 const { errorSpy } = vi.hoisted(() => ({ errorSpy: vi.fn() }));
@@ -53,7 +54,8 @@ function mountStorage(seed: Thread[] = []) {
 
 async function mountHook(seed: Thread[] = []) {
   const state = mountStorage(seed);
-  const hook = renderHook(() => useThreads());
+  const { wrapper } = createQueryTestWrapper();
+  const hook = renderHook(() => useThreads(), { wrapper });
   await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
   return { ...hook, state };
 }
@@ -69,7 +71,8 @@ describe('useThreads — initial load', () => {
       makeThread({ id: 'a', title: 'A', updatedAt: '2024-01-02T00:00:00Z' }),
       makeThread({ id: 'b', title: 'B', updatedAt: '2024-01-01T00:00:00Z' }),
     ]);
-    const { result } = renderHook(() => useThreads());
+    const { wrapper } = createQueryTestWrapper();
+    const { result } = renderHook(() => useThreads(), { wrapper });
     expect(result.current.isLoading).toBe(true);
     expect(result.current.threads).toEqual([]);
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -193,7 +196,9 @@ describe('useThreads — deleteThread', () => {
     await act(async () => {
       await result.current.deleteThread(del);
     });
-    expect(result.current.threads.map((t) => t.id)).toEqual(expectIds);
+    await waitFor(() => {
+      expect(result.current.threads.map((t) => t.id)).toEqual(expectIds);
+    });
     expect(result.current.activeThreadId).toBe(expectActive);
   });
 });
@@ -246,8 +251,11 @@ describe('useThreads — addMessage / updateActiveThread', () => {
     await act(async () => {
       await result.current.addMessage({ role: 'user', content: 'Hello' });
     });
+    await waitFor(() => {
+      const msgs = result.current.activeThread?.messages ?? [];
+      expect(msgs).toHaveLength(1);
+    });
     const msgs = result.current.activeThread?.messages ?? [];
-    expect(msgs).toHaveLength(1);
     expect(msgs[0]).toMatchObject({ role: 'user', content: 'Hello' });
     expect(msgs[0].id).toMatch(/^msg-/);
     expect(typeof msgs[0].timestamp).toBe('string');
@@ -294,7 +302,7 @@ describe('useThreads — refresh', () => {
     await act(async () => {
       await result.current.refresh();
     });
-    expect(result.current.threads[0].title).toBe('A-renamed');
+    await waitFor(() => expect(result.current.threads[0].title).toBe('A-renamed'));
   });
 });
 
@@ -326,5 +334,82 @@ describe('useThreads — error handling', () => {
       await invoke(result.current);
     });
     expect(errorSpy).toHaveBeenCalledWith(logMessage, expect.any(Object));
+  });
+});
+
+describe('useThreads — callback stability across re-renders', () => {
+  // Consumers (notably useChatSseSubscriptions) place these callbacks in
+  // effect dependency arrays. If any of them changed identity on an
+  // unrelated render, the SSE subscription would tear down and rebuild
+  // on every render — exactly the bug gpt55-dev caught in panel round 4.
+  it('preserves Object.is identity for every exported action across an unrelated rerender', async () => {
+    const { result, rerender } = await mountHook([]);
+
+    const first = {
+      createThread: result.current.createThread,
+      selectThread: result.current.selectThread,
+      deleteThread: result.current.deleteThread,
+      renameThread: result.current.renameThread,
+      updateContext: result.current.updateContext,
+      addMessage: result.current.addMessage,
+      updateActiveThread: result.current.updateActiveThread,
+      refresh: result.current.refresh,
+    };
+
+    rerender();
+
+    expect(result.current.createThread).toBe(first.createThread);
+    expect(result.current.selectThread).toBe(first.selectThread);
+    expect(result.current.deleteThread).toBe(first.deleteThread);
+    expect(result.current.renameThread).toBe(first.renameThread);
+    expect(result.current.updateContext).toBe(first.updateContext);
+    expect(result.current.addMessage).toBe(first.addMessage);
+    expect(result.current.updateActiveThread).toBe(first.updateActiveThread);
+    expect(result.current.refresh).toBe(first.refresh);
+  });
+
+  it('keeps callback identity stable across a mutation-driven rerender', async () => {
+    // Stronger guarantee than the "unrelated rerender" test: a real
+    // mutation (createThread) cycles useMutation through idle → pending
+    // → success, which is the most common case where a careless dep on
+    // the whole mutation object would tear the SSE subscription down.
+    //
+    const seedThread = makeThread({ id: 'seed', title: 'Seed' });
+    const { result } = await mountHook([seedThread]);
+
+    // Pin the active thread explicitly so the derived activeThreadId
+    // doesn't flip when the new thread sorts to the top of the list.
+    // `addMessage` and `updateActiveThread` legitimately depend on
+    // `activeThreadId`, so we'd see expected (non-bug) churn there
+    // otherwise.
+    act(() => {
+      result.current.selectThread('seed');
+    });
+
+    const before = {
+      createThread: result.current.createThread,
+      selectThread: result.current.selectThread,
+      deleteThread: result.current.deleteThread,
+      renameThread: result.current.renameThread,
+      updateContext: result.current.updateContext,
+      addMessage: result.current.addMessage,
+      updateActiveThread: result.current.updateActiveThread,
+      refresh: result.current.refresh,
+    };
+
+    await act(async () => {
+      await result.current.createThread({ title: 'stability-probe' }, false);
+    });
+
+    await waitFor(() => expect(result.current.threads.length).toBe(2));
+
+    expect(result.current.createThread).toBe(before.createThread);
+    expect(result.current.selectThread).toBe(before.selectThread);
+    expect(result.current.deleteThread).toBe(before.deleteThread);
+    expect(result.current.renameThread).toBe(before.renameThread);
+    expect(result.current.updateContext).toBe(before.updateContext);
+    expect(result.current.addMessage).toBe(before.addMessage);
+    expect(result.current.updateActiveThread).toBe(before.updateActiveThread);
+    expect(result.current.refresh).toBe(before.refresh);
   });
 });

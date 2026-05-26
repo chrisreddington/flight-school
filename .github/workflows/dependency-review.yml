@@ -32,3 +32,4 @@ jobs:
             pkg:npm/%40github/copilot-linuxmusl-x64
             pkg:npm/%40github/copilot-win32-arm64
             pkg:npm/%40github/copilot-win32-x64
+            pkg:npm/caniuse-lite

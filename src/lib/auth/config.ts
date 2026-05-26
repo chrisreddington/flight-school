@@ -14,7 +14,7 @@ import GitHub from 'next-auth/providers/github';
 
 import { logger } from '@/lib/logger';
 
-import { refreshGitHubAccessToken } from './github-oauth';
+import { refreshGitHubTokenForUser } from './refresh-coordinator';
 import { getTokenStore, type StoredToken } from './token-store';
 
 const log = logger.withTag('Auth');
@@ -136,21 +136,23 @@ export const authConfig: NextAuthConfig = {
         log.warn('JWT expired but no refresh token is available; user must re-authenticate');
         return { ...token, error: 'RefreshTokenMissing' as const };
       }
+      if (typeof token.userId !== 'string') {
+        // Without a userId we cannot key the coordinator; this only happens
+        // for tokens minted before the userId field existed. Force re-auth.
+        log.warn('JWT lacks userId; cannot coordinate refresh — forcing re-auth');
+        return { ...token, error: 'RefreshAccessTokenError' as const };
+      }
 
       try {
-        const refreshed = await refreshGitHubAccessToken(refreshToken);
-        token.accessToken = refreshed.access_token;
-        token.refreshToken = refreshed.refresh_token ?? refreshToken;
-        token.expiresAt = Math.floor(Date.now() / 1000) + refreshed.expires_in;
+        // The coordinator coalesces concurrent refresh attempts for this
+        // user and prefers an already-rotated credential from the token
+        // store over a guaranteed-to-fail re-redemption. Persistence to the
+        // store is done inside the coordinator.
+        const refreshed = await refreshGitHubTokenForUser(token.userId, refreshToken);
+        token.accessToken = refreshed.accessToken;
+        token.refreshToken = refreshed.refreshToken ?? refreshToken;
+        token.expiresAt = refreshed.expiresAt;
         delete (token as { error?: string }).error;
-        log.debug('Refreshed GitHub user-to-server access token');
-        if (typeof token.userId === 'string') {
-          await persistTokenToStore(token.userId, {
-            accessToken: refreshed.access_token,
-            refreshToken: token.refreshToken,
-            expiresAt: token.expiresAt,
-          });
-        }
         return token;
       } catch (error) {
         log.error('Failed to refresh GitHub access token', error);

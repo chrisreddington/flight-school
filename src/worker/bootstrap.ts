@@ -37,7 +37,15 @@ async function main(): Promise<void> {
 }
 
 if (isMainEntry()) {
-  await main();
+  // No top-level await: tsx/esbuild transpiles this file as CJS unless the
+  // root package.json sets `"type": "module"` (which we don't, because the
+  // Next app and a lot of ecosystem tooling expect CJS resolution).
+  // `runWorker()` starts an HTTP server that keeps the event loop alive,
+  // so fire-and-forget with an error handler is sufficient here.
+  main().catch((err) => {
+    console.error('[worker] fatal startup error:', err);
+    process.exit(1);
+  });
 }
 
 export { main, isMainEntry };

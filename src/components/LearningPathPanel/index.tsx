@@ -1,8 +1,6 @@
 'use client';
 
 import { Button, Stack } from '@primer/react';
-import { useEffect, useMemo, useState } from 'react';
-import type { SkillNode } from '@/lib/skills/prerequisites';
 import { getNextAchievableSkills, SKILL_PREREQUISITES } from '@/lib/skills/prerequisites';
 import type { SkillProfile } from '@/lib/skills/types';
 import styles from './LearningPathPanel.module.css';
@@ -12,17 +10,10 @@ interface LearningPathPanelProps {
   onAddSkill?: (skillId: string, displayName: string) => void;
 }
 
+const skillNameMap = new Map(SKILL_PREREQUISITES.map((skill) => [skill.skillId, skill.displayName]));
+
 export function LearningPathPanel({ profile, onAddSkill }: LearningPathPanelProps) {
-  const [nextSkills, setNextSkills] = useState<SkillNode[]>([]);
-
-  const skillNameMap = useMemo(
-    () => new Map(SKILL_PREREQUISITES.map((skill) => [skill.skillId, skill.displayName])),
-    [],
-  );
-
-  useEffect(() => {
-    setNextSkills(getNextAchievableSkills(profile).slice(0, 5));
-  }, [profile]);
+  const nextSkills = getNextAchievableSkills(profile).slice(0, 5);
 
   return (
     <div className={styles.panel}>

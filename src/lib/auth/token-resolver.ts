@@ -21,7 +21,7 @@ import 'server-only';
 import { logger } from '@/lib/logger';
 import { nowMs } from '@/lib/utils/date-utils';
 
-import { refreshGitHubAccessToken } from './github-oauth';
+import { refreshGitHubTokenForUser } from './refresh-coordinator';
 import { getTokenStore } from './token-store';
 
 const log = logger.withTag('TokenResolver');
@@ -73,15 +73,7 @@ export async function resolveFreshGitHubToken(userId: string): Promise<string | 
     throw new Error('GitHub token refresh required but no refresh token is stored for this user.');
   }
 
-  const refreshed = await refreshGitHubAccessToken(stored.refreshToken);
-  const newExpiresAt = Math.floor(nowMs() / 1000) + refreshed.expires_in;
-  // CAS write: if another replica already refreshed concurrently and
-  // persisted a newer record, do not clobber it.
-  await store.setTokenIfNewer(userId, {
-    accessToken: refreshed.access_token,
-    refreshToken: refreshed.refresh_token ?? stored.refreshToken,
-    expiresAt: newExpiresAt,
-  });
+  const refreshed = await refreshGitHubTokenForUser(userId, stored.refreshToken);
   log.debug('Refreshed GitHub access token for background job execution', { userId });
-  return refreshed.access_token;
+  return refreshed.accessToken;
 }
