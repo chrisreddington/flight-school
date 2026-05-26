@@ -14,7 +14,7 @@
   "scripts": {
     "dev": "npm run aspire:run",
     "dev:web-only": "rm -rf .next && next dev",
-    "dev:worker": "tsx watch --include \"src/**/*.ts\" src/worker/bootstrap.ts",
+    "dev:worker": "node scripts/dev-worker.mjs",
     "start:worker": "node dist-worker/bootstrap.mjs",
     "build:worker": "node scripts/build-worker.mjs",
     "dev:web-worker": "COPILOT_WORKER_URL=http://localhost:3001 COPILOT_WORKER_SECRET=local-dev-worker-secret npm run dev:web-only",
@@ -135,7 +135,6 @@
     "markdownlint-cli2": "^0.22.1",
     "prettier": "^3.8.3",
     "ts-prune": "^0.10.3",
-    "tsx": "^4.22.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1",
     "vitest": "^4.0.18"

@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["src/app/**/*.{ts,tsx}"],
+  "entry": ["src/app/**/*.{ts,tsx}", "src/worker/bootstrap.ts", "src/worker/server-main.ts"],
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/test/**"],
   "ignoreBinaries": ["aspire", "wait-on"],
