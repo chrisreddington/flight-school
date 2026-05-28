@@ -17,6 +17,7 @@ import type { FocusResponse } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { withGuardedRoute } from '@/lib/security/guard';
 import { FOCUS_GUARD } from '@/lib/security/route-defaults';
+import { readUserSkillsProfile } from '@/lib/skills/server';
 import type { SkillProfile } from '@/lib/skills/types';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -48,7 +49,16 @@ export async function GET() {
       auditMetadata: { route: '/api/focus', method: 'GET' },
     },
     async (ctx) => {
-      const result = await generateFocus(createSessionIdentity(ctx));
+      // M3.1: hydrate the skill profile from the per-user store so the
+      // first-load focus (which has no request body) personalises to
+      // confirmed/declared skills rather than running blind. If the
+      // profile is missing or corrupt the reader returns the default
+      // shape, which the handlers treat as "no profile".
+      const skillProfile = await readUserSkillsProfile().catch((error) => {
+        log.warn('Failed to read skill profile for GET focus; continuing without it', { error });
+        return undefined;
+      });
+      const result = await generateFocus(createSessionIdentity(ctx), { skillProfile });
       await persistGeneratedChallenge(result);
       return NextResponse.json(result);
     },
@@ -72,9 +82,20 @@ export async function POST(request: NextRequest) {
       auditMetadata: { route: '/api/focus', method: 'POST', component: body.component },
     },
     async (ctx) => {
+      // M3.1: if the client didn't pass a skillProfile (e.g. background
+      // refresh, regenerate-without-body paths), hydrate from the
+      // per-user store. Explicit body wins so SkillsClient can override
+      // with an unsaved in-memory profile.
+      let skillProfile = body.skillProfile;
+      if (!skillProfile) {
+        skillProfile = await readUserSkillsProfile().catch((error) => {
+          log.warn('Failed to read skill profile for POST focus; continuing without it', { error });
+          return undefined;
+        });
+      }
       const result = await generateFocus(createSessionIdentity(ctx), {
         component: body.component,
-        skillProfile: body.skillProfile,
+        skillProfile,
         existingTopicTitles: body.existingTopicTitles,
         reviewTopics: body.reviewTopics,
         interleavingHint: body.interleavingHint,
