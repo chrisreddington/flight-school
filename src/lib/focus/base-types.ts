@@ -78,4 +78,10 @@ export interface LearningTopic {
   replacedByTopicId?: string;
   /** Learner-written reflection captured after completion */
   selfExplanation?: string;
+  /**
+   * Dominant signal that drove generation of this topic. Used by the
+   * focus route post-processor to keep Learn diverse (≤1 `current-repo`
+   * in the returned set). LLM-supplied; missing on legacy stored topics.
+   */
+  dominantSignal?: 'current-repo' | 'top-language' | 'declared-skill';
 }

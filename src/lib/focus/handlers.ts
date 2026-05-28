@@ -25,6 +25,7 @@ import {
   getFallbackGoal,
   getFallbackLearningTopics,
 } from '@/lib/focus/server-utils';
+import { diversifyLearningTopics } from '@/lib/focus/diversify-topics';
 import type { FocusResponse, LearningTopic } from '@/lib/focus/types';
 import type { InterleavingHint } from '@/lib/focus/interleaving';
 import { buildProfileContext } from '@/lib/github/profile-context';
@@ -122,6 +123,15 @@ async function generateSingleComponent(
   }
 
   const withIds = addMissingIds(parsed, [component]);
+
+  // M3.2: when the LLM produced learningTopics (we ask for N=5), keep
+  // at most 1 `current-repo` and return at most 3 to the UI.
+  if (component === 'learningTopics' && withIds.learningTopics?.length) {
+    const before = withIds.learningTopics.length;
+    withIds.learningTopics = diversifyLearningTopics(withIds.learningTopics);
+    log.info(`[learningTopics] Diversified ${before} → ${withIds.learningTopics.length}`);
+  }
+
   withIds.meta = {
     generatedAt: now(),
     aiEnabled: true,

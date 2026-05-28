@@ -128,12 +128,17 @@ export function buildLearningTopicsPrompt(
       : '';
   return `Developer profile: ${profileContext}${skillSections}${reviewSection}
 
-Generate THREE learning topics for growth areas.
+Generate FIVE learning topic candidates for growth areas.
 ${skillProfile?.skills.length ? 'Exclude EX: skills.' : ''}
 ${reviewTopics?.length ? 'PRIORITIZE any RT: topics (spaced repetition — learner explored them before and needs review).' : ''}
 
+For each topic, classify dominantSignal as one of:
+- "current-repo": tied to a specific repo the user is working in
+- "top-language": tied to one of the user's top languages broadly
+- "declared-skill": tied to an EX: skill or a stated focus area
+
 JSON only:
-{"learningTopics":[{"id":"","title":"","description":"","type":"concept|pattern|best-practice","relatedTo":""}]}`;
+{"learningTopics":[{"id":"","title":"","description":"","type":"concept|pattern|best-practice","relatedTo":"","dominantSignal":"current-repo|top-language|declared-skill"}]}`;
 }
 
 /**

@@ -192,9 +192,10 @@ describe('buildLearningTopicsPrompt', () => {
     expect(prompt).toContain('concept|pattern|best-practice');
   });
 
-  it('should request THREE topics', () => {
+  it('should request FIVE candidate topics (so the post-processor can diversify down to 3)', () => {
     const prompt = buildLearningTopicsPrompt(profileContext);
-    expect(prompt).toContain('THREE');
+    expect(prompt).toContain('FIVE');
+    expect(prompt).toContain('dominantSignal');
   });
 
   describe('with skill profile', () => {
