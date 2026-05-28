@@ -27,16 +27,10 @@ import type { ChallengeWorkspace, WorkspaceFile, WorkspaceMetadata } from '@/lib
 import { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile } from '@/lib/workspace/storage';
 import { requireUserContext } from '@/lib/auth/context';
 import { authErrorResponse, validationErrorResponse } from '@/lib/api';
+import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 import { logger } from '@/lib/logger';
 
 const log = logger.withTag('Workspace Storage API');
-
-/**
- * Matches values that are safe to embed verbatim into a filesystem path
- * segment. Used to defensively reject userIds and challenge IDs that could
- * otherwise escape the per-user workspace directory.
- */
-const SAFE_PATH_SEGMENT = /^[a-zA-Z0-9_-]+$/;
 
 /** Maximum length allowed for a workspace filename (incl. any subpath). */
 const MAX_WORKSPACE_FILENAME_LENGTH = 255;

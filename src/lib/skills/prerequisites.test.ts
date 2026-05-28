@@ -138,4 +138,26 @@ describe('getNextAchievableSkills', () => {
     const full = getNextAchievableSkills(fullProfile);
     expect(full.map((s) => s.skillId)).toContain('ci-cd');
   });
+
+  it('subsumes foundational prerequisites when a derived skill is confirmed at intermediate+', () => {
+    // TypeScript Advanced implies JavaScript is satisfied — JS should NOT
+    // be re-recommended as a "next achievable" foundation skill. This is
+    // the f8 fix: Learning Path was nagging users to add JS even after
+    // they confirmed TypeScript Advanced.
+    const profile = makeProfile([{ skillId: 'typescript', level: 'advanced' }]);
+    const result = getNextAchievableSkills(profile);
+    const resultIds = result.map((s) => s.skillId);
+    expect(resultIds).not.toContain('javascript');
+    // And derived skills unlock as if JS were present
+    expect(resultIds).toContain('nodejs');
+    expect(resultIds).toContain('testing');
+  });
+
+  it('does NOT subsume when the derived skill is only at beginner level', () => {
+    // Beginner-level TypeScript is not a strong enough signal to imply
+    // JS competency; JS should still be a "next achievable" foundation.
+    const profile = makeProfile([{ skillId: 'typescript', level: 'beginner' }]);
+    const result = getNextAchievableSkills(profile);
+    expect(result.map((s) => s.skillId)).toContain('javascript');
+  });
 });

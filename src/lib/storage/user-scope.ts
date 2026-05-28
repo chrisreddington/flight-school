@@ -28,6 +28,21 @@ import 'server-only';
 export const SAFE_USER_ID = /^[a-zA-Z0-9_-]+$/;
 
 /**
+ * Allowed characters in a logical path segment that the caller embeds into
+ * a per-user storage path (e.g. `{challengeId}` in
+ * `challenges/{challengeId}.json`). Identical character class to
+ * {@link SAFE_USER_ID} so callers don't have to remember two patterns.
+ * Any segment containing `..`, `/`, or `.` is rejected.
+ *
+ * @remarks
+ * The workspace storage route at `src/app/api/workspace/storage/route.ts`
+ * and the per-user challenge spec module at
+ * `src/lib/challenge/spec-storage.ts` both import this constant — there
+ * is exactly one definition in the codebase.
+ */
+export const SAFE_PATH_SEGMENT = /^[a-zA-Z0-9_-]+$/;
+
+/**
  * Build the per-user storage path for a logical filename.
  *
  * @param userId - Stable user identifier (numeric GitHub ID as string).

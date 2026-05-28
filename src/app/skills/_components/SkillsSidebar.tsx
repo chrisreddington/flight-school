@@ -32,7 +32,11 @@ export function SkillsSidebar({
   onClearAllData,
   onAddLearningPathSkill,
 }: SkillsSidebarProps): React.JSX.Element {
-  const totalSkills = profile?.skills.length || 0;
+  // f7 surfaced as: header shows "0 skills" while detected-GitHub skills are
+  // listed below. Distinguish confirmed (manual + github-confirmed) from
+  // detected-but-unconfirmed so the headline matches the list contents.
+  const confirmedSkills = profile?.skills.filter((s) => s.source !== 'github').length || 0;
+  const detectedSkills = profile?.skills.filter((s) => s.source === 'github').length || 0;
   const advancedSkills = profile?.skills.filter((s) => s.level === 'advanced').length || 0;
   const intermediateSkills = profile?.skills.filter((s) => s.level === 'intermediate').length || 0;
   const beginnerSkills = profile?.skills.filter((s) => s.level === 'beginner').length || 0;
@@ -50,8 +54,12 @@ export function SkillsSidebar({
 
         <div className={layoutStyles.statsGrid}>
           <div className={layoutStyles.statItem}>
-            <span className={layoutStyles.statValue}>{totalSkills}</span>
-            <span className={layoutStyles.statLabel}>Total Skills</span>
+            <span className={layoutStyles.statValue}>{confirmedSkills}</span>
+            <span className={layoutStyles.statLabel}>Confirmed</span>
+          </div>
+          <div className={layoutStyles.statItem}>
+            <span className={layoutStyles.statValue}>{detectedSkills}</span>
+            <span className={layoutStyles.statLabel}>Detected</span>
           </div>
           <div className={layoutStyles.statItem}>
             <span className={layoutStyles.statValue}>{advancedSkills}</span>

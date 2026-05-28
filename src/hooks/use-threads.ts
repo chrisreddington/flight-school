@@ -103,6 +103,13 @@ export function useThreads(): UseThreadsReturn {
   const threadsQuery = useQuery({
     queryKey: THREADS_KEY,
     queryFn: () => threadStore.getAll(),
+    // Threads only change via this hook's own mutations (which call
+    // `invalidateQueries`) or via the cross-tab `THREAD_DATA_CHANGED_EVENT`
+    // listener. Background-polling every focus event was producing 8+
+    // GET /api/threads/storage round-trips per chat message; bumping
+    // staleTime to 30s reduces that to ≤2 without losing freshness on
+    // user-initiated changes.
+    staleTime: 30_000,
   });
 
   const threads = threadsQuery.data ?? [];
