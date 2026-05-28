@@ -88,6 +88,27 @@ describe('ChallengeCard', () => {
     );
   });
 
+  it('navigates to /challenge with id only (no title/description query leakage)', async () => {
+    const challenge = createChallenge({ id: 'safe-id_123' });
+    render(<ChallengeCard challenge={challenge} dateKey="2026-01-01" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Start Challenge' }));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/challenge?id=safe-id_123');
+    });
+  });
+
+  it('shows a secondary New Challenge button on dashboard cards and calls onRefresh', async () => {
+    const onRefresh = vi.fn();
+    render(<ChallengeCard challenge={createChallenge()} onRefresh={onRefresh} />);
+
+    const newChallengeButton = await screen.findByRole('button', { name: 'New Challenge' });
+    fireEvent.click(newChallengeButton);
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it('shows next challenge button and advances queue when completed with queued items', async () => {
     const onAdvanceQueue = vi.fn();
     getHistoryMock.mockResolvedValueOnce({

@@ -111,20 +111,9 @@ export function ChallengeCard({
         }
       })();
     }
-    // Navigate to sandbox with full challenge details
-    const params = new URLSearchParams();
-    params.set('id', challenge.id);
-    params.set('title', challenge.title);
-    params.set('description', challenge.description);
-    params.set('language', challenge.language);
-    params.set('difficulty', challenge.difficulty);
-    if (challenge.type) {
-      params.set('type', challenge.type);
-    }
-    if (challenge.brokenCode) {
-      params.set('brokenCode', challenge.brokenCode);
-    }
-    router.push(`/challenge?${params.toString()}`);
+    // M2.5: challenge specs now live server-side under
+    // users/{userId}/challenges/{id}.json, so the URL carries only id.
+    router.push(`/challenge?id=${encodeURIComponent(challenge.id)}`);
   }, [router, challenge, currentState, dateKey, onStateChange]);
 
   const handleMarkComplete = useCallback(async () => {
@@ -265,9 +254,16 @@ export function ChallengeCard({
               )}
             </>
           ) : (
-            <Button variant="primary" onClick={handleStartChallenge} disabled={isSkipped}>
-              {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
-            </Button>
+            <>
+              <Button variant="primary" onClick={handleStartChallenge} disabled={isSkipped}>
+                {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
+              </Button>
+              {!showHistoryActions && !isCustom && onRefresh && (
+                <Button variant="default" onClick={onRefresh} disabled={isSkipped || refreshDisabled}>
+                  New Challenge
+                </Button>
+              )}
+            </>
           )}
         </Stack>
       </Stack>

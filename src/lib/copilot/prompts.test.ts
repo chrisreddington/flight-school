@@ -68,6 +68,12 @@ describe('buildChallengePrompt', () => {
     expect(prompt).toContain('Otherwise use type: "implement".');
   });
 
+  it('should include existing challenge titles to avoid duplicates', () => {
+    const prompt = buildChallengePrompt(profileContext, undefined, undefined, undefined, ['Foo Challenge']);
+    expect(prompt).toContain('Do NOT suggest these challenges');
+    expect(prompt).toContain('Foo Challenge');
+  });
+
   it('should require a debug challenge when forceDebug is enabled', () => {
     const prompt = buildChallengePrompt(profileContext, undefined, undefined, { forceDebug: true });
     expect(prompt).toContain('REQUIRED: Generate a debug challenge');

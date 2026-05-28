@@ -49,6 +49,7 @@ export function addMissingIds(data: Partial<FocusResponse>, requestedComponents?
       description: topic.description || 'Expand your knowledge.',
       type: topic.type || 'concept',
       relatedTo: topic.relatedTo || 'Your projects',
+      dominantSignal: topic.dominantSignal,
     }));
   }
 

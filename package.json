@@ -47,6 +47,7 @@
     "check:cache-key-scope": "node scripts/check-cache-key-scope.mjs",
     "check:server-fetch-tenancy": "node scripts/check-server-fetch-tenancy.mjs",
     "check:server-action-guards": "node scripts/check-server-action-guards.mjs",
+    "check:otel-emitted": "node scripts/check-otel-emitted.mjs",
     "check:copilot-sdk-boundary": "node scripts/check-copilot-sdk-boundary.mjs",
     "check:web-image": "node scripts/check-web-image-copilot-free.mjs",
     "check:web-image-local": "SKIP_WEB_IMAGE_CHECK=1 node scripts/check-web-image-copilot-free.mjs",

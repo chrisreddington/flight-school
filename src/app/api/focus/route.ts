@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
     component?: FocusComponent;
     skillProfile?: SkillProfile;
     existingTopicTitles?: string[];
+    existingChallengeTitles?: string[];
     reviewTopics?: string[];
     interleavingHint?: InterleavingHint;
     debugMode?: boolean;
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
         component: body.component,
         skillProfile,
         existingTopicTitles: body.existingTopicTitles,
+        existingChallengeTitles: body.existingChallengeTitles,
         reviewTopics: body.reviewTopics,
         interleavingHint: body.interleavingHint,
         debugMode: body.debugMode,

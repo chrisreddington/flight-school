@@ -72,6 +72,8 @@ export function getMonacoEditorOptions() {
     automaticLayout: true,
     tabSize: 2,
     wordWrap: 'on',
+    folding: true,
+    foldingStrategy: 'auto',
     padding: { top: 12, bottom: 12 },
     renderLineHighlight: 'line',
     scrollbar: {

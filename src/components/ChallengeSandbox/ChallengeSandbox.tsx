@@ -68,6 +68,25 @@ import { useDeferredEditorMount } from './use-deferred-editor-mount';
 
 initializeMonacoLanguageDefaults();
 
+const STARTER_CURSOR_MARKERS = ['// Your code here', '# Your code here'];
+
+function moveCursorToStarterMarker(editor: Parameters<OnMount>[0]): void {
+  const model = editor.getModel();
+  if (!model) return;
+
+  const lines = model.getLinesContent();
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    for (const marker of STARTER_CURSOR_MARKERS) {
+      const markerIndex = line.indexOf(marker);
+      if (markerIndex === -1) continue;
+      editor.setPosition({ lineNumber: lineIndex + 1, column: markerIndex + 1 });
+      editor.revealLineInCenter(lineIndex + 1);
+      return;
+    }
+  }
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -162,6 +181,7 @@ export function ChallengeSandbox({ challengeId, challenge, onComplete, autoFocus
         }
       });
       if (autoFocus) {
+        moveCursorToStarterMarker(editor);
         editor.focus();
       }
     },

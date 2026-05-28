@@ -458,9 +458,10 @@ for the full invariant list and migration notes.
 
 ## Observability
 
-OpenTelemetry is registered via `@vercel/otel` on both processes; the
-two emit OTLP to the Aspire Dashboard locally and to App Insights in
-ACA.
+OpenTelemetry is registered via `@vercel/otel` in the Next.js web
+process and via `@opentelemetry/sdk-node` (`NodeSDK`) in the standalone
+worker; both emit OTLP to the Aspire Dashboard locally and to App
+Insights in ACA.
 
 ```mermaid
 flowchart LR
@@ -469,7 +470,7 @@ flowchart LR
         WInstr["instrumentation.ts<br/>service.name=flight-school-web"]
     end
     subgraph Worker["Worker"]
-        KInstr["instrumentation.ts<br/>service.name=flight-school-worker"]
+        KInstr["worker/lifecycle/otel.ts<br/>service.name=flight-school-worker"]
     end
     Otel[[Aspire Dashboard<br/>/ App Insights]]
 
@@ -486,6 +487,7 @@ Hot paths in the code:
 | --- | --- |
 | Server-side OTel bootstrap (both processes) | [`src/instrumentation.ts`](../src/instrumentation.ts) |
 | Browser OTel bootstrap | [`src/lib/observability/browser-otel.ts`](../src/lib/observability/browser-otel.ts) |
+| Browser OTLP proxy routes (auth + anonymous, shared forwarding path) | [`src/app/api/otel/v1/traces/route.ts`](../src/app/api/otel/v1/traces/route.ts), [`src/app/api/otel/v1/traces/anonymous/route.ts`](../src/app/api/otel/v1/traces/anonymous/route.ts), [`src/app/api/otel/v1/traces/shared.ts`](../src/app/api/otel/v1/traces/shared.ts) |
 | Cross-process trace context capture / inject | [`src/lib/observability/context-propagation.ts`](../src/lib/observability/context-propagation.ts) |
 | GenAI semantic conventions (span/metric names, buckets) | [`src/lib/observability/semconv.ts`](../src/lib/observability/semconv.ts) |
 | Hygiene sampler + bubble-filter exporter (drops Next.js self-spans) | [`src/lib/observability/proxy-sampler.ts`](../src/lib/observability/proxy-sampler.ts), [`bubble-filter-exporter.ts`](../src/lib/observability/bubble-filter-exporter.ts) |

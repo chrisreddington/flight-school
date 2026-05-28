@@ -79,16 +79,21 @@ export function buildChallengePrompt(
   skillProfile?: SkillProfile,
   interleavingHint?: InterleavingHint,
   options?: { forceDebug?: boolean },
+  existingChallengeTitles: string[] = [],
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
   const interleavingSection = buildInterleavingSection(interleavingHint);
+  const excludeList =
+    existingChallengeTitles.length > 0
+      ? `\nDo NOT suggest these challenges (already shown): ${existingChallengeTitles.join(', ')}`
+      : '';
   const issueContextNote = profileContext.includes('issues:[')
     ? '\nConsider drawing inspiration from the developer\'s open issues when relevant.\nKeep it authentic and practical to their current work context.\nSet contextSource to "issue" when challenge is inspired by open issues, "skills" when driven by skill gaps, "activity" otherwise.'
     : '';
   const challengeTypeInstruction = options?.forceDebug
     ? 'REQUIRED: Generate a debug challenge. Set type: "debug", include brokenCode with 1-3 intentional bugs, and describe what bugs to find in the description.'
     : 'Optionally, if appropriate for the developer\'s skill level, you may generate a debug challenge.\nFor debug challenges, set type: "debug", include brokenCode with 1-3 intentional bugs, and mention bugs to find.\nOtherwise use type: "implement".';
-  return `Developer profile: ${profileContext}${skillSections}${interleavingSection}
+  return `Developer profile: ${profileContext}${skillSections}${interleavingSection}${excludeList}
 
 Generate ONE coding challenge (15-30 min, ZPD-appropriate).
 ${skillProfile?.skills.length ? 'Prioritize SK: skills, exclude EX: skills.' : ''}

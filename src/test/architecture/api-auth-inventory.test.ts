@@ -38,6 +38,7 @@ const ROUTE_BOUNDARIES: Record<string, Boundary> = {
   // list is a cheap read). The inventory marker uses the strongest
   // boundary present in the file.
   'jobs/route.ts': 'withGuardedRoute',
+  'otel/v1/traces/anonymous/route.ts': 'public',
   'otel/v1/traces/route.ts': 'requireUserContext',
   'profile/route.ts': 'getOctokitForRequest',
   'profile/storage/route.ts': 'createStorageRoute',

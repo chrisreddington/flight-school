@@ -214,6 +214,7 @@ describe('useAIFocus interface contract', () => {
       isAIEnabled: boolean;
       toolsUsed: string[];
       refetch: (component?: FocusComponent) => Promise<void>;
+      regenerateChallenge: (currentChallengeId?: string) => Promise<unknown>;
       skipAndReplaceTopic: (skippedTopicId: string, existingTopicTitles: string[]) => Promise<void>;
       skipAndReplaceChallenge: (skippedChallengeId: string, existingChallengeTitles: string[]) => Promise<void>;
       requestDebugChallenge: () => Promise<void>;
@@ -237,6 +238,7 @@ describe('useAIFocus interface contract', () => {
       isAIEnabled: false,
       toolsUsed: [],
       refetch: async () => {},
+      regenerateChallenge: async () => ({ ok: false, error: 'unexpected' }),
       skipAndReplaceTopic: async () => {},
       skipAndReplaceChallenge: async () => {},
       requestDebugChallenge: async () => {},

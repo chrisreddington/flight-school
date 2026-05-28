@@ -5,6 +5,7 @@ import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
 import { HabitsSection } from './habits-section';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
+import type { RegenerateChallengeResult } from '@/app/challenge/actions';
 import { focusStore } from '@/lib/focus';
 import type { CalibrationNeededItem, DailyChallenge, FocusResponse, LearningTopic } from '@/lib/focus/types';
 import { getDateKey } from '@/lib/utils/date-utils';
@@ -35,6 +36,7 @@ interface DailyFocusSectionProps {
   toolsUsed: string[];
   loadingComponents: string[];
   onRefresh: (components?: string[]) => void;
+  onRegenerateChallenge?: (currentChallengeId?: string) => Promise<RegenerateChallengeResult>;
   /** Callback to skip a single topic and get a replacement */
   onSkipTopic?: (skippedTopic: LearningTopic, existingTopicTitles: string[]) => void;
   /** Callback to stop topic regeneration (receives topic ID) */
@@ -69,6 +71,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   toolsUsed,
   loadingComponents,
   onRefresh,
+  onRegenerateChallenge,
   onSkipTopic,
   onStopSkipTopic,
   skippingTopicIds = new Set(),
@@ -248,7 +251,15 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                 <ChallengeCard
                   challenge={challenge}
                   isCustom={isCustomChallenge}
-                  onRefresh={!isCustomChallenge ? () => onRefresh(['challenge']) : undefined}
+                  onRefresh={
+                    !isCustomChallenge
+                      ? onRegenerateChallenge
+                        ? () => {
+                            void onRegenerateChallenge(challenge.id);
+                          }
+                        : () => onRefresh(['challenge'])
+                      : undefined
+                  }
                   onEdit={isCustomChallenge ? () => router.push(`/challenge/edit/${challenge.id}`) : undefined}
                   onCreate={handleCreateChallenge}
                   onSkipAndReplace={isCustomChallenge ? handleSkipCustomChallenge : onSkipChallenge}

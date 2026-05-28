@@ -103,6 +103,8 @@ beforeEach(() => {
   // Restore native fetch between tests so the wrap idempotency check works
   // against a known baseline.
   (window as unknown as { fetch: typeof fetch }).fetch = (() => Promise.resolve(new Response())) as typeof fetch;
+  document.cookie = 'authjs.session-token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  document.cookie = '__Secure-authjs.session-token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
 });
 
 async function loadModule() {
@@ -111,7 +113,8 @@ async function loadModule() {
 }
 
 describe('initBrowserOtel', () => {
-  it('configures an OTLP exporter pointing at the proxy route', async () => {
+  it('uses the authenticated OTLP route when an Auth.js session cookie is present', async () => {
+    document.cookie = 'authjs.session-token=token-value';
     const { initBrowserOtel } = await loadModule();
 
     initBrowserOtel();
@@ -119,6 +122,16 @@ describe('initBrowserOtel', () => {
     expect(mocks.OTLPTraceExporter).toHaveBeenCalledTimes(1);
     const exporterOpts = mocks.OTLPTraceExporter.mock.calls[0][0];
     expect(exporterOpts.url).toBe('/api/otel/v1/traces');
+  });
+
+  it('uses the anonymous OTLP route when no Auth.js session cookie is present', async () => {
+    const { initBrowserOtel } = await loadModule();
+
+    initBrowserOtel();
+
+    expect(mocks.OTLPTraceExporter).toHaveBeenCalledTimes(1);
+    const exporterOpts = mocks.OTLPTraceExporter.mock.calls[0][0];
+    expect(exporterOpts.url).toBe('/api/otel/v1/traces/anonymous');
   });
 
   it('configures the exporter with keepalive: true for unload delivery', async () => {

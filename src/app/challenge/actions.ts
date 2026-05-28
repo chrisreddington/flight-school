@@ -7,11 +7,20 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { UnauthorizedError } from '@/lib/auth/context';
+import { InvalidChallengeIdError, readUserChallengeSpec, writeUserChallengeSpec } from '@/lib/challenge/spec-storage';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { generateFocus } from '@/lib/focus/handlers';
 import type { DailyChallenge } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
+import { RateLimitedError } from '@/lib/security/rate-limit';
 import { requireGuardedUserContext } from '@/lib/security/guard';
+import { FOCUS_GUARD } from '@/lib/security/route-defaults';
+import { TooManyConcurrentSessionsError } from '@/lib/security/session-cap';
 import { readUserStorage, writeUserStorage } from '@/lib/storage/user-storage';
 
 const QUEUE_FILENAME = 'challenge-queue.json';
+const log = logger.withTag('ChallengeActions');
 
 interface CustomChallengeQueue {
   challenges: DailyChallenge[];
@@ -30,6 +39,73 @@ const CHALLENGE_ACTION_GUARD = {
   eventType: 'storage.write' as const,
   auditMetadata: { route: '/challenge/edit' },
 };
+
+export interface RegenerateChallengeInput {
+  currentChallengeId?: string;
+}
+
+export type RegenerateChallengeResult =
+  | { ok: true; challenge: DailyChallenge }
+  | { ok: false; error: 'unauthenticated' }
+  | { ok: false; error: 'rate-limited'; retryAfterMs: number }
+  | { ok: false; error: 'concurrent-cap' }
+  | { ok: false; error: 'generation-failed' }
+  | { ok: false; error: 'unexpected' };
+
+export async function regenerateChallengeAction(
+  input: RegenerateChallengeInput = {},
+): Promise<RegenerateChallengeResult> {
+  let guardedContext!: Awaited<ReturnType<typeof requireGuardedUserContext>>;
+  try {
+    guardedContext = await requireGuardedUserContext({
+      ...FOCUS_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: { route: 'action:regenerate-challenge' },
+    });
+  } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return { ok: false, error: 'unauthenticated' };
+    }
+    if (error instanceof RateLimitedError) {
+      return { ok: false, error: 'rate-limited', retryAfterMs: error.retryAfterMs };
+    }
+    if (error instanceof TooManyConcurrentSessionsError) {
+      return { ok: false, error: 'concurrent-cap' };
+    }
+    log.error('Guard phase failed in regenerateChallengeAction', { error });
+    return { ok: false, error: 'unexpected' };
+  }
+
+  const { ctx, release } = guardedContext;
+  try {
+    const existingChallengeTitles: string[] = [];
+    if (input.currentChallengeId) {
+      const currentChallenge = await readUserChallengeSpec(input.currentChallengeId);
+      if (currentChallenge?.title) {
+        existingChallengeTitles.push(currentChallenge.title);
+      }
+    }
+
+    const generatedFocus = await generateFocus(createSessionIdentity(ctx), {
+      component: 'challenge',
+      existingChallengeTitles,
+    });
+    if (!('challenge' in generatedFocus) || !generatedFocus.challenge) {
+      return { ok: false, error: 'generation-failed' };
+    }
+
+    await writeUserChallengeSpec(generatedFocus.challenge.id, generatedFocus.challenge);
+    return { ok: true, challenge: generatedFocus.challenge };
+  } catch (error) {
+    if (error instanceof InvalidChallengeIdError) {
+      return { ok: false, error: 'unexpected' };
+    }
+    log.error('Work phase failed in regenerateChallengeAction', { error });
+    return { ok: false, error: 'unexpected' };
+  } finally {
+    release();
+  }
+}
 
 export interface UpdateChallengeState {
   ok: boolean;

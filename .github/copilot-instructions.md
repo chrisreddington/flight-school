@@ -463,7 +463,7 @@ AUTH_GITHUB_ID=               # GitHub App client id
 AUTH_GITHUB_SECRET=           # GitHub App client secret
 AUTH_TRUST_HOST=true          # required behind a proxy (ACA, Codespaces, etc.)
 
-# Per-user abuse controls (defaults match in-code values)
+# Per-user abuse controls
 AUDIT_SALT=                   # openssl rand -hex 32
 # RATE_LIMIT_CHAT_PER_MIN=30
 # RATE_LIMIT_CHAT_CAP=3
@@ -514,5 +514,4 @@ proactively — they are not optional:
 - **[`panel-review`](.github/skills/panel-review/SKILL.md)** — *Mandatory for any non-trivial architectural change.* Convenes a six-reviewer panel (three models × architect + developer personas) that critiques the plan before code lands and re-reviews every milestone until consensus. Every finding of every severity fix-forwards in the next round; the loop exits only when 6/6 SHIP with zero findings. Use the panel for multi-file refactors, cross-cutting cleanups, performance work, or any change where "wrong design" costs more than "wrong implementation".
 
 - **[`doc-currency`](.github/skills/doc-currency/SKILL.md)** — *Mandatory before `task_complete` for any non-trivial change.* Maps the area you touched to its authoritative docs (OTel skill, multi-tenant arch doc, copilot-instructions, README, …) and updates the specifics that drifted. Doc updates ship in the same commit as the code, never as a follow-up PR.
-
 

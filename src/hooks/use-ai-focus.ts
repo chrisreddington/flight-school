@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { regenerateChallengeAction, type RegenerateChallengeResult } from '@/app/challenge/actions';
 import { apiPost } from '@/lib/api-client';
 import { focusStore } from '@/lib/focus';
 import type { FocusResponse } from '@/lib/focus/types';
@@ -45,6 +46,7 @@ interface UseAIFocusResult {
   isAIEnabled: boolean;
   toolsUsed: string[];
   refetch: (component?: FocusComponent) => Promise<void>;
+  regenerateChallenge: (currentChallengeId?: string) => Promise<RegenerateChallengeResult>;
   skipAndReplaceTopic: (skippedTopicId: string, existingTopicTitles: string[]) => Promise<void>;
   skipAndReplaceChallenge: (skippedChallengeId: string, existingChallengeTitles: string[]) => Promise<void>;
   requestDebugChallenge: () => Promise<void>;
@@ -199,6 +201,28 @@ export function useAIFocus(): UseAIFocusResult {
     }
   }, [fetchComponent, mergeAndSave]);
 
+  const regenerateChallenge = useCallback(async (currentChallengeId?: string): Promise<RegenerateChallengeResult> => {
+    const result = await regenerateChallengeAction({ currentChallengeId });
+    if (!result.ok) {
+      return result;
+    }
+
+    let nextFocus: FocusResponse | null = null;
+    setData((previousFocus) => {
+      if (!previousFocus) {
+        return previousFocus;
+      }
+      nextFocus = { ...previousFocus, challenge: result.challenge };
+      return nextFocus;
+    });
+
+    if (nextFocus) {
+      await focusStore.saveTodaysFocus(nextFocus);
+    }
+
+    return result;
+  }, []);
+
   const refreshFromStorage = useCallback(async (): Promise<boolean> => {
     const cached = await focusStore.getTodaysFocus();
     if (cached) {
@@ -241,6 +265,7 @@ export function useAIFocus(): UseAIFocusResult {
     isAIEnabled: data?.meta.aiEnabled ?? false,
     toolsUsed: data?.meta.toolsUsed ?? [],
     refetch,
+    regenerateChallenge,
     skipAndReplaceTopic: skip.skipAndReplaceTopic,
     skipAndReplaceChallenge: skip.skipAndReplaceChallenge,
     requestDebugChallenge,

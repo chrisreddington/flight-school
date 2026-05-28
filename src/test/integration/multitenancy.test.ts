@@ -504,6 +504,39 @@ describe('multi-tenant auth/token isolation', () => {
       );
       expect(otherRead.status).toBe(404);
     });
+
+    it('returns a generated starter workspace when spec exists but workspace files do not', async () => {
+      const { workspace } = await loadStorageRoutes();
+
+      const userId = '5005';
+      const challengeId = 'fresh-spec';
+      const challengeDir = path.join(STORAGE_DIR, 'users', userId, 'challenges');
+      await fs.mkdir(challengeDir, { recursive: true });
+      await fs.writeFile(
+        path.join(challengeDir, `${challengeId}.json`),
+        JSON.stringify({
+          id: challengeId,
+          title: 'Fresh challenge',
+          description: 'Write a function that returns true',
+          difficulty: 'beginner',
+          language: 'TypeScript',
+          estimatedTime: '15 min',
+          whyThisChallenge: ['Practice'],
+        }),
+      );
+
+      requireUserContextMock.mockResolvedValueOnce(ctxFor(userId));
+      const read = await workspace.GET(
+        new Request(`http://test/api/workspace/storage?challengeId=${challengeId}`) as never,
+      );
+
+      expect(read.status).toBe(200);
+      const body = (await read.json()) as ChallengeWorkspace;
+      expect(body.challengeId).toBe(challengeId);
+      expect(body.files.length).toBeGreaterThan(0);
+      expect(body.files[0].name).toBe('solution.ts');
+      expect(body.files[0].content).toContain('Fresh challenge');
+    });
   });
 });
 

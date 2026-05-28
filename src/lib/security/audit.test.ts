@@ -60,11 +60,8 @@ describe('audit log', () => {
     expect(typeof (data as { userIdHash: string }).userIdHash).toBe('string');
   });
 
-  it('warns once when AUDIT_SALT is missing', () => {
+  it('throws when AUDIT_SALT is missing', () => {
     delete process.env.AUDIT_SALT;
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    hashUserId('42');
-    hashUserId('43');
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(() => hashUserId('42')).toThrowError('AUDIT_SALT is required');
   });
 });

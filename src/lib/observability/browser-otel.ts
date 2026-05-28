@@ -6,8 +6,11 @@
  * same-origin fetches so server-side spans become children of the browser
  * span tree, joining frontend and backend into a single trace per page load.
  *
- * Spans are exported to `/api/otel/v1/traces` — a same-origin auth-gated
- * proxy that forwards to the configured upstream OTLP collector. This avoids
+ * Spans are exported to same-origin proxy routes:
+ * - `/api/otel/v1/traces` when an Auth.js session cookie is present
+ * - `/api/otel/v1/traces/anonymous` before authentication
+ *
+ * Both routes forward to the configured upstream OTLP collector. This avoids
  * browser-CORS configuration on the collector itself.
  *
  * # `page.view` parent span
@@ -38,7 +41,9 @@ import { stripQueryString, extractPathname } from '@/lib/observability/url-sanit
 
 import { getCurrentPageView, installRouteTracking, startPageView } from './route-tracking';
 
-const PROXY_URL = '/api/otel/v1/traces';
+const AUTHENTICATED_PROXY_URL = '/api/otel/v1/traces';
+const ANONYMOUS_PROXY_URL = '/api/otel/v1/traces/anonymous';
+const AUTH_SESSION_COOKIE_NAMES = ['__Secure-authjs.session-token', 'authjs.session-token'] as const;
 const SERVICE_NAME = 'flight-school-browser';
 const FETCH_WRAPPED_MARKER = Symbol.for('flight-school.browser-otel.fetch-wrapped');
 
@@ -48,12 +53,19 @@ type WrappedFetch = typeof window.fetch & {
 
 let initialised = false;
 
+function hasAuthSessionCookie(): boolean {
+  const cookie = document.cookie;
+  if (!cookie) return false;
+  const parts = cookie.split(';').map((part) => part.trim());
+  return AUTH_SESSION_COOKIE_NAMES.some((cookieName) => parts.some((part) => part.startsWith(`${cookieName}=`)));
+}
+
 export function initBrowserOtel(): void {
   if (initialised) return;
   initialised = true;
 
   const exporter = new OTLPTraceExporter({
-    url: PROXY_URL,
+    url: hasAuthSessionCookie() ? AUTHENTICATED_PROXY_URL : ANONYMOUS_PROXY_URL,
     // `keepalive: true` lets the browser deliver the final batch even
     // after the tab is closing or navigating away. Without this, the
     // last page.view span and any pending children are routinely lost

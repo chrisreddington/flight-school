@@ -41,6 +41,7 @@ export interface FocusOptions {
   component?: FocusComponent;
   skillProfile?: SkillProfile;
   existingTopicTitles?: string[];
+  existingChallengeTitles?: string[];
   reviewTopics?: string[];
   interleavingHint?: InterleavingHint;
   debugMode?: boolean;
@@ -77,20 +78,27 @@ async function generateSingleComponent(
   skillProfile?: SkillProfile,
   options: {
     reviewTopics?: string[];
+    existingChallengeTitles?: string[];
     interleavingHint?: InterleavingHint;
     debugMode?: boolean;
   } = {},
 ): Promise<Partial<FocusResponse>> {
-  const { reviewTopics, interleavingHint, debugMode } = options;
+  const { reviewTopics, existingChallengeTitles, interleavingHint, debugMode } = options;
 
   const buildPrompt = () => {
     if (component === 'learningTopics') {
       return buildLearningTopicsPrompt(serializedContext, skillProfile, reviewTopics);
     }
     if (component === 'challenge') {
-      return buildChallengePrompt(serializedContext, skillProfile, interleavingHint, {
-        forceDebug: debugMode,
-      });
+      return buildChallengePrompt(
+        serializedContext,
+        skillProfile,
+        interleavingHint,
+        {
+          forceDebug: debugMode,
+        },
+        existingChallengeTitles,
+      );
     }
     return buildGoalPrompt(serializedContext, skillProfile);
   };
@@ -186,7 +194,15 @@ export async function generateFocus(
   options: FocusOptions = {},
 ): Promise<Partial<FocusResponse> | { learningTopic: LearningTopic }> {
   const startTime = nowMs();
-  const { component, skillProfile, existingTopicTitles, reviewTopics, interleavingHint, debugMode } = options;
+  const {
+    component,
+    skillProfile,
+    existingTopicTitles,
+    existingChallengeTitles,
+    reviewTopics,
+    interleavingHint,
+    debugMode,
+  } = options;
 
   let serializedContext = '';
   let compactProfile: CompactDeveloperProfile | null = null;
@@ -208,6 +224,7 @@ export async function generateFocus(
     if (component) {
       const result = await generateSingleComponent(identity, component, serializedContext, skillProfile, {
         reviewTopics,
+        existingChallengeTitles,
         interleavingHint,
         debugMode: component === 'challenge' ? debugMode : undefined,
       });

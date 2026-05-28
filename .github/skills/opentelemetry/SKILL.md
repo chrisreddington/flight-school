@@ -41,7 +41,7 @@ No content has been copied verbatim.
 | Server semconv | Centralised constants for GenAI attribute keys, metric names, instrumentation-scope names. **Do not hard-code these strings anywhere else.** | `src/lib/observability/semconv.ts` |
 | Server tracer/meter API | Wrappers like `withSpan`, `recordAiOperation`, `recordAiStreamMetrics`, `recordGitHubOperation`, `recordJobQueueWait`. | `src/lib/observability/telemetry.ts` |
 | Browser SDK | `initBrowserOtel()` registers `WebTracerProvider` + `DocumentLoadInstrumentation` + `FetchInstrumentation`; exports JSON over HTTP to a same-origin proxy. | `src/lib/observability/browser-otel.ts` |
-| Browser → server proxy | Auth-gated route at `/api/otel/v1/traces` that forwards OTLP/JSON to the upstream collector. Required because the Aspire OTLP receiver is not CORS-enabled for browsers. | `src/app/api/otel/v1/traces/route.ts` |
+| Browser → server proxy | Dual same-origin routes that forward OTLP/JSON to the upstream collector: authenticated `/api/otel/v1/traces` and IP-rate-limited anonymous `/api/otel/v1/traces/anonymous`. Required because the Aspire OTLP receiver is not CORS-enabled for browsers. | `src/app/api/otel/v1/traces/route.ts`, `src/app/api/otel/v1/traces/anonymous/route.ts`, `src/app/api/otel/v1/traces/shared.ts` |
 | Context propagation | W3C `traceparent`/`tracestate`/`baggage` flow browser → API → worker → Copilot SDK via helpers in `src/lib/observability/context-propagation.ts`. **Always propagate.** |
 
 ## Rules
@@ -217,11 +217,12 @@ is incomplete and we emit no browser-side metrics.
 
 ### 9. Browser exports go to the same-origin proxy
 
-The browser exporter URL is `/api/otel/v1/traces`. The proxy is
-auth-gated; pre-auth document-load spans will be dropped, and that is
-acceptable. **Never** point the browser exporter at the Aspire OTLP
-endpoint directly — CORS will fail and exposing collector credentials
-to the browser is unacceptable.
+The browser exporter chooses a same-origin proxy route at bootstrap:
+`/api/otel/v1/traces` when an Auth.js session cookie exists, otherwise
+`/api/otel/v1/traces/anonymous`. The anonymous route is strictly
+rate-limited per client IP. **Never** point the browser exporter at the
+Aspire OTLP endpoint directly — CORS will fail and exposing collector
+credentials to the browser is unacceptable.
 
 The exporter is configured with `fetchOptions: { keepalive: true }` so
 the final batch survives `pagehide` / `beforeunload`. Without this the
@@ -421,7 +422,8 @@ filtered apart by `http.route`.
 
 ### 15. Browser telemetry: traces only, by design
 
-The same-origin proxy at `/api/otel/v1/traces` forwards **traces only**.
+The same-origin proxy routes (`/api/otel/v1/traces` and
+`/api/otel/v1/traces/anonymous`) forward **traces only**.
 Browser-side metrics and logs are intentionally not collected:
 
 - The OTel JS SDK metrics surface is incomplete on the browser.
@@ -459,11 +461,11 @@ registerOTel({
 });
 ```
 
-The sampler matches on `spanName.endsWith('/api/otel/v1/traces')`,
-`http.target`, `url.path`, **and** `http.route` because those attributes
-are populated at different stages of the request lifecycle (HTTP
-instrumentation sets `http.target` / `url.path` at span creation; Next.js
-sets `http.route` later, once the route has matched).
+The sampler matches the proxy-route prefix (`/api/otel/v1/traces`) across
+`spanName`, `http.target`, `url.path`, and `http.route` because those
+attributes are populated at different stages of the request lifecycle
+(HTTP instrumentation sets `http.target` / `url.path` at span creation;
+Next.js sets `http.route` later, once the route has matched).
 
 Do **not** "fix" this by disabling the browser BSP's visibilitychange
 flush — losing spans when a tab is backgrounded is worse than a few

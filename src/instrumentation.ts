@@ -16,6 +16,7 @@ import { registerOTel } from '@vercel/otel';
 import { logger } from '@/lib/logger';
 import { BubbleFilteringSpanExporter } from '@/lib/observability/bubble-filter-exporter';
 import { createTelemetryHygieneSampler } from '@/lib/observability/proxy-sampler';
+import { requireAuditSalt } from '@/lib/security/audit-salt';
 import {
   GEN_AI_DURATION_BUCKETS,
   GEN_AI_TOKEN_USAGE_BUCKETS,
@@ -30,6 +31,8 @@ const log = logger.withTag('Instrumentation');
 export async function register(): Promise<void> {
   // Only run on server
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    requireAuditSalt('web:instrumentation');
+
     // `@vercel/otel` installs a tracer provider by default but only wires
     // a meter provider / log record provider when explicitly given
     // `metricReaders` / `logRecordProcessors`. Without these, every

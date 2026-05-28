@@ -45,6 +45,7 @@ export function Dashboard() {
     isAIEnabled,
     toolsUsed,
     refetch: refetchFocus,
+    regenerateChallenge,
     loadingComponents,
     skipAndReplaceTopic,
     skipAndReplaceChallenge,
@@ -214,6 +215,7 @@ export function Dashboard() {
               toolsUsed={toolsUsed}
               loadingComponents={loadingComponents}
               onRefresh={handleRefresh}
+              onRegenerateChallenge={regenerateChallenge}
               onSkipTopic={handleSkipTopic}
               onStopSkipTopic={handleStopSkipTopic}
               onStopComponent={stopComponent}
