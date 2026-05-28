@@ -111,6 +111,8 @@ export async function register(): Promise<void> {
       logRecordProcessors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
     });
 
-    log.info('Server starting...');
+    log.info(
+      `register() complete — service.name=${process.env.OTEL_SERVICE_NAME ?? 'flight-school'} OTLP=${process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '(unset)'}`,
+    );
   }
 }
