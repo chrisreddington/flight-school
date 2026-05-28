@@ -184,6 +184,7 @@ and rewrite the storage path to live under a per-user subdirectory:
 ```text
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/threads.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/focus-storage.json
+{FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/challenges/{challengeId}.json
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/workspaces/{challengeId}/...
 ```
 
@@ -192,6 +193,11 @@ never from a query string or request body. Before it is used as a path
 segment it is validated against `/^[a-zA-Z0-9_-]+$/`; anything else
 (including `..`, `/`, `.`) is rejected with HTTP 400. The per-user directory
 is created on demand with mode `0o700` on platforms that honour POSIX modes.
+
+Individual `{challengeId}` path segments are validated against the shared
+`SAFE_PATH_SEGMENT` regex (also from `src/lib/storage/user-scope.ts`); the
+`/api/workspace/storage` route and the `challenges/{id}.json` spec store
+(`src/lib/challenge/spec-storage.ts`) both use this single source of truth.
 
 ### Guarantees
 
