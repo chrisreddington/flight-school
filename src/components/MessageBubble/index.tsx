@@ -6,7 +6,7 @@ import { useDebugMode } from '@/contexts/debug-context';
 import { toolSummary } from '@/lib/copilot/tool-summary';
 import type { Message, ToolCallEvent } from '@/lib/threads/types';
 import { CheckIcon, CopilotIcon, LightBulbIcon, PersonIcon } from '@primer/octicons-react';
-import { Avatar, Banner, Label, RelativeTime, SkeletonBox, Spinner, Stack } from '@primer/react';
+import { Avatar, Banner, Button, Label, RelativeTime, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { memo, useMemo } from 'react';
 import styles from './MessageBubble.module.css';
 
@@ -24,6 +24,82 @@ interface MessageBubbleProps {
   showSmartActionIndicator?: boolean;
   /** Whether the message has an error */
   isError?: boolean;
+  /** Called when a follow-up chip is clicked */
+  onFollowUpSelect?: (followUp: string) => void;
+}
+
+interface LearningMessageSections {
+  tldr: string;
+  deepDive?: string;
+  followUps: string[];
+}
+
+const FOLLOW_UP_HEADING_REGEX = /^##\s+Follow-up questions\s*$/i;
+const LIST_ITEM_REGEX = /^\s*-\s+(.+)$/;
+
+function normaliseFollowUpText(followUpLine: string): string {
+  return followUpLine.trim().replace(/\s+/g, ' ');
+}
+
+function parseFollowUpsFromLines(lines: readonly string[]): string[] {
+  const parsedFollowUps: string[] = [];
+  for (const line of lines) {
+    const listMatch = line.match(LIST_ITEM_REGEX);
+    if (!listMatch) {
+      continue;
+    }
+
+    const followUpText = normaliseFollowUpText(listMatch[1]);
+    if (followUpText.length === 0) {
+      continue;
+    }
+
+    parsedFollowUps.push(followUpText);
+  }
+
+  return parsedFollowUps;
+}
+
+function splitContentByFollowUpHeading(content: string): { body: string; followUps: string[] } {
+  const lines = content.split('\n');
+  const headingLineIndex = lines.findIndex((line) => FOLLOW_UP_HEADING_REGEX.test(line.trim()));
+  if (headingLineIndex < 0) {
+    return { body: content, followUps: [] };
+  }
+
+  const body = lines.slice(0, headingLineIndex).join('\n').trim();
+  const followUpLines = lines.slice(headingLineIndex + 1);
+  const followUps = parseFollowUpsFromLines(followUpLines);
+  return { body, followUps };
+}
+
+function parseLearningMessageSections(content: string): LearningMessageSections | null {
+  const trimmedContent = content.trim();
+  if (trimmedContent.length === 0) {
+    return null;
+  }
+
+  const { body: contentWithoutFollowUps, followUps } = splitContentByFollowUpHeading(trimmedContent);
+  const contentSections = contentWithoutFollowUps
+    .split(/\n\s*\n/)
+    .map((section) => section.trim())
+    .filter((section) => section.length > 0);
+
+  if (contentSections.length < 2) {
+    return null;
+  }
+
+  const [tldr, ...deepDiveSections] = contentSections;
+  const deepDive = deepDiveSections.join('\n\n').trim();
+  if (deepDive.length === 0) {
+    return null;
+  }
+
+  return {
+    tldr,
+    deepDive,
+    followUps,
+  };
 }
 
 /** Format a duration in ms as a compact "1.2s" / "850ms" string. */
@@ -129,6 +205,7 @@ export const MessageBubble = memo(function MessageBubble({
   userAvatarUrl,
   showSmartActionIndicator,
   isError = false,
+  onFollowUpSelect,
 }: MessageBubbleProps) {
   const { isDebugMode } = useDebugMode();
   const isUser = message.role === 'user';
@@ -136,6 +213,7 @@ export const MessageBubble = memo(function MessageBubble({
   const hasActionable = showSmartActionIndicator ?? message.hasActionableItem;
 
   const displayContent = message.content;
+  const learningSections = isAssistant && !isError ? parseLearningMessageSections(displayContent) : null;
 
   // Prefer the rich timeline; synthesise complete events from the
   // name-only `toolCalls: string[]` for older messages that only
@@ -221,7 +299,37 @@ export const MessageBubble = memo(function MessageBubble({
               aria-live={isStreaming ? 'polite' : undefined}
               aria-label={isStreaming ? 'Streaming response' : undefined}
             >
-              <MarkdownContent content={displayContent} />
+              {learningSections ? (
+                <div className={styles.learningLayout}>
+                  <MarkdownContent content={learningSections.tldr} />
+                  <details className={styles.deepDiveDisclosure} data-testid="learning-deep-dive">
+                    <summary className={styles.deepDiveSummary}>Show deep dive</summary>
+                    <div className={styles.deepDiveBody}>
+                      <MarkdownContent content={learningSections.deepDive ?? ''} />
+                    </div>
+                  </details>
+                  {learningSections.followUps.length > 0 && onFollowUpSelect && (
+                    <div className={styles.followUpSection}>
+                      <p className={styles.followUpLabel}>Follow-up questions</p>
+                      <div className={styles.followUpChipList}>
+                        {learningSections.followUps.map((followUp) => (
+                          <Button
+                            key={followUp}
+                            size="small"
+                            variant="default"
+                            className={styles.followUpChip}
+                            onClick={() => onFollowUpSelect(followUp)}
+                          >
+                            {followUp}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <MarkdownContent content={displayContent} />
+              )}
             </div>
           ) : null}
 

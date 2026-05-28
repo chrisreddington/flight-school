@@ -22,6 +22,7 @@
 'use client';
 
 import { focusStore } from '@/lib/focus/storage';
+import { invalidateFocusCache } from '@/lib/operations/focus-broadcast';
 import type { CalibrationNeededItem } from '@/lib/focus/types';
 import { skillsStore } from '@/lib/skills/storage';
 import type { SkillLevel, UserSkill } from '@/lib/skills/types';
@@ -70,6 +71,7 @@ export function InlineCalibration({ items, onItemsChange, showProfileLink = true
       try {
         // Save to skills profile and remove from calibration list
         await Promise.all([skillsStore.setSkill(newSkill), focusStore.removeCalibrationItem(item.skillId)]);
+        void invalidateFocusCache();
 
         // Notify parent of the change
         const updatedItems = items.filter((i) => i.skillId !== item.skillId);

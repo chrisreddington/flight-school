@@ -1,9 +1,9 @@
 /**
  * useAIFocus Hook
  *
- * Fetches AI-generated daily focus content with progressive loading. Makes
- * three parallel API requests (challenge, goal, learningTopics) and merges
- * each result into the React + persistent stores as it arrives.
+ * Fetches AI-generated daily focus content with progressive loading. First
+ * load uses a single combined `/api/focus` request; per-card refreshes keep
+ * the existing per-component request path.
  *
  * @remarks
  * Skip-and-regenerate flows live in {@link useFocusSkip}; storage refresh
@@ -17,6 +17,7 @@ import { apiPost } from '@/lib/api-client';
 import { focusStore } from '@/lib/focus';
 import type { FocusResponse } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
+import { broadcastFocusInvalidate, subscribeFocusInvalidate } from '@/lib/operations/focus-broadcast';
 import { skillsStore } from '@/lib/skills/storage';
 import { DEFAULT_SKILL_PROFILE, type SkillProfile } from '@/lib/skills/types';
 import { formatTimestamp } from '@/lib/utils/date-utils';
@@ -27,6 +28,7 @@ import { useFocusStorageSubscriptions } from './use-focus-storage-subscriptions'
 import { useOperationRegenerations } from './use-operation-regenerations';
 
 const log = logger.withTag('useAIFocus');
+let pendingCombinedFocusRequest: Promise<FocusResponse | null> | null = null;
 
 type FocusComponent = 'challenge' | 'goal' | 'learningTopics';
 
@@ -37,6 +39,33 @@ async function getSkillProfileSafe(): Promise<SkillProfile> {
   } catch {
     return DEFAULT_SKILL_PROFILE;
   }
+}
+
+function shouldUseCachedFocus(cachedFocus: FocusResponse | null, currentSkillProfile: SkillProfile): boolean {
+  if (!cachedFocus) return false;
+  const cachedProfileTimestamp = cachedFocus.meta.skillProfileLastUpdated;
+  if (!cachedProfileTimestamp) return false;
+  return cachedProfileTimestamp === currentSkillProfile.lastUpdated;
+}
+
+async function requestCombinedFocus(skillProfile: SkillProfile): Promise<FocusResponse | null> {
+  if (pendingCombinedFocusRequest) return pendingCombinedFocusRequest;
+
+  pendingCombinedFocusRequest = apiPost<FocusResponse>(
+    '/api/focus',
+    { skillProfile: skillProfile.skills.length ? skillProfile : undefined },
+    { timeout: 60000 },
+  )
+    .then((response) => response ?? null)
+    .catch((error) => {
+      log.error('Failed to load combined focus content:', error);
+      return null;
+    })
+    .finally(() => {
+      pendingCombinedFocusRequest = null;
+    });
+
+  return pendingCombinedFocusRequest;
 }
 
 interface UseAIFocusResult {
@@ -153,32 +182,29 @@ export function useAIFocus(): UseAIFocusResult {
     });
   }, []);
 
-  const fetchAllParallel = useCallback(async () => {
-    const skillProfile = await getSkillProfileSafe();
+  const fetchAllCombined = useCallback(async (profileOverride?: SkillProfile) => {
+    const skillProfile = profileOverride ?? (await getSkillProfileSafe());
     const components: FocusComponent[] = ['challenge', 'goal', 'learningTopics'];
+    const requestWasAlreadyInFlight = pendingCombinedFocusRequest !== null;
 
     setLoadingComponents(components);
     setError(null);
 
-    const promises = components.map(async (component) => {
-      const result = await fetchComponent(component, skillProfile);
-      if (result) {
-        await mergeAndSave(result, component);
+    const response = await requestCombinedFocus(skillProfile);
+    if (response) {
+      if (!requestWasAlreadyInFlight) {
+        await focusStore.saveCompleteFocusResponse(response);
+        broadcastFocusInvalidate();
       }
-      return { component, result };
-    });
-
-    const results = await Promise.allSettled(promises);
-    const allFailed = results.every((r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.result));
-
-    if (allFailed) {
+      setData(response);
+      setIsNewDay(false);
+    } else {
       setError('Failed to load focus content');
       const cached = await focusStore.getTodaysFocus();
       if (cached) setData(cached);
     }
-
-    setIsNewDay(false);
-  }, [fetchComponent, mergeAndSave]);
+    setLoadingComponents([]);
+  }, []);
 
   const refetch = useCallback(
     async (component?: FocusComponent) => {
@@ -187,10 +213,10 @@ export function useAIFocus(): UseAIFocusResult {
         const result = await fetchComponent(component, skillProfile);
         if (result) await mergeAndSave(result, component);
       } else {
-        await fetchAllParallel();
+        await fetchAllCombined(skillProfile);
       }
     },
-    [fetchComponent, mergeAndSave, fetchAllParallel],
+    [fetchAllCombined, fetchComponent, mergeAndSave],
   );
 
   const requestDebugChallenge = useCallback(async () => {
@@ -225,13 +251,18 @@ export function useAIFocus(): UseAIFocusResult {
 
   const refreshFromStorage = useCallback(async (): Promise<boolean> => {
     const cached = await focusStore.getTodaysFocus();
+    const currentSkillProfile = await getSkillProfileSafe();
+    if (!shouldUseCachedFocus(cached, currentSkillProfile)) {
+      void fetchAllCombined(currentSkillProfile);
+      return false;
+    }
     if (cached) {
       setData(cached);
       log.debug('Refreshed data from storage');
       return true;
     }
     return false;
-  }, []);
+  }, [fetchAllCombined]);
 
   // Initial mount: read cache first to handle returning-from-navigation;
   // only fetch fresh data on genuinely new days.
@@ -239,22 +270,29 @@ export function useAIFocus(): UseAIFocusResult {
     const loadInitialData = async () => {
       const cached = await focusStore.getTodaysFocus();
       const newDay = await focusStore.isNewDay();
+      const currentSkillProfile = await getSkillProfileSafe();
       setIsNewDay(newDay);
 
-      if (cached && !newDay) {
+      if (cached && !newDay && shouldUseCachedFocus(cached, currentSkillProfile)) {
         setData(cached);
         setLoadingComponents([]);
         hasFetchedRef.current = true;
       } else if (!hasFetchedRef.current) {
         hasFetchedRef.current = true;
-        await fetchAllParallel();
+        await fetchAllCombined(currentSkillProfile);
       }
     };
 
     loadInitialData();
-  }, [fetchAllParallel]);
+  }, [fetchAllCombined]);
 
   useFocusStorageSubscriptions(refreshFromStorage);
+
+  useEffect(() => {
+    return subscribeFocusInvalidate(() => {
+      void refreshFromStorage();
+    });
+  }, [refreshFromStorage]);
 
   const generatedAt = data?.meta.generatedAt ?? null;
 

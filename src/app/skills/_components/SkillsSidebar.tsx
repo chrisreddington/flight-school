@@ -12,7 +12,7 @@ import { LearningPathPanel } from '@/components/LearningPathPanel';
 import type { SkillLevel, SkillProfile } from '@/lib/skills/types';
 import { SKILL_LEVEL_DESCRIPTIONS, SKILL_LEVEL_LABELS } from '@/lib/skills/types';
 import { AlertIcon, CodeIcon, MortarBoardIcon } from '@primer/octicons-react';
-import { Banner, Button, Stack } from '@primer/react';
+import { Banner, Button, Link, Stack } from '@primer/react';
 
 import styles from '../profile-skills.module.css';
 import layoutStyles from '@/styles/two-column-layout.module.css';
@@ -51,6 +51,9 @@ export function SkillsSidebar({
           <p className={layoutStyles.sidebarTitle}>Skill Profile</p>
         </div>
         <p className={layoutStyles.sidebarSubtitle}>Your learning journey</p>
+        <p className={layoutStyles.sidebarSubtitle}>
+          {confirmedSkills} confirmed · <Link href="#skill-suggestions-panel">{detectedSkills} detected</Link>
+        </p>
 
         <div className={layoutStyles.statsGrid}>
           <div className={layoutStyles.statItem}>

@@ -90,6 +90,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
 
   // Local state for calibration items - allows persistence on dismiss/confirm
   const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[] | null>(null);
+  const [isChallengeRefreshSuggested, setIsChallengeRefreshSuggested] = useState(false);
 
   // Use local state if set, otherwise fall back to aiFocus data
   const calibrationNeeded: CalibrationNeededItem[] = calibrationItems ?? aiFocus?.calibrationNeeded ?? [];
@@ -109,6 +110,7 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   // Handle calibration item changes (from InlineCalibration)
   const handleCalibrationChange = useCallback((items: CalibrationNeededItem[]) => {
     setCalibrationItems(items);
+    setIsChallengeRefreshSuggested(true);
   }, []);
 
   // Get the daily challenge from AI focus or fallback
@@ -121,6 +123,10 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   // Use active challenge (custom takes priority over daily)
   const challenge = activeChallenge || dailyChallenge || getDynamicChallenge(profile);
   const isCustomChallenge = challenge?.isCustom || activeSource === 'custom-queue';
+
+  useEffect(() => {
+    setIsChallengeRefreshSuggested(false);
+  }, [challenge.id]);
 
   const handleAdvanceQueue = useCallback(async () => {
     const dateKey = getDateKey();
@@ -172,6 +178,15 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   const isChallengeRefreshDisabled = isChallengeLoading || isRateLimited;
   const isGoalRefreshDisabled = isGoalLoading || isRateLimited;
   const isTopicsLoading = isProfileLoading || loadingComponents.includes('learningTopics');
+
+  function handleRefreshSuggestionClick(): void {
+    if (onRegenerateChallenge) {
+      void onRegenerateChallenge(challenge.id);
+    } else {
+      onRefresh(['challenge']);
+    }
+    setIsChallengeRefreshSuggested(false);
+  }
 
   return (
     <section className={styles.card}>
@@ -273,6 +288,11 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                 />
                 {calibrationNeeded.length > 0 && (
                   <InlineCalibration items={calibrationNeeded} onItemsChange={handleCalibrationChange} />
+                )}
+                {isChallengeRefreshSuggested && (
+                  <Button size="small" variant="default" onClick={handleRefreshSuggestionClick}>
+                    Refresh suggestion
+                  </Button>
                 )}
               </>
             )}

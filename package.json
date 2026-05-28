@@ -110,6 +110,7 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "client-only": "^0.0.1",
     "server-only": "^0.0.1"
   },
   "devDependencies": {

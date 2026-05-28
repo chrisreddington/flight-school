@@ -122,13 +122,15 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
             </Stack>
           )}
 
-          {calibrationItems.length > 0 && (
-            <InlineCalibration
-              items={calibrationItems}
-              onItemsChange={handleCalibrationChange}
-              showProfileLink={false}
-            />
-          )}
+          <section id="skill-suggestions-panel">
+            {calibrationItems.length > 0 && (
+              <InlineCalibration
+                items={calibrationItems}
+                onItemsChange={handleCalibrationChange}
+                showProfileLink={false}
+              />
+            )}
+          </section>
 
           {showAddForm && <AddSkillForm onSuccess={handleSuccessfulAdd} onCancel={() => setShowAddForm(false)} />}
 

@@ -243,6 +243,7 @@ export const LearningChat = memo(function LearningChat({
                     message={message}
                     isStreaming={isMessageStreaming}
                     userAvatarUrl={userAvatarUrl}
+                    onFollowUpSelect={handleSendMessage}
                   />
                 );
               })}

@@ -221,7 +221,7 @@ describe('initBrowserOtel', () => {
     await window.fetch('/api/foo');
 
     expect(mocks.setSpan).toHaveBeenCalledWith(expect.anything(), pageSpan);
-    expect(mocks.contextWith).toHaveBeenCalledTimes(1);
+    expect(mocks.contextWith.mock.calls.length).toBe(1);
     expect(originalFetch).toHaveBeenCalledWith('/api/foo');
   });
 

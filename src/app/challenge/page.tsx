@@ -42,7 +42,7 @@ export default async function ChallengePage({ searchParams }: ChallengePageProps
 
   const challengeSpec = await readUserChallengeSpec(challengeId);
   if (!challengeSpec) {
-    notFound();
+    redirect('/');
   }
 
   return <ChallengePageClient challengeId={challengeId} challenge={toChallengeDef(challengeSpec)} />;

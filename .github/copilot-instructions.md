@@ -276,6 +276,13 @@ Rules of the road:
   network promise. See `src/hooks/use-user-profile.ts` `refetch()` for
   the reference implementation and the divergent-settlement regression
   test alongside it.
+- **Focus invalidation is cross-tab and storage-first.** `invalidateFocusCache()`
+  in `src/lib/operations/focus-broadcast.ts` clears today's focus record
+  and then calls `broadcastFocusInvalidate()`, which fans out through a
+  `focus-invalidate` window event, a `BroadcastChannel`, and a
+  `localStorage` fallback tick for browsers without `BroadcastChannel`.
+  Consumers subscribe via `subscribeFocusInvalidate(handler)` and refresh
+  from storage on receipt instead of forcing an immediate network refetch.
 
 ## Code Organization
 
@@ -322,6 +329,14 @@ When answering questions:
 
 Focus on building understanding, not just providing solutions.`;
 ```
+
+### Follow-up questions rendering contract
+- `LEARNING_LENS_PROMPT` in `src/lib/copilot/prompts.ts` ends answers with
+  the exact heading `## Follow-up questions` followed by `-` bullet items.
+- `MessageBubble` in `src/components/MessageBubble/index.tsx` parses that
+  exact heading and bullet list to render clickable follow-up chips.
+- The heading text and bullet format are a prompt↔parser contract; changing
+  either side without updating the other drops follow-up chips.
 
 ### When to Apply Learning Lens
 - User asks "why" or "how does this work"
@@ -430,6 +445,18 @@ Guidelines:
 2. **Generation phase**: Create structured challenge when sufficient context
 3. **Validation phase**: Ensure challenge is coherent and achievable
 
+### Server-side spec storage
+Generated challenge specs are persisted per user at
+`users/{userId}/challenges/{id}.json` through
+`src/lib/challenge/spec-storage.ts` (`readUserChallengeSpec` /
+`writeUserChallengeSpec`).
+
+- `/challenge?id=...` resolves the spec on the server by `id`; URL query
+  fields like `title`/`description` are ignored.
+- Missing spec is treated as expired content and redirects to `/`.
+- All reads/writes are user-scoped; one user cannot overwrite another
+  user's spec even when ids match.
+
 ### Challenge Generation Format
 When generating a challenge, return a structured JSON object:
 ```typescript
@@ -514,4 +541,3 @@ proactively — they are not optional:
 - **[`panel-review`](.github/skills/panel-review/SKILL.md)** — *Mandatory for any non-trivial architectural change.* Convenes a six-reviewer panel (three models × architect + developer personas) that critiques the plan before code lands and re-reviews every milestone until consensus. Every finding of every severity fix-forwards in the next round; the loop exits only when 6/6 SHIP with zero findings. Use the panel for multi-file refactors, cross-cutting cleanups, performance work, or any change where "wrong design" costs more than "wrong implementation".
 
 - **[`doc-currency`](.github/skills/doc-currency/SKILL.md)** — *Mandatory before `task_complete` for any non-trivial change.* Maps the area you touched to its authoritative docs (OTel skill, multi-tenant arch doc, copilot-instructions, README, …) and updates the specifics that drifted. Doc updates ship in the same commit as the code, never as a follow-up PR.
-

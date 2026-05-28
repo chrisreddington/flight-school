@@ -40,20 +40,39 @@ function walk(absoluteDir) {
 }
 
 function findFunctionBody(source, startIndex) {
-  // Walk forward from startIndex until we hit the opening `{`, then
-  // brace-balance to the matching close.
-  let openIndex = source.indexOf('{', startIndex);
-  if (openIndex === -1) return '';
-  let depth = 0;
-  for (let pointer = openIndex; pointer < source.length; pointer++) {
+  // Parse params first so default-value braces in signatures (e.g. `= {}`)
+  // don't get mistaken for the function body opening brace.
+  const paramOpen = source.indexOf('(', startIndex);
+  if (paramOpen === -1) return '';
+
+  let parenDepth = 0;
+  let paramClose = -1;
+  for (let pointer = paramOpen; pointer < source.length; pointer++) {
     const character = source[pointer];
-    if (character === '{') depth++;
-    else if (character === '}') {
-      depth--;
-      if (depth === 0) return source.slice(openIndex, pointer + 1);
+    if (character === '(') parenDepth++;
+    else if (character === ')') {
+      parenDepth--;
+      if (parenDepth === 0) {
+        paramClose = pointer;
+        break;
+      }
     }
   }
-  return source.slice(openIndex);
+  if (paramClose === -1) return '';
+
+  const bodyOpen = source.indexOf('{', paramClose);
+  if (bodyOpen === -1) return '';
+
+  let braceDepth = 0;
+  for (let pointer = bodyOpen; pointer < source.length; pointer++) {
+    const character = source[pointer];
+    if (character === '{') braceDepth++;
+    else if (character === '}') {
+      braceDepth--;
+      if (braceDepth === 0) return source.slice(bodyOpen, pointer + 1);
+    }
+  }
+  return source.slice(bodyOpen);
 }
 
 function findNeighborhood(source, index) {

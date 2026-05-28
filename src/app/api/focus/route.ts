@@ -22,6 +22,75 @@ import type { SkillProfile } from '@/lib/skills/types';
 import { NextRequest, NextResponse } from 'next/server';
 
 const log = logger.withTag('Focus API Route');
+const MAX_EXISTING_TITLES = 50;
+const MAX_EXISTING_TITLE_LENGTH = 200;
+
+type FocusPostBody = {
+  component?: FocusComponent;
+  skillProfile?: SkillProfile;
+  existingTopicTitles?: string[];
+  existingChallengeTitles?: string[];
+  reviewTopics?: string[];
+  interleavingHint?: InterleavingHint;
+  debugMode?: boolean;
+};
+
+function parseIsoTimestampMs(rawTimestamp: string | undefined): number {
+  if (!rawTimestamp) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(rawTimestamp);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function hasSkills(skillProfile: SkillProfile | undefined): skillProfile is SkillProfile {
+  return Boolean(skillProfile && Array.isArray(skillProfile.skills) && skillProfile.skills.length > 0);
+}
+
+function chooseNewestSkillProfile({
+  clientProfile,
+  serverProfile,
+}: {
+  clientProfile: SkillProfile | undefined;
+  serverProfile: SkillProfile | undefined;
+}): SkillProfile | undefined {
+  if (!hasSkills(clientProfile)) return serverProfile;
+  if (!serverProfile) return clientProfile;
+
+  const clientUpdatedAtMs = parseIsoTimestampMs(clientProfile.lastUpdated);
+  const serverUpdatedAtMs = parseIsoTimestampMs(serverProfile.lastUpdated);
+
+  if (clientUpdatedAtMs >= serverUpdatedAtMs) {
+    return clientProfile;
+  }
+
+  return serverProfile;
+}
+
+function validateExistingTitles(titles: unknown, fieldName: string): string | null {
+  if (titles === undefined) return null;
+  if (!Array.isArray(titles)) return `${fieldName} must be an array of strings`;
+  if (titles.length > MAX_EXISTING_TITLES) {
+    return `${fieldName} cannot contain more than ${MAX_EXISTING_TITLES} items`;
+  }
+
+  for (const title of titles) {
+    if (typeof title !== 'string') return `${fieldName} must be an array of strings`;
+    if (title.length > MAX_EXISTING_TITLE_LENGTH) {
+      return `${fieldName} items cannot exceed ${MAX_EXISTING_TITLE_LENGTH} characters`;
+    }
+  }
+
+  return null;
+}
+
+function stampSkillProfileTimestamp(
+  result: Partial<FocusResponse> | { learningTopic: unknown },
+  skillProfile: SkillProfile | undefined,
+): void {
+  if (!('meta' in result) || !result.meta || typeof result.meta !== 'object') return;
+  if (result.meta.skillProfileLastUpdated) return;
+  if (!skillProfile?.lastUpdated) return;
+  result.meta.skillProfileLastUpdated = skillProfile.lastUpdated;
+}
 
 /**
  * Persist any `challenge` field on a fresh focus result to the per-user
@@ -66,15 +135,16 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const body = await parseJsonBodyWithFallback<{
-    component?: FocusComponent;
-    skillProfile?: SkillProfile;
-    existingTopicTitles?: string[];
-    existingChallengeTitles?: string[];
-    reviewTopics?: string[];
-    interleavingHint?: InterleavingHint;
-    debugMode?: boolean;
-  }>(request, {});
+  const body = await parseJsonBodyWithFallback<FocusPostBody>(request, {});
+
+  const topicTitlesError = validateExistingTitles(body.existingTopicTitles, 'existingTopicTitles');
+  if (topicTitlesError) {
+    return NextResponse.json({ error: topicTitlesError }, { status: 400 });
+  }
+  const challengeTitlesError = validateExistingTitles(body.existingChallengeTitles, 'existingChallengeTitles');
+  if (challengeTitlesError) {
+    return NextResponse.json({ error: challengeTitlesError }, { status: 400 });
+  }
 
   return withGuardedRoute(
     {
@@ -83,17 +153,19 @@ export async function POST(request: NextRequest) {
       auditMetadata: { route: '/api/focus', method: 'POST', component: body.component },
     },
     async (ctx) => {
-      // M3.1: if the client didn't pass a skillProfile (e.g. background
-      // refresh, regenerate-without-body paths), hydrate from the
-      // per-user store. Explicit body wins so SkillsClient can override
-      // with an unsaved in-memory profile.
-      let skillProfile = body.skillProfile;
-      if (!skillProfile) {
-        skillProfile = await readUserSkillsProfile().catch((error) => {
-          log.warn('Failed to read skill profile for POST focus; continuing without it', { error });
-          return undefined;
-        });
+      const serverSkillProfile = await readUserSkillsProfile().catch((error) => {
+        log.warn('Failed to read skill profile for POST focus; continuing without it', { error });
+        return undefined;
+      });
+      const skillProfile = chooseNewestSkillProfile({
+        clientProfile: body.skillProfile,
+        serverProfile: serverSkillProfile,
+      });
+
+      if (!body.component) {
+        log.info('Running combined focus generation request', { componentCount: 3 });
       }
+
       const result = await generateFocus(createSessionIdentity(ctx), {
         component: body.component,
         skillProfile,
@@ -103,6 +175,7 @@ export async function POST(request: NextRequest) {
         interleavingHint: body.interleavingHint,
         debugMode: body.debugMode,
       });
+      stampSkillProfileTimestamp(result, skillProfile);
       await persistGeneratedChallenge(result);
       return NextResponse.json(result);
     },

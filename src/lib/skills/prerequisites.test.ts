@@ -160,4 +160,40 @@ describe('getNextAchievableSkills', () => {
     const result = getNextAchievableSkills(profile);
     expect(result.map((s) => s.skillId)).toContain('javascript');
   });
+
+  it('handles prerequisite cycles without infinite looping', () => {
+    const javascriptNode = SKILL_PREREQUISITES.find((node) => node.skillId === 'javascript');
+    if (!javascriptNode) {
+      throw new Error('Expected javascript node in SKILL_PREREQUISITES');
+    }
+
+    const originalPrerequisites = [...javascriptNode.prerequisites];
+    javascriptNode.prerequisites = ['typescript'];
+
+    try {
+      const profile = makeProfile([{ skillId: 'typescript', level: 'advanced' }]);
+      const nextAchievableSkills = getNextAchievableSkills(profile);
+      expect(nextAchievableSkills.map((skill) => skill.skillId)).not.toContain('javascript');
+    } finally {
+      javascriptNode.prerequisites = originalPrerequisites;
+    }
+  });
+
+  it('handles unknown prerequisite ids gracefully', () => {
+    const typescriptNode = SKILL_PREREQUISITES.find((node) => node.skillId === 'typescript');
+    if (!typescriptNode) {
+      throw new Error('Expected typescript node in SKILL_PREREQUISITES');
+    }
+
+    const originalPrerequisites = [...typescriptNode.prerequisites];
+    typescriptNode.prerequisites = [...originalPrerequisites, 'unknown-prerequisite'];
+
+    try {
+      const profile = makeProfile([{ skillId: 'typescript', level: 'advanced' }]);
+      const nextAchievableSkills = getNextAchievableSkills(profile);
+      expect(nextAchievableSkills.map((skill) => skill.skillId)).not.toContain('javascript');
+    } finally {
+      typescriptNode.prerequisites = originalPrerequisites;
+    }
+  });
 });

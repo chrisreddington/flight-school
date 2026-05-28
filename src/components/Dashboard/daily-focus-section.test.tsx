@@ -53,7 +53,11 @@ vi.mock('./habits-section', () => ({
 }));
 
 vi.mock('./inline-calibration', () => ({
-  InlineCalibration: () => null,
+  InlineCalibration: ({
+    onItemsChange,
+  }: {
+    onItemsChange?: (items: Array<{ skillId: string; displayName: string; suggestedLevel: string }>) => void;
+  }) => <button onClick={() => onItemsChange?.([])}>Confirm calibration</button>,
 }));
 
 vi.mock('@/components/FocusItem', () => ({
@@ -131,9 +135,9 @@ describe('DailyFocusSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Custom Queue Challenge' }));
 
     await waitFor(() => {
-      expect(addChallengeMock).toHaveBeenCalledWith('2026-01-01', customChallenge);
-      expect(transitionChallengeMock).toHaveBeenCalledWith('2026-01-01', 'custom-1', 'completed', 'advance-queue');
-      expect(advanceQueueMock).toHaveBeenCalledTimes(1);
+      expect(addChallengeMock.mock.calls[0]).toEqual(['2026-01-01', customChallenge]);
+      expect(transitionChallengeMock.mock.calls[0]).toEqual(['2026-01-01', 'custom-1', 'completed', 'advance-queue']);
+      expect(advanceQueueMock.mock.calls.length).toBe(1);
     });
 
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -194,16 +198,78 @@ describe('DailyFocusSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Skip Custom Queue Skip Challenge' }));
 
     await waitFor(() => {
-      expect(addChallengeMock).toHaveBeenCalledWith('2026-01-01', customChallenge);
-      expect(transitionChallengeMock).toHaveBeenCalledWith('2026-01-01', 'custom-skip-1', 'skipped', 'skip-queue');
-      expect(advanceQueueMock).toHaveBeenCalledTimes(1);
+      expect(addChallengeMock.mock.calls[0]).toEqual(['2026-01-01', customChallenge]);
+      expect(transitionChallengeMock.mock.calls[0]).toEqual(['2026-01-01', 'custom-skip-1', 'skipped', 'skip-queue']);
+      expect(advanceQueueMock.mock.calls.length).toBe(1);
     });
-    expect(onSkipChallenge).not.toHaveBeenCalled();
+    expect(onSkipChallenge.mock.calls.length).toBe(0);
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
       transitionChallengeMock.mock.invocationCallOrder[0],
     );
     expect(transitionChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
       advanceQueueMock.mock.invocationCallOrder[0],
     );
+  });
+
+  it('shows a Refresh suggestion chip after calibration updates and regenerates only when clicked', async () => {
+    const onRegenerateChallenge = vi.fn().mockResolvedValue({ ok: true });
+    const onRefresh = vi.fn();
+    const challenge = {
+      id: 'challenge-1',
+      title: 'Challenge 1',
+      description: 'desc',
+      language: 'TypeScript',
+      difficulty: 'beginner',
+      whyThisChallenge: [],
+    };
+
+    useCustomChallengeQueueMock.mockReturnValue({
+      activeChallenge: challenge,
+      activeSource: 'daily-focus',
+      queueRemaining: 0,
+      advanceQueue: advanceQueueMock,
+    });
+
+    const aiFocus: FocusResponse = {
+      challenge,
+      goal: { id: 'goal-1', title: 'Goal', actions: [] },
+      learningTopics: [],
+      calibrationNeeded: [{ skillId: 'ts', displayName: 'TypeScript', suggestedLevel: 'intermediate' }],
+      meta: {
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        aiEnabled: true,
+        model: 'test-model',
+        toolsUsed: [],
+        totalTimeMs: 1,
+        usedCachedProfile: false,
+      },
+    };
+
+    render(
+      <DailyFocusSection
+        profile={null}
+        isLoading={false}
+        aiFocus={aiFocus}
+        isAIEnabled={true}
+        toolsUsed={[]}
+        loadingComponents={[]}
+        onRefresh={onRefresh}
+        onRegenerateChallenge={onRegenerateChallenge}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Refresh suggestion' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm calibration' }));
+
+    const refreshSuggestionButton = await screen.findByRole('button', { name: 'Refresh suggestion' });
+    expect(onRegenerateChallenge.mock.calls.length).toBe(0);
+    expect(onRefresh.mock.calls.length).toBe(0);
+
+    fireEvent.click(refreshSuggestionButton);
+
+    await waitFor(() => {
+      expect(onRegenerateChallenge.mock.calls[0]).toEqual(['challenge-1']);
+    });
+    expect(onRefresh.mock.calls.length).toBe(0);
   });
 });

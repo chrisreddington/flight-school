@@ -284,6 +284,11 @@ Child fetches export first; the parent exports later. The Aspire OTLP
 collector links them retroactively by `traceId`, but in the dashboard's
 live list you'll briefly see children before their parent. This is not
 a bug — refresh after the route ends and the tree is complete.
+`initBrowserOtel()` configures the browser `BatchSpanProcessor` with
+`maxQueueSize: 100` and `scheduledDelayMillis: 5000`
+([`src/lib/observability/browser-otel.ts`](../../../src/lib/observability/browser-otel.ts))
+to keep browser OTLP export request volume bounded and avoid chatty
+per-navigation export bursts.
 
 ### 10. Always propagate trace context across boundaries
 

@@ -84,6 +84,53 @@
   margin-bottom: var(--base-size-4);
 }
 
+.learningLayout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+.deepDiveDisclosure {
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-medium);
+  background-color: var(--bgColor-muted);
+  padding: var(--base-size-8) var(--base-size-10);
+}
+
+.deepDiveSummary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fgColor-accent);
+  font-weight: 600;
+}
+
+.deepDiveBody {
+  margin-top: var(--base-size-8);
+}
+
+.followUpSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-6);
+}
+
+.followUpLabel {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fgColor-muted);
+}
+
+.followUpChipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-6);
+}
+
+.followUpChip {
+  border-radius: 999px;
+}
+
 /* Tables */
 .messageContent table {
   border-collapse: collapse;

@@ -34,14 +34,14 @@ export function diversifyLearningTopics(candidates: readonly LearningTopic[]): L
     if (isCurrentRepo) currentRepoTaken += 1;
   }
 
-  // If diversification starved us below MAX_RETURNED (e.g. all 5 were
-  // current-repo), backfill from the rejected current-repo entries so
-  // the user still gets three topics. This is a deliberate trade — we
-  // prefer "a little repetitive" over "fewer topics".
+  // If diversification starved us below MAX_RETURNED, backfill ONLY with
+  // non-current-repo topics that were skipped due to ordering. This keeps
+  // the invariant that output contains at most one current-repo topic.
   if (picked.length < MAX_RETURNED) {
     for (const topic of candidates) {
       if (picked.length >= MAX_RETURNED) break;
       if (picked.includes(topic)) continue;
+      if (topic.dominantSignal === 'current-repo') continue;
       picked.push(topic);
     }
   }

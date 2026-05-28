@@ -26,6 +26,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       'server-only': path.resolve(__dirname, './src/test/mocks/server-only.ts'),
+      'client-only': path.resolve(__dirname, './src/test/mocks/client-only.ts'),
     },
   },
 });

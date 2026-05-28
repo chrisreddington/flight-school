@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   COACH_BASE_PROMPT,
+  LEARNING_LENS_PROMPT,
   buildChallengePrompt,
   buildGoalPrompt,
   buildLearningTopicsPrompt,
@@ -24,6 +25,13 @@ describe('System Prompts', () => {
     // never in the base prompt — see capabilities.ts / profiles.ts.
     expect(COACH_BASE_PROMPT).not.toMatch(/\bMCP\b/);
     expect(COACH_BASE_PROMPT).not.toMatch(/list_user_repositories/);
+  });
+
+  it('LEARNING_LENS_PROMPT requires a strict markdown follow-up heading and bullet list contract', () => {
+    expect(LEARNING_LENS_PROMPT).toContain('## Follow-up questions');
+    expect(LEARNING_LENS_PROMPT).toContain('- ');
+    expect(LEARNING_LENS_PROMPT).toContain('2–3');
+    expect(LEARNING_LENS_PROMPT).toContain('quick answer');
   });
 });
 

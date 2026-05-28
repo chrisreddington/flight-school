@@ -53,8 +53,10 @@ function createFallbackMeta(totalTimeMs: number) {
     aiEnabled: false,
     model: 'fallback',
     toolsUsed: [],
+    // Server-side floor only (handler/SDK time), not client-perceived E2E latency.
     totalTimeMs,
     usedCachedProfile: false,
+    skillProfileLastUpdated: undefined,
   };
 }
 
@@ -145,8 +147,10 @@ async function generateSingleComponent(
     aiEnabled: true,
     model: result.meta.model,
     toolsUsed: [],
+    // Server-side floor only (handler/SDK time), not client-perceived E2E latency.
     totalTimeMs: result.meta.totalTimeMs,
     usedCachedProfile: true,
+    skillProfileLastUpdated: skillProfile?.lastUpdated,
   };
 
   return withIds;
@@ -267,8 +271,10 @@ export async function generateFocus(
         aiEnabled: true,
         model: 'gpt-5-mini',
         toolsUsed: [],
+        // Server-side floor only (handler/SDK time), not client-perceived E2E latency.
         totalTimeMs: totalTime,
         usedCachedProfile: serializedContext.length > 0,
+        skillProfileLastUpdated: skillProfile?.lastUpdated,
       },
     };
 

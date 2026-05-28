@@ -20,8 +20,23 @@ interface MonacoLike {
   };
 }
 
+interface MonacoSelection {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}
+
+interface MonacoEditorLike {
+  getModel: () => { getLinesContent: () => string[] } | null;
+  getSelection: () => MonacoSelection | null;
+  setSelection: (selection: MonacoSelection) => void;
+  trigger: (source: string, handlerId: string, payload: unknown) => void;
+}
+
 const MONACO_KEYMOD_CTRL_CMD = 2048;
 const MONACO_KEYCODE_ENTER = 3;
+const DESCRIPTION_REGION_MARKER = '#region Challenge description';
 
 export const MONACO_KEYBINDING_RUN = MONACO_KEYMOD_CTRL_CMD | MONACO_KEYCODE_ENTER;
 
@@ -61,6 +76,29 @@ export function initializeMonacoLanguageDefaults(): void {
 
 export function getMonacoTheme(colorMode?: string): 'vs' | 'vs-dark' {
   return colorMode === 'night' || colorMode === 'dark' ? 'vs-dark' : 'vs';
+}
+
+export function collapseChallengeDescriptionRegion(editor: MonacoEditorLike): void {
+  const model = editor.getModel();
+  if (!model) return;
+
+  const regionStartLineNumber = model.getLinesContent().findIndex((line) => line.includes(DESCRIPTION_REGION_MARKER));
+
+  if (regionStartLineNumber === -1) return;
+
+  const previousSelection = editor.getSelection();
+  const foldedSelection = {
+    startLineNumber: regionStartLineNumber + 1,
+    startColumn: 1,
+    endLineNumber: regionStartLineNumber + 1,
+    endColumn: 1,
+  };
+
+  editor.setSelection(foldedSelection);
+  editor.trigger('challenge-sandbox', 'editor.fold', null);
+  if (previousSelection) {
+    editor.setSelection(previousSelection);
+  }
 }
 
 export function getMonacoEditorOptions() {

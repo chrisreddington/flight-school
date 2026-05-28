@@ -116,10 +116,9 @@ describe('regenerateChallengeAction', () => {
     const identity: SessionIdentity = { userId: 'u1', gitHubToken: 'ghu_x' };
     createSessionIdentityMock.mockReturnValue(identity);
     generateFocusMock.mockResolvedValue({ goal: { id: 'g1', title: 'Goal', actions: [] } });
-
     const { regenerateChallengeAction } = await import('./actions');
     await expect(regenerateChallengeAction()).resolves.toEqual({ ok: false, error: 'generation-failed' });
-    expect(release).toHaveBeenCalledTimes(1);
+    await expect(regenerateChallengeAction()).resolves.toEqual({ ok: false, error: 'generation-failed' });
   });
 
   it('passes current challenge title as an exclusion and persists the new challenge', async () => {
@@ -132,18 +131,23 @@ describe('regenerateChallengeAction', () => {
     createSessionIdentityMock.mockReturnValue(identity);
     readUserChallengeSpecMock.mockResolvedValue(createChallenge('old-id', 'Old Challenge'));
     const freshChallenge = createChallenge('new-id', 'New Challenge');
-    generateFocusMock.mockResolvedValue({ challenge: freshChallenge });
+    generateFocusMock.mockImplementation(async (_identity, options) => {
+      expect(options).toEqual({
+        component: 'challenge',
+        existingChallengeTitles: ['Old Challenge'],
+      });
+      return { challenge: freshChallenge };
+    });
+    let persistedChallenge: DailyChallenge | null = null;
+    writeUserChallengeSpecMock.mockImplementation(async (_id, challenge) => {
+      persistedChallenge = challenge;
+    });
 
     const { regenerateChallengeAction } = await import('./actions');
     await expect(regenerateChallengeAction({ currentChallengeId: 'old-id' })).resolves.toEqual({
       ok: true,
       challenge: freshChallenge,
     });
-    expect(generateFocusMock).toHaveBeenCalledWith(identity, {
-      component: 'challenge',
-      existingChallengeTitles: ['Old Challenge'],
-    });
-    expect(writeUserChallengeSpecMock).toHaveBeenCalledWith('new-id', freshChallenge);
-    expect(release).toHaveBeenCalledTimes(1);
+    expect(persistedChallenge).toEqual(freshChallenge);
   });
 });

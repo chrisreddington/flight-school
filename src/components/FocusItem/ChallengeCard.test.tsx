@@ -71,42 +71,40 @@ describe('ChallengeCard', () => {
     expect(await screen.findByText('Mark failed')).toBeInTheDocument();
   });
 
-  it('registers challenge before transitioning to in-progress when starting', async () => {
+  it('uses Start as pure navigation without writing focus state', async () => {
     const dateKey = '2026-01-01';
     const challenge = createChallenge();
 
     render(<ChallengeCard challenge={challenge} dateKey={dateKey} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Start Challenge' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start →' }));
 
     await waitFor(() => {
-      expect(addChallengeMock).toHaveBeenCalledWith(dateKey, challenge);
-      expect(transitionChallengeMock).toHaveBeenCalledWith(dateKey, challenge.id, 'in-progress', 'dashboard');
+      expect(pushMock.mock.calls[0]).toEqual(['/challenge?id=c1']);
     });
-    expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      transitionChallengeMock.mock.invocationCallOrder[0],
-    );
+    expect(addChallengeMock.mock.calls.length).toBe(0);
+    expect(transitionChallengeMock.mock.calls.length).toBe(0);
   });
 
   it('navigates to /challenge with id only (no title/description query leakage)', async () => {
     const challenge = createChallenge({ id: 'safe-id_123' });
     render(<ChallengeCard challenge={challenge} dateKey="2026-01-01" />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Start Challenge' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start →' }));
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith('/challenge?id=safe-id_123');
+      expect(pushMock.mock.calls[0]).toEqual(['/challenge?id=safe-id_123']);
     });
   });
 
-  it('shows a secondary New Challenge button on dashboard cards and calls onRefresh', async () => {
+  it('shows a secondary ↻ New challenge button and calls onRefresh', async () => {
     const onRefresh = vi.fn();
     render(<ChallengeCard challenge={createChallenge()} onRefresh={onRefresh} />);
 
-    const newChallengeButton = await screen.findByRole('button', { name: 'New Challenge' });
+    const newChallengeButton = await screen.findByRole('button', { name: '↻ New challenge' });
     fireEvent.click(newChallengeButton);
 
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onRefresh.mock.calls.length).toBe(1);
   });
 
   it('shows next challenge button and advances queue when completed with queued items', async () => {
@@ -126,7 +124,7 @@ describe('ChallengeCard', () => {
 
     const nextChallengeButton = await screen.findByRole('button', { name: 'Next Challenge' });
     fireEvent.click(nextChallengeButton);
-    expect(onAdvanceQueue).toHaveBeenCalledTimes(1);
+    expect(onAdvanceQueue.mock.calls.length).toBe(1);
   });
 
   it('calls addChallenge before transitionChallenge when marking complete', async () => {
@@ -140,8 +138,8 @@ describe('ChallengeCard', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Complete' }));
 
     await waitFor(() => {
-      expect(addChallengeMock).toHaveBeenCalledWith(dateKey, challenge);
-      expect(transitionChallengeMock).toHaveBeenCalledWith(dateKey, challenge.id, 'completed', 'history');
+      expect(addChallengeMock.mock.calls[0]).toEqual([dateKey, challenge]);
+      expect(transitionChallengeMock.mock.calls[0]).toEqual([dateKey, challenge.id, 'completed', 'history']);
     });
     expect(addChallengeMock.mock.invocationCallOrder[0]).toBeLessThan(
       transitionChallengeMock.mock.invocationCallOrder[0],

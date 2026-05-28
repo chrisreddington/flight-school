@@ -188,6 +188,10 @@ and rewrite the storage path to live under a per-user subdirectory:
 {FLIGHT_SCHOOL_DATA_DIR}/users/{userId}/workspaces/{challengeId}/...
 ```
 
+The Learn-topic personalization snapshot used by `/api/focus` is
+resolved fresh per request from Octokit profile data and is **not**
+persisted as a per-user storage artifact.
+
 `{userId}` is the numeric GitHub user ID taken from the Auth.js session —
 never from a query string or request body. Before it is used as a path
 segment it is validated against `/^[a-zA-Z0-9_-]+$/`; anything else

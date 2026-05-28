@@ -96,25 +96,10 @@ export function ChallengeCard({
   }, [dateKey, challenge.id]);
 
   const handleStartChallenge = useCallback(() => {
-    if (currentState === 'not-started') {
-      // Transition to in-progress when starting
-      (async () => {
-        try {
-          setActionError(null);
-          await focusStore.addChallenge(dateKey, challenge);
-          await focusStore.transitionChallenge(dateKey, challenge.id, 'in-progress', 'dashboard');
-          setCurrentState('in-progress');
-          if (onStateChange) onStateChange();
-        } catch (error) {
-          setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
-          logger.error('Failed to start challenge', { error }, 'ChallengeCard');
-        }
-      })();
-    }
     // M2.5: challenge specs now live server-side under
     // users/{userId}/challenges/{id}.json, so the URL carries only id.
     router.push(`/challenge?id=${encodeURIComponent(challenge.id)}`);
-  }, [router, challenge, currentState, dateKey, onStateChange]);
+  }, [router, challenge.id]);
 
   const handleMarkComplete = useCallback(async () => {
     try {
@@ -256,11 +241,11 @@ export function ChallengeCard({
           ) : (
             <>
               <Button variant="primary" onClick={handleStartChallenge} disabled={isSkipped}>
-                {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
+                {isInProgress ? 'Continue Challenge' : 'Start →'}
               </Button>
               {!showHistoryActions && !isCustom && onRefresh && (
                 <Button variant="default" onClick={onRefresh} disabled={isSkipped || refreshDisabled}>
-                  New Challenge
+                  ↻ New challenge
                 </Button>
               )}
             </>

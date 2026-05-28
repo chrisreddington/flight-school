@@ -59,6 +59,7 @@ import { GuidedModePanel } from './GuidedModePanel';
 import type { ChallengeSandboxProps } from './types';
 import {
   MONACO_KEYBINDING_RUN,
+  collapseChallengeDescriptionRegion,
   configureMonacoLanguageDefaults,
   getMonacoEditorOptions,
   getMonacoTheme,
@@ -180,6 +181,7 @@ export function ChallengeSandbox({ challengeId, challenge, onComplete, autoFocus
           void evaluate();
         }
       });
+      collapseChallengeDescriptionRegion(editor);
       if (autoFocus) {
         moveCursorToStarterMarker(editor);
         editor.focus();

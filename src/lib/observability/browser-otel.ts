@@ -73,7 +73,10 @@ export function initBrowserOtel(): void {
     fetchOptions: { keepalive: true },
   } as ConstructorParameters<typeof OTLPTraceExporter>[0]);
 
-  const processor = new BatchSpanProcessor(exporter);
+  const processor = new BatchSpanProcessor(exporter, {
+    maxQueueSize: 100,
+    scheduledDelayMillis: 5000,
+  });
 
   const provider = new WebTracerProvider({
     resource: defaultResource().merge(

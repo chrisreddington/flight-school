@@ -38,7 +38,7 @@ describe('diversifyLearningTopics', () => {
     expect(out.filter((t) => t.dominantSignal === 'current-repo')).toHaveLength(1);
   });
 
-  it('backfills with rejected current-repo topics if filtering starves the result', () => {
+  it('keeps current-repo topics at <= 1 even under backfill pressure', () => {
     const out = diversifyLearningTopics([
       topic('repo1', 'current-repo'),
       topic('repo2', 'current-repo'),
@@ -46,8 +46,9 @@ describe('diversifyLearningTopics', () => {
       topic('repo4', 'current-repo'),
       topic('repo5', 'current-repo'),
     ]);
-    expect(out).toHaveLength(3);
-    expect(out.map((t) => t.id)).toEqual(['repo1', 'repo2', 'repo3']);
+    expect(out).toHaveLength(1);
+    expect(out.map((t) => t.id)).toEqual(['repo1']);
+    expect(out.filter((t) => t.dominantSignal === 'current-repo')).toHaveLength(1);
   });
 
   it('treats missing dominantSignal as non-current-repo', () => {

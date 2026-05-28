@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   MONACO_KEYBINDING_RUN,
+  collapseChallengeDescriptionRegion,
   configureMonacoLanguageDefaults,
   getMonacoEditorOptions,
   getMonacoTheme,
@@ -77,5 +78,40 @@ describe('ChallengeSandbox Monaco config', () => {
     });
     expect(typescriptDefaults.setEagerModelSync).toHaveBeenCalledWith(true);
     expect(javascriptDefaults.setEagerModelSync).toHaveBeenCalledWith(true);
+  });
+
+  it('folds the Challenge description region on first editor mount', () => {
+    const selection = {
+      startLineNumber: 22,
+      startColumn: 1,
+      endLineNumber: 22,
+      endColumn: 1,
+    };
+    const editor = {
+      getModel: () => ({
+        getLinesContent: () => [
+          'function solve() {',
+          '// #region Challenge description',
+          '// very long description',
+          '// #endregion',
+          '// Your code here',
+          '}',
+        ],
+      }),
+      getSelection: vi.fn(() => selection),
+      setSelection: vi.fn(),
+      trigger: vi.fn(),
+    };
+
+    collapseChallengeDescriptionRegion(editor);
+
+    expect(editor.setSelection).toHaveBeenNthCalledWith(1, {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 1,
+    });
+    expect(editor.trigger.mock.calls).toEqual([['challenge-sandbox', 'editor.fold', null]]);
+    expect(editor.setSelection).toHaveBeenNthCalledWith(2, selection);
   });
 });

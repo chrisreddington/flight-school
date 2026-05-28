@@ -49,9 +49,11 @@ const log = logger.withTag('FocusStore');
 interface FocusStoreInterface {
   getTodaysFocus(): Promise<FocusResponse | null>;
   saveTodaysFocus(focus: FocusResponse): Promise<void>;
+  saveCompleteFocusResponse(response: FocusResponse): Promise<void>;
   getHistory(): Promise<FocusHistory>;
   isNewDay(): Promise<boolean>;
   clear(): Promise<void>;
+  clearTodaysFocus(): Promise<void>;
   transitionChallenge(dateKey: string, challengeId: string, newState: ChallengeState, source?: string): Promise<void>;
   transitionGoal(dateKey: string, goalId: string, newState: GoalState, source?: string): Promise<void>;
   markTopicExplored(dateKey: string, topicId: string, source?: string): Promise<void>;
@@ -100,6 +102,13 @@ class LocalStorageFocusStore implements FocusStoreInterface {
     await this.setStorage(schema);
   }
 
+  async saveCompleteFocusResponse(response: FocusResponse): Promise<void> {
+    await this.withSchema((schema) => {
+      schema.history = saveFocusToHistory(schema.history, getDateKey(), response);
+      return true;
+    });
+  }
+
   async getHistory(): Promise<FocusHistory> {
     const schema = await this.getStorage();
     return schema.history;
@@ -117,6 +126,15 @@ class LocalStorageFocusStore implements FocusStoreInterface {
       log.error('Failed to clear focus storage', { error });
       throw error;
     }
+  }
+
+  async clearTodaysFocus(): Promise<void> {
+    await this.withSchema((schema) => {
+      const dateKey = getDateKey();
+      if (!(dateKey in schema.history)) return false;
+      delete schema.history[dateKey];
+      return true;
+    });
   }
 
   async transitionChallenge(

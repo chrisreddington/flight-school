@@ -42,7 +42,7 @@ describe('POST /api/otel/v1/traces/anonymous', () => {
     const res = await POST(makeRequest({ resourceSpans: [] }));
 
     expect(res.status).toBe(204);
-    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(mocks.fetch.mock.calls).toEqual([]);
   });
 
   it('forwards OTLP payload to upstream when configured', async () => {
@@ -54,7 +54,7 @@ describe('POST /api/otel/v1/traces/anonymous', () => {
     const res = await POST(makeRequest(payload));
 
     expect(res.status).toBe(204);
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch.mock.calls).toHaveLength(1);
     const [url, init] = mocks.fetch.mock.calls[0];
     expect(url).toBe('http://collector:4318/v1/traces');
     expect((init as RequestInit).body).toBe(JSON.stringify(payload));
