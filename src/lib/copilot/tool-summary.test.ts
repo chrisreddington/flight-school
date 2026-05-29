@@ -8,7 +8,7 @@ describe('toolSummary', () => {
       repo: 'flight-school',
       q: 'auth',
     });
-    expect(result.icon).toBe('🔍');
+    expect(result.iconKind).toBe('search');
     expect(result.summary).toContain('Searching code');
     expect(result.summary).toContain('`chrisreddington/flight-school`');
     expect(result.summary).toContain('`auth`');
@@ -31,7 +31,7 @@ describe('toolSummary', () => {
 
   it('summarises list_commits with repo', () => {
     const result = toolSummary('list_commits', { owner: 'foo', repo: 'bar' });
-    expect(result.icon).toBe('🧾');
+    expect(result.iconKind).toBe('commit');
     expect(result.summary).toBe('Listing commits on `foo/bar`');
   });
 
@@ -51,13 +51,13 @@ describe('toolSummary', () => {
       repo: 'bar',
       pull_number: '42',
     });
-    expect(result.icon).toBe('🔀');
+    expect(result.iconKind).toBe('pull-request');
     expect(result.summary).toBe('Reading PR #42 on `foo/bar`');
   });
 
   it('falls back to bare tool name for unknown tools', () => {
     const result = toolSummary('mystery_tool', { anything: 1 });
-    expect(result.icon).toBe('🛠️');
+    expect(result.iconKind).toBe('tool');
     expect(result.summary).toBe('Running `mystery_tool`');
   });
 

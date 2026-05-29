@@ -324,8 +324,10 @@
 }
 
 .toolEventIcon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
+  color: var(--fgColor-muted);
 }
 
 .toolEventSummary {

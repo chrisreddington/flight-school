@@ -10,10 +10,25 @@
  * rather than throwing.
  */
 
+/**
+ * Action category for a tool call. The UI layer maps each kind to an Octicon
+ * so this module stays framework-free (no JSX / React import here).
+ */
+export type ToolIconKind =
+  | 'search'
+  | 'file'
+  | 'commit'
+  | 'pull-request'
+  | 'issue'
+  | 'repository'
+  | 'branch'
+  | 'profile'
+  | 'tool';
+
 /** Result of summarising a single tool call. */
 export interface ToolSummaryResult {
-  /** Single-character icon prefix conveying the action category. */
-  icon: string;
+  /** Action category the UI maps to an Octicon. */
+  iconKind: ToolIconKind;
   /** Human-readable one-line description, e.g. "Searching code in foo/bar for auth". */
   summary: string;
 }
@@ -62,7 +77,7 @@ function code(value: string | undefined): string {
  * @example
  * ```ts
  * toolSummary('search_code', { q: 'auth', owner: 'foo', repo: 'bar' });
- * // → { icon: '🔍', summary: 'Searching code in `foo/bar` for `auth`' }
+ * // → { iconKind: 'search', summary: 'Searching code in `foo/bar` for `auth`' }
  * ```
  */
 export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
@@ -74,13 +89,13 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
       const query = pickString(args, 'q', 'query');
       const where = repo ? ` in ${code(repo)}` : '';
       const what = query ? ` for ${code(query)}` : '';
-      return { icon: '🔍', summary: `Searching code${where}${what}` };
+      return { iconKind: 'search', summary: `Searching code${where}${what}` };
     }
     case 'search_repositories':
     case 'search_repos': {
       const query = pickString(args, 'query', 'q');
       return {
-        icon: '🔍',
+        iconKind: 'search',
         summary: query ? `Searching repositories for ${code(query)}` : 'Searching repositories',
       };
     }
@@ -89,7 +104,7 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
       const query = pickString(args, 'query', 'q');
       const label = key === 'search_issues' ? 'issues' : 'pull requests';
       return {
-        icon: '🔍',
+        iconKind: 'search',
         summary: query ? `Searching ${label} for ${code(query)}` : `Searching ${label}`,
       };
     }
@@ -97,15 +112,15 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
     case 'read_file': {
       const repo = pickRepo(args);
       const path = pickString(args, 'path', 'file_path', 'filename');
-      if (path && repo) return { icon: '📄', summary: `Reading ${code(path)} from ${code(repo)}` };
-      if (path) return { icon: '📄', summary: `Reading ${code(path)}` };
-      if (repo) return { icon: '📄', summary: `Reading file from ${code(repo)}` };
-      return { icon: '📄', summary: 'Reading file' };
+      if (path && repo) return { iconKind: 'file', summary: `Reading ${code(path)} from ${code(repo)}` };
+      if (path) return { iconKind: 'file', summary: `Reading ${code(path)}` };
+      if (repo) return { iconKind: 'file', summary: `Reading file from ${code(repo)}` };
+      return { iconKind: 'file', summary: 'Reading file' };
     }
     case 'list_commits': {
       const repo = pickRepo(args);
       return {
-        icon: '🧾',
+        iconKind: 'commit',
         summary: repo ? `Listing commits on ${code(repo)}` : 'Listing commits',
       };
     }
@@ -113,15 +128,15 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
       const repo = pickRepo(args);
       const sha = pickString(args, 'sha', 'ref', 'commit_sha');
       const shortSha = sha ? sha.slice(0, 7) : undefined;
-      if (repo && shortSha) return { icon: '🧾', summary: `Reading commit ${code(shortSha)} on ${code(repo)}` };
-      if (repo) return { icon: '🧾', summary: `Reading commit on ${code(repo)}` };
-      return { icon: '🧾', summary: 'Reading commit' };
+      if (repo && shortSha) return { iconKind: 'commit', summary: `Reading commit ${code(shortSha)} on ${code(repo)}` };
+      if (repo) return { iconKind: 'commit', summary: `Reading commit on ${code(repo)}` };
+      return { iconKind: 'commit', summary: 'Reading commit' };
     }
     case 'list_pull_requests':
     case 'list_prs': {
       const repo = pickRepo(args);
       return {
-        icon: '🔀',
+        iconKind: 'pull-request',
         summary: repo ? `Listing pull requests on ${code(repo)}` : 'Listing pull requests',
       };
     }
@@ -129,47 +144,47 @@ export function toolSummary(name: string, args?: unknown): ToolSummaryResult {
     case 'get_pr': {
       const repo = pickRepo(args);
       const num = pickString(args, 'pull_number', 'number', 'pr_number');
-      if (repo && num) return { icon: '🔀', summary: `Reading PR #${num} on ${code(repo)}` };
+      if (repo && num) return { iconKind: 'pull-request', summary: `Reading PR #${num} on ${code(repo)}` };
       return {
-        icon: '🔀',
+        iconKind: 'pull-request',
         summary: repo ? `Reading pull request on ${code(repo)}` : 'Reading pull request',
       };
     }
     case 'list_issues': {
       const repo = pickRepo(args);
       return {
-        icon: '🐛',
+        iconKind: 'issue',
         summary: repo ? `Listing issues on ${code(repo)}` : 'Listing issues',
       };
     }
     case 'get_issue': {
       const repo = pickRepo(args);
       const num = pickString(args, 'issue_number', 'number');
-      if (repo && num) return { icon: '🐛', summary: `Reading issue #${num} on ${code(repo)}` };
-      return { icon: '🐛', summary: repo ? `Reading issue on ${code(repo)}` : 'Reading issue' };
+      if (repo && num) return { iconKind: 'issue', summary: `Reading issue #${num} on ${code(repo)}` };
+      return { iconKind: 'issue', summary: repo ? `Reading issue on ${code(repo)}` : 'Reading issue' };
     }
     case 'get_repository':
     case 'get_repo': {
       const repo = pickRepo(args);
       return {
-        icon: '📦',
+        iconKind: 'repository',
         summary: repo ? `Looking up ${code(repo)}` : 'Looking up repository',
       };
     }
     case 'list_branches': {
       const repo = pickRepo(args);
       return {
-        icon: '🌿',
+        iconKind: 'branch',
         summary: repo ? `Listing branches on ${code(repo)}` : 'Listing branches',
       };
     }
     case 'list_repositories':
     case 'list_repos':
-      return { icon: '📦', summary: 'Listing repositories' };
+      return { iconKind: 'repository', summary: 'Listing repositories' };
     case 'get_me':
     case 'get_authenticated_user':
-      return { icon: '👤', summary: 'Reading your GitHub profile' };
+      return { iconKind: 'profile', summary: 'Reading your GitHub profile' };
     default:
-      return { icon: '🛠️', summary: `Running ${code(name)}` };
+      return { iconKind: 'tool', summary: `Running ${code(name)}` };
   }
 }

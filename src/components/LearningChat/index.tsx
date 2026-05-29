@@ -2,7 +2,8 @@
 
 import type { RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
 import { CopilotIcon, PlusIcon } from '@primer/octicons-react';
-import { Button, Dialog, Heading } from '@primer/react';
+import { Button, Dialog } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useSmoothedText } from '@/lib/chat/use-smoothed-text';
@@ -276,16 +277,16 @@ export const LearningChat = memo(function LearningChat({
         <div className={styles.messagesContainer} role="log" aria-label="Chat messages">
           {messages.length === 0 && !isStreamingInActiveThread ? (
             <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>
-                <CopilotIcon size={48} aria-hidden="true" />
-              </div>
-              <Heading as="h3" className={styles.emptyTitle}>
-                Start a learning conversation
-              </Heading>
-              <p className={styles.emptyDescription}>
-                Ask about code concepts, explore repositories, or get help understanding patterns. Copilot will explain
-                reasoning and suggest follow-up explorations.
-              </p>
+              <Blankslate spacious>
+                <Blankslate.Visual>
+                  <CopilotIcon size={48} />
+                </Blankslate.Visual>
+                <Blankslate.Heading>Start a learning conversation</Blankslate.Heading>
+                <Blankslate.Description>
+                  Ask about code concepts, explore repositories, or get help understanding patterns. Copilot will
+                  explain reasoning and suggest follow-up explorations.
+                </Blankslate.Description>
+              </Blankslate>
             </div>
           ) : (
             <div className={styles.messagesList}>

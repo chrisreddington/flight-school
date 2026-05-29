@@ -4,8 +4,23 @@ import { MarkdownContent } from '@/components/MarkdownContent';
 import { ConversationBadge, McpToolsBadge, ModelBadge, StatusBadge, TtftBadges } from '@/components/StatusBadge';
 import { useDebugMode } from '@/contexts/debug-context';
 import { toolSummary } from '@/lib/copilot/tool-summary';
+import type { ToolIconKind } from '@/lib/copilot/tool-summary';
 import type { Message, ToolCallEvent } from '@/lib/threads/types';
-import { CheckIcon, CopilotIcon, LightBulbIcon, PersonIcon } from '@primer/octicons-react';
+import {
+  CheckIcon,
+  CopilotIcon,
+  FileIcon,
+  GitBranchIcon,
+  GitCommitIcon,
+  GitPullRequestIcon,
+  type Icon,
+  IssueOpenedIcon,
+  LightBulbIcon,
+  PersonIcon,
+  RepoIcon,
+  SearchIcon,
+  ToolsIcon,
+} from '@primer/octicons-react';
 import { Avatar, Banner, Button, Label, RelativeTime, SkeletonBox, Spinner, Stack } from '@primer/react';
 import { memo, useMemo } from 'react';
 import styles from './MessageBubble.module.css';
@@ -127,6 +142,19 @@ interface ToolEventRowProps {
   showDetails: boolean;
 }
 
+/** Maps a tool action category to the Octicon that represents it in the timeline. */
+const TOOL_ICON_BY_KIND: Record<ToolIconKind, Icon> = {
+  search: SearchIcon,
+  file: FileIcon,
+  commit: GitCommitIcon,
+  'pull-request': GitPullRequestIcon,
+  issue: IssueOpenedIcon,
+  repository: RepoIcon,
+  branch: GitBranchIcon,
+  profile: PersonIcon,
+  tool: ToolsIcon,
+};
+
 /**
  * A single row in the tool-event timeline.
  *
@@ -134,7 +162,8 @@ interface ToolEventRowProps {
  * debug toggle is on — a native `<details>` disclosure with raw args/result.
  */
 function ToolEventRow({ event, showDetails }: ToolEventRowProps) {
-  const { icon, summary } = useMemo(() => toolSummary(event.name, event.args), [event.name, event.args]);
+  const { iconKind, summary } = useMemo(() => toolSummary(event.name, event.args), [event.name, event.args]);
+  const ToolIcon = TOOL_ICON_BY_KIND[iconKind];
   const isRunning = event.status === 'running';
   const duration = formatDuration(event.durationMs);
   const ariaLabel = isRunning ? `Tool running: ${summary}` : `Tool completed: ${summary}`;
@@ -156,7 +185,7 @@ function ToolEventRow({ event, showDetails }: ToolEventRowProps) {
           {isRunning ? <Spinner size="small" srText="" /> : <CheckIcon size={14} className={styles.toolEventCheck} />}
         </span>
         <span className={styles.toolEventIcon} aria-hidden="true">
-          {icon}
+          <ToolIcon size={14} />
         </span>
         <span className={styles.toolEventSummary}>{summary}</span>
         {duration && !isRunning && <span className={styles.toolEventDuration}>{duration}</span>}

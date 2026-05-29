@@ -59,6 +59,9 @@ describe('MessageBubble tool events', () => {
     expect(item.textContent).toContain('Searching code');
     expect(item.textContent).toContain('chrisreddington/flight-school');
     expect(item.textContent).toContain('auth');
+    // Running state renders both a Spinner and the action-category Octicon
+    // (proves the category resolves to a real Octicon, not an emoji glyph).
+    expect(item.querySelectorAll('svg').length).toBeGreaterThanOrEqual(2);
     // No "Show details" disclosure outside debug mode.
     expect(within(list).queryByText('Show details')).toBeNull();
   });

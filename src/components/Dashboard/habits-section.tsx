@@ -40,6 +40,11 @@ export function HabitsSection() {
     <>
       {loadError && <Banner title="Failed to load habits" description={loadError} variant="critical" />}
       {habits.length === 0 ? (
+        // Compact dashboard card: kept as a lightweight inline empty state rather
+        // than a Primer Blankslate. The dashboard is a grid of small sibling cards
+        // and is the surface the user asked to lighten on mobile, so a full
+        // Blankslate (visual + heading + description) would overweight this card.
+        // The full-page /habits empty state uses Blankslate (habit-list-section).
         <div className={styles.habitsCard}>
           <Stack direction="vertical" align="center" gap="normal">
             <p style={{ color: 'var(--fgColor-muted)', textAlign: 'center', margin: 0 }}>

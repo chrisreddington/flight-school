@@ -111,26 +111,6 @@
   padding: var(--base-size-32);
 }
 
-.emptyIcon {
-  color: var(--fgColor-muted);
-  opacity: 0.5;
-  margin-bottom: var(--base-size-16);
-}
-
-.emptyTitle {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 var(--base-size-8) 0;
-  color: var(--fgColor-default);
-}
-
-.emptyDescription {
-  font-size: 14px;
-  color: var(--fgColor-muted);
-  max-width: 400px;
-  line-height: 1.5;
-}
-
 .inputArea {
   display: flex;
   flex-direction: row;
