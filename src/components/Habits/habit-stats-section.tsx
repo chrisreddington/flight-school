@@ -11,6 +11,7 @@
 import { FlameIcon, PlusIcon } from '@primer/octicons-react';
 import { Button } from '@primer/react';
 import styles from '@/app/habits/habits.module.css';
+import layoutStyles from '@/styles/two-column-layout.module.css';
 
 interface HabitStatsSectionProps {
   activeHabitsCount: number;
@@ -28,29 +29,29 @@ export function HabitStatsSection({
   onNewHabitClick,
 }: HabitStatsSectionProps) {
   return (
-    <div className={styles.sidebarCard}>
-      <div className={styles.sidebarHeader}>
-        <FlameIcon size={20} className={styles.sidebarIcon} />
-        <p className={styles.sidebarTitle}>Habit Tracker</p>
+    <div className={layoutStyles.sidebarCard}>
+      <div className={layoutStyles.sidebarHeader}>
+        <FlameIcon size={20} className={layoutStyles.sidebarIcon} />
+        <p className={layoutStyles.sidebarTitle}>Habit Tracker</p>
       </div>
-      <p className={styles.sidebarSubtitle}>Build lasting habits</p>
+      <p className={layoutStyles.sidebarSubtitle}>Build lasting habits</p>
 
-      <div className={styles.statsGrid}>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{activeHabitsCount}</span>
-          <span className={styles.statLabel}>Active</span>
+      <div className={layoutStyles.statsGrid}>
+        <div className={layoutStyles.statItem}>
+          <span className={layoutStyles.statValue}>{activeHabitsCount}</span>
+          <span className={layoutStyles.statLabel}>Active</span>
         </div>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{totalCheckIns}</span>
-          <span className={styles.statLabel}>Check-ins</span>
+        <div className={layoutStyles.statItem}>
+          <span className={layoutStyles.statValue}>{totalCheckIns}</span>
+          <span className={layoutStyles.statLabel}>Check-ins</span>
         </div>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{currentStreaks}</span>
-          <span className={styles.statLabel}>Streaks</span>
+        <div className={layoutStyles.statItem}>
+          <span className={layoutStyles.statValue}>{currentStreaks}</span>
+          <span className={layoutStyles.statLabel}>Streaks</span>
         </div>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{totalCompletions}</span>
-          <span className={styles.statLabel}>Completed</span>
+        <div className={layoutStyles.statItem}>
+          <span className={layoutStyles.statValue}>{totalCompletions}</span>
+          <span className={layoutStyles.statLabel}>Completed</span>
         </div>
       </div>
 

@@ -124,6 +124,31 @@
   font-size: var(--text-body-size-medium, 14px);
 }
 
+/* Lighten the top of the dashboard on phones: smaller greeting, tighter card
+   padding, and a trimmed outer gutter so content starts higher up. */
+@media (max-width: 767px) {
+  .main {
+    padding: var(--base-size-16, 16px);
+    gap: var(--base-size-16, 16px);
+  }
+
+  .card {
+    padding: var(--base-size-16, 16px);
+  }
+
+  .welcomeSection {
+    padding: 0;
+  }
+
+  .welcomeHeading {
+    font-size: var(--text-title-size-medium, 24px) !important;
+  }
+
+  .focusTabs {
+    margin-bottom: var(--base-size-16, 16px);
+  }
+}
+
 /* ============================================================================
    Daily Focus Section
    ============================================================================ */

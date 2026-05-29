@@ -1,9 +1,10 @@
 'use client';
 
 import type { RepoReference, Thread, ThreadContext } from '@/lib/threads/types';
-import { CopilotIcon } from '@primer/octicons-react';
-import { Heading } from '@primer/react';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { CopilotIcon, PlusIcon } from '@primer/octicons-react';
+import { Button, Dialog, Heading } from '@primer/react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { useSmoothedText } from '@/lib/chat/use-smoothed-text';
 import { ChatHeader } from './ChatHeader';
 import { ChatInput } from '../ChatInput';
@@ -11,6 +12,7 @@ import { MessageBubble } from '../MessageBubble';
 import { RepoSelector } from '../RepoSelector';
 import type { RepoOption } from '../RepoSelector/types';
 import { ThreadSidebar } from '../ThreadSidebar';
+import { ThreadList } from '../ThreadSidebar/ThreadList';
 import styles from './LearningChat.module.css';
 import { mergeStreamingMessage } from './streaming-display';
 import { useAutoScrollOnNewMessages } from './useAutoScrollOnNewMessages';
@@ -110,9 +112,27 @@ export const LearningChat = memo(function LearningChat({
   streamingToolEvents = [],
   userAvatarUrl,
 }: LearningChatProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Track pending repos when no thread is active yet
   const [pendingRepos, setPendingRepos] = useState<RepoReference[]>([]);
+
+  // Phone hides the inline sidebar (CSS) and surfaces threads in a drawer;
+  // tablet defaults the inline sidebar to its collapsed icon rail so the
+  // chat keeps usable width. Desktop shows the full sidebar.
+  const isPhone = useMediaQuery('(max-width: 767px)');
+  const isTablet = useMediaQuery('(min-width: 768px) and (max-width: 1011px)');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // `null` = follow the breakpoint default; once the user toggles, their
+  // choice wins so the breakpoint effect never fights them.
+  const [collapsedOverride, setCollapsedOverride] = useState<boolean | null>(null);
+  const sidebarCollapsed = collapsedOverride ?? isTablet;
+
+  // Close the drawer if the viewport grows past phone width, otherwise the
+  // overlay could linger alongside the now-visible inline sidebar.
+  useEffect(() => {
+    if (!isPhone && drawerOpen) {
+      setDrawerOpen(false);
+    }
+  }, [isPhone, drawerOpen]);
 
   // Get active thread's messages
   const activeThread = useMemo(() => threads.find((t) => t.id === activeThreadId) ?? null, [threads, activeThreadId]);
@@ -124,8 +144,21 @@ export const LearningChat = memo(function LearningChat({
   const titleEditing = useThreadTitleEditing(activeThread, activeThreadId, handlers.renameThread);
 
   const handleToggleSidebar = useCallback(() => {
-    setSidebarCollapsed((prev) => !prev);
-  }, []);
+    setCollapsedOverride((current) => !(current ?? isTablet));
+  }, [isTablet]);
+
+  const handleSelectThreadFromDrawer = useCallback(
+    (threadId: string | null) => {
+      handlers.selectThread(threadId);
+      setDrawerOpen(false);
+    },
+    [handlers],
+  );
+
+  const handleNewThreadFromDrawer = useCallback(() => {
+    handlers.createThread();
+    setDrawerOpen(false);
+  }, [handlers]);
 
   const handleRepoSelectionChange = useCallback(
     (repos: RepoReference[]) => {
@@ -195,22 +228,49 @@ export const LearningChat = memo(function LearningChat({
 
   return (
     <div className={styles.container}>
-      {/* Thread Sidebar */}
-      <ThreadSidebar
-        threads={threads}
-        activeThreadId={activeThreadId}
-        streamingThreadIds={streamingThreadIds}
-        isLoading={isThreadsLoading}
-        onSelectThread={handlers.selectThread}
-        onNewThread={handlers.createThread}
-        onDeleteThread={handlers.deleteThread}
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={handleToggleSidebar}
-      />
+      {/* Inline thread sidebar (hidden on phone via CSS; threads move to a drawer). */}
+      <div className={styles.inlineSidebar}>
+        <ThreadSidebar
+          threads={threads}
+          activeThreadId={activeThreadId}
+          streamingThreadIds={streamingThreadIds}
+          isLoading={isThreadsLoading}
+          onSelectThread={handlers.selectThread}
+          onNewThread={handlers.createThread}
+          onDeleteThread={handlers.deleteThread}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={handleToggleSidebar}
+        />
+      </div>
+
+      {/* Conversations drawer (phone only). */}
+      {drawerOpen && (
+        <Dialog title="Conversations" position={{ narrow: 'left' }} width="small" onClose={() => setDrawerOpen(false)}>
+          <div className={styles.drawerActions}>
+            <Button variant="primary" leadingVisual={PlusIcon} block onClick={handleNewThreadFromDrawer}>
+              New conversation
+            </Button>
+          </div>
+          <ThreadList
+            threads={threads}
+            activeThreadId={activeThreadId}
+            streamingThreadIds={streamingThreadIds}
+            isLoading={isThreadsLoading}
+            onSelectThread={handleSelectThreadFromDrawer}
+            onNewThread={handleNewThreadFromDrawer}
+            onDeleteThread={handlers.deleteThread}
+          />
+        </Dialog>
+      )}
 
       {/* Main Chat Area */}
       <div className={styles.chatArea}>
-        <ChatHeader activeThread={activeThread} titleEditing={titleEditing} />
+        <ChatHeader
+          activeThread={activeThread}
+          titleEditing={titleEditing}
+          onOpenThreads={() => setDrawerOpen(true)}
+          isThreadsOpen={drawerOpen}
+        />
 
         {/* Messages */}
         <div className={styles.messagesContainer} role="log" aria-label="Chat messages">

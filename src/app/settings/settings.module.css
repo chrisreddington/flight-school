@@ -1,11 +1,29 @@
 .main {
-  max-width: 720px;
+  max-width: 768px;
   margin: 0 auto;
   padding: var(--base-size-32, 32px) var(--base-size-16, 16px);
 }
 
-.pageHeading {
+.pageHeader {
   margin-bottom: var(--base-size-24, 24px);
+  padding-bottom: var(--base-size-16, 16px);
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+}
+
+.pageHeading {
+  margin: 0 0 var(--base-size-4, 4px) 0;
+}
+
+.pageSubtitle {
+  color: var(--fgColor-muted, #656d76);
+  margin: 0;
+}
+
+.card {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-24, 24px);
 }
 
 .sectionHeading {

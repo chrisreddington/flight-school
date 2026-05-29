@@ -9,6 +9,24 @@
   border-bottom: 1px solid var(--borderColor-default, #d0d7de);
 }
 
+/* Left group must be able to shrink so the avatar never wraps below the logo
+   and the breadcrumb truncates instead of pushing the row onto two lines. */
+.leftGroup {
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .header {
+    padding: var(--base-size-12, 12px) var(--base-size-16, 16px);
+  }
+
+  /* Marketing badge is non-essential chrome on small screens. */
+  .sdkBadgeLink {
+    display: none;
+  }
+}
+
 .logoLink {
   text-decoration: none;
   color: inherit;

@@ -233,132 +233,151 @@ export const MessageBubble = memo(function MessageBubble({
         ? `${runningCount} tool${runningCount === 1 ? '' : 's'} running`
         : `${completeCount} tool${completeCount === 1 ? '' : 's'} completed`;
 
+  const avatar = (
+    <div className={styles.avatar}>
+      {isUser ? (
+        userAvatarUrl ? (
+          <Avatar src={userAvatarUrl} size={32} alt="You" />
+        ) : (
+          <div className={styles.defaultAvatar}>
+            <PersonIcon size={16} />
+          </div>
+        )
+      ) : (
+        <div className={styles.copilotAvatar}>
+          <CopilotIcon size={16} />
+        </div>
+      )}
+    </div>
+  );
+
+  const messageContent = (
+    <div className={styles.content}>
+      {/* Header */}
+      <Stack
+        direction="horizontal"
+        align="center"
+        gap="condensed"
+        className={`${styles.header} ${isUser ? styles.headerUser : ''}`}
+      >
+        <span className={styles.role}>{isUser ? 'You' : 'Copilot'}</span>
+        <RelativeTime date={new Date(message.timestamp)} className={styles.timestamp} />
+        {hasActionable && isAssistant && !isError && (
+          <Label variant="attention" size="small">
+            <Stack direction="horizontal" align="center" gap="condensed">
+              <LightBulbIcon size={12} />
+              <span>Actionable</span>
+            </Stack>
+          </Label>
+        )}
+      </Stack>
+
+      {/* Tool event timeline — surfaced to all users, not just debug mode. */}
+      {resolvedToolEvents.length > 0 && (
+        <div className={styles.toolEvents}>
+          <ul data-testid="tool-event-list" className={styles.toolEventList} aria-label="Tool calls">
+            {resolvedToolEvents.map((event) => (
+              <ToolEventRow key={event.id} event={event} showDetails={isDebugMode} />
+            ))}
+          </ul>
+          <span className={styles.srOnly} role="status" aria-live="polite">
+            {liveRegionText}
+          </span>
+        </div>
+      )}
+
+      {/* Body */}
+      {isError ? (
+        <Banner variant="critical" title="Error" hideTitle className={styles.errorBanner}>
+          {displayContent}
+        </Banner>
+      ) : isStreaming && !displayContent ? (
+        <div className={styles.loadingState} role="status" aria-live="polite" aria-label="Loading response">
+          <SkeletonBox height="3em" />
+        </div>
+      ) : displayContent ? (
+        <div
+          className={styles.messageContent}
+          role={isStreaming ? 'status' : undefined}
+          aria-live={isStreaming ? 'polite' : undefined}
+          aria-label={isStreaming ? 'Streaming response' : undefined}
+        >
+          {learningSections ? (
+            <div className={styles.learningLayout}>
+              <MarkdownContent content={learningSections.tldr} />
+              <details className={styles.deepDiveDisclosure} data-testid="learning-deep-dive">
+                <summary className={styles.deepDiveSummary}>Show deep dive</summary>
+                <div className={styles.deepDiveBody}>
+                  <MarkdownContent content={learningSections.deepDive ?? ''} />
+                </div>
+              </details>
+              {learningSections.followUps.length > 0 && onFollowUpSelect && (
+                <div className={styles.followUpSection}>
+                  <p className={styles.followUpLabel}>Follow-up questions</p>
+                  <div className={styles.followUpChipList}>
+                    {learningSections.followUps.map((followUp) => (
+                      <Button
+                        key={followUp}
+                        size="small"
+                        variant="default"
+                        className={styles.followUpChip}
+                        onClick={() => onFollowUpSelect(followUp)}
+                      >
+                        {followUp}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <MarkdownContent content={displayContent} />
+          )}
+        </div>
+      ) : null}
+
+      {/* Performance metrics - STANDARDIZED ORDER: conversation, server→client TTFT flow, total, model, MCP */}
+      {isDebugMode && isAssistant && message.perf && !isStreaming && (
+        <div className={styles.perfMetrics}>
+          {/* 1. Conversation state (shows session creation overhead) */}
+          {message.perf.sessionPoolHit !== undefined && (
+            <ConversationBadge
+              reused={message.perf.sessionPoolHit}
+              createTimeMs={message.perf.sessionPoolHit ? undefined : (message.perf.sessionCreateMs ?? undefined)}
+            />
+          )}
+          {/* 2. TTFT - Server→Client flow (server time INCLUDES session creation) */}
+          <TtftBadges
+            serverMs={message.perf.serverFirstTokenMs ?? undefined}
+            clientMs={message.perf.clientFirstTokenMs}
+          />
+          {/* 3. Total time (end-to-end completion) */}
+          {message.perf.clientTotalMs !== undefined && (
+            <StatusBadge variant="info">Total: {message.perf.clientTotalMs}ms</StatusBadge>
+          )}
+          {/* 4. Model (metadata) */}
+          {message.perf.model && <ModelBadge model={message.perf.model} />}
+          {/* 5. MCP tools (feature indicator) */}
+          {message.perf.mcpEnabled && <McpToolsBadge />}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.assistantBubble}`}>
       <Stack direction="horizontal" gap="condensed" align="start">
-        {/* Avatar */}
-        <div className={styles.avatar}>
-          {isUser ? (
-            userAvatarUrl ? (
-              <Avatar src={userAvatarUrl} size={32} alt="You" />
-            ) : (
-              <div className={styles.defaultAvatar}>
-                <PersonIcon size={16} />
-              </div>
-            )
-          ) : (
-            <div className={styles.copilotAvatar}>
-              <CopilotIcon size={16} />
-            </div>
-          )}
-        </div>
-
-        {/* Message Content */}
-        <div className={styles.content}>
-          {/* Header */}
-          <Stack direction="horizontal" align="center" gap="condensed" className={styles.header}>
-            <span className={styles.role}>{isUser ? 'You' : 'Copilot'}</span>
-            <RelativeTime date={new Date(message.timestamp)} className={styles.timestamp} />
-            {hasActionable && isAssistant && !isError && (
-              <Label variant="attention" size="small">
-                <Stack direction="horizontal" align="center" gap="condensed">
-                  <LightBulbIcon size={12} />
-                  <span>Actionable</span>
-                </Stack>
-              </Label>
-            )}
-          </Stack>
-
-          {/* Tool event timeline — surfaced to all users, not just debug mode. */}
-          {resolvedToolEvents.length > 0 && (
-            <div className={styles.toolEvents}>
-              <ul data-testid="tool-event-list" className={styles.toolEventList} aria-label="Tool calls">
-                {resolvedToolEvents.map((event) => (
-                  <ToolEventRow key={event.id} event={event} showDetails={isDebugMode} />
-                ))}
-              </ul>
-              <span className={styles.srOnly} role="status" aria-live="polite">
-                {liveRegionText}
-              </span>
-            </div>
-          )}
-
-          {/* Body */}
-          {isError ? (
-            <Banner variant="critical" title="Error" hideTitle className={styles.errorBanner}>
-              {displayContent}
-            </Banner>
-          ) : isStreaming && !displayContent ? (
-            <div className={styles.loadingState} role="status" aria-live="polite" aria-label="Loading response">
-              <SkeletonBox height="3em" />
-            </div>
-          ) : displayContent ? (
-            <div
-              className={styles.messageContent}
-              role={isStreaming ? 'status' : undefined}
-              aria-live={isStreaming ? 'polite' : undefined}
-              aria-label={isStreaming ? 'Streaming response' : undefined}
-            >
-              {learningSections ? (
-                <div className={styles.learningLayout}>
-                  <MarkdownContent content={learningSections.tldr} />
-                  <details className={styles.deepDiveDisclosure} data-testid="learning-deep-dive">
-                    <summary className={styles.deepDiveSummary}>Show deep dive</summary>
-                    <div className={styles.deepDiveBody}>
-                      <MarkdownContent content={learningSections.deepDive ?? ''} />
-                    </div>
-                  </details>
-                  {learningSections.followUps.length > 0 && onFollowUpSelect && (
-                    <div className={styles.followUpSection}>
-                      <p className={styles.followUpLabel}>Follow-up questions</p>
-                      <div className={styles.followUpChipList}>
-                        {learningSections.followUps.map((followUp) => (
-                          <Button
-                            key={followUp}
-                            size="small"
-                            variant="default"
-                            className={styles.followUpChip}
-                            onClick={() => onFollowUpSelect(followUp)}
-                          >
-                            {followUp}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <MarkdownContent content={displayContent} />
-              )}
-            </div>
-          ) : null}
-
-          {/* Performance metrics - STANDARDIZED ORDER: conversation, server→client TTFT flow, total, model, MCP */}
-          {isDebugMode && isAssistant && message.perf && !isStreaming && (
-            <div className={styles.perfMetrics}>
-              {/* 1. Conversation state (shows session creation overhead) */}
-              {message.perf.sessionPoolHit !== undefined && (
-                <ConversationBadge
-                  reused={message.perf.sessionPoolHit}
-                  createTimeMs={message.perf.sessionPoolHit ? undefined : (message.perf.sessionCreateMs ?? undefined)}
-                />
-              )}
-              {/* 2. TTFT - Server→Client flow (server time INCLUDES session creation) */}
-              <TtftBadges
-                serverMs={message.perf.serverFirstTokenMs ?? undefined}
-                clientMs={message.perf.clientFirstTokenMs}
-              />
-              {/* 3. Total time (end-to-end completion) */}
-              {message.perf.clientTotalMs !== undefined && (
-                <StatusBadge variant="info">Total: {message.perf.clientTotalMs}ms</StatusBadge>
-              )}
-              {/* 4. Model (metadata) */}
-              {message.perf.model && <ModelBadge model={message.perf.model} />}
-              {/* 5. MCP tools (feature indicator) */}
-              {message.perf.mcpEnabled && <McpToolsBadge />}
-            </div>
-          )}
-        </div>
+        {isUser ? (
+          <>
+            {messageContent}
+            {avatar}
+          </>
+        ) : (
+          <>
+            {avatar}
+            {messageContent}
+          </>
+        )}
       </Stack>
     </div>
   );

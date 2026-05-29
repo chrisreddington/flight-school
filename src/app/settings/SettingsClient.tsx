@@ -1,7 +1,9 @@
 'use client';
 
 import { DeleteMyDataDialog } from '@/components/DeleteMyDataDialog/DeleteMyDataDialog';
-import { Button, Heading, Stack, Text } from '@primer/react';
+import { useBreadcrumb } from '@/contexts/breadcrumb-context';
+import { clearAllLocalData } from '@/lib/storage/clear-local-data';
+import { Banner, Button, Heading, Stack, Text } from '@primer/react';
 import { TrashIcon } from '@primer/octicons-react';
 import { useCallback, useState } from 'react';
 
@@ -13,22 +15,56 @@ interface SettingsClientProps {
 }
 
 /**
- * Client portion of the Settings page. Owns the modal state and the
- * post-deletion sign-out hop. The server page component
- * (`page.tsx`) resolves the authenticated identity and passes the
- * GitHub login down so the modal can enforce typed-confirmation.
+ * Client portion of the Settings page. Hosts the two destructive data
+ * actions: a server-side account wipe (typed-confirmation dialog) and a
+ * device-local reset (inline critical banner). The server page component
+ * (`page.tsx`) resolves the authenticated identity and passes the GitHub
+ * login down so the account-deletion modal can enforce typed-confirmation.
  */
 export function SettingsClient({ login }: SettingsClientProps) {
+  useBreadcrumb('/settings', 'Settings', '/settings');
+
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [showLocalResetConfirm, setShowLocalResetConfirm] = useState(false);
 
   const onConfirmed = useCallback(async () => {
     setDialogOpen(false);
     await signOutAction();
   }, []);
 
+  const onResetLocalData = useCallback(async () => {
+    await clearAllLocalData();
+    window.location.href = '/';
+  }, []);
+
   return (
     <Stack direction="vertical" gap="spacious">
-      <section>
+      <section className={styles.card}>
+        <Heading as="h2" className={styles.sectionHeading}>
+          Reset app data on this device
+        </Heading>
+        <Text as="p" className={styles.sectionLead}>
+          Clears locally stored skills, focus history, chat threads, workspaces, habits, and the challenge queue from
+          this browser. Your account and server-side history are kept — re-syncing restores detected skills.
+        </Text>
+        {showLocalResetConfirm ? (
+          <Banner
+            variant="critical"
+            title="Reset local data?"
+            description="This clears Flight School data stored in this browser. It can't be undone here."
+            primaryAction={<Banner.PrimaryAction onClick={onResetLocalData}>Reset app data</Banner.PrimaryAction>}
+            secondaryAction={
+              <Banner.SecondaryAction onClick={() => setShowLocalResetConfirm(false)}>Cancel</Banner.SecondaryAction>
+            }
+          />
+        ) : (
+          <Button variant="danger" leadingVisual={TrashIcon} onClick={() => setShowLocalResetConfirm(true)}>
+            Reset app data
+          </Button>
+        )}
+      </section>
+
+      <section className={styles.card}>
         <Heading as="h2" className={styles.sectionHeading}>
           Privacy &amp; data
         </Heading>

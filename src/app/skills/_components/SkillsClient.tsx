@@ -40,11 +40,9 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
     handleCalibrationChange,
     handleSkillChange,
     handleRemoveSkill,
-    handleClearAllData,
   } = useSkillsProfile({ initialProfile });
 
   const [showAddForm, setShowAddForm] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useBreadcrumb('/skills', 'Skills', '/skills');
 
@@ -70,13 +68,7 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
 
   return (
     <main className={layoutStyles.main}>
-      <SkillsSidebar
-        profile={profile}
-        showResetConfirm={showResetConfirm}
-        onResetConfirmChange={setShowResetConfirm}
-        onClearAllData={handleClearAllData}
-        onAddLearningPathSkill={handleAddLearningPathSkill}
-      />
+      <SkillsSidebar profile={profile} onAddLearningPathSkill={handleAddLearningPathSkill} />
 
       <div className={styles.content}>
         {loadError && <Banner title="Failed to load skill profile" description={loadError} variant="critical" />}

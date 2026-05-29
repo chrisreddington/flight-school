@@ -40,14 +40,19 @@ export function SkillsList({ profile, onSkillChange, onRemoveSkill }: SkillsList
     <Stack direction="vertical" gap="normal" className={styles.skillsList}>
       {profile?.skills.map((skill) => (
         <div key={skill.skillId} className={styles.skillCard}>
-          <Stack direction="horizontal" align="start" justify="space-between" gap="normal">
+          <Stack
+            direction={{ narrow: 'vertical', regular: 'horizontal' }}
+            align="start"
+            justify="space-between"
+            gap="normal"
+          >
             <div className={styles.skillInfo}>
               <span className={styles.skillName}>{skill.displayName || skill.skillId}</span>
               <span className={styles.skillSource}>
                 {SKILL_SOURCE_LABELS[skill.source as SkillSource] || skill.source}
               </span>
             </div>
-            <Stack direction="horizontal" align="start" gap="condensed">
+            <Stack direction="horizontal" align="start" gap="condensed" className={styles.skillControls}>
               <SkillSlider
                 skillId={skill.skillId}
                 skillName={skill.displayName || skill.skillId}

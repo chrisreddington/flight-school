@@ -122,6 +122,18 @@
   gap: var(--base-size-4, 4px);
 }
 
+/* Slider + remove button group. Must be able to shrink (and go full-width when
+   the card stacks vertically on mobile) so the slider never overflows. */
+.skillControls {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .skillControls {
+    width: 100%;
+  }
+}
+
 .skillName {
   font-weight: var(--base-text-weight-medium, 500);
   font-size: var(--text-body-size-medium, 14px);
@@ -149,29 +161,4 @@
   font-size: var(--text-body-size-small, 12px);
   color: var(--fgColor-muted, #656d76);
   margin: 0;
-}
-
-/* Danger Zone */
-.dangerZone {
-  margin-top: var(--base-size-24, 24px);
-  padding: var(--base-size-16, 16px);
-  border: 1px solid var(--borderColor-danger-muted, #ff818266);
-  border-radius: var(--borderRadius-medium, 6px);
-  background-color: var(--bgColor-danger-muted, #ffebe9);
-}
-
-.dangerTitle {
-  display: flex;
-  align-items: center;
-  gap: var(--base-size-8, 8px);
-  font-size: var(--text-body-size-medium, 14px);
-  font-weight: var(--base-text-weight-semibold, 600);
-  margin: 0 0 var(--base-size-8, 8px) 0;
-  color: var(--fgColor-danger, #cf222e);
-}
-
-.dangerDescription {
-  font-size: var(--text-body-size-small, 12px);
-  color: var(--fgColor-default, #1f2328);
-  margin: 0 0 var(--base-size-12, 12px) 0;
 }

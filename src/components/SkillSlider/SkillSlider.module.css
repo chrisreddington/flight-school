@@ -8,7 +8,8 @@
   background-color: var(--bgColor-default, #ffffff);
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: var(--borderRadius-medium, 6px);
-  min-width: 280px;
+  min-width: min(280px, 100%);
+  flex: 1;
   transition: opacity 150ms ease-in-out;
 }
 

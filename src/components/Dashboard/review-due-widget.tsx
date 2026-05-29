@@ -1,6 +1,7 @@
 'use client';
 
 import { Banner, Button, Label, Stack } from '@primer/react';
+import { BookIcon } from '@primer/octicons-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { TopicQuiz } from '@/components/TopicQuiz';
@@ -108,7 +109,10 @@ export function ReviewDueWidget() {
     return (
       <section className={styles.card}>
         <header className={styles.header}>
-          <h3 className={styles.title}>📚 Spaced Review</h3>
+          <h3 className={styles.title}>
+            <BookIcon size={16} className={styles.titleIcon} />
+            Spaced Review
+          </h3>
           <p className={styles.subtitle}>You&apos;re all caught up! Topics will appear here when due for review.</p>
         </header>
       </section>
@@ -119,7 +123,10 @@ export function ReviewDueWidget() {
     <>
       <section className={styles.card}>
         <header className={styles.header}>
-          <h3 className={styles.title}>📚 Review Due</h3>
+          <h3 className={styles.title}>
+            <BookIcon size={16} className={styles.titleIcon} />
+            Review Due
+          </h3>
           <p className={styles.subtitle}>Topics to revisit for better retention</p>
         </header>
 

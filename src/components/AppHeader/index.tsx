@@ -24,6 +24,7 @@ import {
   ChevronRightIcon,
   CopilotIcon,
   FlameIcon,
+  GearIcon,
   HistoryIcon,
   HomeIcon,
   MortarBoardIcon,
@@ -53,9 +54,9 @@ export function AppHeader() {
 
   return (
     <header className={styles.header}>
-      <Stack direction="horizontal" align="center" justify="space-between" wrap="wrap" gap="normal">
+      <Stack direction="horizontal" align="center" justify="space-between" wrap="nowrap" gap="normal">
         {/* Left side: Logo + Breadcrumbs */}
-        <Stack direction="horizontal" align="center" gap="condensed">
+        <Stack direction="horizontal" align="center" gap="condensed" className={styles.leftGroup}>
           <Link href="/" className={styles.logoLink}>
             <Stack direction="horizontal" align="center" gap="condensed">
               <span className={styles.logoIcon}>
@@ -163,6 +164,14 @@ export function AppHeader() {
                     <ActionList.Description>View past learning items</ActionList.Description>
                   </ActionList.LinkItem>
                 </ActionList.Group>
+                <ActionList.Divider />
+                <ActionList.LinkItem href="/settings">
+                  <ActionList.LeadingVisual>
+                    <GearIcon />
+                  </ActionList.LeadingVisual>
+                  Settings
+                  <ActionList.Description>Privacy &amp; account data</ActionList.Description>
+                </ActionList.LinkItem>
                 <ActionList.Divider />
                 <ActionList.LinkItem
                   href="https://github.com/chrisreddington/flight-school"
