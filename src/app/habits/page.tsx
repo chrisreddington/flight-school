@@ -12,7 +12,6 @@ import { AppHeader } from '@/components/AppHeader';
 import { readUserHabits } from '@/lib/habits/server';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { requireGuardedRscContext } from '@/lib/security/guard';
-import layoutStyles from '@/styles/two-column-layout.module.css';
 
 import { HabitsClient } from './_components/HabitsClient';
 
@@ -36,9 +35,9 @@ export default async function HabitsPage() {
   const { active, completed, abandoned } = partitionByState(collection.habits);
 
   return (
-    <div className={layoutStyles.root}>
+    <>
       <AppHeader />
       <HabitsClient initialActive={active} initialCompleted={completed} initialAbandoned={abandoned} />
-    </div>
+    </>
   );
 }

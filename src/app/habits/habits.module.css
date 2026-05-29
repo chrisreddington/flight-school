@@ -1,3 +1,66 @@
+/* Page layout wrapper — inset background to match the app shell */
+.layout {
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+/* Sidebar cards (relocated from the retired shared two-column layout module) */
+.sidebarCard {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-20, 20px);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.sidebarIcon {
+  color: var(--fgColor-accent, #0969da);
+}
+
+.sidebarTitle {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.sidebarSubtitle {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--base-size-12, 12px);
+}
+
+.statItem {
+  text-align: center;
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.statValue {
+  display: block;
+  font-size: var(--text-title-size-medium, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: 1.25;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.statLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+}
+
 /* Tip card in sidebar */
 .tipCard {
   background-color: var(--bgColor-accent-muted, #ddf4ff);
@@ -16,20 +79,6 @@
   color: var(--fgColor-default, #1f2328);
   margin: 0;
   line-height: 1.5;
-}
-
-/* Main content area */
-.content {
-  background-color: var(--bgColor-default, #ffffff);
-  border: 1px solid var(--borderColor-default, #d0d7de);
-  border-radius: var(--borderRadius-medium, 6px);
-  padding: var(--base-size-24, 24px);
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.header {
-  margin-bottom: var(--base-size-24, 24px);
 }
 
 .headerActions {

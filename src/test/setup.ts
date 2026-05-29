@@ -39,6 +39,23 @@ if (typeof window !== 'undefined') {
       set: () => undefined,
     });
   }
+
+  // Primer's SplitPageLayout.Pane uses ResizeObserver (via useOverflow) to
+  // toggle scroll affordances. jsdom doesn't implement it, so provide a no-op
+  // stub — layout tests assert on structure, not measured overflow.
+  if (!('ResizeObserver' in window)) {
+    class ResizeObserverStub {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      configurable: true,
+      value: ResizeObserverStub,
+    });
+    globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  }
 }
 
 // Reset mocks between tests

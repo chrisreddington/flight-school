@@ -1,0 +1,76 @@
+.card {
+  background: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-16);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-4);
+  margin-block-end: var(--base-size-12);
+}
+
+.title {
+  font-weight: var(--base-text-weight-semibold);
+}
+
+.subtitle,
+.emptyMessage,
+.legendLabel {
+  color: var(--fgColor-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 11px);
+  gap: 3px;
+  justify-content: start;
+  padding-block: var(--base-size-4);
+}
+
+.dayCell,
+.legendSwatch {
+  block-size: 11px;
+  border-radius: 2px;
+  inline-size: 11px;
+}
+
+.dayCell {
+  border: 0;
+  padding: 0;
+}
+
+.legend {
+  align-items: center;
+  display: flex;
+  gap: var(--base-size-4);
+  justify-content: flex-end;
+  margin-block-start: var(--base-size-8);
+}
+
+.emptyMessage {
+  display: block;
+  margin-block-start: var(--base-size-8);
+}
+
+.level0 {
+  background: var(--bgColor-neutral-muted);
+}
+
+.level1 {
+  background: var(--bgColor-success-muted);
+}
+
+.level2 {
+  background: var(--bgColor-success-subtle);
+}
+
+.level3 {
+  background: var(--bgColor-success-emphasis);
+}
+
+.level4 {
+  background: var(--fgColor-success);
+}
