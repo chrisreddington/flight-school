@@ -15,7 +15,6 @@ import { CodeIcon, MortarBoardIcon } from '@primer/octicons-react';
 import { Link, Stack } from '@primer/react';
 
 import styles from '../profile-skills.module.css';
-import layoutStyles from '@/styles/two-column-layout.module.css';
 
 interface SkillsSidebarProps {
   profile: SkillProfile;
@@ -33,49 +32,49 @@ export function SkillsSidebar({ profile, onAddLearningPathSkill }: SkillsSidebar
   const beginnerSkills = profile?.skills.filter((s) => s.level === 'beginner').length || 0;
 
   return (
-    <aside className={layoutStyles.sidebar}>
+    <Stack direction="vertical" gap="normal">
       <ProfileNav />
 
-      <div className={layoutStyles.sidebarCard}>
-        <div className={layoutStyles.sidebarHeader}>
-          <MortarBoardIcon size={20} className={layoutStyles.sidebarIcon} />
-          <p className={layoutStyles.sidebarTitle}>Skill Profile</p>
+      <div className={styles.sidebarCard}>
+        <div className={styles.sidebarHeader}>
+          <MortarBoardIcon size={20} className={styles.sidebarIcon} />
+          <p className={styles.sidebarTitle}>Skill Profile</p>
         </div>
-        <p className={layoutStyles.sidebarSubtitle}>Your learning journey</p>
-        <p className={layoutStyles.sidebarSubtitle}>
+        <p className={styles.sidebarSubtitle}>Your learning journey</p>
+        <p className={styles.sidebarSubtitle}>
           {confirmedSkills} confirmed · <Link href="#skill-suggestions-panel">{detectedSkills} detected</Link>
         </p>
 
-        <div className={layoutStyles.statsGrid}>
-          <div className={layoutStyles.statItem}>
-            <span className={layoutStyles.statValue}>{confirmedSkills}</span>
-            <span className={layoutStyles.statLabel}>Confirmed</span>
+        <div className={styles.statsGrid}>
+          <div className={styles.statItem}>
+            <span className={styles.statValue}>{confirmedSkills}</span>
+            <span className={styles.statLabel}>Confirmed</span>
           </div>
-          <div className={layoutStyles.statItem}>
-            <span className={layoutStyles.statValue}>{detectedSkills}</span>
-            <span className={layoutStyles.statLabel}>Detected</span>
+          <div className={styles.statItem}>
+            <span className={styles.statValue}>{detectedSkills}</span>
+            <span className={styles.statLabel}>Detected</span>
           </div>
-          <div className={layoutStyles.statItem}>
-            <span className={layoutStyles.statValue}>{advancedSkills}</span>
-            <span className={layoutStyles.statLabel}>Advanced</span>
+          <div className={styles.statItem}>
+            <span className={styles.statValue}>{advancedSkills}</span>
+            <span className={styles.statLabel}>Advanced</span>
           </div>
-          <div className={layoutStyles.statItem}>
-            <span className={layoutStyles.statValue}>{intermediateSkills}</span>
-            <span className={layoutStyles.statLabel}>Intermediate</span>
+          <div className={styles.statItem}>
+            <span className={styles.statValue}>{intermediateSkills}</span>
+            <span className={styles.statLabel}>Intermediate</span>
           </div>
-          <div className={layoutStyles.statItem}>
-            <span className={layoutStyles.statValue}>{beginnerSkills}</span>
-            <span className={layoutStyles.statLabel}>Beginner</span>
+          <div className={styles.statItem}>
+            <span className={styles.statValue}>{beginnerSkills}</span>
+            <span className={styles.statLabel}>Beginner</span>
           </div>
         </div>
       </div>
 
       <LearningPathPanel profile={profile} onAddSkill={onAddLearningPathSkill} />
 
-      <div className={layoutStyles.sidebarCard}>
-        <div className={layoutStyles.sidebarHeader}>
-          <CodeIcon size={20} className={layoutStyles.sidebarIcon} />
-          <p className={layoutStyles.sidebarTitle}>Skill Levels</p>
+      <div className={styles.sidebarCard}>
+        <div className={styles.sidebarHeader}>
+          <CodeIcon size={20} className={styles.sidebarIcon} />
+          <p className={styles.sidebarTitle}>Skill Levels</p>
         </div>
         <Stack direction="vertical" gap="condensed">
           {(['beginner', 'intermediate', 'advanced'] as SkillLevel[]).map((level) => (
@@ -90,6 +89,6 @@ export function SkillsSidebar({ profile, onAddLearningPathSkill }: SkillsSidebar
           </div>
         </Stack>
       </div>
-    </aside>
+    </Stack>
   );
 }

@@ -1,15 +1,15 @@
 'use client';
 
 import { InfoIcon, PlusIcon } from '@primer/octicons-react';
-import { Banner, Button, Heading, Spinner, Stack } from '@primer/react';
+import { Banner, Button, Spinner, SplitPageLayout, Stack } from '@primer/react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
 import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
+import { PageHeader } from '@/components/PageHeader';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import type { SkillProfile } from '@/lib/skills/types';
 import { formatDate } from '@/lib/utils/date-utils';
-import layoutStyles from '@/styles/two-column-layout.module.css';
 
 import { AddSkillForm } from './AddSkillForm';
 import styles from '../profile-skills.module.css';
@@ -67,27 +67,24 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
   );
 
   return (
-    <main className={layoutStyles.main}>
-      <SkillsSidebar profile={profile} onAddLearningPathSkill={handleAddLearningPathSkill} />
+    <SplitPageLayout className={styles.layout}>
+      <SplitPageLayout.Pane position={{ regular: 'start', narrow: 'end' }} aria-label="Skill profile sidebar">
+        <SkillsSidebar profile={profile} onAddLearningPathSkill={handleAddLearningPathSkill} />
+      </SplitPageLayout.Pane>
 
-      <div className={styles.content}>
-        {loadError && <Banner title="Failed to load skill profile" description={loadError} variant="critical" />}
+      <SplitPageLayout.Content>
+        <PageHeader
+          title="Your Skills"
+          description="Calibrate your skill levels for personalized learning recommendations."
+          actions={
+            <Button variant="primary" leadingVisual={PlusIcon} onClick={() => setShowAddForm(true)}>
+              Add Skill
+            </Button>
+          }
+        />
+
         <Stack direction="vertical" gap="normal">
-          <div className={styles.pageHeader}>
-            <Stack direction="horizontal" align="center" justify="space-between">
-              <div>
-                <Heading as="h1" className={styles.pageTitle}>
-                  Your Skills
-                </Heading>
-                <p className={styles.pageDescription}>
-                  Calibrate your skill levels for personalized learning recommendations.
-                </p>
-              </div>
-              <Button variant="primary" leadingVisual={PlusIcon} onClick={() => setShowAddForm(true)}>
-                Add Skill
-              </Button>
-            </Stack>
-          </div>
+          {loadError && <Banner title="Failed to load skill profile" description={loadError} variant="critical" />}
 
           {actionError && (
             <Banner
@@ -137,7 +134,7 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
             </div>
           )}
         </Stack>
-      </div>
-    </main>
+      </SplitPageLayout.Content>
+    </SplitPageLayout>
   );
 }

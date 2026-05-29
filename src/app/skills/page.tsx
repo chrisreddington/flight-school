@@ -12,7 +12,6 @@ import { redirect } from 'next/navigation';
 import { AppHeader } from '@/components/AppHeader';
 import { requireGuardedRscContext } from '@/lib/security/guard';
 import { readUserSkillsProfile } from '@/lib/skills/server';
-import layoutStyles from '@/styles/two-column-layout.module.css';
 
 import { SkillsClient } from './_components/SkillsClient';
 
@@ -23,9 +22,9 @@ export default async function SkillProfilePage() {
   const initialProfile = await readUserSkillsProfile();
 
   return (
-    <div className={layoutStyles.root}>
+    <>
       <AppHeader />
       <SkillsClient initialProfile={initialProfile} />
-    </div>
+    </>
   );
 }
