@@ -55,9 +55,9 @@ that matter for a learning/dashboard/AI product like Flight School, grouped
 by the job you're doing. Full index: https://primer.style/product/components.
 
 ### Page scaffolding & navigation
-- [`PageLayout`](https://primer.style/product/components/page-layout) — header / main / pane / footer regions; provides responsive primitives (`hidden`, responsive `position`, `responsiveVariant="fullscreen"` for the sidebar) so you don't hand-roll a CSS grid like `two-column-layout` — but you still choose and **test** the narrow-viewport behavior.
-- [`SplitPageLayout`](https://primer.style/product/components/split-page-layout) — two-column main + sidebar (settings, skills).
-- [`PageHeader`](https://primer.style/product/components/page-header) — consistent page titles, context actions, back-link. Use on every top-level page.
+- [`SplitPageLayout`](https://primer.style/product/components/split-page-layout) — **the standard shell for every top-level page** (dashboard, skills, habits, settings, history). It provides the responsive `.Pane` + `.Content` split (collapses to stacked on narrow viewports via `position={{ regular, narrow }}`), so we never hand-roll a CSS grid. The previous `two-column-layout.module.css` grid has been removed — do not reintroduce a bespoke layout grid.
+- [`PageLayout`](https://primer.style/product/components/page-layout) — the header / main / pane / footer variant; reach for it only if you need a footer region `SplitPageLayout` doesn't cover.
+- [`PageHeader`](https://primer.style/product/components/page-header) — consistent page titles, context actions, back-link. **Every top-level page renders the shared `src/components/PageHeader` wrapper** inside `SplitPageLayout.Content`; don't compose a one-off title block.
 - [`Breadcrumbs`](https://primer.style/product/components/breadcrumbs) — hierarchy/location (the app already has a breadcrumb context).
 - [`NavList`](https://primer.style/product/components/nav-list) — vertical nav (sidebar sections, settings nav).
 - [`UnderlineNav`](https://primer.style/product/components/underline-nav) — horizontal page-level tabbed nav.
@@ -66,7 +66,7 @@ by the job you're doing. Full index: https://primer.style/product/components.
 
 ### Containers & content
 - [`Card`](https://primer.style/product/components/card) — the workhorse for dashboard tiles, skill cards, focus cards.
-- [`Blankslate`](https://primer.style/product/components/blankslate) — **the canonical empty state** (no skills yet, no habits, no history). Use it; don't invent empties.
+- [`Blankslate`](https://primer.style/product/components/blankslate) — **the canonical empty state for full-region no-data** (no skills yet, no habits, no history, the empty chat onboarding). Use it; don't invent empties. *Exception:* constrained spaces (dropdowns, narrow sidebars/side-panels) and compact dashboard cards keep a lightweight inline empty state instead of a heavy Blankslate — document the exception inline. `Banner` is for errors/degraded notices, never for empties.
 - [`Timeline`](https://primer.style/product/components/timeline) — learning history, activity feeds.
 - [`TreeView`](https://primer.style/product/components/tree-view) — file manager in the challenge sandbox.
 - [`Details`](https://primer.style/product/components/details) / progressive disclosure — collapsible hints, explanations.
@@ -279,12 +279,16 @@ Primer breakpoint tokens (use these, don't invent pixel queries):
 Rules:
 
 - **No fixed pixel widths that can't shrink.** Multi-column grids must
-  collapse to a single column on narrow viewports (the existing
-  `two-column-layout.module.css` collapses at 900px — prefer the
-  `--breakpoint-large`/`medium` token going forward).
-- **Touch targets ≥ 44×44px** on coarse pointers. Primer controls already
-  meet this; custom tap targets must too (`--base-size-44` / `min-height`).
-  Primer ships `size-coarse`/`size-fine` token sets for pointer-aware sizing.
+  collapse to a single column on narrow viewports. Use `SplitPageLayout`'s
+  responsive `.Pane`/`.Content` split (collapses at Primer's narrow
+  breakpoint) rather than a bespoke media-query grid.
+- **Touch targets follow WCAG 2.5.8 (AA): ≥ 24×24 CSS px**, the same bar
+  GitHub/Primer holds itself to — don't force a blanket 44px on a
+  Primer-aligned app. Aim for a comfortable ~44px on *primary* mobile
+  actions, but small/dense controls are fine at 24px and dense data viz
+  (e.g. the contribution-graph cells) may go smaller under WCAG's
+  inline/equivalent exceptions **when an equivalent larger control exists**
+  (the graph's day cells pair with the larger `DateNavigation` control).
 - **Fluid type & spacing:** scale down section padding on small screens
   (`--base-size-16` instead of `--base-size-24`, etc.). Never let a desktop
   layout cause horizontal scroll on mobile.
@@ -367,8 +371,8 @@ Not optional, not a follow-up. Match https://primer.style/accessibility.
    https://primer.style/product/components if unsure.
 2. **Style only with tokens** (Principle 1). If you're typing a hex or a raw
    px value, stop and find the token.
-3. **Match existing module-CSS patterns** in the repo (see
-   `two-column-layout.module.css`, `*.module.css`) so new work is consistent.
+3. **Match existing module-CSS patterns** in the repo (colocated
+   `*.module.css` next to each component) so new work is consistent.
 4. **Design mobile-first**, then layer breakpoints (Principle 3).
 5. **Add all states** — loading, empty, error (Principle 4).
 6. **Verify:** screenshot at 375 / 768 / 1280; check contrast and focus;
@@ -384,7 +388,7 @@ Not optional, not a follow-up. Match https://primer.style/accessibility.
 | Drop shadows to define every card | 1px border + bg token; shadows only for floating layers |
 | Multiple accent colors in one view | One accent; neutrals dominate (80/10/5/5) |
 | Fixed-width layouts | Fluid grids that collapse at breakpoints |
-| Tap targets < 44px on mobile | `--base-size-44` min, coarse-pointer sizing |
+| Tap targets < 24px (WCAG 2.5.8) with no equivalent control | ≥24px; ~44px for primary mobile actions; pointer-aware sizing |
 | Custom component that Primer already ships | Use the Primer component |
 | `outline: none` with no replacement | Keep the Primer focus ring |
 | Inventing font sizes | Type shorthands (`--text-*-shorthand-*`) |
@@ -398,7 +402,7 @@ Not optional, not a follow-up. Match https://primer.style/accessibility.
 - [ ] Functional color tokens; semantic states use matched triplets.
 - [ ] Reuses Primer components where they exist.
 - [ ] Beautiful and usable at 375px, 768px, 1280px (no horizontal scroll).
-- [ ] Touch targets ≥ 44px on coarse pointers.
+- [ ] Touch targets ≥ 24×24px (WCAG 2.5.8 AA); ~44px on primary mobile actions.
 - [ ] Loading, empty, and error states all designed.
 - [ ] WCAG AA contrast; visible focus ring; color not the sole signal.
 - [ ] Works in light AND dark theme (verify, don't assume).

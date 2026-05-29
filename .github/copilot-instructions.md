@@ -339,6 +339,18 @@ Focus on building understanding, not just providing solutions.`;
 - The heading text and bullet format are a prompt↔parser contract; changing
   either side without updating the other drops follow-up chips.
 
+### Tool-event icon contract
+- `tool-summary.ts` in `src/lib/copilot/` is **framework-free** (no JSX) and
+  returns an `iconKind` category from the `ToolIconKind` union
+  (`'search'|'file'|'commit'|'pull-request'|'issue'|'repository'|'branch'|'profile'|'tool'`)
+  — never an emoji or icon element.
+- `MessageBubble` maps each `iconKind` to a Primer Octicon via the exhaustive
+  `TOOL_ICON_BY_KIND: Record<ToolIconKind, Icon>` and renders it in the
+  tool-event timeline (shown to ALL users, not just debug mode). The
+  `Record` is exhaustive, so adding a kind without a mapping fails `tsc`.
+- Adding a new tool category means adding the kind to the union AND a mapping
+  in `MessageBubble`; the two sides are a contract.
+
 ### When to Apply Learning Lens
 - User asks "why" or "how does this work"
 - User is exploring new concepts
