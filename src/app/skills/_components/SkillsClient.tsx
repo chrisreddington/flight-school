@@ -8,6 +8,7 @@ import { useCallback, useState } from 'react';
 import { InlineCalibration } from '@/components/Dashboard/inline-calibration';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import type { SkillProfile } from '@/lib/skills/types';
+import { formatDate } from '@/lib/utils/date-utils';
 import layoutStyles from '@/styles/two-column-layout.module.css';
 
 import { AddSkillForm } from './AddSkillForm';
@@ -140,9 +141,7 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
 
           {profile?.lastUpdated && (
             <div className={styles.lastUpdated}>
-              <p className={styles.lastUpdatedText}>
-                Last updated: {new Date(profile.lastUpdated).toLocaleDateString()}
-              </p>
+              <p className={styles.lastUpdatedText}>Last updated: {formatDate(profile.lastUpdated)}</p>
             </div>
           )}
         </Stack>
