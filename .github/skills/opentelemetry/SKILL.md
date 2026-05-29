@@ -224,6 +224,13 @@ rate-limited per client IP. **Never** point the browser exporter at the
 Aspire OTLP endpoint directly — CORS will fail and exposing collector
 credentials to the browser is unacceptable.
 
+The anonymous route **must** stay in `PUBLIC_PREFIXES` in `src/proxy.ts`.
+The whole point of the anonymous endpoint is to capture telemetry *before*
+a session cookie exists (e.g. on `/sign-in`); if the auth proxy gates it,
+unauthenticated page-load traces are silently 401'd and lost — which is
+the one moment they matter most. The authenticated `/api/otel/v1/traces`
+route is intentionally **not** public and stays gated.
+
 The exporter is configured with `fetchOptions: { keepalive: true }` so
 the final batch survives `pagehide` / `beforeunload`. Without this the
 last `page.view` span and any pending children are silently dropped

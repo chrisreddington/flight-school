@@ -26,7 +26,14 @@ if (!process.env.AUTH_SECRET) {
 
 const { auth } = NextAuth(edgeAuthConfig);
 
-const PUBLIC_PREFIXES = ['/api/auth', '/api/health', '/sign-in', '/_next', '/favicon.ico'];
+const PUBLIC_PREFIXES = [
+  '/api/auth',
+  '/api/health',
+  '/api/otel/v1/traces/anonymous',
+  '/sign-in',
+  '/_next',
+  '/favicon.ico',
+];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {

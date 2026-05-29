@@ -27,7 +27,7 @@ Next.js 16 App Router application on React 19.2 with Primer React UI. All API ca
 must respect:
 
 - **`reactCompiler: true`** — the compiler auto-memoises components, so don't add `useMemo` / `useCallback` / `React.memo` unless a profile shows it's needed. If a Primer component breaks the compiler's Rules of React, opt that file out with `"use no memo"` and leave a `TODO:` comment.
-- **`experimental.cacheComponents: true`** — Partial Prerender mode. Any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
+- **`cacheComponents` (Partial Prerender mode)** — enabled for `next build` / `next start` / CI, but **gated off in `next dev`** by the `enableCacheComponents` const in `next.config.ts` (set `ENABLE_CACHE_COMPONENTS=1` to opt back in locally). A dev-only upstream Next bug (`InvariantError: Expected workUnitAsyncStorage to have a store`) throws below the root `<Suspense>` and makes the root `<ErrorBoundary>` blank the whole app shell — including `/sign-in` — so local dev would be unusable with it on. Production prerendering is unaffected. Regardless of the dev gate, write code as if PPR is always on: any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
 
 **Route-segment config is forbidden under `cacheComponents`.** Do not add
 `export const dynamic = '…'` or `export const runtime = 'nodejs'` to any

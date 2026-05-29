@@ -88,6 +88,20 @@ describe('proxy gating', () => {
     expect(response.status).toBe(401);
   });
 
+  it('allows unauthenticated /api/otel/v1/traces/anonymous requests', async () => {
+    const res = await proxy(makeRequest('/api/otel/v1/traces/anonymous'));
+    const response = res as Response;
+    // The anonymous telemetry endpoint must be reachable before a session
+    // cookie exists (e.g. on /sign-in) so page-load traces survive.
+    expect(response.status).toBe(200);
+  });
+
+  it('still gates the authenticated /api/otel/v1/traces endpoint', async () => {
+    const res = await proxy(makeRequest('/api/otel/v1/traces'));
+    const response = res as Response;
+    expect(response.status).toBe(401);
+  });
+
   it('allows unauthenticated /_next/* and static assets', async () => {
     expect(((await proxy(makeRequest('/_next/static/chunk.js'))) as Response).status).toBe(200);
     expect(((await proxy(makeRequest('/favicon.ico'))) as Response).status).toBe(200);
