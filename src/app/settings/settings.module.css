@@ -1,22 +1,18 @@
-.main {
-  max-width: 768px;
-  margin: 0 auto;
-  padding: var(--base-size-32, 32px) var(--base-size-16, 16px);
+/* Full-height inset background so the page matches the app-shell palette. */
+.layout {
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
 }
 
-.pageHeader {
-  margin-bottom: var(--base-size-24, 24px);
-  padding-bottom: var(--base-size-16, 16px);
-  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+.dangerZoneSection {
+  margin-top: var(--base-size-24, 24px);
 }
 
-.pageHeading {
-  margin: 0 0 var(--base-size-4, 4px) 0;
-}
-
-.pageSubtitle {
-  color: var(--fgColor-muted, #656d76);
-  margin: 0;
+.dangerZoneHeading {
+  margin-bottom: var(--base-size-16, 16px);
+  padding-bottom: var(--base-size-8, 8px);
+  border-bottom: 1px solid var(--borderColor-danger, #f85149);
+  color: var(--fgColor-danger, #d1242f);
 }
 
 .card {

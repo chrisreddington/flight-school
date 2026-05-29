@@ -1,9 +1,10 @@
 'use client';
 
 import { DeleteMyDataDialog } from '@/components/DeleteMyDataDialog/DeleteMyDataDialog';
+import { PageHeader } from '@/components/PageHeader';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { clearAllLocalData } from '@/lib/storage/clear-local-data';
-import { Banner, Button, Heading, Stack, Text } from '@primer/react';
+import { Banner, Button, Heading, SplitPageLayout, Stack, Text } from '@primer/react';
 import { TrashIcon } from '@primer/octicons-react';
 import { useCallback, useState } from 'react';
 
@@ -38,50 +39,65 @@ export function SettingsClient({ login }: SettingsClientProps) {
   }, []);
 
   return (
-    <Stack direction="vertical" gap="spacious">
-      <section className={styles.card}>
-        <Heading as="h2" className={styles.sectionHeading}>
-          Reset app data on this device
-        </Heading>
-        <Text as="p" className={styles.sectionLead}>
-          Clears locally stored skills, focus history, chat threads, workspaces, habits, and the challenge queue from
-          this browser. Your account and server-side history are kept — re-syncing restores detected skills.
-        </Text>
-        {showLocalResetConfirm ? (
-          <Banner
-            variant="critical"
-            title="Reset local data?"
-            description="This clears Flight School data stored in this browser. It can't be undone here."
-            primaryAction={<Banner.PrimaryAction onClick={onResetLocalData}>Reset app data</Banner.PrimaryAction>}
-            secondaryAction={
-              <Banner.SecondaryAction onClick={() => setShowLocalResetConfirm(false)}>Cancel</Banner.SecondaryAction>
-            }
-          />
-        ) : (
-          <Button variant="danger" leadingVisual={TrashIcon} onClick={() => setShowLocalResetConfirm(true)}>
-            Reset app data
-          </Button>
-        )}
-      </section>
+    <SplitPageLayout className={styles.layout}>
+      <SplitPageLayout.Content>
+        <PageHeader
+          title="Settings"
+          description="Manage your account preferences and the data Flight School stores for you."
+        />
+        <section aria-labelledby="danger-zone-heading" className={styles.dangerZoneSection}>
+          <Heading as="h2" id="danger-zone-heading" className={styles.dangerZoneHeading}>
+            Danger zone
+          </Heading>
+          <Stack direction="vertical" gap="spacious">
+            <section className={styles.card}>
+              <Heading as="h3" className={styles.sectionHeading}>
+                Reset app data on this device
+              </Heading>
+              <Text as="p" className={styles.sectionLead}>
+                Clears locally stored skills, focus history, chat threads, workspaces, habits, and the challenge queue
+                from this browser. Your account and server-side history are kept — re-syncing restores detected skills.
+              </Text>
+              {showLocalResetConfirm ? (
+                <Banner
+                  variant="critical"
+                  title="Reset local data?"
+                  description="This clears Flight School data stored in this browser. It can't be undone here."
+                  primaryAction={<Banner.PrimaryAction onClick={onResetLocalData}>Reset app data</Banner.PrimaryAction>}
+                  secondaryAction={
+                    <Banner.SecondaryAction onClick={() => setShowLocalResetConfirm(false)}>
+                      Cancel
+                    </Banner.SecondaryAction>
+                  }
+                />
+              ) : (
+                <Button variant="danger" leadingVisual={TrashIcon} onClick={() => setShowLocalResetConfirm(true)}>
+                  Reset app data
+                </Button>
+              )}
+            </section>
 
-      <section className={styles.card}>
-        <Heading as="h2" className={styles.sectionHeading}>
-          Privacy &amp; data
-        </Heading>
-        <Text as="p" className={styles.sectionLead}>
-          Flight School stores your chats, evaluations, and background job history per-account on the server so AI
-          features can resume across devices. You can wipe everything from your account here.
-        </Text>
-        <Button variant="danger" leadingVisual={TrashIcon} onClick={() => setDialogOpen(true)}>
-          Delete all my data
-        </Button>
-      </section>
+            <section className={styles.card}>
+              <Heading as="h3" className={styles.sectionHeading}>
+                Privacy &amp; data
+              </Heading>
+              <Text as="p" className={styles.sectionLead}>
+                Flight School stores your chats, evaluations, and background job history per-account on the server so AI
+                features can resume across devices. You can wipe everything from your account here.
+              </Text>
+              <Button variant="danger" leadingVisual={TrashIcon} onClick={() => setDialogOpen(true)}>
+                Delete all my data
+              </Button>
+            </section>
+          </Stack>
+        </section>
+      </SplitPageLayout.Content>
       <DeleteMyDataDialog
         login={login}
         isOpen={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onConfirmed={onConfirmed}
       />
-    </Stack>
+    </SplitPageLayout>
   );
 }
