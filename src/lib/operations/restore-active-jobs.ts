@@ -1,7 +1,8 @@
 /**
  * Restores active background jobs after a page refresh by querying
- * /api/jobs (in the browser) or the filesystem-backed
- * `activeOperationsStore` (in SSR).
+ * /api/jobs (in the browser). During SSR there is no durable per-process
+ * state to recover from — the in-memory `activeOperationsStore` is empty —
+ * so the browser's `/api/jobs` fetch is the authoritative restore source.
  */
 
 import { activeOperationsStore, type ActiveOperationItemType } from './active-operations-store';

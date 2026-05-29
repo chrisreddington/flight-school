@@ -48,7 +48,7 @@ import { jobEventBus } from '@/worker/jobs/streaming/event-bus';
 import { terminalEventFromStatus } from '@/worker/jobs/streaming/types';
 import { isJobStillValid, resolveJobIdentity } from './job-identity';
 import { registerSession, unregisterSession } from './session-registry';
-import { upsertMessageById } from './thread-consolidation';
+import { finalizeToolEvents, upsertMessageById } from './thread-consolidation';
 
 const log = logger.withTag('JobChatExecutor');
 
@@ -123,7 +123,7 @@ export async function executeChatResponse(jobId: string, input: ChatResponseInpu
         content: contentToPersist,
         timestamp: now(),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        toolEvents: toolEvents.length > 0 ? toolEvents.map((e) => ({ ...e })) : undefined,
+        toolEvents: toolEvents.length > 0 ? finalizeToolEvents(toolEvents) : undefined,
         hasActionableItem,
       };
       const updatedMessages = upsertMessageById(currentThread.messages, assistantMessageId, consolidatedMessage, false);
@@ -146,7 +146,7 @@ export async function executeChatResponse(jobId: string, input: ChatResponseInpu
         jobId,
         terminalEventFromStatus(status, {
           content: fullContent,
-          toolEvents: toolEvents.map((e) => ({ ...e })),
+          toolEvents: finalizeToolEvents(toolEvents),
           hasActionableItem,
           message,
         }),
