@@ -35,7 +35,7 @@ export default function HistoryPage() {
     <div className={styles.root}>
       <AppHeader />
 
-      <main className={styles.main}>
+      <div className={styles.main}>
         <Suspense
           fallback={
             <div className={styles.loadingState}>
@@ -45,7 +45,7 @@ export default function HistoryPage() {
         >
           <HistoryPageContent />
         </Suspense>
-      </main>
+      </div>
     </div>
   );
 }

@@ -10,26 +10,9 @@
    Container V2 - Clean two-column layout
    ============================================================================ */
 
-.containerV2 {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* No separate header - title moves into sidebar */
-.headerV2 {
-  display: none;
-}
-
-.layoutV2 {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: var(--base-size-24);
-  flex: 1;
-  min-height: 0;
+/* Page layout wrapper — inset background to match the app shell */
+.layout {
+  background-color: var(--bgColor-inset, #f6f8fa);
 }
 
 /* ============================================================================
@@ -406,7 +389,6 @@
    ============================================================================ */
 
 .mainContent {
-  flex: 1;
   padding: var(--base-size-24);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
@@ -415,24 +397,6 @@
   flex-direction: column;
   gap: var(--base-size-16);
   /* No independent scroll - flows with page */
-}
-
-/* Page header in main content */
-.pageHeader {
-  margin-bottom: var(--base-size-8);
-}
-
-.pageTitle {
-  font-size: var(--text-title-size-large, 32px);
-  font-weight: var(--base-text-weight-semibold, 600);
-  margin: 0 0 var(--base-size-4, 4px) 0;
-  color: var(--fgColor-default, #1f2328);
-}
-
-.pageDescription {
-  font-size: var(--text-body-size-medium, 14px);
-  color: var(--fgColor-muted, #656d76);
-  margin: 0;
 }
 
 .historyTabs {
@@ -835,16 +799,6 @@
    ============================================================================ */
 
 @media (max-width: 900px) {
-  .layoutV2 {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--borderColor-default);
-    max-height: 400px;
-  }
-
   .activityGrid52 {
     max-width: 100%;
     overflow-x: scroll;
