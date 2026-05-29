@@ -19,17 +19,17 @@ import { useLearningChat } from '@/hooks/use-learning-chat';
 import { getDisplayName, useUserProfile } from '@/hooks/use-user-profile';
 import type { LearningTopic } from '@/lib/focus/types';
 import type { RepoReference } from '@/lib/threads/types';
-import { Stack } from '@primer/react';
-import { useCallback, useMemo } from 'react';
+import { PageHeader } from '@/components/PageHeader';
+import { SkeletonBox, SplitPageLayout, Stack } from '@primer/react';
 import { AppHeader } from '../AppHeader';
 import { LearningChat } from '../LearningChat';
 import { DailyFocusSection } from './daily-focus-section';
+import { getGreeting } from './dashboard-helpers';
 import styles from './Dashboard.module.css';
 import { Footer } from './footer';
 import { ProTipSection } from './pro-tip-section';
 import { ProfileActivitySection } from './profile-activity-section';
 import { ReviewDueWidget } from './review-due-widget';
-import { WelcomeSection } from './welcome-section';
 
 // ============================================================================
 // Main Component
@@ -61,61 +61,40 @@ export function Dashboard() {
   } = useAIFocus();
 
   // Adapter for DailyFocusSection which expects string[] format
-  const handleRefresh = useCallback(
-    (components?: string[]) => {
-      const component = components?.[0] as 'challenge' | 'goal' | 'learningTopics' | undefined;
-      refetchFocus(component);
-    },
-    [refetchFocus],
-  );
+  const handleRefresh = (components?: string[]) => {
+    const component = components?.[0] as 'challenge' | 'goal' | 'learningTopics' | undefined;
+    refetchFocus(component);
+  };
 
   // Handle skipping a single topic and generating a replacement
-  const handleSkipTopic = useCallback(
-    (skippedTopic: LearningTopic, existingTopicTitles: string[]) => {
-      skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
-    },
-    [skipAndReplaceTopic],
-  );
+  const handleSkipTopic = (skippedTopic: LearningTopic, existingTopicTitles: string[]) => {
+    skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
+  };
 
   // Handle skipping a challenge and generating a replacement
-  const handleSkipChallenge = useCallback(
-    (challengeId: string, existingChallengeTitles: string[]) => {
-      skipAndReplaceChallenge(challengeId, existingChallengeTitles);
-    },
-    [skipAndReplaceChallenge],
-  );
+  const handleSkipChallenge = (challengeId: string, existingChallengeTitles: string[]) => {
+    skipAndReplaceChallenge(challengeId, existingChallengeTitles);
+  };
 
   // Handle skipping a goal and generating a replacement
-  const handleSkipGoal = useCallback(
-    (goalId: string, existingGoalTitles: string[]) => {
-      skipAndReplaceGoal(goalId, existingGoalTitles);
-    },
-    [skipAndReplaceGoal],
-  );
+  const handleSkipGoal = (goalId: string, existingGoalTitles: string[]) => {
+    skipAndReplaceGoal(goalId, existingGoalTitles);
+  };
 
   // Handle stopping a topic skip/regeneration (receives ID from the card)
-  const handleStopSkipTopic = useCallback(
-    (topicId: string) => {
-      stopTopicSkip(topicId);
-    },
-    [stopTopicSkip],
-  );
+  const handleStopSkipTopic = (topicId: string) => {
+    stopTopicSkip(topicId);
+  };
 
   // Handle stopping a challenge skip/regeneration (receives ID from the card)
-  const handleStopSkipChallenge = useCallback(
-    (challengeId: string) => {
-      stopChallengeSkip(challengeId);
-    },
-    [stopChallengeSkip],
-  );
+  const handleStopSkipChallenge = (challengeId: string) => {
+    stopChallengeSkip(challengeId);
+  };
 
   // Handle stopping a goal skip/regeneration (receives ID from the card)
-  const handleStopSkipGoal = useCallback(
-    (goalId: string) => {
-      stopGoalSkip(goalId);
-    },
-    [stopGoalSkip],
-  );
+  const handleStopSkipGoal = (goalId: string) => {
+    stopGoalSkip(goalId);
+  };
 
   const {
     threads,
@@ -136,76 +115,80 @@ export function Dashboard() {
   } = useLearningChat();
 
   const displayName = getDisplayName(profile);
+  const showName = displayName !== 'Developer';
 
-  // Memoize available repos to prevent unnecessary re-renders
-  const availableRepos = useMemo(
-    () =>
-      profile?.repos?.map((repo) => ({
-        fullName: repo.fullName,
-        owner: repo.owner,
-        name: repo.name,
-        language: repo.language ?? undefined,
-      })) ?? [],
-    [profile?.repos],
-  );
+  const availableRepos =
+    profile?.repos?.map((repo) => ({
+      fullName: repo.fullName,
+      owner: repo.owner,
+      name: repo.name,
+      language: repo.language ?? undefined,
+    })) ?? [];
 
-  // PERF: Consolidate chat handlers to reduce prop drilling and prevent unnecessary re-renders
-  const chatHandlers = useMemo(
-    () => ({
-      sendMessage: async (message: string, repos?: RepoReference[]) => {
-        await sendMessage(message, { profile: 'learning', capabilities: ['github'], repos });
-      },
-      createThread,
-      selectThread: (threadId: string | null) => {
-        if (threadId) selectThread(threadId);
-      },
-      deleteThread,
-      renameThread,
-      updateContext,
-      stopStreaming,
-    }),
-    [sendMessage, createThread, selectThread, deleteThread, renameThread, updateContext, stopStreaming],
-  );
+  const chatHandlers = {
+    sendMessage: async (message: string, repos?: RepoReference[]) => {
+      await sendMessage(message, { profile: 'learning', capabilities: ['github'], repos });
+    },
+    createThread,
+    selectThread: (threadId: string | null) => {
+      if (threadId) selectThread(threadId);
+    },
+    deleteThread,
+    renameThread,
+    updateContext,
+    stopStreaming,
+  };
 
   /**
    * Handle exploring a learning topic (AC7.1-AC7.4).
    * Creates a new thread pre-seeded with the topic context and sends an initial message.
    */
-  const handleExploreTopic = useCallback(
-    async (topic: LearningTopic) => {
-      // Create a new thread with the topic as title
-      const thread = await createThread(
-        {
-          title: `Explore: ${topic.title}`,
-          context: {
-            learningFocus: topic.title,
-          },
+  const handleExploreTopic = async (topic: LearningTopic) => {
+    // Create a new thread with the topic as title
+    const thread = await createThread(
+      {
+        title: `Explore: ${topic.title}`,
+        context: {
+          learningFocus: topic.title,
         },
-        true,
-      ); // Mark as active
+      },
+      true,
+    ); // Mark as active
 
-      // Send an initial message to pre-seed the conversation (AC7.2)
-      // The learning lens system prompt is applied by the backend (AC7.4)
-      // Pass threadId explicitly to avoid race condition with async state update
-      const seedMessage = `I'd like to explore "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
+    // Send an initial message to pre-seed the conversation (AC7.2)
+    // The learning lens system prompt is applied by the backend (AC7.4)
+    // Pass threadId explicitly to avoid race condition with async state update
+    const seedMessage = `I'd like to explore "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
 
-      await sendMessage(seedMessage, {
-        profile: 'learning',
-        capabilities: ['github'],
-        threadId: thread.id,
-      });
-    },
-    [createThread, sendMessage],
+    await sendMessage(seedMessage, {
+      profile: 'learning',
+      capabilities: ['github'],
+      threadId: thread.id,
+    });
+  };
+
+  // Skeleton-aware greeting shown in the page header description while the
+  // profile loads, then the display name fills in.
+  const greeting = (
+    <>
+      {getGreeting()},{' '}
+      {profileLoading || !showName ? (
+        <SkeletonBox height="1em" width="80px" className={styles.skeletonInline} />
+      ) : (
+        displayName
+      )}
+      ! 👋 Ready to level up your skills? Here&apos;s what&apos;s lined up for you today.
+    </>
   );
 
   return (
     <div className={styles.root}>
       <AppHeader />
 
-      <main className={styles.main}>
-        <div className={styles.mainContent}>
+      <SplitPageLayout>
+        <SplitPageLayout.Content>
+          <PageHeader title="Dashboard" description={greeting} />
           <Stack direction="vertical" gap="spacious">
-            <WelcomeSection displayName={displayName} isLoading={profileLoading} />
             <ReviewDueWidget />
             <DailyFocusSection
               profile={profile}
@@ -245,15 +228,15 @@ export function Dashboard() {
               userAvatarUrl={profile?.user?.avatarUrl}
             />
           </Stack>
-        </div>
+        </SplitPageLayout.Content>
 
-        <aside className={styles.sidebar}>
+        <SplitPageLayout.Pane position={{ regular: 'end', narrow: 'end' }} aria-label="Activity and tips">
           <Stack direction="vertical" gap="spacious">
             <ProfileActivitySection profile={profile} isLoading={profileLoading} onRefresh={refetchProfile} />
             <ProTipSection />
           </Stack>
-        </aside>
-      </main>
+        </SplitPageLayout.Pane>
+      </SplitPageLayout>
 
       <Footer />
     </div>

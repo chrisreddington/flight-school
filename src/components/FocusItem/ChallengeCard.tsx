@@ -154,7 +154,7 @@ export function ChallengeCard({
     <div className={styles.card}>
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
-          <Stack direction="horizontal" gap="condensed" align="center">
+          <Stack direction="horizontal" gap="condensed" align="center" wrap="wrap">
             {isCustom && (
               <Label size="small" variant="accent">
                 Custom

@@ -141,7 +141,7 @@ export function TopicCard({
 
         {actionError && <InlineMessage variant="critical">{actionError}</InlineMessage>}
 
-        <Stack direction="horizontal" gap="condensed">
+        <Stack direction="horizontal" gap="condensed" wrap="wrap">
           <Button
             variant="primary"
             leadingVisual={isExplored ? CheckIcon : BookIcon}
