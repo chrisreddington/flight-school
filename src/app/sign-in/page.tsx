@@ -20,26 +20,31 @@ export default function SignInPage({ searchParams }: SignInPageProps) {
 
   return (
     <main className={styles.container}>
-      <header className={styles.header}>
-        <Heading as="h1" className={styles.title}>
-          Welcome to Flight School
-        </Heading>
-        <Text as="p" className={styles.subtitle}>
-          Sign in with your GitHub account to access personalized challenges, AI coaching, and your learning history.
-        </Text>
-      </header>
+      <div className={styles.card}>
+        <span className={styles.logo} aria-hidden="true">
+          <MarkGithubIcon size={32} />
+        </span>
+        <header className={styles.header}>
+          <Heading as="h1" className={styles.title}>
+            Welcome to Flight School
+          </Heading>
+          <Text as="p" className={styles.subtitle}>
+            Sign in with your GitHub account to access personalized challenges, AI coaching, and your learning history.
+          </Text>
+        </header>
 
-      {error ? (
-        <Text as="p" className={styles.error} role="alert">
-          Sign in failed. Please try again.
-        </Text>
-      ) : null}
+        {error ? (
+          <Text as="p" className={styles.error} role="alert">
+            Sign in failed. Please try again.
+          </Text>
+        ) : null}
 
-      <form action={action}>
-        <Button type="submit" variant="primary" size="large" leadingVisual={MarkGithubIcon}>
-          Sign in with GitHub
-        </Button>
-      </form>
+        <form action={action} className={styles.form}>
+          <Button type="submit" variant="primary" size="large" leadingVisual={MarkGithubIcon} block>
+            Sign in with GitHub
+          </Button>
+        </form>
+      </div>
     </main>
   );
 }
