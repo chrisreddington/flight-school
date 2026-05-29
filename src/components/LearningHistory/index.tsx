@@ -19,9 +19,9 @@ import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { LearningTopic } from '@/lib/focus/types';
 import { PageHeader } from '@/components/PageHeader';
-import { CalendarIcon } from '@primer/octicons-react';
-import { Banner, Link, SplitPageLayout } from '@primer/react';
-import { UnderlinePanels } from '@primer/react/experimental';
+import { CalendarIcon, HistoryIcon } from '@primer/octicons-react';
+import { Banner, SplitPageLayout } from '@primer/react';
+import { Blankslate, UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLearningChat } from '@/hooks/use-learning-chat';
@@ -268,31 +268,33 @@ export function LearningHistory({ activeTab = 'history' }: LearningHistoryProps)
               </UnderlinePanels.Tab>
               <UnderlinePanels.Panel>
                 {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
-                <div className={styles.emptyState}>
-                  <Banner
-                    title="No learning history yet"
-                    description="Your daily learning will be saved here as you use the app."
-                    variant="info"
-                    hideTitle
-                  />
-                  <div className={styles.backLink}>
-                    <Link href="/">← Back to Dashboard</Link>
-                  </div>
-                </div>
+                <Blankslate>
+                  <Blankslate.Visual>
+                    <HistoryIcon size={24} />
+                  </Blankslate.Visual>
+                  <Blankslate.Heading>No learning history yet</Blankslate.Heading>
+                  <Blankslate.Description>
+                    Your daily learning will be saved here as you use the app.
+                  </Blankslate.Description>
+                  <Blankslate.PrimaryAction onClick={() => router.push('/')}>
+                    Back to Dashboard
+                  </Blankslate.PrimaryAction>
+                </Blankslate>
               </UnderlinePanels.Panel>
               <UnderlinePanels.Panel>
                 {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
-                <div className={styles.emptyState}>
-                  <Banner
-                    title="No learning history yet"
-                    description="Start exploring topics and completing challenges to see your stats here."
-                    variant="info"
-                    hideTitle
-                  />
-                  <div className={styles.backLink}>
-                    <Link href="/">← Back to Dashboard</Link>
-                  </div>
-                </div>
+                <Blankslate>
+                  <Blankslate.Visual>
+                    <HistoryIcon size={24} />
+                  </Blankslate.Visual>
+                  <Blankslate.Heading>No learning history yet</Blankslate.Heading>
+                  <Blankslate.Description>
+                    Start exploring topics and completing challenges to see your stats here.
+                  </Blankslate.Description>
+                  <Blankslate.PrimaryAction onClick={() => router.push('/')}>
+                    Back to Dashboard
+                  </Blankslate.PrimaryAction>
+                </Blankslate>
               </UnderlinePanels.Panel>
             </UnderlinePanels>
           </div>

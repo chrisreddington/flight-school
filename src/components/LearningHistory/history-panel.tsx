@@ -1,5 +1,7 @@
 import type { LearningTopic } from '@/lib/focus/types';
+import { SearchIcon } from '@primer/octicons-react';
 import { Banner, Button, Spinner, Stack } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 import { GeneratingBanner } from './generating-banner';
 import { HistoryEntryCard } from './history-entry-card';
 import type { HistoryEntry } from './types';
@@ -110,12 +112,15 @@ export function HistoryPanel({
         ))}
 
         {filteredEntries.length === 0 && !hasGenerating && (
-          <Banner
-            title="No results"
-            description={`No items match your filters.${searchQuery ? ' Try a different search term.' : ''}`}
-            variant="info"
-            hideTitle
-          />
+          <Blankslate>
+            <Blankslate.Visual>
+              <SearchIcon size={24} />
+            </Blankslate.Visual>
+            <Blankslate.Heading>No results</Blankslate.Heading>
+            <Blankslate.Description>
+              No items match your filters.{searchQuery ? ' Try a different search term.' : ''}
+            </Blankslate.Description>
+          </Blankslate>
         )}
       </Stack>
     </>

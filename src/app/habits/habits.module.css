@@ -104,18 +104,6 @@
   gap: var(--base-size-16, 16px);
 }
 
-.emptyState {
-  padding: var(--base-size-48, 48px) var(--base-size-32, 32px);
-  text-align: center;
-  background-color: var(--bgColor-muted, #f6f8fa);
-  border-radius: var(--borderRadius-medium, 6px);
-  border: 1px dashed var(--borderColor-muted, #d0d7de);
-}
-
-.emptyIcon {
-  color: var(--fgColor-muted, #656d76);
-}
-
 .habitCard {
   background-color: var(--bgColor-muted, #f6f8fa);
   border: 1px solid var(--borderColor-muted, #d8dee4);
@@ -182,16 +170,6 @@
 
 .sectionHeading {
   font-size: 1.25rem;
-}
-
-.emptyHeading {
-  font-size: 1.125rem;
-  margin-top: var(--base-size-16, 16px);
-}
-
-.emptyText {
-  color: var(--fgColor-muted, #656d76);
-  margin-top: var(--base-size-8, 8px);
 }
 
 .newHabitButton {

@@ -6,7 +6,7 @@
  */
 
 import type { LearningTopic } from '@/lib/focus/types';
-import { ChevronDownIcon, ChevronRightIcon } from '@primer/octicons-react';
+import { ChevronDownIcon, ChevronRightIcon, CommentIcon } from '@primer/octicons-react';
 import { Stack } from '@primer/react';
 import { ItemCard } from './item-card';
 import styles from './LearningHistory.module.css';
@@ -103,7 +103,9 @@ export function HistoryEntryCard({
               />
               {item.type === 'challenge' && item.data.selfExplanation && (
                 <details className={styles.selfExplanationDetails}>
-                  <summary className={styles.selfExplanationSummary}>💬 Your note</summary>
+                  <summary className={styles.selfExplanationSummary}>
+                    <CommentIcon size={14} /> Your note
+                  </summary>
                   <p className={styles.selfExplanationText}>{item.data.selfExplanation}</p>
                 </details>
               )}

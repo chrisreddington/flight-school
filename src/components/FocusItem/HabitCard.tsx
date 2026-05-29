@@ -11,6 +11,7 @@ import type { HabitWithHistory } from '@/lib/habits/types';
 import { getDateKey } from '@/lib/utils/date-utils';
 import { logger } from '@/lib/logger';
 import {
+  CheckCircleIcon,
   CheckIcon,
   FlameIcon,
   KebabHorizontalIcon,
@@ -253,7 +254,7 @@ export function HabitCard({ habit, onUpdate, onDelete }: HabitCardProps) {
       return (
         <Stack direction="horizontal" gap="condensed" align="center">
           <Label variant="success" size="large">
-            ✓ Checked in today
+            <CheckCircleIcon size={14} /> Checked in today
           </Label>
           <Button variant="invisible" size="small" leadingVisual={UndoIcon} onClick={handleUndo}>
             Undo

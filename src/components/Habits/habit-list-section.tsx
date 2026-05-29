@@ -19,7 +19,8 @@ import {
   TrashIcon,
   UndoIcon,
 } from '@primer/octicons-react';
-import { ActionList, ActionMenu, Button, CounterLabel, Heading, IconButton, Label, Stack, Text } from '@primer/react';
+import { ActionList, ActionMenu, Button, CounterLabel, Heading, IconButton, Label, Stack } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 import styles from '@/app/habits/habits.module.css';
 import { isPendingToday, getRemainingSkips } from '@/lib/habits/state-machine';
 
@@ -215,15 +216,14 @@ export function HabitListSection({
         </div>
 
         {activeHabits.length === 0 ? (
-          <div className={styles.emptyState}>
-            <FlameIcon size={48} className={styles.emptyIcon} />
-            <Heading as="h3" className={styles.emptyHeading}>
-              No active habits yet
-            </Heading>
-            <Text as="p" className={styles.emptyText}>
-              Start building better habits by creating your first one.
-            </Text>
-          </div>
+          <Blankslate>
+            <Blankslate.Visual>
+              <FlameIcon size={24} />
+            </Blankslate.Visual>
+            <Blankslate.Heading>No active habits yet</Blankslate.Heading>
+            <Blankslate.Description>Start building better habits by creating your first one.</Blankslate.Description>
+            <Blankslate.PrimaryAction onClick={onNewHabitClick}>Create a habit</Blankslate.PrimaryAction>
+          </Blankslate>
         ) : (
           <div className={styles.habitsList}>
             {activeHabits.map((habit) => (

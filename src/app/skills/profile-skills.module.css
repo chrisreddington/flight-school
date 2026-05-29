@@ -181,12 +181,6 @@
   color: var(--fgColor-muted, #656d76);
 }
 
-.emptyState {
-  padding: var(--base-size-24, 24px);
-  text-align: center;
-  color: var(--fgColor-muted, #656d76);
-}
-
 .lastUpdated {
   margin-top: var(--base-size-16, 16px);
   padding-top: var(--base-size-16, 16px);

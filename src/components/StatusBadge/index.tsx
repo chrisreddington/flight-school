@@ -7,6 +7,7 @@
  * - Feature indicators (MCP tools, model, etc.)
  */
 
+import { CopilotIcon, ServerIcon, SyncIcon, ToolsIcon, ZapIcon } from '@primer/octicons-react';
 import React from 'react';
 import styles from './StatusBadge.module.css';
 
@@ -15,8 +16,8 @@ type BadgeVariant = 'success' | 'warning' | 'info' | 'neutral';
 interface StatusBadgeProps {
   /** Badge variant determines color scheme */
   variant: BadgeVariant;
-  /** Icon emoji to display */
-  icon?: string;
+  /** Leading icon, typically an Octicon element */
+  icon?: React.ReactNode;
   /** Badge text content */
   children: React.ReactNode;
 }
@@ -55,13 +56,13 @@ interface ConversationBadgeProps {
 export function ConversationBadge({ reused, createTimeMs }: ConversationBadgeProps): React.ReactElement {
   if (reused) {
     return (
-      <StatusBadge variant="success" icon="⚡">
+      <StatusBadge variant="success" icon={<ZapIcon size={12} />}>
         Conversation reused
       </StatusBadge>
     );
   }
   return (
-    <StatusBadge variant="warning" icon="🔄">
+    <StatusBadge variant="warning" icon={<SyncIcon size={12} />}>
       New conversation{createTimeMs != null && ` (${createTimeMs}ms setup)`}
     </StatusBadge>
   );
@@ -72,7 +73,7 @@ export function ConversationBadge({ reused, createTimeMs }: ConversationBadgePro
  */
 export function McpToolsBadge(): React.ReactElement {
   return (
-    <StatusBadge variant="info" icon="🔧">
+    <StatusBadge variant="info" icon={<ToolsIcon size={12} />}>
       MCP tools
     </StatusBadge>
   );
@@ -88,7 +89,7 @@ interface ModelBadgeProps {
  */
 export function ModelBadge({ model }: ModelBadgeProps): React.ReactElement {
   return (
-    <StatusBadge variant="neutral" icon="🤖">
+    <StatusBadge variant="neutral" icon={<CopilotIcon size={12} />}>
       {model}
     </StatusBadge>
   );
@@ -115,12 +116,12 @@ export function TtftBadges({ clientMs, serverMs }: TtftBadgesProps): React.React
   return (
     <>
       {serverMs != null && (
-        <StatusBadge variant="info" icon="🖥️">
+        <StatusBadge variant="info" icon={<ServerIcon size={12} />}>
           Server: {serverMs}ms
         </StatusBadge>
       )}
       {clientMs != null && (
-        <StatusBadge variant="info" icon="⚡">
+        <StatusBadge variant="info" icon={<ZapIcon size={12} />}>
           TTFT: {clientMs}ms
         </StatusBadge>
       )}

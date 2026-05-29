@@ -7,13 +7,12 @@
 
 'use client';
 
-import Link from 'next/link';
-
 import { SkillSlider } from '@/components/SkillSlider';
 import type { SkillLevel, SkillProfile, SkillSource } from '@/lib/skills/types';
 import { SKILL_SOURCE_LABELS } from '@/lib/skills/types';
-import { TrashIcon } from '@primer/octicons-react';
+import { MortarBoardIcon, TrashIcon } from '@primer/octicons-react';
 import { Button, Stack } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 
 import styles from '../profile-skills.module.css';
 
@@ -26,13 +25,16 @@ interface SkillsListProps {
 export function SkillsList({ profile, onSkillChange, onRemoveSkill }: SkillsListProps): React.JSX.Element {
   if (profile?.skills.length === 0) {
     return (
-      <div className={styles.emptyState}>
-        <p>
-          No skills configured yet. Skills will be detected automatically from your GitHub activity, or you can add them
-          manually.
-        </p>
-        <Link href="/">Return to Dashboard</Link>
-      </div>
+      <Blankslate>
+        <Blankslate.Visual>
+          <MortarBoardIcon size={24} />
+        </Blankslate.Visual>
+        <Blankslate.Heading>No skills configured yet</Blankslate.Heading>
+        <Blankslate.Description>
+          Skills will be detected automatically from your GitHub activity, or you can add them manually.
+        </Blankslate.Description>
+        <Blankslate.PrimaryAction href="/">Return to Dashboard</Blankslate.PrimaryAction>
+      </Blankslate>
     );
   }
 

@@ -13,7 +13,7 @@ import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { ArrowRightIcon, ClockIcon } from '@primer/octicons-react';
+import { ArrowRightIcon, ClockIcon, LinkIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, Stack } from '@primer/react';
 import { InlineMessage } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
@@ -205,7 +205,7 @@ export function ChallengeCard({
           <Heading as="h3">{challenge.title}</Heading>
           {showIssueContextBadge && challenge.contextSource === 'issue' && (
             <Label size="small" variant="accent">
-              Inspired by your work 🔗
+              <LinkIcon size={12} /> Inspired by your work
             </Label>
           )}
         </Stack>

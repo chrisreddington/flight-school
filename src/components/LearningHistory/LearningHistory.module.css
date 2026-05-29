@@ -709,15 +709,6 @@
    Empty & Loading States
    ============================================================================ */
 
-.emptyState {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--base-size-32);
-}
-
 .loadingState {
   display: flex;
   align-items: center;
@@ -725,10 +716,6 @@
   gap: var(--base-size-8);
   padding: var(--base-size-32);
   color: var(--fgColor-muted);
-}
-
-.backLink {
-  margin-top: var(--base-size-24);
 }
 
 /* ============================================================================

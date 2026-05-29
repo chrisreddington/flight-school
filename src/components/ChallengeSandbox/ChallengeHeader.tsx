@@ -13,7 +13,15 @@
 import { DifficultyBadge } from '@/components/DifficultyBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import type { ChallengeDef } from '@/lib/copilot/types';
-import { ChevronDownIcon, ChevronRightIcon, ClockIcon, CodeIcon, InfoIcon, RocketIcon } from '@primer/octicons-react';
+import {
+  BugIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  CodeIcon,
+  InfoIcon,
+  RocketIcon,
+} from '@primer/octicons-react';
 import { Button, Label, SegmentedControl } from '@primer/react';
 import styles from './ChallengeSandbox.module.css';
 
@@ -51,7 +59,7 @@ export function ChallengeHeader({
             <h2 className={styles.headerTitle}>{challenge.title}</h2>
             {challenge.type === 'debug' && (
               <Label size="small" variant="attention">
-                🐛 Debug Mode
+                <BugIcon size={12} /> Debug Mode
               </Label>
             )}
             {challenge.description && (
