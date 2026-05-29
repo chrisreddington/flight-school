@@ -26,6 +26,7 @@ function toChallengeDef(spec: NonNullable<Awaited<ReturnType<typeof readUserChal
     brokenCode: spec.brokenCode,
     language: spec.language,
     difficulty: spec.difficulty,
+    estimatedTime: spec.estimatedTime,
     testCases: [],
   };
 }

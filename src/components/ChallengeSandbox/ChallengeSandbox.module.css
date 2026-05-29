@@ -21,6 +21,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--base-size-8);
   padding: var(--base-size-12) var(--base-size-16);
   border-bottom: 1px solid var(--borderColor-default);
   background-color: var(--bgColor-muted);
@@ -29,13 +31,39 @@
 .headerLeft {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--base-size-8);
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .headerRight {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--base-size-8);
+  flex-shrink: 0;
+}
+
+/* Meta band: language + estimated time, sits under the title row */
+.headerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--base-size-12);
+  margin-top: var(--base-size-4);
+}
+
+.headerMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4);
+  font-size: var(--text-body-size-small);
+  color: var(--fgColor-muted);
+}
+
+.headerMetaItem svg {
+  color: var(--fgColor-muted);
 }
 
 .guidedPanelWrapper {
@@ -127,7 +155,9 @@
 .headerTitleRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--base-size-8);
+  min-width: 0;
 }
 
 .descriptionToggle {
@@ -393,6 +423,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--base-size-8);
   padding: var(--base-size-8) var(--base-size-12);
   border-bottom: 1px solid var(--borderColor-muted);
@@ -422,6 +453,7 @@
 .sectionHeaderRight {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--base-size-8);
 }
 

@@ -47,7 +47,7 @@ export function ChallengePageClient({ challengeId, challenge }: ChallengePageCli
         brokenCode: challenge.brokenCode,
         difficulty: challenge.difficulty,
         language: challenge.language ?? 'TypeScript',
-        estimatedTime: '30 minutes',
+        estimatedTime: challenge.estimatedTime ?? '30 minutes',
         whyThisChallenge: [],
         isCustom: challengeId.startsWith('custom-'),
       });

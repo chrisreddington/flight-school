@@ -13,7 +13,7 @@
 import { DifficultyBadge } from '@/components/DifficultyBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import type { ChallengeDef } from '@/lib/copilot/types';
-import { ChevronDownIcon, ChevronRightIcon, CodeIcon, InfoIcon, RocketIcon } from '@primer/octicons-react';
+import { ChevronDownIcon, ChevronRightIcon, ClockIcon, CodeIcon, InfoIcon, RocketIcon } from '@primer/octicons-react';
 import { Button, Label, SegmentedControl } from '@primer/react';
 import styles from './ChallengeSandbox.module.css';
 
@@ -75,6 +75,18 @@ export function ChallengeHeader({
               <MarkdownContent content={challenge.description} />
             </div>
           )}
+          <div className={styles.headerMeta}>
+            <span className={styles.headerMetaItem}>
+              <CodeIcon size={14} />
+              {challenge.language}
+            </span>
+            {challenge.estimatedTime && (
+              <span className={styles.headerMetaItem}>
+                <ClockIcon size={14} />
+                {challenge.estimatedTime}
+              </span>
+            )}
+          </div>
         </div>
         <DifficultyBadge difficulty={challenge.difficulty} variant="css" />
       </div>
