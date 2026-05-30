@@ -17,23 +17,9 @@ import { RateLimitedError } from '@/lib/security/rate-limit';
 import { requireGuardedUserContext } from '@/lib/security/guard';
 import { FOCUS_GUARD } from '@/lib/security/route-defaults';
 import { TooManyConcurrentSessionsError } from '@/lib/security/session-cap';
-import { readUserStorage, writeUserStorage } from '@/lib/storage/user-storage';
+import { challengeQueueRepo, type CustomChallengeQueue } from '@/lib/challenge/queue-repo';
 
-const QUEUE_FILENAME = 'challenge-queue.json';
 const log = logger.withTag('ChallengeActions');
-
-interface CustomChallengeQueue {
-  challenges: DailyChallenge[];
-  lastUpdated: string;
-}
-
-const DEFAULT_QUEUE: CustomChallengeQueue = { challenges: [], lastUpdated: '' };
-
-function isCustomChallengeQueue(data: unknown): data is CustomChallengeQueue {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
-  return Array.isArray(schema.challenges) && typeof schema.lastUpdated === 'string';
-}
 
 const CHALLENGE_ACTION_GUARD = {
   eventType: 'storage.write' as const,
@@ -151,7 +137,7 @@ export async function updateChallengeAction(
   challengeId: string,
   updates: ChallengeEditableFields,
 ): Promise<UpdateChallengeState> {
-  const { release } = await requireGuardedUserContext({
+  const { ctx, release } = await requireGuardedUserContext({
     ...CHALLENGE_ACTION_GUARD,
     auditMetadata: { ...CHALLENGE_ACTION_GUARD.auditMetadata, action: 'updateChallenge' },
   });
@@ -164,7 +150,7 @@ export async function updateChallengeAction(
       return { ok: false, error: 'Description is required' };
     }
 
-    const queue = await readUserStorage<CustomChallengeQueue>(QUEUE_FILENAME, DEFAULT_QUEUE, isCustomChallengeQueue);
+    const queue = await challengeQueueRepo.read(ctx.userId);
     const index = queue.challenges.findIndex((c) => c.id === challengeId);
     if (index === -1) {
       return { ok: false, error: 'Failed to save changes. The challenge may no longer exist.' };
@@ -175,7 +161,7 @@ export async function updateChallengeAction(
       challenges: queue.challenges.map((c, i) => (i === index ? updatedChallenge : c)),
       lastUpdated: new Date().toISOString(),
     };
-    await writeUserStorage(QUEUE_FILENAME, updatedQueue, isCustomChallengeQueue);
+    await challengeQueueRepo.write(ctx.userId, updatedQueue);
     revalidatePath('/');
     revalidatePath(`/challenge/edit/${challengeId}`);
     return { ok: true };
