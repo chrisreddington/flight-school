@@ -243,4 +243,36 @@ describe('createStorageRoute (per-user partitioning)', () => {
     const body = (await readJson(res)) as Schema;
     expect(body).toEqual({ items: ['alice'] });
   });
+
+  it('authenticates exactly once per GET/POST/DELETE handler', async () => {
+    const { GET, POST, DELETE } = buildRoute();
+
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    await POST(postRequest({ items: ['x'] }) as never);
+    expect(requireUserContext).toHaveBeenCalledTimes(1);
+
+    requireUserContext.mockReset();
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    await GET();
+    expect(requireUserContext).toHaveBeenCalledTimes(1);
+
+    requireUserContext.mockReset();
+    requireUserContext.mockResolvedValueOnce({ userId: '111', login: 'a', accessToken: 'ghu_a' });
+    await DELETE();
+    expect(requireUserContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create the per-user directory when the POST body is invalid', async () => {
+    const { POST } = buildRoute();
+    requireUserContext.mockResolvedValueOnce({ userId: '888', login: 'd', accessToken: 'ghu_d' });
+    const badBody = new Request('http://test.local/api/test/storage', {
+      method: 'POST',
+      body: JSON.stringify({ items: 'not-an-array' }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(badBody as never);
+    expect(res.status).toBe(400);
+    await expect(fs.stat(path.join(TEST_STORAGE_DIR, 'users', '888'))).rejects.toThrow();
+  });
 });
