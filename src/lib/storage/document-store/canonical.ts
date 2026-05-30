@@ -15,6 +15,49 @@ import type { DocumentMetadata } from './types';
 const INDEXED_FIELDS: readonly (keyof DocumentMetadata)[] = ['type', 'status', 'parentId', 'sortKey'];
 
 /**
+ * Recursively rebuild a JSON value into a canonical shape: object keys are
+ * sorted, keys whose value is `undefined` are dropped, and `null` is kept
+ * verbatim. Arrays keep their order (it is semantically significant) but each
+ * element is canonicalised; an `undefined` array element becomes `null` to
+ * match `JSON.stringify` and keep length stable. Primitives pass through.
+ *
+ * Domain bodies use `null` meaningfully (e.g. the profile cache stores `null`
+ * to mean "no cached profile"), so — unlike {@link canonicalizeMetadata} —
+ * `null` must survive. The migrator hashes the result to decide insert vs.
+ * skip, so the ordering must be total and deterministic.
+ */
+function canonicalizeValue(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((element) => (element === undefined ? null : canonicalizeValue(element)));
+  }
+  const source = value as Record<string, unknown>;
+  const canonical: Record<string, unknown> = {};
+  for (const key of Object.keys(source).sort()) {
+    const fieldValue = source[key];
+    if (fieldValue === undefined) continue;
+    canonical[key] = canonicalizeValue(fieldValue);
+  }
+  return canonical;
+}
+
+/**
+ * Serialise a document body to a canonical JSON string for content hashing.
+ * Stable across key insertion order and `undefined`-vs-absent differences,
+ * while preserving `null`. Two bodies that are deeply equal up to those
+ * normalisations produce byte-identical strings; any real difference (a
+ * changed value, an added key, a reordered array) produces a different one.
+ *
+ * Used by the file→sqlite migrator's insert-if-absent conflict policy: it
+ * compares `canonicalizeBody(source)` against `canonicalizeBody(target)`
+ * rather than a persisted hash, so a conservative serialisation failure
+ * surfaces as a false "diverged" (skip + log) rather than a silent overwrite.
+ */
+export function canonicalizeBody(body: unknown): string {
+  return JSON.stringify(canonicalizeValue(body));
+}
+
+/**
  * Normalise metadata for storage: keep only the four indexed fields, and
  * omit any that are `null` or `undefined`. Domain bodies may use `null`
  * meaningfully, but indexed metadata is a query surface where an absent
