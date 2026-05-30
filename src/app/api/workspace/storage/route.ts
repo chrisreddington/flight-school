@@ -28,9 +28,9 @@ import { CURRENT_WORKSPACE_SCHEMA_VERSION, type WorkspaceFile as WorkspaceTempla
 import { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile } from '@/lib/workspace/storage';
 import { requireUserContext } from '@/lib/auth/context';
 import { authErrorResponse, validationErrorResponse } from '@/lib/api';
-import { SAFE_PATH_SEGMENT, userScopedFilename } from '@/lib/storage/user-scope';
+import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 import { logger } from '@/lib/logger';
-import type { ChallengeSpec } from '@/lib/challenge/spec-storage';
+import { challengeSpecRepo } from '@/lib/challenge/repo';
 import { getWorkspaceTemplate } from '@/lib/workspace/templates';
 import { now } from '@/lib/utils/date-utils';
 
@@ -111,33 +111,6 @@ function buildStarterWorkspace(challengeId: string, files: WorkspaceTemplateFile
   };
 }
 
-function isChallengeSpec(value: unknown): value is ChallengeSpec {
-  if (typeof value !== 'object' || value === null) return false;
-  const spec = value as Record<string, unknown>;
-  return (
-    typeof spec.id === 'string' &&
-    typeof spec.title === 'string' &&
-    typeof spec.description === 'string' &&
-    typeof spec.difficulty === 'string' &&
-    typeof spec.language === 'string'
-  );
-}
-
-async function readUserChallengeSpecForWorkspace(userId: string, challengeId: string): Promise<ChallengeSpec | null> {
-  const fullPath = userScopedFilename(userId, `challenges/${challengeId}.json`);
-  const lastSlash = fullPath.lastIndexOf('/');
-  const subdir = fullPath.slice(0, lastSlash);
-  const filename = fullPath.slice(lastSlash + 1);
-  const raw = await readFile(subdir, filename);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return isChallengeSpec(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 // =============================================================================
 // GET: Read workspace
 // =============================================================================
@@ -162,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     const metadataJson = await readFile(workspaceDir, METADATA_FILENAME);
     if (!metadataJson) {
-      const challengeSpec = await readUserChallengeSpecForWorkspace(scoped.userId, challengeId);
+      const challengeSpec = await challengeSpecRepo.read(scoped.userId, challengeId);
       if (challengeSpec) {
         const starterWorkspace = buildStarterWorkspace(
           challengeId,
