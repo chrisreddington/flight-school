@@ -23,16 +23,14 @@
 
 import { requireUserContext } from '@/lib/auth/context';
 import { logger } from '@/lib/logger';
-import { deleteFile, deleteStorage, ensureDir, readFile, readStorage, writeStorage } from './utils';
+import { deleteStorage, ensureDir, readStorage, writeStorage } from './utils';
 import { userScopedFilename } from './user-scope';
-import { getUserScopedStoreForUser } from './document-store/scoped-store';
+import { buildCompatDeps } from './document-store/compat-deps';
 import {
   readMappedDoc,
   removeMappedDoc,
   resolveContainerMapping,
   writeMappedDoc,
-  type CompatDeps,
-  type LegacyDocumentIO,
 } from './document-store/user-storage-core';
 
 const log = logger.withTag('User Storage');
@@ -44,9 +42,9 @@ const log = logger.withTag('User Storage');
 export type SchemaGuard<T> = (data: unknown) => data is T;
 
 /**
- * Builds the scoped legacy-file path for `userId`/`filename` and ensures the
- * per-user directory exists. The userId-injected core that every public helper
- * and the storage-route factory share, so a request authenticates exactly once.
+ * Build the scoped legacy-file path for `userId`/`filename` and ensures the
+ * per-user directory exists. Used only by the UNMAPPED (legacy-file) read/write
+ * path; mapped singletons resolve their deps via {@link buildCompatDeps}.
  */
 async function ensureUserScopedPath(userId: string, filename: string): Promise<string> {
   const path = userScopedFilename(userId, filename);
@@ -67,20 +65,6 @@ export async function resolveScopedUserId(filename: string): Promise<string> {
   const { userId } = await requireUserContext();
   userScopedFilename(userId, filename);
   return userId;
-}
-
-/**
- * Build the production {@link CompatDeps} for `userId`: the user-scoped envelope
- * store plus a legacy seam that reads/clears the user's `users/{userId}/...`
- * file without the self-heal write-back the legacy primitives would do.
- */
-async function compatDepsFor(userId: string): Promise<CompatDeps> {
-  const store = await getUserScopedStoreForUser(userId);
-  const legacy: LegacyDocumentIO = {
-    readRaw: (filename) => readFile(`users/${userId}`, filename),
-    remove: (filename) => deleteFile(`users/${userId}`, filename),
-  };
-  return { store, legacy };
 }
 
 /**
@@ -106,7 +90,7 @@ export async function readUserStorageForUser<T>(
     const path = await ensureUserScopedPath(userId, filename);
     return readStorage<T>(path, defaultSchema, guard);
   }
-  const deps = await compatDepsFor(userId);
+  const deps = await buildCompatDeps(userId);
   return readMappedDoc(deps, mapping, filename, defaultSchema, guard);
 }
 
@@ -152,7 +136,7 @@ export async function writeUserStorageForUser<T>(
     await writeStorage(path, data);
     return;
   }
-  const deps = await compatDepsFor(userId);
+  const deps = await buildCompatDeps(userId);
   await writeMappedDoc(deps, mapping, filename, data, guard);
 }
 
@@ -183,7 +167,7 @@ export async function deleteUserStorageForUser(userId: string, filename: string)
     await deleteStorage(path);
     return;
   }
-  const deps = await compatDepsFor(userId);
+  const deps = await buildCompatDeps(userId);
   await removeMappedDoc(deps, mapping, filename);
 }
 
