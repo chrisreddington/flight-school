@@ -1,25 +1,20 @@
 /**
  * Server-side accessor for the user's habits collection. Used by the
  * `/habits` RSC for initial render — Server Components and Server Actions
- * read/write here, bypassing the client HTTP round-trip.
+ * read here, bypassing the client HTTP round-trip. Reads/writes resolve the
+ * authenticated user, then delegate to the shared {@link habitsRepo} (the
+ * single source of the filename/default/guard).
  */
 
-import { readUserStorage } from '@/lib/storage/user-storage';
+import { requireUserContext } from '@/lib/auth/context';
+import { habitsRepo } from './repo';
 import type { HabitCollection } from './types';
-
-const HABITS_FILENAME = 'habits.json';
-
-const DEFAULT_COLLECTION: HabitCollection = { habits: [] };
-
-function isHabitCollection(data: unknown): data is HabitCollection {
-  if (typeof data !== 'object' || data === null) return false;
-  return Array.isArray((data as Record<string, unknown>).habits);
-}
 
 /**
  * Returns every habit owned by the authenticated user. The caller is
  * responsible for partitioning into active/completed/abandoned buckets.
  */
 export async function readUserHabits(): Promise<HabitCollection> {
-  return readUserStorage<HabitCollection>(HABITS_FILENAME, DEFAULT_COLLECTION, isHabitCollection);
+  const { userId } = await requireUserContext();
+  return habitsRepo.read(userId);
 }

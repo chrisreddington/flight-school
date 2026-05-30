@@ -8,7 +8,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { readUserHabits } from '@/lib/habits/server';
+import { habitsRepo } from '@/lib/habits/repo';
 import {
   MAX_ACTIVE_HABITS,
   createHabit,
@@ -19,19 +19,11 @@ import {
   type TrackingConfig,
 } from '@/lib/habits/types';
 import { requireGuardedUserContext } from '@/lib/security/guard';
-import { writeUserStorage } from '@/lib/storage/user-storage';
-
-const HABITS_FILENAME = 'habits.json';
 
 const HABITS_ACTION_GUARD = {
   eventType: 'storage.write' as const,
   auditMetadata: { route: '/habits' },
 };
-
-function isHabitCollection(data: unknown): data is HabitCollection {
-  if (typeof data !== 'object' || data === null) return false;
-  return Array.isArray((data as Record<string, unknown>).habits);
-}
 
 /** Serialized payload sent from {@link HabitCreationDialog} to the action. */
 export interface CreateHabitPayload {
@@ -54,7 +46,7 @@ export interface HabitActionResult {
  * is for UX, not security.
  */
 export async function createHabitAction(payload: CreateHabitPayload): Promise<HabitActionResult> {
-  const { release } = await requireGuardedUserContext({
+  const { ctx, release } = await requireGuardedUserContext({
     ...HABITS_ACTION_GUARD,
     auditMetadata: { ...HABITS_ACTION_GUARD.auditMetadata, action: 'createHabit' },
   });
@@ -74,7 +66,7 @@ export async function createHabitAction(payload: CreateHabitPayload): Promise<Ha
       payload.includesWeekends,
     );
 
-    const collection = await readUserHabits();
+    const collection = await habitsRepo.read(ctx.userId);
     const activeCount = collection.habits.filter(
       (existing) => existing.state === 'not-started' || existing.state === 'active' || existing.state === 'paused',
     ).length;
@@ -87,7 +79,7 @@ export async function createHabitAction(payload: CreateHabitPayload): Promise<Ha
       ...collection,
       habits: [...collection.habits, habitWithHistory],
     };
-    await writeUserStorage(HABITS_FILENAME, next, isHabitCollection);
+    await habitsRepo.write(ctx.userId, next);
     revalidatePath('/habits');
     return { ok: true, habit: habitWithHistory };
   } finally {
@@ -111,7 +103,7 @@ export interface HabitEditableFields {
  * only the editable fields into the canonical habit record.
  */
 export async function updateHabitAction(habitId: string, edits: HabitEditableFields): Promise<HabitActionResult> {
-  const { release } = await requireGuardedUserContext({
+  const { ctx, release } = await requireGuardedUserContext({
     ...HABITS_ACTION_GUARD,
     auditMetadata: { ...HABITS_ACTION_GUARD.auditMetadata, action: 'updateHabit' },
   });
@@ -121,13 +113,13 @@ export async function updateHabitAction(habitId: string, edits: HabitEditableFie
     if (!title || !description) {
       return { ok: false, error: 'Title and description are required' };
     }
-    const collection = await readUserHabits();
+    const collection = await habitsRepo.read(ctx.userId);
     const index = collection.habits.findIndex((h) => h.id === habitId);
     if (index === -1) return { ok: false, error: `Habit ${habitId} not found` };
     const merged: HabitWithHistory = { ...collection.habits[index], title, description };
     const updated = [...collection.habits];
     updated[index] = merged;
-    await writeUserStorage(HABITS_FILENAME, { ...collection, habits: updated }, isHabitCollection);
+    await habitsRepo.write(ctx.userId, { ...collection, habits: updated });
     revalidatePath('/habits');
     return { ok: true, habit: merged };
   } finally {
