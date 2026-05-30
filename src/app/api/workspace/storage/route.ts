@@ -1,18 +1,13 @@
 /**
  * Workspace Storage API Route
  *
- * Server-side file-based persistence for challenge workspaces, **partitioned
- * per authenticated user**. Each authenticated request resolves its GitHub
- * identity via {@link requireUserContext} and the workspace tree lives under
- * `users/{userId}/workspaces/...` — User A cannot reach User B's workspaces.
- *
- * Storage structure (per user):
- * ```
- * users/{userId}/workspaces/
- *   {challengeId}/
- *     _workspace.json    # metadata only
- *     solution.ts        # actual file content
- * ```
+ * Server-side persistence for challenge workspaces, **partitioned per
+ * authenticated user**. Each request resolves its GitHub identity via
+ * {@link requireUserContext}; all storage is delegated to
+ * {@link workspacesRepo}, which keys each workspace by `challengeId` under the
+ * user's `'workspaces'` envelope partition (with transparent read-through of any
+ * residual legacy `users/{userId}/workspaces/{id}/...` file tree). User A can
+ * never reach User B's workspaces.
  *
  * Endpoints:
  * - GET ?challengeId=X           - Read workspace (full or metadata only)
@@ -22,10 +17,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile, writeFile, deleteFile, deleteDir, listFiles, ensureDir, safeChildPath } from '@/lib/storage/utils';
-import type { ChallengeWorkspace, WorkspaceFile, WorkspaceMetadata } from '@/lib/workspace/types';
-import { CURRENT_WORKSPACE_SCHEMA_VERSION, type WorkspaceFile as WorkspaceTemplateFile } from '@/lib/workspace/types';
-import { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile } from '@/lib/workspace/storage';
 import { requireUserContext } from '@/lib/auth/context';
 import { authErrorResponse, validationErrorResponse } from '@/lib/api';
 import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
@@ -33,46 +24,23 @@ import { logger } from '@/lib/logger';
 import { challengeSpecRepo } from '@/lib/challenge/repo';
 import { getWorkspaceTemplate } from '@/lib/workspace/templates';
 import { now } from '@/lib/utils/date-utils';
+import { CURRENT_WORKSPACE_SCHEMA_VERSION } from '@/lib/workspace/types';
+import type {
+  ChallengeWorkspace,
+  WorkspaceFile as WorkspaceTemplateFile,
+  WorkspaceMetadata,
+} from '@/lib/workspace/types';
+import { WORKSPACES_DIR, toFileMetadata } from '@/lib/workspace/storage';
+import { assertSafeWorkspaceFilename } from '@/lib/workspace/filename';
+import { workspacesRepo } from '@/lib/workspace/repo';
 
 const log = logger.withTag('Workspace Storage API');
 
-/** Maximum length allowed for a workspace filename (incl. any subpath). */
-const MAX_WORKSPACE_FILENAME_LENGTH = 255;
-
 /**
- * Validates that `name` is a safe workspace filename: it may consist of one or
- * more `/`-separated segments, each matching a conservative character class,
- * and the resolved path must stay under `workspaceDir`. Throws on rejection.
+ * Resolves the authenticated, path-safe user id, or returns an HTTP response
+ * describing why the request can't proceed.
  */
-function assertSafeWorkspaceFilename(workspaceDir: string, name: unknown): void {
-  if (typeof name !== 'string') {
-    throw new Error('filename must be a string');
-  }
-  if (name.length === 0 || name.length > MAX_WORKSPACE_FILENAME_LENGTH) {
-    throw new Error('filename length out of bounds');
-  }
-  const segments = name.split('/');
-  const segmentPattern = /^[a-zA-Z0-9._-]+$/;
-  for (const segment of segments) {
-    if (!segmentPattern.test(segment)) {
-      throw new Error(`invalid filename segment "${segment}"`);
-    }
-  }
-  // Structural + containment check (rejects `..`, `\`, NUL, absolute, etc.).
-  safeChildPath(workspaceDir, ...segments);
-}
-
-// =============================================================================
-// Utility Functions
-// =============================================================================
-
-/**
- * Resolves the authenticated user's workspaces root, or returns an HTTP
- * response describing why the request can't proceed.
- */
-async function resolveUserWorkspacesDir(): Promise<
-  { ok: true; userId: string; root: string } | { ok: false; response: Response }
-> {
+async function resolveUserId(): Promise<{ ok: true; userId: string } | { ok: false; response: Response }> {
   let userId: string;
   try {
     ({ userId } = await requireUserContext());
@@ -90,13 +58,7 @@ async function resolveUserWorkspacesDir(): Promise<
     };
   }
 
-  const root = `users/${userId}/${WORKSPACES_DIR}`;
-  await ensureDir(`users/${userId}`, { mode: 0o700 });
-  return { ok: true, userId, root };
-}
-
-function getWorkspaceDir(workspacesRoot: string, challengeId: string): string {
-  return `${workspacesRoot}/${challengeId}`;
+  return { ok: true, userId };
 }
 
 function buildStarterWorkspace(challengeId: string, files: WorkspaceTemplateFile[]): ChallengeWorkspace {
@@ -111,12 +73,24 @@ function buildStarterWorkspace(challengeId: string, files: WorkspaceTemplateFile
   };
 }
 
+/** Derive the metadata-only projection (per-file content stripped). */
+function toWorkspaceMetadata(workspace: ChallengeWorkspace): WorkspaceMetadata {
+  return {
+    version: workspace.version,
+    challengeId: workspace.challengeId,
+    files: workspace.files.map(toFileMetadata),
+    activeFileId: workspace.activeFileId,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
+  };
+}
+
 // =============================================================================
 // GET: Read workspace
 // =============================================================================
 
 export async function GET(request: NextRequest) {
-  const scoped = await resolveUserWorkspacesDir();
+  const scoped = await resolveUserId();
   if (!scoped.ok) return scoped.response;
 
   const { searchParams } = new URL(request.url);
@@ -131,62 +105,36 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const workspaceDir = getWorkspaceDir(scoped.root, challengeId);
+    const workspace = await workspacesRepo.read(scoped.userId, challengeId);
 
-    const metadataJson = await readFile(workspaceDir, METADATA_FILENAME);
-    if (!metadataJson) {
+    if (!workspace) {
+      // No saved workspace: synthesise a starter from the challenge spec when
+      // one exists. Historically this returns the FULL starter even for
+      // metadataOnly requests — preserved so the sandbox's first load is
+      // unaffected.
       const challengeSpec = await challengeSpecRepo.read(scoped.userId, challengeId);
       if (challengeSpec) {
-        const starterWorkspace = buildStarterWorkspace(
-          challengeId,
-          getWorkspaceTemplate({
-            title: challengeSpec.title,
-            description: challengeSpec.description,
-            type: challengeSpec.type,
-            brokenCode: challengeSpec.brokenCode,
-            language: challengeSpec.language,
-            difficulty: challengeSpec.difficulty,
-            testCases: [],
-          }),
+        return NextResponse.json(
+          buildStarterWorkspace(
+            challengeId,
+            getWorkspaceTemplate({
+              title: challengeSpec.title,
+              description: challengeSpec.description,
+              type: challengeSpec.type,
+              brokenCode: challengeSpec.brokenCode,
+              language: challengeSpec.language,
+              difficulty: challengeSpec.difficulty,
+              testCases: [],
+            }),
+          ),
         );
-        return NextResponse.json(starterWorkspace);
       }
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
     }
 
-    const metadata: WorkspaceMetadata = JSON.parse(metadataJson);
-
     if (metadataOnly) {
-      return NextResponse.json(metadata);
+      return NextResponse.json(toWorkspaceMetadata(workspace));
     }
-
-    const files: WorkspaceFile[] = await Promise.all(
-      metadata.files.map(async (fileMeta) => {
-        // Defence in depth: reject filenames that escape the workspace
-        // subtree (in case any were persisted before validation was added).
-        try {
-          assertSafeWorkspaceFilename(workspaceDir, fileMeta.name);
-        } catch (validationError) {
-          log.warn('Skipping workspace file with unsafe name on read', {
-            challengeId,
-            name: fileMeta.name,
-            error: validationError instanceof Error ? validationError.message : String(validationError),
-          });
-          return toWorkspaceFile(fileMeta, '');
-        }
-        const content = (await readFile(workspaceDir, fileMeta.name)) ?? '';
-        return toWorkspaceFile(fileMeta, content);
-      }),
-    );
-
-    const workspace: ChallengeWorkspace = {
-      version: metadata.version,
-      challengeId: metadata.challengeId,
-      files,
-      activeFileId: metadata.activeFileId,
-      createdAt: metadata.createdAt,
-      updatedAt: metadata.updatedAt,
-    };
 
     return NextResponse.json(workspace);
   } catch (error) {
@@ -200,7 +148,7 @@ export async function GET(request: NextRequest) {
 // =============================================================================
 
 export async function POST(request: NextRequest) {
-  const scoped = await resolveUserWorkspacesDir();
+  const scoped = await resolveUserId();
   if (!scoped.ok) return scoped.response;
 
   try {
@@ -213,10 +161,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid challengeId' }, { status: 400 });
     }
 
-    const workspaceDir = getWorkspaceDir(scoped.root, workspace.challengeId);
-
-    // Validate every caller-supplied filename BEFORE touching the filesystem.
-    // Any rejection -> 400 and no partial writes.
+    // Validate every caller-supplied filename against the same rules the repo's
+    // legacy read-through trusts. Any rejection -> 400, nothing persisted.
+    const workspaceDir = `users/${scoped.userId}/${WORKSPACES_DIR}/${workspace.challengeId}`;
     try {
       for (const file of workspace.files) {
         assertSafeWorkspaceFilename(workspaceDir, file?.name);
@@ -229,30 +176,7 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse('Invalid file name');
     }
 
-    await ensureDir(workspaceDir);
-
-    const existingFiles = await listFiles(workspaceDir);
-    const newFileNames = new Set(workspace.files.map((f) => f.name));
-    newFileNames.add(METADATA_FILENAME);
-
-    for (const existingFile of existingFiles) {
-      if (!newFileNames.has(existingFile)) {
-        await deleteFile(workspaceDir, existingFile);
-      }
-    }
-
-    await Promise.all(workspace.files.map((file) => writeFile(workspaceDir, file.name, file.content)));
-
-    const metadata: WorkspaceMetadata = {
-      version: workspace.version,
-      challengeId: workspace.challengeId,
-      files: workspace.files.map(toFileMetadata),
-      activeFileId: workspace.activeFileId,
-      createdAt: workspace.createdAt,
-      updatedAt: workspace.updatedAt,
-    };
-
-    await writeFile(workspaceDir, METADATA_FILENAME, JSON.stringify(metadata, null, 2));
+    await workspacesRepo.write(scoped.userId, workspace);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -266,7 +190,7 @@ export async function POST(request: NextRequest) {
 // =============================================================================
 
 export async function DELETE(request: NextRequest) {
-  const scoped = await resolveUserWorkspacesDir();
+  const scoped = await resolveUserId();
   if (!scoped.ok) return scoped.response;
 
   const { searchParams } = new URL(request.url);
@@ -277,12 +201,11 @@ export async function DELETE(request: NextRequest) {
       if (!SAFE_PATH_SEGMENT.test(challengeId)) {
         return NextResponse.json({ error: 'Invalid challengeId' }, { status: 400 });
       }
-      const workspaceDir = getWorkspaceDir(scoped.root, challengeId);
-      await deleteDir(workspaceDir);
+      await workspacesRepo.remove(scoped.userId, challengeId);
       log.debug('Deleted workspace', { challengeId });
     } else {
       // Delete all workspaces for this user only — never touch other users.
-      await deleteDir(scoped.root);
+      await workspacesRepo.removeAll(scoped.userId);
       log.debug('Deleted all workspaces for user');
     }
 
