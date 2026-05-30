@@ -142,6 +142,20 @@ export function describeDocumentStoreContract(
       expect(await store.get(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID)).toBeNull();
     });
 
+    it('rejects unsafe partitionKey and id segments on every operation', async () => {
+      const store = await getStore();
+      const unsafe = '../escape';
+
+      await expect(store.get(CONTAINER, unsafe, SINGLETON_DOCUMENT_ID)).rejects.toThrow();
+      await expect(store.getEnvelope(CONTAINER, 'user-a', unsafe)).rejects.toThrow();
+      await expect(store.put(CONTAINER, unsafe, SINGLETON_DOCUMENT_ID, body)).rejects.toThrow();
+      await expect(store.put(CONTAINER, 'user-a', unsafe, body)).rejects.toThrow();
+      await expect(store.remove(CONTAINER, unsafe, SINGLETON_DOCUMENT_ID)).rejects.toThrow();
+      await expect(store.list(CONTAINER, unsafe)).rejects.toThrow();
+      await expect(store.removeByParent(CONTAINER, unsafe, 'parent-1')).rejects.toThrow();
+      await expect(store.deletePartition(CONTAINER, unsafe)).rejects.toThrow();
+    });
+
     it('lists every document in a partition', async () => {
       const store = await getStore();
       await store.put('track-steps', 'user-a', 'step-1', { label: 'one' });
