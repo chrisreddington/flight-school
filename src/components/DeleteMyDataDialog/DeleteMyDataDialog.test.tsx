@@ -1,7 +1,7 @@
 /**
  * Tests for DeleteMyDataDialog.
  *
- * Focus areas (S1.5 panel fix B — partial-delete safety):
+ * Focus areas (S1.5 panel fixes B & C — partial-delete safety):
  * - A partial server deletion (`success: false`) must NOT call
  *   `onConfirmed` (which signs the user out), and must surface an error
  *   so the user stays authed and can retry.
@@ -9,9 +9,12 @@
  * - A registry-only cleanup failure (`success: true`,
  *   `registryCleanupPending: true`) still signs the user out — the data is
  *   gone, only the owner record lingers.
+ * - (Fix C) The sign-out gate keys off `!result.success`, never
+ *   `summary.partial`: a `success: false` response with no `partial` flag
+ *   must still keep the user signed in.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@primer/react';
 
@@ -54,7 +57,13 @@ function renderDialog() {
 async function confirmDeletion() {
   const input = screen.getByLabelText('Type your GitHub login to confirm');
   fireEvent.change(input, { target: { value: 'octocat' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Delete everything' }));
+  // Wrap the click in act(): clicking kicks off the async apiDelete flow
+  // whose resolution sets state (submitting/error). Flushing it inside act
+  // keeps those updates from escaping the test's render scope and triggering
+  // React's "not wrapped in act(...)" warnings.
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Delete everything' }));
+  });
 }
 
 afterEach(() => {

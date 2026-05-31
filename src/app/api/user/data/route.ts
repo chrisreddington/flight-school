@@ -58,18 +58,19 @@ interface DeleteSummary {
   storeDataDeleted: boolean;
   /**
    * True only when user data may still be on the server (a partition-phase
-   * store failure or an activity-buffer clear failure). This — mirrored by
-   * the top-level `success: false` — is the signal the client uses to keep
-   * the user signed in for a retry. A registry-only cleanup failure is NOT
-   * partial: every byte of user data is gone, so it surfaces via
-   * {@link DeleteSummary.registryCleanupPending} instead.
+   * store failure, an activity-buffer clear failure, or a legacy storage-dir
+   * wipe failure). This — mirrored by the top-level `success: false` — is the
+   * signal the client uses to keep the user signed in for a retry. A
+   * registry-only cleanup failure is NOT partial: every byte of user data is
+   * gone, so it surfaces via {@link DeleteSummary.registryCleanupPending}
+   * instead.
    */
-  partial?: boolean;
+  partial?: true;
   /**
    * Best-effort wipe steps that failed. May contain blocking entries
-   * (`store-data:<containers>`, `activity`) that imply data remains, or the
-   * non-blocking `store-registry` warning that only means the owner record
-   * lingers. Use `partial` / `success` to tell the two apart.
+   * (`store-data:<containers>`, `activity`, `storage-dir`) that imply data
+   * remains, or the non-blocking `store-registry` warning that only means the
+   * owner record lingers. Use `partial` / `success` to tell the two apart.
    */
   failed?: string[];
   /**
@@ -79,7 +80,7 @@ interface DeleteSummary {
    * alongside `success: true` — if user data also remains (`partial: true`)
    * this flag is suppressed, because its contract is "the wipe is complete".
    */
-  registryCleanupPending?: boolean;
+  registryCleanupPending?: true;
 }
 
 interface DeleteRequestBody {
@@ -209,8 +210,18 @@ export async function DELETE(request: NextRequest) {
 
     // Wipe the entire per-user storage directory (threads, evaluations,
     // suggestions, focus, etc.). `deleteDir` is recursive and a no-op
-    // when the directory doesn't exist.
-    await deleteDir(`users/${userId}`);
+    // when the directory doesn't exist. A failure here is tolerated (reported
+    // via `failed`) rather than 500ing: the legacy flat-file data may remain,
+    // so this is a blocking partial like the partition/activity steps, but the
+    // client still needs the 200 summary to know it must NOT sign out.
+    let storageDirDeleted = true;
+    try {
+      await deleteDir(`users/${userId}`);
+    } catch (err) {
+      log.error(`[user ${userId}] Legacy storage directory deletion failed`, { err });
+      storageDirDeleted = false;
+      failed.push('storage-dir');
+    }
 
     // Wipe the user's DocumentStore partitions. The file adapter persists
     // under `_docstore/{container}/{userId}/`, NOT under `users/{userId}/`,
@@ -248,8 +259,10 @@ export async function DELETE(request: NextRequest) {
     // second mark is a defensive idempotent re-write, not recovery of a wiped
     // marker — it guarantees the tombstone is present even if a future refactor
     // moves tombstone storage back under the per-user directory. A failure here
-    // must not 500 the wipe: the data is already gone, so log-and-swallow and
-    // still return the summary the client needs to sign out.
+    // must not 500 the wipe and must not override the computed summary: the
+    // tombstone is best-effort and orthogonal to whether every byte of user
+    // data was wiped (which may be partial), so log-and-swallow and still
+    // return the summary the client needs.
     try {
       await markUserDeleted(userId);
     } catch (err) {
@@ -261,13 +274,13 @@ export async function DELETE(request: NextRequest) {
     // A registry-only cleanup failure is deliberately excluded: the data is
     // gone, only the owner record lingers, so it surfaces as
     // `registryCleanupPending` and the delete still counts as successful.
-    const userDataMayRemain = !storeDataDeleted || !activityEventsCleared;
+    const userDataMayRemain = !storeDataDeleted || !activityEventsCleared || !storageDirDeleted;
 
     const summary: DeleteSummary = {
       jobsCancelled,
       jobsDeleted,
       activityEventsCleared,
-      storageDirDeleted: true,
+      storageDirDeleted,
       storeDataDeleted,
       ...(failed.length > 0 ? { failed } : {}),
       ...(userDataMayRemain ? { partial: true } : {}),

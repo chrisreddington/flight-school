@@ -34,9 +34,9 @@ interface DeleteDataResponse {
    */
   success: boolean;
   summary?: {
-    partial?: boolean;
+    partial?: true;
     failed?: string[];
-    registryCleanupPending?: boolean;
+    registryCleanupPending?: true;
   };
 }
 

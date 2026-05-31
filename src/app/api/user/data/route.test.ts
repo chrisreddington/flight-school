@@ -109,6 +109,10 @@ beforeEach(() => {
   captureTraceMock.mockReturnValue({});
   getDocumentStoreMock.mockResolvedValue({ __store: true });
   deleteUserDataMock.mockResolvedValue(undefined);
+  // Restore default-resolving impls: clearAllMocks() resets call history but
+  // NOT implementations, so a per-test mockRejectedValue would otherwise leak.
+  deleteDirMock.mockResolvedValue(undefined);
+  markUserDeletedMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -275,6 +279,66 @@ describe('DELETE /api/user/data', () => {
     expect(body.summary.storeDataDeleted).toBe(true);
     expect(body.summary.failed).toEqual(['activity', 'store-registry']);
     expect(body.summary.registryCleanupPending).toBeUndefined();
+  });
+
+  it('reports a legacy storage-directory failure as partial with storage-dir', async () => {
+    // The flat-file subtree wipe (`deleteDir('users/{userId}')`) failing means
+    // legacy threads/evaluations/focus data may remain, so the wipe is partial
+    // and the client must NOT sign out. A failure here must still return a 200
+    // summary rather than 500ing and losing the contract.
+    deleteDirMock.mockRejectedValue(new Error('disk unavailable'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(body.summary.storageDirDeleted).toBe(false);
+    expect(body.summary.storeDataDeleted).toBe(true);
+    expect(body.summary.activityEventsCleared).toBe(true);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.failed).toEqual(['storage-dir']);
+    expect(body.summary.registryCleanupPending).toBeUndefined();
+  });
+
+  it('suppresses registryCleanupPending when the legacy storage directory also fails', async () => {
+    // Combined failure: the flat-file subtree wipe fails AND the registry-phase
+    // store removal fails. Legacy user data still remains, so the wipe is
+    // partial — `registryCleanupPending` must NOT be set even though the
+    // registry removal failed, keeping it mutually exclusive with `partial`.
+    deleteDirMock.mockRejectedValue(new Error('disk unavailable'));
+    deleteUserDataMock.mockRejectedValue(new UserDataDeletionErrorMock('registry', [], 'registry removal failed'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.storageDirDeleted).toBe(false);
+    expect(body.summary.storeDataDeleted).toBe(true);
+    expect(body.summary.failed).toEqual(['storage-dir', 'store-registry']);
+    expect(body.summary.registryCleanupPending).toBeUndefined();
+  });
+
+  it('still returns the summary when the defensive tombstone re-write fails', async () => {
+    // Fix E regression guard: the FIRST markUserDeleted (pre-wipe) succeeds but
+    // the SECOND defensive re-write throws. That failure must be swallowed —
+    // the wipe already completed — so the response is still 200 with the clean
+    // success summary the client needs to sign out.
+    markUserDeletedMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('tombstone re-write down'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.summary.storageDirDeleted).toBe(true);
+    expect(body.summary.storeDataDeleted).toBe(true);
+    expect(body.summary.activityEventsCleared).toBe(true);
+    expect(body.summary.partial).toBeUndefined();
+    expect(body.summary.registryCleanupPending).toBeUndefined();
+    expect(body.summary.failed).toBeUndefined();
   });
 
   it('reports partial failure when worker activity DELETE fails', async () => {
