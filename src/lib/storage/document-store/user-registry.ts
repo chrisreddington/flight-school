@@ -103,6 +103,19 @@ export async function removeUserRegistration(store: DocumentStore, userId: strin
  * known a priori, so retention never falls back to a cross-partition scan.
  */
 export async function* iterateRegisteredUsers(store: DocumentStore): AsyncGenerator<string> {
+  for await (const entry of iterateRegisteredEntries(store)) {
+    yield entry.userId;
+  }
+}
+
+/**
+ * Yield the full {@link UserRegistryEntry} (user id + `registeredAt`) of every
+ * registered user, walking the same fixed bucket set as
+ * {@link iterateRegisteredUsers}. Retention's age guard needs `registeredAt` to
+ * spare freshly-registered-but-empty users from a prune race, so it walks the
+ * entries rather than the bare ids.
+ */
+export async function* iterateRegisteredEntries(store: DocumentStore): AsyncGenerator<UserRegistryEntry> {
   for (const shard of allRegistryShards()) {
     let cursor: string | undefined;
     do {
@@ -112,7 +125,7 @@ export async function* iterateRegisteredUsers(store: DocumentStore): AsyncGenera
         cursor,
       });
       for (const envelope of page.items) {
-        yield envelope.body.userId;
+        yield envelope.body;
       }
       cursor = page.nextCursor;
     } while (cursor);

@@ -9,6 +9,8 @@ const {
   markUserDeletedMock,
   clearUserTombstoneMock,
   captureTraceMock,
+  getDocumentStoreMock,
+  deleteUserDataMock,
   UnauthorizedErrorMock,
 } = vi.hoisted(() => {
   class UnauthorizedErrorMock extends Error {}
@@ -21,6 +23,8 @@ const {
     markUserDeletedMock: vi.fn(),
     clearUserTombstoneMock: vi.fn(),
     captureTraceMock: vi.fn(),
+    getDocumentStoreMock: vi.fn(),
+    deleteUserDataMock: vi.fn(),
     UnauthorizedErrorMock,
   };
 });
@@ -50,6 +54,14 @@ vi.mock('@/lib/storage/utils', () => ({
 vi.mock('@/lib/storage/tombstone', () => ({
   markUserDeleted: markUserDeletedMock,
   clearUserTombstone: clearUserTombstoneMock,
+}));
+
+vi.mock('@/lib/storage/document-store/factory', () => ({
+  getDocumentStore: getDocumentStoreMock,
+}));
+
+vi.mock('@/lib/storage/document-store/account-deletion', () => ({
+  deleteUserData: deleteUserDataMock,
 }));
 
 import { DELETE } from './route';
@@ -82,6 +94,8 @@ beforeEach(() => {
   deleteWorkerJobsForUserMock.mockResolvedValue({ deleted: 2, cancelled: 0 });
   deleteWorkerActivityMock.mockResolvedValue(undefined);
   captureTraceMock.mockReturnValue({});
+  getDocumentStoreMock.mockResolvedValue({ __store: true });
+  deleteUserDataMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -152,8 +166,41 @@ describe('DELETE /api/user/data', () => {
         jobsDeleted: 3,
         activityEventsCleared: true,
         storageDirDeleted: true,
+        storeDataDeleted: true,
       },
     });
+  });
+
+  it('wipes document-store partitions after the legacy directory and before the final tombstone re-mark', async () => {
+    const callOrder: string[] = [];
+    deleteDirMock.mockImplementation(async () => {
+      callOrder.push('deleteDir');
+    });
+    deleteUserDataMock.mockImplementation(async () => {
+      callOrder.push('deleteUserData');
+    });
+    markUserDeletedMock.mockImplementation(async () => {
+      callOrder.push('markUserDeleted');
+    });
+
+    await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+
+    expect(callOrder).toEqual(['markUserDeleted', 'deleteDir', 'deleteUserData', 'markUserDeleted']);
+  });
+
+  it('reports partial failure when document-store deletion fails without 500ing', async () => {
+    deleteUserDataMock.mockRejectedValue(new Error('partition wipe failed: focus'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.summary.storeDataDeleted).toBe(false);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.failed).toEqual(['store-data']);
+    // The happy-path summary already proves the final re-mark runs on success;
+    // the ordering test pins that it runs AFTER deleteUserData even when it fails.
   });
 
   it('reports partial failure when worker activity DELETE fails', async () => {

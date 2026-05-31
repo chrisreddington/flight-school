@@ -4,9 +4,13 @@
  * `DELETE /api/user/data` — irreversibly deletes all server-side data
  * belonging to the authenticated caller:
  *
- *   - their entire `users/{userId}/` storage subtree (threads,
- *     evaluations, suggestions, focus, anything else partitioned per
- *     user)
+ *   - their entire `users/{userId}/` storage subtree (legacy flat-file
+ *     threads, evaluations, suggestions, focus, anything else partitioned
+ *     per user)
+ *   - their DocumentStore partitions (skills, habits, focus, profile,
+ *     challenges, threads, evaluations, activity, … — persisted under
+ *     `_docstore/{container}/{userId}/`, outside the `users/` subtree),
+ *     via {@link deleteUserData}
  *   - every {@link BackgroundJob} they own (cancelling any in-flight
  *     ones first)
  *   - every {@link AIActivityEvent} they own in the in-memory activity
@@ -26,6 +30,8 @@
 import { requireUserContext, UnauthorizedError, readCredentialsFromJwt } from '@/lib/auth/context';
 import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { deleteDir } from '@/lib/storage/utils';
+import { deleteUserData } from '@/lib/storage/document-store/account-deletion';
+import { getDocumentStore } from '@/lib/storage/document-store/factory';
 import { markUserDeleted, clearUserTombstone } from '@/lib/storage/tombstone';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -49,6 +55,7 @@ interface DeleteSummary {
   jobsDeleted: number;
   activityEventsCleared: boolean;
   storageDirDeleted: boolean;
+  storeDataDeleted: boolean;
   partial?: boolean;
   failed?: string[];
 }
@@ -183,6 +190,21 @@ export async function DELETE(request: NextRequest) {
     // when the directory doesn't exist.
     await deleteDir(`users/${userId}`);
 
+    // Wipe the user's DocumentStore partitions. The file adapter persists
+    // under `_docstore/{container}/{userId}/`, NOT under `users/{userId}/`,
+    // so `deleteDir` above misses it entirely — without this call the
+    // account-deletion endpoint would leave skills/habits/focus/etc. data
+    // behind. A partial failure here is tolerated (reported via `failed`)
+    // rather than 500ing, so the rest of the wipe still completes.
+    let storeDataDeleted = true;
+    try {
+      await deleteUserData(await getDocumentStore(), userId);
+    } catch (err) {
+      log.error(`[user ${userId}] DocumentStore partition deletion failed`, { err });
+      storeDataDeleted = false;
+      failed.push('store-data');
+    }
+
     // Restore the tombstone marker after deleteDir wipes it (deleteDir
     // recursively removes everything under `users/{userId}/` including
     // `.deleted`). The marker must remain in place until the user signs
@@ -194,6 +216,7 @@ export async function DELETE(request: NextRequest) {
       jobsDeleted,
       activityEventsCleared,
       storageDirDeleted: true,
+      storeDataDeleted,
       ...(failed.length > 0 ? { partial: true, failed } : {}),
     };
 

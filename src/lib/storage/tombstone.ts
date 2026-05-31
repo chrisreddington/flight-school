@@ -21,6 +21,24 @@
  * path so tombstones written by older builds remain effective during a
  * rolling deploy.
  *
+ * ## Cross-process freshness (no positive cache)
+ *
+ * Every check reads the marker from disk — there is deliberately no
+ * in-process positive cache. The Next.js process clears a tombstone on
+ * sign-in while a SEPARATE worker process runs the write-path guard; a
+ * cached `true` in the worker would outlive the clear and permanently
+ * wedge a resurrected user out of their own writes. The cost is one
+ * point-read per guard, which §A.5 of the storage plan accepts.
+ *
+ * ## Deployment invariant
+ *
+ * NOTE: Tombstones are raw files under `DATA_DIR`, so every process that
+ *       reads or writes per-user state (web + worker + any background
+ *       writer) MUST share that filesystem. This holds for the local
+ *       file/sqlite default (single host, shared `DATA_DIR`). A split-host
+ *       or serverless deployment must move tombstones into the `system`
+ *       container before it is safe — tracked as an S2/Cosmos follow-up.
+ *
  * @module storage/tombstone
  */
 
@@ -31,41 +49,27 @@ const TOMBSTONE_DIR = 'tombstones';
 const LEGACY_TOMBSTONE_DIR_PREFIX = 'users/';
 const LEGACY_TOMBSTONE_FILENAME = '.deleted';
 
-const tombstoneCache = new Map<string, true>();
-
 /** Mark `userId` as deleted. Idempotent. */
 export async function markUserDeleted(userId: string): Promise<void> {
   await writeFile(TOMBSTONE_DIR, userId, new Date().toISOString());
-  tombstoneCache.set(userId, true);
 }
 
 /**
- * True when {@link markUserDeleted} has been called for `userId` and
- * the marker is still present on disk. Cached in-process; falls back
- * to a `readFile` on the new and legacy paths so it survives process
- * restarts and rolling deploys.
+ * True when {@link markUserDeleted} has been called for `userId` and the
+ * marker is still present on disk. Always reads from disk (see the module
+ * note on cross-process freshness); falls back to the legacy
+ * `users/{userId}/.deleted` path so tombstones written by older builds
+ * stay effective during a rolling deploy.
  */
 export async function isUserDeleted(userId: string): Promise<boolean> {
-  if (tombstoneCache.has(userId)) return true;
   const marker = await readFile(TOMBSTONE_DIR, userId);
-  if (marker !== null) {
-    tombstoneCache.set(userId, true);
-    return true;
-  }
-  // Fall back to the legacy `users/{userId}/.deleted` path so a deploy
-  // that interleaves old & new instances doesn't accidentally resurrect
-  // a deleted user.
-  const legacy = await readFile(`${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`, LEGACY_TOMBSTONE_FILENAME);
-  if (legacy !== null) {
-    tombstoneCache.set(userId, true);
-    return true;
-  }
-  return false;
+  if (marker !== null) return true;
+  const legacyMarker = await readFile(`${LEGACY_TOMBSTONE_DIR_PREFIX}${userId}`, LEGACY_TOMBSTONE_FILENAME);
+  return legacyMarker !== null;
 }
 
 /** Clear the tombstone (call on successful sign-in for `userId`). */
 export async function clearUserTombstone(userId: string): Promise<void> {
-  tombstoneCache.delete(userId);
   await deleteFile(TOMBSTONE_DIR, userId);
   // Clear the legacy location too so a subsequent isUserDeleted lookup
   // doesn't flap back to true via the legacy fallback path.

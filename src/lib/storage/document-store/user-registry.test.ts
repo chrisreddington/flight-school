@@ -15,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import {
   collectRegisteredUsers,
   ensureUserRegistered,
+  iterateRegisteredEntries,
   registryItemId,
   registryShardFor,
   removeUserRegistration,
@@ -137,5 +138,24 @@ describe('removeUserRegistration', () => {
     await removeUserRegistration(store, 'alice');
 
     expect(await collectRegisteredUsers(store)).toEqual(['bob']);
+  });
+});
+
+describe('iterateRegisteredEntries', () => {
+  it('yields the userId and registeredAt of every registered user', async () => {
+    const store = createFileDocumentStore();
+    await ensureUserRegistered(store, 'alice');
+    await ensureUserRegistered(store, 'bob');
+
+    const entries: Array<{ userId: string; registeredAt: string }> = [];
+    for await (const entry of iterateRegisteredEntries(store)) {
+      entries.push(entry);
+    }
+
+    expect(entries.map((entry) => entry.userId).sort()).toEqual(['alice', 'bob']);
+    for (const entry of entries) {
+      expect(typeof entry.registeredAt).toBe('string');
+      expect(Number.isNaN(Date.parse(entry.registeredAt))).toBe(false);
+    }
   });
 });
