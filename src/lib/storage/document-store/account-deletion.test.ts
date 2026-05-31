@@ -21,29 +21,31 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deleteUserData } from './account-deletion';
+import { deleteUserData, UserDataDeletionError } from './account-deletion';
 import { USER_SCOPED_CONTAINERS } from './containers';
 import { createFileDocumentStore } from './file-adapter';
 import { createSqliteDocumentStore } from './sqlite-adapter';
-import { collectRegisteredUsers, ensureUserRegistered, registryShardFor } from './user-registry';
+import { collectRegisteredUsers, ensureUserRegistered, registryItemId, registryShardFor } from './user-registry';
 import { SINGLETON_DOCUMENT_ID, type ContainerName, type DocumentStore } from './types';
 
 /**
  * A minimal {@link DocumentStore} that records partition deletes and document
  * removes in call order, and can be told to throw on specific containers'
- * `deletePartition`. Only the methods {@link deleteUserData} touches are
- * implemented; the rest throw so an accidental new dependency is loud.
+ * `deletePartition` or on the registry `remove`. Only the methods
+ * {@link deleteUserData} touches are implemented; the rest throw so an
+ * accidental new dependency is loud.
  */
-function createRecordingStore(failOn: Set<ContainerName> = new Set()) {
+function createRecordingStore(failOn: Set<ContainerName> = new Set(), failRegistryRemove = false) {
   const deletedPartitions: ContainerName[] = [];
-  const removedRegistryShards: string[] = [];
+  const removedRegistryItems: string[] = [];
   const store = {
     async deletePartition(container: ContainerName): Promise<void> {
       if (failOn.has(container)) throw new Error(`boom: ${container}`);
       deletedPartitions.push(container);
     },
-    async remove(container: ContainerName, partitionKey: string): Promise<void> {
-      removedRegistryShards.push(`${container}/${partitionKey}`);
+    async remove(container: ContainerName, partitionKey: string, id: string): Promise<void> {
+      if (failRegistryRemove) throw new Error('registry remove failed');
+      removedRegistryItems.push(`${container}/${partitionKey}/${id}`);
     },
     get: () => Promise.reject(new Error('unexpected get')),
     getEnvelope: () => Promise.reject(new Error('unexpected getEnvelope')),
@@ -51,17 +53,17 @@ function createRecordingStore(failOn: Set<ContainerName> = new Set()) {
     list: () => Promise.reject(new Error('unexpected list')),
     removeByParent: () => Promise.reject(new Error('unexpected removeByParent')),
   } as unknown as DocumentStore;
-  return { store, deletedPartitions, removedRegistryShards };
+  return { store, deletedPartitions, removedRegistryItems };
 }
 
 describe('deleteUserData ordering and partial failure', () => {
   it('deletes every user-scoped partition before removing the registry entry', async () => {
-    const { store, deletedPartitions, removedRegistryShards } = createRecordingStore();
+    const { store, deletedPartitions, removedRegistryItems } = createRecordingStore();
 
     await deleteUserData(store, 'user-a');
 
     expect(deletedPartitions).toEqual([...USER_SCOPED_CONTAINERS]);
-    expect(removedRegistryShards).toEqual([`system/${registryShardFor('user-a')}`]);
+    expect(removedRegistryItems).toEqual([`system/${registryShardFor('user-a')}/${registryItemId('user-a')}`]);
   });
 
   it('never deletes the shared system container as a user partition', async () => {
@@ -73,10 +75,35 @@ describe('deleteUserData ordering and partial failure', () => {
   });
 
   it('leaves the registry entry in place when any partition delete fails', async () => {
-    const { store, removedRegistryShards } = createRecordingStore(new Set<ContainerName>(['focus']));
+    const { store, removedRegistryItems } = createRecordingStore(new Set<ContainerName>(['focus']));
 
     await expect(deleteUserData(store, 'user-a')).rejects.toThrow(/focus/);
-    expect(removedRegistryShards).toEqual([]);
+    expect(removedRegistryItems).toEqual([]);
+  });
+
+  it('throws a partition-phase UserDataDeletionError naming the failed containers', async () => {
+    const { store } = createRecordingStore(new Set<ContainerName>(['focus', 'threads']));
+
+    const error = await deleteUserData(store, 'user-a').catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(UserDataDeletionError);
+    const deletionError = error as UserDataDeletionError;
+    expect(deletionError.phase).toBe('partition');
+    expect([...deletionError.failedContainers]).toEqual(['focus', 'threads']);
+  });
+
+  it('throws a registry-phase UserDataDeletionError when only the registry remove fails', async () => {
+    // Every partition cleared, so the data IS gone; only the owner record
+    // lingers. The phase lets the caller treat this as a completed wipe.
+    const { store, deletedPartitions } = createRecordingStore(new Set(), true);
+
+    const error = await deleteUserData(store, 'user-a').catch((err: unknown) => err);
+
+    expect(deletedPartitions).toEqual([...USER_SCOPED_CONTAINERS]);
+    expect(error).toBeInstanceOf(UserDataDeletionError);
+    const deletionError = error as UserDataDeletionError;
+    expect(deletionError.phase).toBe('registry');
+    expect([...deletionError.failedContainers]).toEqual([]);
   });
 
   it('completes and removes the registry entry on retry after a partial failure', async () => {
@@ -87,7 +114,7 @@ describe('deleteUserData ordering and partial failure', () => {
     // already-cleared partitions succeed and the registry entry is removed.
     const healthy = createRecordingStore();
     await deleteUserData(healthy.store, 'user-a');
-    expect(healthy.removedRegistryShards).toEqual([`system/${registryShardFor('user-a')}`]);
+    expect(healthy.removedRegistryItems).toEqual([`system/${registryShardFor('user-a')}/${registryItemId('user-a')}`]);
   });
 });
 
@@ -165,6 +192,25 @@ describe.each(adapterCases)('deleteUserData isolation on the $name adapter', ({ 
     await seedAllContainers(store, 'user-b');
 
     await deleteUserData(store, 'user-a');
+
+    expect(await countAllContainers(store, 'user-a')).toBe(0);
+    expect(await countAllContainers(store, 'user-b')).toBe(USER_SCOPED_CONTAINERS.length);
+
+    const registered = await collectRegisteredUsers(store);
+    expect(registered).not.toContain('user-a');
+    expect(registered).toContain('user-b');
+  });
+
+  maybeIt('is idempotent: a second delete after a complete delete is a no-op', async () => {
+    const store = await make(dir);
+    await seedAllContainers(store, 'user-a');
+    await seedAllContainers(store, 'user-b');
+
+    await deleteUserData(store, 'user-a');
+    // A retry after a fully-successful delete (e.g. a duplicated request) must
+    // resolve cleanly against already-empty partitions and an already-removed
+    // registry entry, without touching the second user.
+    await expect(deleteUserData(store, 'user-a')).resolves.toBeUndefined();
 
     expect(await countAllContainers(store, 'user-a')).toBe(0);
     expect(await countAllContainers(store, 'user-b')).toBe(USER_SCOPED_CONTAINERS.length);

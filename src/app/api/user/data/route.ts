@@ -30,7 +30,7 @@
 import { requireUserContext, UnauthorizedError, readCredentialsFromJwt } from '@/lib/auth/context';
 import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { deleteDir } from '@/lib/storage/utils';
-import { deleteUserData } from '@/lib/storage/document-store/account-deletion';
+import { deleteUserData, UserDataDeletionError } from '@/lib/storage/document-store/account-deletion';
 import { getDocumentStore } from '@/lib/storage/document-store/factory';
 import { markUserDeleted, clearUserTombstone } from '@/lib/storage/tombstone';
 import { logger } from '@/lib/logger';
@@ -194,21 +194,35 @@ export async function DELETE(request: NextRequest) {
     // under `_docstore/{container}/{userId}/`, NOT under `users/{userId}/`,
     // so `deleteDir` above misses it entirely — without this call the
     // account-deletion endpoint would leave skills/habits/focus/etc. data
-    // behind. A partial failure here is tolerated (reported via `failed`)
-    // rather than 500ing, so the rest of the wipe still completes.
+    // behind. A failure here is tolerated (reported via `failed`) rather than
+    // 500ing, so the rest of the wipe still completes. The failure phase
+    // matters: a partition-phase failure means user data is still present
+    // (so the client must NOT sign out), whereas a registry-phase failure
+    // means the data is gone and only the owner record lingers.
     let storeDataDeleted = true;
     try {
       await deleteUserData(await getDocumentStore(), userId);
     } catch (err) {
       log.error(`[user ${userId}] DocumentStore partition deletion failed`, { err });
-      storeDataDeleted = false;
-      failed.push('store-data');
+      if (err instanceof UserDataDeletionError && err.phase === 'registry') {
+        // Every partition cleared; only the registry entry removal failed.
+        // The user's data IS gone, so this is a completed wipe with a
+        // discoverable owner record that a sweep can reconcile later.
+        failed.push('store-registry');
+      } else {
+        // Partition-phase (or unknown) failure: some user data may remain.
+        storeDataDeleted = false;
+        const failedContainers = err instanceof UserDataDeletionError ? err.failedContainers.join(',') : 'unknown';
+        failed.push(`store-data:${failedContainers}`);
+      }
     }
 
-    // Restore the tombstone marker after deleteDir wipes it (deleteDir
-    // recursively removes everything under `users/{userId}/` including
-    // `.deleted`). The marker must remain in place until the user signs
-    // in again so any late executor write still aborts.
+    // Re-assert the tombstone. The first `markUserDeleted` (above) wrote
+    // `tombstones/{userId}`, which lives OUTSIDE the `users/{userId}/` subtree,
+    // so the `deleteDir('users/{userId}')` call above never touched it. This
+    // second mark is a defensive idempotent re-write, not recovery of a wiped
+    // marker — it guarantees the tombstone is present even if a future refactor
+    // moves tombstone storage back under the per-user directory.
     await markUserDeleted(userId);
 
     const summary: DeleteSummary = {

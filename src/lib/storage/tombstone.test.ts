@@ -7,7 +7,7 @@
  * mark → isDeleted → clear → isDeleted.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -16,12 +16,12 @@ let tmpDir: string;
 
 beforeAll(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tombstone-test-'));
-  process.env.FLIGHT_SCHOOL_DATA_DIR = tmpDir;
+  vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', tmpDir);
 });
 
 afterAll(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
-  delete process.env.FLIGHT_SCHOOL_DATA_DIR;
+  vi.unstubAllEnvs();
 });
 
 beforeEach(async () => {

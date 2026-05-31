@@ -102,10 +102,19 @@ let documentStorePromise: Promise<DocumentStore> | null = null;
  * The promise is cached (not the resolved value) so concurrent first callers
  * share a single construction — and a single sentinel reconciliation — instead
  * of racing to open two stores.
+ *
+ * A rejected construction is NOT cached: if the first attempt fails (a
+ * transient sentinel-reconciliation error, say), the memoised promise is
+ * cleared so the next caller retries from scratch rather than inheriting a
+ * permanently-poisoned rejection for the life of the process.
  */
 export function getDocumentStore(): Promise<DocumentStore> {
   if (!documentStorePromise) {
-    documentStorePromise = createDocumentStore();
+    const pending = createDocumentStore();
+    documentStorePromise = pending;
+    pending.catch(() => {
+      if (documentStorePromise === pending) documentStorePromise = null;
+    });
   }
   return documentStorePromise;
 }

@@ -29,11 +29,13 @@ vi.mock('./sqlite-adapter', () => ({
 let createDocumentStore: typeof import('./factory').createDocumentStore;
 let resolveStorageBackend: typeof import('./factory').resolveStorageBackend;
 let assertNodeSupportsSqlite: typeof import('./factory').assertNodeSupportsSqlite;
+let getDocumentStore: typeof import('./factory').getDocumentStore;
 let SENTINEL_FILENAME: string;
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_STORAGE_DIR);
-  ({ createDocumentStore, resolveStorageBackend, assertNodeSupportsSqlite } = await import('./factory'));
+  ({ createDocumentStore, resolveStorageBackend, assertNodeSupportsSqlite, getDocumentStore } =
+    await import('./factory'));
   ({ SENTINEL_FILENAME } = await import('./backend-sentinel'));
 });
 
@@ -58,6 +60,21 @@ async function readSentinelBackend(): Promise<string> {
   const raw = await fs.readFile(path.join(TEST_STORAGE_DIR, SENTINEL_FILENAME), 'utf-8');
   return JSON.parse(raw).backend;
 }
+
+describe('getDocumentStore memoisation', () => {
+  it('does not cache a rejected construction, so a later call retries', async () => {
+    // A bogus STORAGE_BACKEND makes the first construction reject. The memo
+    // must clear itself on rejection so a corrected backend can still resolve,
+    // rather than serving the poisoned rejection for the life of the process.
+    vi.stubEnv('STORAGE_BACKEND', 'not-a-backend');
+    await expect(getDocumentStore()).rejects.toThrow(/STORAGE_BACKEND/);
+
+    vi.stubEnv('STORAGE_BACKEND', 'file');
+    const store = await getDocumentStore();
+    await store.put('system', 'p1', 'doc', { ok: true });
+    expect(await store.get('system', 'p1', 'doc')).toEqual({ ok: true });
+  });
+});
 
 describe('resolveStorageBackend', () => {
   it('defaults to file when STORAGE_BACKEND is unset, empty, or "file"', () => {

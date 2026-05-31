@@ -20,13 +20,50 @@ import type { ContainerName, DocumentStore } from './types';
 import { removeUserRegistration } from './user-registry';
 
 /**
+ * Which phase of {@link deleteUserData} failed.
+ *
+ * `partition` means one or more data partitions could not be cleared, so the
+ * registry entry was deliberately left in place and the user's data is only
+ * partially gone. `registry` means every partition was wiped but the final
+ * registry-entry removal failed — the data IS gone, only the discoverable
+ * owner record lingers.
+ */
+export type UserDataDeletionPhase = 'partition' | 'registry';
+
+/**
+ * Typed failure from {@link deleteUserData} that tells the caller WHICH phase
+ * failed, so a route can report a partition failure as a partial,
+ * data-still-present delete (do not sign out) versus a registry-only failure
+ * as a completed data wipe with a lingering owner record (safe to sign out).
+ */
+export class UserDataDeletionError extends Error {
+  readonly phase: UserDataDeletionPhase;
+  readonly failedContainers: readonly ContainerName[];
+
+  constructor(
+    phase: UserDataDeletionPhase,
+    failedContainers: readonly ContainerName[],
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'UserDataDeletionError';
+    this.phase = phase;
+    this.failedContainers = failedContainers;
+  }
+}
+
+/**
  * Delete every per-user partition for `userId`, then remove their registry
  * entry. Partition deletes are idempotent, so retrying after a partial failure
  * is safe: already-cleared partitions delete again as no-ops.
  *
- * @throws Error if any partition delete fails — the registry entry is left in
- *   place (the account stays discoverable) so the caller can retry. The error
- *   names the containers that failed.
+ * @throws UserDataDeletionError with `phase: 'partition'` if any partition
+ *   delete fails — the registry entry is left in place (the account stays
+ *   discoverable) so the caller can retry; the message names the failed
+ *   containers. Throws with `phase: 'registry'` if every partition cleared but
+ *   the registry-entry removal failed — the data is gone, only the owner record
+ *   lingers.
  */
 export async function deleteUserData(store: DocumentStore, userId: string): Promise<void> {
   const failedContainers: ContainerName[] = [];
@@ -40,8 +77,21 @@ export async function deleteUserData(store: DocumentStore, userId: string): Prom
   }
 
   if (failedContainers.length > 0) {
-    throw new Error(`Failed to delete document-store partitions for ${userId}: ${failedContainers.join(', ')}`);
+    throw new UserDataDeletionError(
+      'partition',
+      failedContainers,
+      `Failed to delete document-store partitions for ${userId}: ${failedContainers.join(', ')}`,
+    );
   }
 
-  await removeUserRegistration(store, userId);
+  try {
+    await removeUserRegistration(store, userId);
+  } catch (cause) {
+    throw new UserDataDeletionError(
+      'registry',
+      [],
+      `Deleted all partitions for ${userId} but failed to remove the registry entry`,
+      { cause },
+    );
+  }
 }

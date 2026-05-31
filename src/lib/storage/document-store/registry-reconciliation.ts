@@ -18,6 +18,13 @@
  * distinguishable from "registered long ago, data since deleted". Until then
  * this stays a tested-but-dormant primitive.
  *
+ * CRITICAL (cursor stability): this pass calls `removeUserRegistration` while
+ * iterating `iterateRegisteredEntries` over the SAME registry shard, so a live
+ * scheduler must not assume the underlying list cursor tolerates in-place
+ * deletes. Before wiring, snapshot the entries to prune in a first pass and
+ * remove them in a second — or confirm the chosen adapter's list cursor is
+ * stable under concurrent same-shard deletes.
+ *
  * @module storage/document-store/registry-reconciliation
  */
 
@@ -69,7 +76,14 @@ export async function reconcileUserRegistry(
   const pruned: string[] = [];
 
   for await (const entry of iterateRegisteredEntries(store)) {
-    const ageMs = now - Date.parse(entry.registeredAt);
+    // Fail closed on a corrupt timestamp: an unparseable `registeredAt` yields
+    // NaN, and `NaN < minAgeMs` is false, which would skip the age guard and
+    // prune the entry immediately. Skipping it instead keeps the entry until a
+    // human or a future repair can inspect it.
+    const registeredAtMs = Date.parse(entry.registeredAt);
+    if (Number.isNaN(registeredAtMs)) continue;
+
+    const ageMs = now - registeredAtMs;
     if (ageMs < minAgeMs) continue;
     if (await userHasData(store, entry.userId)) continue;
 

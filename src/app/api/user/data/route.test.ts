@@ -11,9 +11,20 @@ const {
   captureTraceMock,
   getDocumentStoreMock,
   deleteUserDataMock,
+  UserDataDeletionErrorMock,
   UnauthorizedErrorMock,
 } = vi.hoisted(() => {
   class UnauthorizedErrorMock extends Error {}
+  class UserDataDeletionErrorMock extends Error {
+    readonly phase: 'partition' | 'registry';
+    readonly failedContainers: readonly string[];
+    constructor(phase: 'partition' | 'registry', failedContainers: readonly string[], message: string) {
+      super(message);
+      this.name = 'UserDataDeletionError';
+      this.phase = phase;
+      this.failedContainers = failedContainers;
+    }
+  }
   return {
     requireUserContextMock: vi.fn(),
     readCredentialsFromJwtMock: vi.fn(),
@@ -25,6 +36,7 @@ const {
     captureTraceMock: vi.fn(),
     getDocumentStoreMock: vi.fn(),
     deleteUserDataMock: vi.fn(),
+    UserDataDeletionErrorMock,
     UnauthorizedErrorMock,
   };
 });
@@ -62,6 +74,7 @@ vi.mock('@/lib/storage/document-store/factory', () => ({
 
 vi.mock('@/lib/storage/document-store/account-deletion', () => ({
   deleteUserData: deleteUserDataMock,
+  UserDataDeletionError: UserDataDeletionErrorMock,
 }));
 
 import { DELETE } from './route';
@@ -188,8 +201,10 @@ describe('DELETE /api/user/data', () => {
     expect(callOrder).toEqual(['markUserDeleted', 'deleteDir', 'deleteUserData', 'markUserDeleted']);
   });
 
-  it('reports partial failure when document-store deletion fails without 500ing', async () => {
-    deleteUserDataMock.mockRejectedValue(new Error('partition wipe failed: focus'));
+  it('reports a partition-phase failure as store-data with the failed containers and storeDataDeleted false', async () => {
+    deleteUserDataMock.mockRejectedValue(
+      new UserDataDeletionErrorMock('partition', ['focus', 'threads'], 'partition wipe failed'),
+    );
 
     const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
     const body = await response.json();
@@ -198,9 +213,22 @@ describe('DELETE /api/user/data', () => {
     expect(body.success).toBe(true);
     expect(body.summary.storeDataDeleted).toBe(false);
     expect(body.summary.partial).toBe(true);
-    expect(body.summary.failed).toEqual(['store-data']);
-    // The happy-path summary already proves the final re-mark runs on success;
-    // the ordering test pins that it runs AFTER deleteUserData even when it fails.
+    expect(body.summary.failed).toEqual(['store-data:focus,threads']);
+  });
+
+  it('reports a registry-phase failure as store-registry while keeping storeDataDeleted true', async () => {
+    // Registry-only failure means the data IS gone; only the owner record
+    // lingers, so the wipe is reported as complete (the client may sign out).
+    deleteUserDataMock.mockRejectedValue(new UserDataDeletionErrorMock('registry', [], 'registry removal failed'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.summary.storeDataDeleted).toBe(true);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.failed).toEqual(['store-registry']);
   });
 
   it('reports partial failure when worker activity DELETE fails', async () => {

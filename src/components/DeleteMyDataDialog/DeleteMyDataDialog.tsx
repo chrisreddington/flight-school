@@ -11,13 +11,25 @@
  *
  * On success it calls {@link onConfirmed} (typically signs the user
  * out) so the page doesn't immediately attempt to refetch state for
- * an account that no longer has data.
+ * an account that no longer has data. A *partial* deletion (the server
+ * cleared some data but reported `summary.partial`) is treated as a
+ * failure here: {@link onConfirmed} is NOT called, so the user stays
+ * signed in and can retry rather than being logged out while data
+ * still lingers on the server.
  */
 
 import { ApiError, apiDelete } from '@/lib/api-client';
 import { Banner, Dialog, FormControl, Stack, Text, TextInput } from '@primer/react';
 import React, { useCallback, useState } from 'react';
 import { signIn } from 'next-auth/react';
+
+interface DeleteDataResponse {
+  success: boolean;
+  summary?: {
+    partial?: boolean;
+    failed?: string[];
+  };
+}
 
 export interface DeleteMyDataDialogProps {
   /** Caller's GitHub login as known to the authenticated session. */
@@ -40,9 +52,15 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
     setSubmitting(true);
     setError(null);
     try {
-      await apiDelete<{ success: boolean }>('/api/user/data', {
+      const result = await apiDelete<DeleteDataResponse>('/api/user/data', {
         body: JSON.stringify({ confirmLogin: login }),
       });
+      if (result.summary?.partial) {
+        // The server kept some data behind. Don't sign the user out —
+        // surface the failure so they can retry from a still-authed session.
+        setError('Some of your data could not be deleted. Please try again in a moment.');
+        return;
+      }
       onConfirmed();
     } catch (err) {
       if (err instanceof ApiError && err.context?.code === 'recent_auth_required') {

@@ -80,4 +80,17 @@ describe('reconcileUserRegistry', () => {
     expect(outcome.pruned).toEqual([]);
     expect(await collectRegisteredUsers(store)).toEqual(['active']);
   });
+
+  it('fails closed on a corrupt registeredAt rather than pruning it', async () => {
+    // An unparseable timestamp yields NaN, and `NaN < minAgeMs` is false. A
+    // naive age check would treat the entry as old enough and prune it; the
+    // sweep must instead skip it so a corrupt entry is never silently dropped.
+    const store = createFileDocumentStore();
+    await registerAt(store, 'corrupt', 'not-a-date');
+
+    const outcome = await reconcileUserRegistry(store, { minAgeMs: ONE_HOUR_MS, now: NOW });
+
+    expect(outcome.pruned).toEqual([]);
+    expect(await collectRegisteredUsers(store)).toEqual(['corrupt']);
+  });
 });
