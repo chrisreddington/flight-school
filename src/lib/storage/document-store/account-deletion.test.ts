@@ -89,7 +89,21 @@ describe('deleteUserData ordering and partial failure', () => {
     expect(error).toBeInstanceOf(UserDataDeletionError);
     const deletionError = error as UserDataDeletionError;
     expect(deletionError.phase).toBe('partition');
+    expect(deletionError.name).toBe('UserDataDeletionError');
     expect([...deletionError.failedContainers]).toEqual(['focus', 'threads']);
+  });
+
+  it('reports every container and skips the registry remove when all partitions fail', async () => {
+    const { store, removedRegistryItems } = createRecordingStore(new Set(USER_SCOPED_CONTAINERS));
+
+    const error = await deleteUserData(store, 'user-a').catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(UserDataDeletionError);
+    const deletionError = error as UserDataDeletionError;
+    expect(deletionError.phase).toBe('partition');
+    expect([...deletionError.failedContainers]).toEqual([...USER_SCOPED_CONTAINERS]);
+    // Registry remove must never run while any partition data may remain.
+    expect(removedRegistryItems).toEqual([]);
   });
 
   it('throws a registry-phase UserDataDeletionError when only the registry remove fails', async () => {

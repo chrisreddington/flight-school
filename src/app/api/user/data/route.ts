@@ -56,8 +56,28 @@ interface DeleteSummary {
   activityEventsCleared: boolean;
   storageDirDeleted: boolean;
   storeDataDeleted: boolean;
+  /**
+   * True only when user data may still be on the server (a partition-phase
+   * store failure or an activity-buffer clear failure). This — mirrored by
+   * the top-level `success: false` — is the signal the client uses to keep
+   * the user signed in for a retry. A registry-only cleanup failure is NOT
+   * partial: every byte of user data is gone, so it surfaces via
+   * {@link DeleteSummary.registryCleanupPending} instead.
+   */
   partial?: boolean;
+  /**
+   * Best-effort wipe steps that failed. May contain blocking entries
+   * (`store-data:<containers>`, `activity`) that imply data remains, or the
+   * non-blocking `store-registry` warning that only means the owner record
+   * lingers. Use `partial` / `success` to tell the two apart.
+   */
   failed?: string[];
+  /**
+   * Every user-data partition was wiped but the discoverable owner registry
+   * entry could not be removed. The wipe is complete (safe to sign out); a
+   * later reconciliation sweep prunes the orphaned entry.
+   */
+  registryCleanupPending?: boolean;
 }
 
 interface DeleteRequestBody {
@@ -172,9 +192,9 @@ export async function DELETE(request: NextRequest) {
 
     // Clear this user's slice of the activity buffer via the worker.
     // The web-side `activityLogger.clear` is a no-op in the new model;
-    // the worker DELETE is authoritative. Run it in parallel with the
-    // jobs cleanup-implied tombstone but await it BEFORE wiping the
-    // user directory so late activity writes don't recreate the dir.
+    // the worker DELETE is authoritative. This runs sequentially after the
+    // jobs cleanup and is awaited BEFORE wiping the user directory so late
+    // activity writes can't recreate the dir.
     let activityEventsCleared = true;
     const failed: string[] = [];
     try {
@@ -200,6 +220,7 @@ export async function DELETE(request: NextRequest) {
     // (so the client must NOT sign out), whereas a registry-phase failure
     // means the data is gone and only the owner record lingers.
     let storeDataDeleted = true;
+    let registryCleanupPending = false;
     try {
       await deleteUserData(await getDocumentStore(), userId);
     } catch (err) {
@@ -207,7 +228,9 @@ export async function DELETE(request: NextRequest) {
       if (err instanceof UserDataDeletionError && err.phase === 'registry') {
         // Every partition cleared; only the registry entry removal failed.
         // The user's data IS gone, so this is a completed wipe with a
-        // discoverable owner record that a sweep can reconcile later.
+        // discoverable owner record that a sweep can reconcile later. This
+        // must NOT mark the delete partial — the client may safely sign out.
+        registryCleanupPending = true;
         failed.push('store-registry');
       } else {
         // Partition-phase (or unknown) failure: some user data may remain.
@@ -225,18 +248,27 @@ export async function DELETE(request: NextRequest) {
     // moves tombstone storage back under the per-user directory.
     await markUserDeleted(userId);
 
+    // `partial` (and the mirrored `success: false`) means user data may still
+    // be on the server, so the client keeps the user signed in for a retry.
+    // A registry-only cleanup failure is deliberately excluded: the data is
+    // gone, only the owner record lingers, so it surfaces as
+    // `registryCleanupPending` and the delete still counts as successful.
+    const userDataMayRemain = !storeDataDeleted || !activityEventsCleared;
+
     const summary: DeleteSummary = {
       jobsCancelled,
       jobsDeleted,
       activityEventsCleared,
       storageDirDeleted: true,
       storeDataDeleted,
-      ...(failed.length > 0 ? { partial: true, failed } : {}),
+      ...(failed.length > 0 ? { failed } : {}),
+      ...(userDataMayRemain ? { partial: true } : {}),
+      ...(registryCleanupPending ? { registryCleanupPending: true } : {}),
     };
 
     log.info(`[user ${userId}] data deletion complete`, summary);
 
-    return NextResponse.json({ success: true, summary });
+    return NextResponse.json({ success: !userDataMayRemain, summary });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });

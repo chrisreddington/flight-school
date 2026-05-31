@@ -24,10 +24,17 @@ import React, { useCallback, useState } from 'react';
 import { signIn } from 'next-auth/react';
 
 interface DeleteDataResponse {
+  /**
+   * Authoritative completion signal: `false` means user data may still be on
+   * the server (a partition or activity-buffer failure), so the dialog keeps
+   * the user signed in for a retry. A registry-only cleanup failure still
+   * reports `true` — the data is gone, only the owner record lingers.
+   */
   success: boolean;
   summary?: {
     partial?: boolean;
     failed?: string[];
+    registryCleanupPending?: boolean;
   };
 }
 
@@ -55,9 +62,11 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
       const result = await apiDelete<DeleteDataResponse>('/api/user/data', {
         body: JSON.stringify({ confirmLogin: login }),
       });
-      if (result.summary?.partial) {
-        // The server kept some data behind. Don't sign the user out —
+      if (!result.success) {
+        // The server kept some user data behind. Don't sign the user out —
         // surface the failure so they can retry from a still-authed session.
+        // A registry-only cleanup failure reports `success: true`, so it
+        // correctly falls through to sign-out below.
         setError('Some of your data could not be deleted. Please try again in a moment.');
         return;
       }

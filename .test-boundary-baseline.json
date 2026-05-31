@@ -12,7 +12,7 @@
   "src/app/api/jobs/route.test.ts": 5,
   "src/app/api/jobs/worker-client.test.ts": 2,
   "src/app/api/otel/v1/traces/route.test.ts": 4,
-  "src/app/api/user/data/route.test.ts": 10,
+  "src/app/api/user/data/route.test.ts": 13,
   "src/app/challenge/create/create-page.test.ts": 5,
   "src/app/settings/settings-client.test.tsx": 2,
   "src/components/ChallengeSandbox/monaco-config.test.ts": 4,

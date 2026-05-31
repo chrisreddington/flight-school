@@ -209,16 +209,21 @@ describe('DELETE /api/user/data', () => {
     const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
     const body = await response.json();
 
+    // Data may remain, so the wipe is NOT successful and is flagged partial.
     expect(response.status).toBe(200);
-    expect(body.success).toBe(true);
+    expect(body.success).toBe(false);
     expect(body.summary.storeDataDeleted).toBe(false);
     expect(body.summary.partial).toBe(true);
+    expect(body.summary.registryCleanupPending).toBeUndefined();
     expect(body.summary.failed).toEqual(['store-data:focus,threads']);
+    // The defensive second tombstone still fires even when the wipe fails.
+    expect(markUserDeletedMock).toHaveBeenCalledTimes(2);
   });
 
-  it('reports a registry-phase failure as store-registry while keeping storeDataDeleted true', async () => {
+  it('reports a registry-phase failure as a completed wipe with registryCleanupPending', async () => {
     // Registry-only failure means the data IS gone; only the owner record
-    // lingers, so the wipe is reported as complete (the client may sign out).
+    // lingers, so the wipe is reported as successful and NOT partial (the
+    // client may sign out) while flagging the orphaned entry for a sweep.
     deleteUserDataMock.mockRejectedValue(new UserDataDeletionErrorMock('registry', [], 'registry removal failed'));
 
     const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
@@ -227,8 +232,10 @@ describe('DELETE /api/user/data', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.summary.storeDataDeleted).toBe(true);
-    expect(body.summary.partial).toBe(true);
+    expect(body.summary.partial).toBeUndefined();
+    expect(body.summary.registryCleanupPending).toBe(true);
     expect(body.summary.failed).toEqual(['store-registry']);
+    expect(markUserDeletedMock).toHaveBeenCalledTimes(2);
   });
 
   it('reports partial failure when worker activity DELETE fails', async () => {
@@ -238,12 +245,13 @@ describe('DELETE /api/user/data', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.success).toBe(true);
+    expect(body.success).toBe(false);
     expect(body.summary.activityEventsCleared).toBe(false);
     expect(body.summary.partial).toBe(true);
     expect(body.summary.failed).toEqual(['activity']);
     // Storage still wiped despite partial activity failure.
     expect(deleteDirMock).toHaveBeenCalledWith('users/user-1');
+    expect(markUserDeletedMock).toHaveBeenCalledTimes(2);
   });
 
   it('rolls back the tombstone and returns 503 when worker delete fails', async () => {
