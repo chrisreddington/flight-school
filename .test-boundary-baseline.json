@@ -53,7 +53,7 @@
   "src/lib/skills/repo.test.ts": 1,
   "src/lib/storage/document-store/factory.test.ts": 4,
   "src/lib/storage/document-store/user-scoped-store.test.ts": 1,
-  "src/lib/workspace/legacy-tree.test.ts": 7,
+  "src/lib/workspace/legacy-tree.test.ts": 8,
   "src/lib/workspace/storage.test.ts": 17,
   "src/worker/jobs/executor-dispatcher.test.ts": 2,
   "src/worker/jobs/executors/session-registry.test.ts": 1,

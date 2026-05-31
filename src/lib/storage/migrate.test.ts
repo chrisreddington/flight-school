@@ -31,6 +31,7 @@ const LOCK_PATH = path.join(TEST_ROOT, '.storage-migration-lock');
 let runStorageMigration: typeof import('./migrate').runStorageMigration;
 let StorageMigrationRefusedError: typeof import('./migrate').StorageMigrationRefusedError;
 let StorageMigrationLockError: typeof import('./migrate').StorageMigrationLockError;
+let StaleStorageMigrationLockError: typeof import('./migrate').StaleStorageMigrationLockError;
 let StorageMigrationUserError: typeof import('./migrate').StorageMigrationUserError;
 let DocumentConflictError: typeof import('./document-store/types').DocumentConflictError;
 let releaseLock: typeof import('./migrate-lock').releaseLock;
@@ -39,8 +40,13 @@ let readLegacyWorkspaceTree: typeof import('../workspace/legacy-tree').readLegac
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_DATA_DIR);
-  ({ runStorageMigration, StorageMigrationRefusedError, StorageMigrationLockError, StorageMigrationUserError } =
-    await import('./migrate'));
+  ({
+    runStorageMigration,
+    StorageMigrationRefusedError,
+    StorageMigrationLockError,
+    StaleStorageMigrationLockError,
+    StorageMigrationUserError,
+  } = await import('./migrate'));
   ({ DocumentConflictError } = await import('./document-store/types'));
   ({ releaseLock } = await import('./migrate-lock'));
   ({ createFileDocumentStore } = await import('./document-store/file-adapter'));
@@ -256,6 +262,39 @@ describe('runStorageMigration — corrupt and absent sources', () => {
     expect(summary.counts.skippedCorrupt).toBe(1);
     expect(await store.getEnvelope('workspaces', 'alice', 'chal-1')).toBeNull();
   });
+
+  it('counts a workspace with a malformed file entry as skippedCorrupt', async () => {
+    const store = createFileDocumentStore();
+    // A sidecar whose `files` array carries a non-string `name` would crash the
+    // reassembly path; the importer must treat it as a skip, not abort.
+    await seedLegacyFile('alice', 'workspaces/chal-1/_workspace.json', {
+      version: 1,
+      challengeId: 'chal-1',
+      activeFileId: 'file-a',
+      files: [{ id: 'file-a', name: 42, language: 'typescript', createdAt: 1, updatedAt: 2 }],
+    });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.skippedCorrupt).toBe(1);
+    expect(await store.getEnvelope('workspaces', 'alice', 'chal-1')).toBeNull();
+  });
+
+  it('skips a user tombstoned before the run and processes none of their docs', async () => {
+    const store = createFileDocumentStore();
+    // Unique userId avoids the module-level tombstoneCache pollution that the
+    // on-disk-only beforeEach wipe cannot reach.
+    await seedLegacyFile('ghost', 'skills-profile.json', { level: 'intermediate' });
+    const tombstonePath = path.join(TEST_DATA_DIR, 'tombstones', 'ghost');
+    await fs.mkdir(path.dirname(tombstonePath), { recursive: true });
+    await fs.writeFile(tombstonePath, new Date().toISOString(), 'utf8');
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.usersProcessed).toBe(0);
+    expect(summary.counts.inserted).toBe(0);
+    expect(await store.getEnvelope('skills', 'ghost', 'current')).toBeNull();
+  });
 });
 
 describe('runStorageMigration — tenancy and selection', () => {
@@ -392,18 +431,26 @@ describe('runStorageMigration — advisory lock', () => {
     await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StorageMigrationLockError);
   });
 
-  it('takes over a stale lock and releases its own on completion', async () => {
+  it('refuses a stale lock and leaves it intact for manual removal', async () => {
     const store = createFileDocumentStore();
     await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
-    await fs.writeFile(
-      LOCK_PATH,
-      JSON.stringify({ ownerId: 'dead', expiresAt: new Date(Date.now() - 60_000).toISOString() }),
-      'utf8',
-    );
+    const stalePayload = JSON.stringify({ ownerId: 'dead', expiresAt: new Date(Date.now() - 60_000).toISOString() });
+    await fs.writeFile(LOCK_PATH, stalePayload, 'utf8');
 
-    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StaleStorageMigrationLockError);
+    // The crashed predecessor's lock must survive so an operator can inspect it.
+    expect(await fs.readFile(LOCK_PATH, 'utf8')).toBe(stalePayload);
+    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
+  });
 
-    expect(summary.counts.inserted).toBe(1);
-    await expect(fs.access(LOCK_PATH)).rejects.toThrow();
+  it('treats a lock with an unparseable expiry as stale and refuses it', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+    const malformedPayload = JSON.stringify({ ownerId: 'dead', expiresAt: 'not-a-date' });
+    await fs.writeFile(LOCK_PATH, malformedPayload, 'utf8');
+
+    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StaleStorageMigrationLockError);
+    expect(await fs.readFile(LOCK_PATH, 'utf8')).toBe(malformedPayload);
+    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
   });
 });

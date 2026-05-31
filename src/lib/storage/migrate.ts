@@ -36,7 +36,7 @@ import { allDescriptors, enumerateUsers } from '@/lib/storage/migrate-descriptor
 import { acquireLock, releaseLock } from '@/lib/storage/migrate-lock';
 import { isUserDeleted } from '@/lib/storage/tombstone';
 
-export { StorageMigrationLockError } from '@/lib/storage/migrate-lock';
+export { StorageMigrationLockError, StaleStorageMigrationLockError } from '@/lib/storage/migrate-lock';
 export { StorageMigrationUserError } from '@/lib/storage/migrate-descriptors';
 
 const log = logger.withTag('storage-migrate');
@@ -295,11 +295,32 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
     const userIds = await excludeTombstonedUsers(await enumerateUsers(user));
 
     const registeredUsers = new Set<string>();
+    let usersProcessed = 0;
     for (const userId of userIds) {
+      // Re-check the tombstone per user: a deletion can land AFTER the up-front
+      // excludeTombstonedUsers filter but before we reach this user's documents.
+      if (await isUserDeleted(userId)) {
+        log.warn('Skipping user tombstoned mid-run', { userId });
+        continue;
+      }
+      usersProcessed += 1;
       for (const descriptor of descriptors) {
         const ids = await descriptor.enumerateIds(userId);
         for (const id of ids) {
-          const sourceBody = await descriptor.loadLegacyBody(userId, id);
+          let sourceBody: unknown;
+          try {
+            sourceBody = await descriptor.loadLegacyBody(userId, id);
+          } catch (error) {
+            // A malformed legacy record (e.g. a workspace sidecar with a
+            // non-string filename) must not abort the whole run.
+            counts.skippedCorrupt += 1;
+            log.warn('Skipping unreadable legacy document', {
+              container: descriptor.container,
+              id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            continue;
+          }
           if (sourceBody === null) {
             counts.skippedCorrupt += 1;
             continue;
@@ -329,7 +350,7 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
     const summary: MigrationSummary = {
       dryRun,
       backend,
-      usersProcessed: userIds.length,
+      usersProcessed,
       counts,
       status: deriveStatus(counts),
       startedAt,

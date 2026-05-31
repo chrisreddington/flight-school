@@ -68,12 +68,27 @@ export function toWorkspaceFile(meta: WorkspaceFileMetadata, content: string): W
 }
 
 /**
+ * Shape check for one entry in a legacy `_workspace.json` `files` array.
+ *
+ * @remarks
+ * Only `name` is asserted (and only that it is a string): a non-string `name`
+ * is what crashes {@link assertSafeWorkspaceFilename} during reassembly, so
+ * rejecting it here turns a thrown migration into an honest skip. Other fields
+ * are left unchecked to avoid regressing legacy-valid records.
+ */
+export function isWorkspaceFileMetadata(value: unknown): value is WorkspaceFileMetadata {
+  return typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>).name === 'string';
+}
+
+/**
  * Shape check for a parsed legacy `_workspace.json` sidecar.
  *
  * @remarks
  * Legacy records are stored verbatim (including numeric `createdAt`/`updatedAt`
  * timestamps), so this guard asserts only the structural fields and never the
  * timestamp representation — tightening it would reject legacy-valid records.
+ * Each file entry must pass {@link isWorkspaceFileMetadata} so a malformed entry
+ * fails the whole guard rather than crashing reassembly mid-stream.
  */
 export function isWorkspaceMetadata(value: unknown): value is WorkspaceMetadata {
   if (typeof value !== 'object' || value === null) return false;
@@ -82,6 +97,7 @@ export function isWorkspaceMetadata(value: unknown): value is WorkspaceMetadata 
     typeof metadata.version === 'number' &&
     typeof metadata.challengeId === 'string' &&
     Array.isArray(metadata.files) &&
+    metadata.files.every(isWorkspaceFileMetadata) &&
     typeof metadata.activeFileId === 'string'
   );
 }

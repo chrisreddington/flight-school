@@ -5,8 +5,9 @@
  * This is a single-operator UX guard — it stops a second `npm run
  * storage:migrate` invocation from racing the first — not a cross-process
  * lease (that is an S2 concern). The lock file lives deliberately OUTSIDE the
- * data root so it never lands in a partition the importer itself walks, and a
- * lease whose `expiresAt` has passed may be taken over.
+ * data root so it never lands in a partition the importer itself walks. A live
+ * lock is refused; a stale or malformed lock is reported (never auto-claimed)
+ * so the operator clears it by hand, mirroring git's `index.lock`.
  *
  * @module storage/migrate-lock
  */
@@ -16,7 +17,7 @@ import path from 'path';
 
 import { getStorageRoot } from '@/lib/storage/utils';
 
-/** How long an advisory lock is honoured before a peer may take it over. */
+/** How long a lock is considered live before it is reported as stale. */
 const LOCK_TTL_MS = 10 * 60 * 1000;
 
 /** Thrown when another live migration already holds the advisory lock. */
@@ -24,6 +25,28 @@ export class StorageMigrationLockError extends Error {
   constructor(public readonly heldBy?: string) {
     super(`Another migration holds the advisory lock${heldBy ? ` (owner ${heldBy})` : ''}.`);
     this.name = 'StorageMigrationLockError';
+  }
+}
+
+/**
+ * Thrown when the lock file exists but its lease has expired or its contents
+ * are unparseable. Auto-takeover is deliberately NOT attempted: a
+ * `rm`-then-`wx` sequence still races a second operator across processes (the
+ * classic delete-the-live-lock TOCTOU), so a crashed run leaves a lock that an
+ * operator must remove by hand. Subclasses {@link StorageMigrationLockError} so
+ * the CLI's exit-2 branch still catches it.
+ */
+export class StaleStorageMigrationLockError extends StorageMigrationLockError {
+  constructor(
+    public readonly lockPath: string,
+    heldBy?: string,
+  ) {
+    super(heldBy);
+    this.name = 'StaleStorageMigrationLockError';
+    this.message =
+      `A stale migration lock remains at ${lockPath}` +
+      `${heldBy ? ` (owner ${heldBy})` : ''}. A previous run likely crashed; ` +
+      'remove the file and re-run the migration.';
   }
 }
 
@@ -54,11 +77,13 @@ async function readLockPayload(filePath: string): Promise<LockPayload | null> {
 }
 
 /**
- * Acquires the best-effort advisory lock, taking over a lock whose lease has
- * already expired. This is a single-operator UX guard, not a cross-process
+ * Acquires the best-effort advisory lock. A live lock from another owner is
+ * refused; a stale or malformed lock is reported (never auto-claimed) so the
+ * operator removes it by hand. Single-operator UX guard, not a cross-process
  * lease (that is an S2 concern).
  *
  * @throws StorageMigrationLockError When a live (unexpired) lock is held.
+ * @throws StaleStorageMigrationLockError When a stale/malformed lock remains.
  */
 export async function acquireLock(ownerId: string, now: () => number): Promise<LockHandle> {
   const filePath = lockFilePath();
@@ -76,24 +101,14 @@ export async function acquireLock(ownerId: string, now: () => number): Promise<L
     }
     const existing = await readLockPayload(filePath);
     const expiresAt = existing?.expiresAt ? Date.parse(existing.expiresAt) : Number.NaN;
-    // A malformed/unparseable `expiresAt` (NaN) is treated as already-expired so
-    // a corrupt lock file can be taken over rather than deadlocking forever.
     const isLive = Number.isFinite(expiresAt) && expiresAt >= now();
     if (isLive) {
       throw new StorageMigrationLockError(existing?.ownerId);
     }
-    await fs.rm(filePath, { force: true });
-    try {
-      await fs.writeFile(filePath, payload, { flag: 'wx' });
-    } catch (retryError) {
-      // Another racer took over between our rm and write; surface the typed
-      // lock error so the CLI exits 2 instead of leaking a raw EEXIST.
-      if ((retryError as NodeJS.ErrnoException).code === 'EEXIST') {
-        throw new StorageMigrationLockError();
-      }
-      throw retryError;
-    }
-    return { filePath, ownerId };
+    // A stale or malformed (NaN-`expiresAt`) lock is reported, never claimed:
+    // `rm`-then-`wx` would reintroduce the cross-process delete-the-live-lock
+    // TOCTOU. The operator clears the file by hand and re-runs.
+    throw new StaleStorageMigrationLockError(filePath, existing?.ownerId);
   }
 }
 

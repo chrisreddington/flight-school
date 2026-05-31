@@ -120,7 +120,24 @@ describe('readLegacyWorkspaceTree', () => {
     });
   });
 
-  it('degrades an unsafe file name to empty content instead of throwing', async () => {
+  it('warns and returns null when a file entry is malformed', async () => {
+    const onWarn = vi.fn();
+    const readRaw = makeReadRaw({
+      'workspaces/fizzbuzz/_workspace.json': JSON.stringify({
+        ...metadataSidecar(),
+        files: [null],
+      }),
+    });
+
+    const result = await readLegacyWorkspaceTree(readRaw, onWarn, USER_ID, CHALLENGE_ID);
+
+    expect(result).toBeNull();
+    expect(onWarn).toHaveBeenCalledWith('Legacy workspace metadata missing or invalid; treating as missing', {
+      challengeId: CHALLENGE_ID,
+    });
+  });
+
+  it('degrades an unsafe file name on read by skipping its content', async () => {
     const onWarn = vi.fn();
     const unsafe = metadataSidecar({
       files: [

@@ -154,6 +154,11 @@ export async function POST(request: NextRequest) {
   try {
     const workspace: ChallengeWorkspace = await request.json();
 
+    // A JSON `null` body parses successfully but would crash the property reads
+    // below; reject any non-object payload as a 400 rather than a 500.
+    if (typeof workspace !== 'object' || workspace === null) {
+      return NextResponse.json({ error: 'Invalid workspace data' }, { status: 400 });
+    }
     if (!workspace.challengeId || !Array.isArray(workspace.files)) {
       return NextResponse.json({ error: 'Invalid workspace data' }, { status: 400 });
     }

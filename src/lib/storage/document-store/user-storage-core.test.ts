@@ -340,6 +340,21 @@ describe('readMappedDoc self-heal CAS race (H-A)', () => {
     expect(read).toEqual(DEFAULT_BODY);
   });
 
+  it('falls back to the default when the CAS winner is present but invalid', async () => {
+    const { DocumentConflictError } = await import('./types');
+    const store = createScriptedScopedStore({
+      // The heal put loses the CAS race and the re-read finds another corrupt
+      // envelope, so `guard(winner.body)` fails its else branch.
+      envelopeQueue: [corruptEnvelope, corruptEnvelope],
+      putError: new DocumentConflictError(),
+    });
+    const legacy = createMemoryLegacy();
+
+    const read = await core.readMappedDoc({ store, legacy }, mapping, SAMPLE_FILENAME, DEFAULT_BODY, isSampleBody);
+
+    expect(read).toEqual(DEFAULT_BODY);
+  });
+
   it('returns the default when the heal put hits a deletion tombstone', async () => {
     const { UserDeletedError } = await import('./user-scoped-store');
     const store = createScriptedScopedStore({
