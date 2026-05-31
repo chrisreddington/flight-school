@@ -45,19 +45,24 @@ export function getStorageRoot(): string {
   return path.join(home, '.local', 'share', 'flight-school');
 }
 
-const STORAGE_DIR = getStorageRoot();
-
 /**
- * Safely joins path segments and ensures the result is within STORAGE_DIR.
+ * Safely joins path segments and ensures the result is within the storage root.
  * This is the ONLY function that should construct paths from user input.
  *
- * @param segments - Path segments to join (relative to STORAGE_DIR)
- * @returns Absolute path guaranteed to be within STORAGE_DIR
- * @throws Error if the resulting path would escape STORAGE_DIR
+ * The storage root is resolved per call via {@link getStorageRoot} rather than
+ * captured once at module load: `FLIGHT_SCHOOL_DATA_DIR` is a runtime config
+ * source, so a value set after this module first evaluates (the common case in
+ * per-test isolation, where the env is stubbed before each test) must still
+ * take effect. Caching it here previously made the resolved directory depend on
+ * import order, which silently routed writes to the real home directory.
+ *
+ * @param segments - Path segments to join (relative to the storage root)
+ * @returns Absolute path guaranteed to be within the storage root
+ * @throws Error if the resulting path would escape the storage root
  */
 function safePath(...segments: string[]): string {
   // Resolve the base storage directory to an absolute path
-  const baseDir = path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
+  const baseDir = path.resolve(/* turbopackIgnore: true */ getStorageRoot());
 
   // Join all segments and resolve to absolute path
   const targetPath = path.resolve(/* turbopackIgnore: true */ baseDir, ...segments);
@@ -90,7 +95,7 @@ function safePath(...segments: string[]): string {
 /** Ensures the .data storage directory exists (internal). */
 async function ensureStorageDir(): Promise<void> {
   try {
-    await fs.mkdir(STORAGE_DIR, { recursive: true });
+    await fs.mkdir(getStorageRoot(), { recursive: true });
   } catch (error) {
     log.error('Failed to create storage directory', { error });
     throw error;
@@ -306,6 +311,40 @@ export async function writeFile(subdir: string, filename: string, content: strin
 }
 
 /**
+ * Atomically creates a file, failing if it already exists.
+ *
+ * Uses the OS-level exclusive-create flag (`wx`), so two callers racing the
+ * same path can never both succeed: exactly one create wins and every other
+ * caller observes `EEXIST`. This closes the create-only TOCTOU window that the
+ * temp-write-then-rename {@link writeFile} path leaves open. The document-store
+ * file adapter relies on this to give `ifNoneMatch: '*'` real uniqueness under
+ * concurrency (e.g. racing track enrollments claiming the same slot).
+ *
+ * The atomicity guarantee holds for a local POSIX/NTFS filesystem; it is not
+ * claimed for networked filesystems where `O_EXCL` is unreliable.
+ *
+ * @param subdir - Subdirectory path relative to the storage root.
+ * @param filename - Name of the file to create within the subdirectory.
+ * @param content - File content to write.
+ * @returns `true` when this call created the file, `false` when it already
+ *   existed (the caller decides whether that is a conflict).
+ */
+export async function createFileExclusive(subdir: string, filename: string, content: string): Promise<boolean> {
+  const filePath = safePath(subdir, filename);
+  try {
+    await ensureDir(subdir);
+    await fs.writeFile(filePath, content, { encoding: 'utf-8', flag: 'wx' });
+    return true;
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      return false;
+    }
+    log.error(`Failed to exclusively create file: ${subdir}/${filename}`, { error });
+    throw error;
+  }
+}
+
+/**
  * Deletes a file from a subdirectory.
  *
  * @param subdir - Subdirectory path relative to .data
@@ -350,7 +389,7 @@ export async function deleteDir(subdir: string): Promise<void> {
  * @returns Array of subdirectory names
  */
 export async function listDirs(subdir: string): Promise<string[]> {
-  const dirPath = subdir ? safePath(subdir) : path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
+  const dirPath = subdir ? safePath(subdir) : path.resolve(/* turbopackIgnore: true */ getStorageRoot());
   try {
     await ensureStorageDir();
     if (subdir) await ensureDir(subdir);

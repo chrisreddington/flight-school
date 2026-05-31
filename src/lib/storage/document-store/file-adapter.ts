@@ -7,12 +7,16 @@
  * `${DATA_DIR}/_docstore/{container}/{partitionKey}/{id}.json`, wrapping the
  * low-level atomic-write primitives in `../utils`.
  *
- * CAS guarantees are **last-write-wins with conflict detection**: a
- * read-then-write `put` can race a competing writer in the gap between its
- * read and its rename (a documented TOCTOU ceiling that only the SQLite
- * backend fully closes). `etag` is a fresh uuid on every write, never a
- * content hash, so an identical rewrite still advances the token — matching
- * what SQLite and Cosmos do. See `files/v20-storage-and-tracks-plan.md` §A.3.
+ * CAS guarantees differ by write kind. Create-only writes (`ifNoneMatch: '*'`)
+ * are **atomic**: they go through an OS-level exclusive create, so two racing
+ * first-writers can never both win — exactly what enrollment-slot claims rely
+ * on. Compare-and-set updates (`ifMatch: etag`) remain **last-write-wins with
+ * conflict detection**: the read-then-rename gap is a documented TOCTOU ceiling
+ * that only the SQLite backend fully closes (atomicity is scoped to a local
+ * filesystem; networked filesystems are out of scope). `etag` is a fresh uuid
+ * on every write, never a content hash, so an identical rewrite still advances
+ * the token — matching what SQLite and Cosmos do. See
+ * `files/v20-storage-and-tracks-plan.md` §A.3.
  *
  * @module storage/document-store/file-adapter
  */
@@ -22,7 +26,7 @@ import { randomUUID } from 'crypto';
 
 import { logger } from '@/lib/logger';
 import { SAFE_PATH_SEGMENT } from '../user-scope';
-import { deleteDir, deleteFile, ensureDir, listFiles, readFile, writeFile } from '../utils';
+import { createFileExclusive, deleteDir, deleteFile, ensureDir, listFiles, readFile, writeFile } from '../utils';
 import { canonicalizeMetadata, decodeCursor, encodeCursor } from './canonical';
 import {
   DocumentConflictError,
@@ -120,25 +124,35 @@ class FileDocumentStore implements DocumentStore {
   ): Promise<DocumentEnvelope<T>> {
     const dir = partitionDir(container, partitionKey);
     const filename = documentFilename(id);
-
-    const existing = await this.getEnvelope<T>(container, partitionKey, id);
-    if (opts.ifNoneMatch === '*' && existing) {
-      throw new DocumentConflictError(`document ${container}/${partitionKey}/${id} already exists`);
-    }
-    if (opts.ifMatch !== undefined && (!existing || existing.etag !== opts.ifMatch)) {
-      throw new DocumentConflictError(
-        `etag mismatch for ${container}/${partitionKey}/${id} (expected ${opts.ifMatch})`,
-      );
-    }
-
     const stored: StoredEnvelope<T> = {
       body,
       metadata: canonicalizeMetadata(opts.metadata),
       etag: randomUUID(),
       updatedAt: new Date().toISOString(),
     };
+    const serialized = JSON.stringify(stored, null, 2);
+
+    // Create-only writes take an atomic exclusive-create path: the OS guarantees
+    // exactly one of two racing first-writers succeeds, so `ifNoneMatch: '*'`
+    // confers true uniqueness instead of the read-then-rename TOCTOU the upsert
+    // path carries. The loser observes EEXIST and surfaces a conflict.
+    if (opts.ifNoneMatch === '*') {
+      const created = await createFileExclusive(dir, filename, serialized);
+      if (!created) {
+        throw new DocumentConflictError(`document ${container}/${partitionKey}/${id} already exists`);
+      }
+      return { id, partitionKey, ...stored };
+    }
+
+    const existing = await this.getEnvelope<T>(container, partitionKey, id);
+    if (opts.ifMatch !== undefined && (!existing || existing.etag !== opts.ifMatch)) {
+      throw new DocumentConflictError(
+        `etag mismatch for ${container}/${partitionKey}/${id} (expected ${opts.ifMatch})`,
+      );
+    }
+
     await ensureDir(dir, { mode: DIR_MODE });
-    await writeFile(dir, filename, JSON.stringify(stored, null, 2));
+    await writeFile(dir, filename, serialized);
 
     return { id, partitionKey, ...stored };
   }

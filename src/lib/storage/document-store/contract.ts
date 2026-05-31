@@ -13,7 +13,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { DocumentConflictError, SINGLETON_DOCUMENT_ID, type ContainerName, type DocumentStore } from './types';
+import {
+  DocumentConflictError,
+  SINGLETON_DOCUMENT_ID,
+  type ContainerName,
+  type DocumentEnvelope,
+  type DocumentStore,
+} from './types';
 
 /** A small domain body used throughout the contract tests. */
 interface SampleBody {
@@ -93,6 +99,24 @@ export function describeDocumentStoreContract(
         ifNoneMatch: '*',
       });
       expect(written.body).toEqual(body);
+    });
+
+    it('resolves concurrent ifNoneMatch creates to exactly one winner', async () => {
+      const store = await getStore();
+      const outcomes = await Promise.allSettled([
+        store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, label: 'first' }, { ifNoneMatch: '*' }),
+        store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, label: 'second' }, { ifNoneMatch: '*' }),
+      ]);
+
+      const winners = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+      const losers = outcomes.filter((outcome) => outcome.status === 'rejected');
+      expect(winners).toHaveLength(1);
+      expect(losers).toHaveLength(1);
+      expect((losers[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
+
+      const winner = (winners[0] as PromiseFulfilledResult<DocumentEnvelope<SampleBody>>).value;
+      const persisted = await store.get<SampleBody>(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID);
+      expect(persisted).toEqual(winner.body);
     });
 
     it('advances the etag on a matching ifMatch update', async () => {
