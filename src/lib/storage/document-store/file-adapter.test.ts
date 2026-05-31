@@ -98,34 +98,68 @@ describe('FileDocumentStore dataDir override', () => {
 });
 
 describe('FileDocumentStore concurrent-CAS harness is non-vacuous', () => {
-  it('a lock-free read-check-write over the same document yields TWO winners', async () => {
+  it('a lock-free read-check-write over the same document lets both writers pass the etag check', async () => {
     // Positive control for the one-winner CAS assertions in the shared contract.
-    // It mirrors the adapter's ifMatch path (read envelope, compare etag, write)
-    // but WITHOUT withDocumentLock. A read (fs.readFile) never resolves
-    // synchronously, so both reads below are GUARANTEED in-flight before either
-    // write — both observe the seeded etag and both pass their check. The lock is
-    // therefore the only thing that collapses this to one winner: if a regression
-    // silently dropped it, the real adapter would behave exactly like this
-    // control. (A barrier that instead forced "both reads before either write"
-    // cannot exist with the lock present — the lock serialises the whole
-    // read-check-write, so the second read waits behind the first write and such
-    // a barrier would deadlock. This control is the deterministic alternative.)
+    // It reproduces the adapter's ifMatch substrate (read envelope, compare etag,
+    // write) but WITHOUT withDocumentLock, in two explicit phases so the proof
+    // makes no libuv-scheduling assumption:
+    //   phase 1 — run both reads and await BOTH; assert each saw the seeded etag
+    //             (i.e. without serialisation both writers pass the check the
+    //              real adapter performs);
+    //   phase 2 — run both raw writes.
+    // The real adapter's lock is the only thing that would interleave a read
+    // after the other's write and so collapse this to one winner. (A barrier that
+    // forced "both reads before either write" INSIDE the locked path cannot
+    // exist — the lock serialises the whole read-check-write, so the second read
+    // waits behind the first write and such a barrier would deadlock. Running the
+    // substrate lock-free is the deterministic alternative.)
     const store = createFileDocumentStore();
     const seeded = await store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
     const ops = createStorageFileOps(() => TEST_STORAGE_DIR);
 
-    async function lockFreeStaleUpdate(value: number): Promise<boolean> {
-      const current = await store.getEnvelope<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
-      if (!current || current.etag !== seeded.etag) return false;
-      await ops.writeFile(
-        '_docstore/skills/user-a',
-        `${SINGLETON_DOCUMENT_ID}.json`,
-        JSON.stringify({ body: { value }, metadata: {}, etag: randomUUID(), updatedAt: new Date().toISOString() }),
-      );
-      return true;
-    }
+    const reads = await Promise.all([
+      store.getEnvelope<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID),
+      store.getEnvelope<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID),
+    ]);
+    expect(reads.every((envelope) => envelope?.etag === seeded.etag)).toBe(true);
 
-    const passedCheck = await Promise.all([lockFreeStaleUpdate(1), lockFreeStaleUpdate(2)]);
-    expect(passedCheck.filter(Boolean)).toHaveLength(2);
+    await Promise.all(
+      [1, 2].map((value) =>
+        ops.writeFile(
+          '_docstore/skills/user-a',
+          `${SINGLETON_DOCUMENT_ID}.json`,
+          JSON.stringify({ body: { value }, metadata: {}, etag: randomUUID(), updatedAt: new Date().toISOString() }),
+        ),
+      ),
+    );
+
+    // Both lock-free writes landed: a value persists (one of them won the rename
+    // race), confirming the substrate genuinely admits two writers absent a lock.
+    const persisted = await store.get<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
+    expect([1, 2]).toContain(persisted?.value);
+  });
+
+  it('shares one lock between symlinked and canonical spellings of the same dataDir', async () => {
+    // Targeted regression test for canonicalRootForLockKey: two instances spell
+    // the SAME physical directory differently (one via a symlink alias), so a
+    // lexical lock key would give them separate mutexes and let both win the CAS
+    // race. The canonical key must collapse them to one winner.
+    const symlinkDir = path.join(os.tmpdir(), `flight-school-symlink-${Date.now()}`);
+    await fs.symlink(TEST_STORAGE_DIR, symlinkDir);
+    try {
+      const storeReal = createFileDocumentStore({ dataDir: TEST_STORAGE_DIR });
+      const storeSymlink = createFileDocumentStore({ dataDir: symlinkDir });
+      const seeded = await storeReal.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
+
+      const outcomes = await Promise.allSettled([
+        storeReal.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 1 }, { ifMatch: seeded.etag }),
+        storeSymlink.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 2 }, { ifMatch: seeded.etag }),
+      ]);
+
+      expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+      expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
+    } finally {
+      await fs.unlink(symlinkDir);
+    }
   });
 });

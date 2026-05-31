@@ -164,9 +164,19 @@ export interface DocumentStore {
    * Delete every document in a partition whose `parentId` matches — the
    * scoped delete the re-enroll prune and per-parent cleanup need.
    * Idempotent: zero matching rows is success.
+   *
+   * Teardown operation: adapters do NOT serialise this against concurrent
+   * single-document `put`/`remove` calls to the same partition (the file
+   * adapter's per-document write lock does not cover partition-wide sweeps).
+   * Callers must run it only when no live writes to the partition can race it.
    */
   removeByParent(container: ContainerName, partitionKey: string, parentId: string): Promise<void>;
 
-  /** Wipe one partition in one container (retention + account deletion). */
+  /**
+   * Wipe one partition in one container (retention + account deletion).
+   *
+   * Teardown operation with the same no-concurrent-writes precondition as
+   * {@link removeByParent}: it is not serialised against single-document writes.
+   */
   deletePartition(container: ContainerName, partitionKey: string): Promise<void>;
 }

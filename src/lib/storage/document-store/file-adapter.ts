@@ -116,22 +116,36 @@ const documentWriteLocks = new Map<string, Promise<void>>();
  * `/tmp` vs `/private/tmp` on macOS) share one lock key. `realpathSync` only
  * resolves paths that exist, so walk up to the nearest existing ancestor,
  * canonicalize that, and re-append the not-yet-created tail. The data dir is
- * created on first write, so once it exists every instance canonicalizes alike.
+ * created on first write, so once it exists every instance canonicalizes alike;
+ * before then the ancestor-based key and the later dir-based key are identical
+ * because the re-appended tail segments are real (non-symlink) directories.
+ *
+ * Only the "missing path" error shapes (`ENOENT`, `ENOTDIR`) are expected while
+ * the tree is still being created lazily — those drive the walk-up. Any other
+ * error (`EACCES`, `ELOOP`, …) means the root genuinely cannot be canonicalized,
+ * so we must NOT silently fall back to a lexical key that could diverge from
+ * another spelling of the same directory and re-open the dual-winner CAS race;
+ * we surface it instead.
  */
 function canonicalRootForLockKey(resolvedRoot: string): string {
   const pendingSegments: string[] = [];
   let candidate = resolvedRoot;
 
-  while (candidate !== path.dirname(candidate)) {
+  // Loops at most once per path segment; the terminal filesystem root is
+  // canonicalized too (it is tried before the parent-equals-self check below).
+  for (;;) {
     try {
       const realCandidate = realpathSync.native(candidate);
       return pendingSegments.length === 0 ? realCandidate : path.join(realCandidate, ...pendingSegments);
-    } catch {
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+      const parent = path.dirname(candidate);
+      if (parent === candidate) return resolvedRoot; // reached the FS root with nothing to resolve
       pendingSegments.unshift(path.basename(candidate));
-      candidate = path.dirname(candidate);
+      candidate = parent;
     }
   }
-  return resolvedRoot;
 }
 
 /**
@@ -171,21 +185,23 @@ async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Pro
  * to the process storage root), so two stores pointed at different directories
  * never collide. The instance holds no mutable state of its own; write
  * serialisation lives in the process-wide {@link documentWriteLocks} registry,
- * keyed by the instance's symlink-canonical root so concurrent writers reach the
+ * keyed by the store's symlink-canonical root so concurrent writers reach the
  * same lock even when issued through different instances over the same `dataDir`
- * — including when those instances spell the directory differently.
+ * — including when those instances spell the directory differently. The
+ * canonical root is recomputed at every lock acquisition (not cached at
+ * construction) so the key always tracks the directory the I/O actually hits,
+ * even if a symlink in the configured path is retargeted mid-process.
  */
 class FileDocumentStore implements DocumentStore {
   readonly #ops: StorageFileOps;
 
   /**
-   * Symlink-canonical data-dir root; namespaces this store's keys in
-   * {@link documentWriteLocks}. Kept separate from the path used for file I/O
-   * (which honours the directory exactly as configured) so that two stores
-   * reaching the same physical directory via different spellings still share a
-   * lock. See {@link canonicalRootForLockKey}.
+   * Data-dir root exactly as configured (resolved but NOT symlink-canonical);
+   * the path file I/O is bound to. {@link #lockKey} canonicalizes this per call
+   * to derive the {@link documentWriteLocks} namespace, keeping the lock key in
+   * step with the physical directory the OS resolves at syscall time.
    */
-  readonly #lockRoot: string;
+  readonly #ioRoot: string;
 
   /**
    * @param dataDir - Base directory for this store's `_docstore` tree; defaults
@@ -194,12 +210,17 @@ class FileDocumentStore implements DocumentStore {
   constructor(dataDir?: string) {
     const root = resolveDataDir(dataDir);
     this.#ops = createStorageFileOps(() => root);
-    this.#lockRoot = canonicalRootForLockKey(root);
+    this.#ioRoot = root;
   }
 
-  /** The {@link documentWriteLocks} key for one physical document under this store. */
+  /**
+   * The {@link documentWriteLocks} key for one physical document under this
+   * store. The canonical root is resolved on every call so two spellings of the
+   * same directory — or a symlink retargeted since construction — always map to
+   * the same lock. See {@link canonicalRootForLockKey}.
+   */
   #lockKey(container: ContainerName, partitionKey: string, id: string): string {
-    return `${this.#lockRoot}\u0000${container}/${partitionKey}/${id}`;
+    return `${canonicalRootForLockKey(this.#ioRoot)}\u0000${container}/${partitionKey}/${id}`;
   }
 
   async get<T>(container: ContainerName, partitionKey: string, id: string): Promise<T | null> {
@@ -279,7 +300,9 @@ class FileDocumentStore implements DocumentStore {
    * Delete one document, idempotently. Holds the same per-document lock as
    * {@link put}, so a `remove` racing a stale `ifMatch` update can never let the
    * losing writer resurrect the document: the two serialise, and whichever runs
-   * second observes the other's effect (an absent doc fails the etag check).
+   * second observes the other's committed state — a `put` running second finds
+   * an absent doc and its etag check fails; a `remove` running second finds the
+   * written doc and deletes it. Either ordering ends with no document.
    */
   async remove(container: ContainerName, partitionKey: string, id: string): Promise<void> {
     await withDocumentLock(this.#lockKey(container, partitionKey, id), async () => {

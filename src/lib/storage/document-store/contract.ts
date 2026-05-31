@@ -228,6 +228,24 @@ export function describeDocumentStoreContract(
         const winner = (winners[0] as PromiseFulfilledResult<DocumentEnvelope<SampleBody>>).value;
         expect(await storeTwo.get<SampleBody>(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID)).toEqual(winner.body);
       });
+
+      it('never resurrects a document removed through one instance while another updates it', async () => {
+        // The remove-vs-put no-resurrection invariant must also hold when the two
+        // racers are SEPARATE instances over one backend: remove() takes the same
+        // canonical per-document lock as put(), so a stale update on one instance
+        // cannot reinstate a document deleted through the other.
+        const [storeOne, storeTwo] = await options.getPairedStores!();
+        const seeded = await storeOne.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
+
+        await Promise.allSettled([
+          storeOne.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 99 }, { ifMatch: seeded.etag }),
+          storeTwo.remove(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID),
+        ]);
+
+        // Absent from BOTH instances — no torn or resurrected document survives.
+        expect(await storeOne.get(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID)).toBeNull();
+        expect(await storeTwo.get(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID)).toBeNull();
+      });
     }
 
     it('rejects an ifMatch update against an absent document', async () => {

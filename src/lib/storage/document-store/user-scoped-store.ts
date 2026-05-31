@@ -44,7 +44,16 @@ export interface UserScopedStore {
   put<T>(container: ContainerName, id: string, body: T, opts?: PutOptions): Promise<DocumentEnvelope<T>>;
   remove(container: ContainerName, id: string): Promise<void>;
   list<T>(container: ContainerName, opts?: ListOptions): Promise<ListResult<T>>;
+  /**
+   * Teardown sweep: NOT serialised against single-document writes to the same
+   * partition. Run only when no live writes can race it. See
+   * {@link DocumentStore.removeByParent}.
+   */
   removeByParent(container: ContainerName, parentId: string): Promise<void>;
+  /**
+   * Teardown wipe with the same no-concurrent-writes precondition as
+   * {@link removeByParent}. See {@link DocumentStore.deletePartition}.
+   */
   deletePartition(container: ContainerName): Promise<void>;
 }
 
