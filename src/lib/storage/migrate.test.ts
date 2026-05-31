@@ -318,8 +318,11 @@ describe('runStorageMigration — tenancy and selection', () => {
 
     // The seam fires twice for a single user: call 1 is the up-front
     // excludeTombstonedUsers filter (still live), call 2 is the per-user gate
-    // immediately before iterating their documents (now tombstoned). Removing
-    // the per-user gate would let call 2 never happen and write the envelope.
+    // immediately before iterating their documents (now tombstoned). The gate is
+    // a performance shortcut — it skips descriptor.enumerateIds for a user already
+    // known deleted; the pre-write re-check is the actual correctness guard. This
+    // test confirms the gate path exits early and the user is neither written nor
+    // counted.
     let tombstoneChecks = 0;
     const isDeleted = async () => {
       tombstoneChecks += 1;
@@ -333,28 +336,35 @@ describe('runStorageMigration — tenancy and selection', () => {
     expect(await store.getEnvelope('skills', 'gate-victim', 'current')).toBeNull();
   });
 
-  it('stops writes for a user tombstoned mid-run and still counts clean users', async () => {
+  it('re-checks the tombstone before EACH write: writes doc 1, stops before doc 2', async () => {
     const store = createFileDocumentStore();
     await seedLegacyFile('mid-clean', 'skills-profile.json', { level: 'a' });
+    // mid-victim owns two migratable singletons. The descriptor order is
+    // skills → habits (see MIGRATABLE_SINGLETON_FILENAMES), so skills/current is
+    // doc 1 and habits/current is doc 2.
     await seedLegacyFile('mid-victim', 'skills-profile.json', { level: 'b' });
+    await seedLegacyFile('mid-victim', 'habits.json', { streak: 7 });
 
-    // For mid-victim the seam returns live for call 1 (up-front filter) and
-    // call 2 (per-user gate), then tombstoned for call 3 (the pre-write
-    // re-check before their first write). mid-clean always reads live. If the
-    // inner pre-write re-check is removed, mid-victim's envelope would persist
-    // and usersProcessed would climb to 2 — this test guards that check.
+    // For mid-victim the seam returns live for call 1 (up-front filter), call 2
+    // (per-user gate), and call 3 (pre-write re-check before doc 1), then
+    // tombstoned for call 4 (pre-write re-check before doc 2). mid-clean always
+    // reads live. This proves the re-check repeats BETWEEN document writes: a
+    // regression that checked once before the first write would write doc 2 too
+    // and this test would fail on the non-null habits envelope.
     const checksByUser = new Map<string, number>();
     const isDeleted = async (userId: string) => {
       const checks = (checksByUser.get(userId) ?? 0) + 1;
       checksByUser.set(userId, checks);
-      return userId === 'mid-victim' && checks >= 3;
+      return userId === 'mid-victim' && checks >= 4;
     };
 
     const summary = await runStorageMigration({ ...SQLITE_RUN, store, isDeleted });
 
     expect(summary.usersProcessed).toBe(1);
     expect(await store.getEnvelope('skills', 'mid-clean', 'current')).not.toBeNull();
-    expect(await store.getEnvelope('skills', 'mid-victim', 'current')).toBeNull();
+    // Doc 1 was written before the flip; doc 2 was stopped by the per-write re-check.
+    expect(await store.getEnvelope('skills', 'mid-victim', 'current')).not.toBeNull();
+    expect(await store.getEnvelope('habits', 'mid-victim', 'current')).toBeNull();
   });
 });
 
