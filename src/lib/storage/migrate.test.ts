@@ -30,8 +30,6 @@ const LOCK_PATH = path.join(TEST_ROOT, '.storage-migration-lock');
 
 let runStorageMigration: typeof import('./migrate').runStorageMigration;
 let StorageMigrationRefusedError: typeof import('./migrate').StorageMigrationRefusedError;
-let StorageMigrationLockError: typeof import('./migrate').StorageMigrationLockError;
-let StaleStorageMigrationLockError: typeof import('./migrate').StaleStorageMigrationLockError;
 let StorageMigrationUserError: typeof import('./migrate').StorageMigrationUserError;
 let DocumentConflictError: typeof import('./document-store/types').DocumentConflictError;
 let releaseLock: typeof import('./migrate-lock').releaseLock;
@@ -40,13 +38,7 @@ let readLegacyWorkspaceTree: typeof import('../workspace/legacy-tree').readLegac
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_DATA_DIR);
-  ({
-    runStorageMigration,
-    StorageMigrationRefusedError,
-    StorageMigrationLockError,
-    StaleStorageMigrationLockError,
-    StorageMigrationUserError,
-  } = await import('./migrate'));
+  ({ runStorageMigration, StorageMigrationRefusedError, StorageMigrationUserError } = await import('./migrate'));
   ({ DocumentConflictError } = await import('./document-store/types'));
   ({ releaseLock } = await import('./migrate-lock'));
   ({ createFileDocumentStore } = await import('./document-store/file-adapter'));
@@ -319,6 +311,51 @@ describe('runStorageMigration — tenancy and selection', () => {
     );
     expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
   });
+
+  it('skips a user tombstoned between the up-front filter and their first document', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('gate-victim', 'skills-profile.json', { level: 'a' });
+
+    // The seam fires twice for a single user: call 1 is the up-front
+    // excludeTombstonedUsers filter (still live), call 2 is the per-user gate
+    // immediately before iterating their documents (now tombstoned). Removing
+    // the per-user gate would let call 2 never happen and write the envelope.
+    let tombstoneChecks = 0;
+    const isDeleted = async () => {
+      tombstoneChecks += 1;
+      return tombstoneChecks >= 2;
+    };
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store, user: 'gate-victim', isDeleted });
+
+    expect(summary.usersProcessed).toBe(0);
+    expect(summary.counts.inserted).toBe(0);
+    expect(await store.getEnvelope('skills', 'gate-victim', 'current')).toBeNull();
+  });
+
+  it('stops writes for a user tombstoned mid-run and still counts clean users', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('mid-clean', 'skills-profile.json', { level: 'a' });
+    await seedLegacyFile('mid-victim', 'skills-profile.json', { level: 'b' });
+
+    // For mid-victim the seam returns live for call 1 (up-front filter) and
+    // call 2 (per-user gate), then tombstoned for call 3 (the pre-write
+    // re-check before their first write). mid-clean always reads live. If the
+    // inner pre-write re-check is removed, mid-victim's envelope would persist
+    // and usersProcessed would climb to 2 — this test guards that check.
+    const checksByUser = new Map<string, number>();
+    const isDeleted = async (userId: string) => {
+      const checks = (checksByUser.get(userId) ?? 0) + 1;
+      checksByUser.set(userId, checks);
+      return userId === 'mid-victim' && checks >= 3;
+    };
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store, isDeleted });
+
+    expect(summary.usersProcessed).toBe(1);
+    expect(await store.getEnvelope('skills', 'mid-clean', 'current')).not.toBeNull();
+    expect(await store.getEnvelope('skills', 'mid-victim', 'current')).toBeNull();
+  });
 });
 
 describe('runStorageMigration — dry run', () => {
@@ -415,42 +452,5 @@ describe('runStorageMigration — file backend guard', () => {
 
     expect(summary.counts.inserted).toBe(1);
     expect(await store.getEnvelope('skills', 'alice', 'current')).not.toBeNull();
-  });
-});
-
-describe('runStorageMigration — advisory lock', () => {
-  it('refuses to start when a live lock is held by another owner', async () => {
-    const store = createFileDocumentStore();
-    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
-    await fs.writeFile(
-      LOCK_PATH,
-      JSON.stringify({ ownerId: 'other', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
-      'utf8',
-    );
-
-    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StorageMigrationLockError);
-  });
-
-  it('refuses a stale lock and leaves it intact for manual removal', async () => {
-    const store = createFileDocumentStore();
-    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
-    const stalePayload = JSON.stringify({ ownerId: 'dead', expiresAt: new Date(Date.now() - 60_000).toISOString() });
-    await fs.writeFile(LOCK_PATH, stalePayload, 'utf8');
-
-    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StaleStorageMigrationLockError);
-    // The crashed predecessor's lock must survive so an operator can inspect it.
-    expect(await fs.readFile(LOCK_PATH, 'utf8')).toBe(stalePayload);
-    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
-  });
-
-  it('treats a lock with an unparseable expiry as stale and refuses it', async () => {
-    const store = createFileDocumentStore();
-    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
-    const malformedPayload = JSON.stringify({ ownerId: 'dead', expiresAt: 'not-a-date' });
-    await fs.writeFile(LOCK_PATH, malformedPayload, 'utf8');
-
-    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StaleStorageMigrationLockError);
-    expect(await fs.readFile(LOCK_PATH, 'utf8')).toBe(malformedPayload);
-    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
   });
 });

@@ -72,6 +72,38 @@ describe('workspace storage route', () => {
     expect(body.files[0].name).toBe('solution.ts');
     expect(body.files[0].content).toContain('Fresh challenge');
   });
+
+  it('rejects a null JSON body with a 400 instead of crashing', async () => {
+    const { POST } = await import('./route');
+
+    requireUserContextMock.mockResolvedValueOnce(ctxFor('5006'));
+    const saved = await POST(
+      new Request('http://test/api/workspace/storage', {
+        method: 'POST',
+        body: JSON.stringify(null),
+        headers: { 'content-type': 'application/json' },
+      }) as never,
+    );
+
+    expect(saved.status).toBe(400);
+    expect(await saved.json()).toEqual({ error: 'Invalid workspace data' });
+  });
+
+  it('rejects an array JSON body with a 400 instead of crashing', async () => {
+    const { POST } = await import('./route');
+
+    requireUserContextMock.mockResolvedValueOnce(ctxFor('5007'));
+    const saved = await POST(
+      new Request('http://test/api/workspace/storage', {
+        method: 'POST',
+        body: JSON.stringify([]),
+        headers: { 'content-type': 'application/json' },
+      }) as never,
+    );
+
+    expect(saved.status).toBe(400);
+    expect(await saved.json()).toEqual({ error: 'Invalid workspace data' });
+  });
 });
 
 afterAll(async () => {

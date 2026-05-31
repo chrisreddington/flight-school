@@ -98,6 +98,8 @@ export interface StorageMigrationOptions {
   ownerId?: string;
   /** Clock seam (tests); defaults to {@link Date.now}. */
   now?: () => number;
+  /** Tombstone-check seam (tests); defaults to {@link isUserDeleted}. */
+  isDeleted?: (userId: string) => Promise<boolean>;
 }
 
 /** Thrown when a `file`-backend run is attempted without `--assume-quiesced`. */
@@ -238,11 +240,17 @@ async function writeStateDocument(store: DocumentStore, summary: MigrationSummar
  * importer writes through the RAW store (bypassing the user-scoped tombstone
  * guard), so without this filter a re-run could resurrect a deleted user's
  * data. Applies to dry-run too, so the preview matches a real run.
+ *
+ * @param userIds - Candidate users to filter.
+ * @param isDeleted - Tombstone-check seam (injected for deterministic tests).
  */
-async function excludeTombstonedUsers(userIds: string[]): Promise<string[]> {
+async function excludeTombstonedUsers(
+  userIds: string[],
+  isDeleted: (userId: string) => Promise<boolean>,
+): Promise<string[]> {
   const liveUserIds: string[] = [];
   for (const userId of userIds) {
-    if (await isUserDeleted(userId)) {
+    if (await isDeleted(userId)) {
       log.warn('Skipping tombstoned user; not migrating deleted data', { userId });
       continue;
     }
@@ -269,6 +277,7 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
     assumeQuiesced = false,
     ownerId = `migrate-${process.pid}`,
     now = Date.now,
+    isDeleted = isUserDeleted,
   } = options;
 
   const backend = options.backend ?? resolveStorageBackend();
@@ -292,19 +301,26 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
   try {
     const store = options.store ?? (await getDocumentStore());
     const descriptors = allDescriptors();
-    const userIds = await excludeTombstonedUsers(await enumerateUsers(user));
+    const userIds = await excludeTombstonedUsers(await enumerateUsers(user), isDeleted);
 
     const registeredUsers = new Set<string>();
     let usersProcessed = 0;
     for (const userId of userIds) {
       // Re-check the tombstone per user: a deletion can land AFTER the up-front
       // excludeTombstonedUsers filter but before we reach this user's documents.
-      if (await isUserDeleted(userId)) {
-        log.warn('Skipping user tombstoned mid-run', { userId });
+      // This cheap early-out skips enumeration entirely for the common case.
+      if (await isDeleted(userId)) {
+        log.warn('Skipping user tombstoned before processing', { userId });
         continue;
       }
-      usersProcessed += 1;
+      // A deletion can also land DURING this user's document iteration. Re-check
+      // immediately before each write so the very next write is the last one;
+      // reads taken before the flip are harmless because the importer never
+      // mutates legacy data. Correctness beats the per-document tombstone-stat
+      // cost here: migration runs assumeQuiesced as a one-shot operational tool.
+      let tombstonedMidRun = false;
       for (const descriptor of descriptors) {
+        if (tombstonedMidRun) break;
         const ids = await descriptor.enumerateIds(userId);
         for (const id of ids) {
           let sourceBody: unknown;
@@ -329,6 +345,11 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
             await previewDocument(store, counts, descriptor.container, userId, id, sourceBody, force);
             continue;
           }
+          if (await isDeleted(userId)) {
+            log.warn('Stopping writes for user tombstoned mid-run', { userId });
+            tombstonedMidRun = true;
+            break;
+          }
           if (!registeredUsers.has(userId)) {
             await ensureUserRegistered(store, userId);
             registeredUsers.add(userId);
@@ -344,6 +365,12 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
             });
           }
         }
+      }
+      // Count only users who finished without a mid-run tombstone interrupting
+      // their writes. Dry runs never reach the pre-write re-check, so they stay
+      // counted as before.
+      if (!tombstonedMidRun) {
+        usersProcessed += 1;
       }
     }
 

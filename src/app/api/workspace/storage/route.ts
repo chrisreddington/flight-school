@@ -155,8 +155,9 @@ export async function POST(request: NextRequest) {
     const workspace: ChallengeWorkspace = await request.json();
 
     // A JSON `null` body parses successfully but would crash the property reads
-    // below; reject any non-object payload as a 400 rather than a 500.
-    if (typeof workspace !== 'object' || workspace === null) {
+    // below; an array slips past the property reads (returning `undefined`) but
+    // is never a valid workspace. Reject any non-object payload as a 400.
+    if (typeof workspace !== 'object' || workspace === null || Array.isArray(workspace)) {
       return NextResponse.json({ error: 'Invalid workspace data' }, { status: 400 });
     }
     if (!workspace.challengeId || !Array.isArray(workspace.files)) {
