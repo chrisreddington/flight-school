@@ -253,10 +253,12 @@ export class TracksRepo {
    * Mark a step completed. Validates enrollment currency, ensures the instance
    * exists (via {@link startStep}), then CAS-advances its status to
    * `'completed'` with a `completedAt` stamp, retrying on conflict so a
-   * concurrent access-stamp cannot block completion.
+   * concurrent access-stamp cannot block completion. Each retry re-validates
+   * enrollment currency, so a rival re-enroll that displaces this enrollment
+   * mid-race aborts the completion rather than finalizing a displaced step.
    *
-   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not the active,
-   *   currently-slotted enrollment for its track.
+   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not (or, mid-race,
+   *   ceases to be) the active, currently-slotted enrollment for its track.
    * @throws {StepContentionError} when every CAS attempt loses to a concurrent
    *   writer.
    */
@@ -283,7 +285,13 @@ export class TracksRepo {
         return completed;
       } catch (error) {
         if (!(error instanceof DocumentConflictError)) throw error;
-        // Lost a CAS race with a concurrent writer; re-read and retry.
+        // Lost a CAS race with a concurrent writer. Before retrying, re-confirm
+        // this enrollment is STILL the track's current active winner: a rival
+        // re-enroll could have repointed the active slot during the race, and a
+        // displaced enrollment must not finalize a step. Throws
+        // EnrollmentNotActiveError if currency was lost; otherwise we re-read and
+        // retry the advance.
+        await this.#requireActiveEnrollment(enrollmentId);
       }
     }
     throw new StepContentionError(id);

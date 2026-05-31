@@ -10,12 +10,15 @@
  * CAS guarantees differ by write kind. Create-only writes (`ifNoneMatch: '*'`)
  * are **atomic**: they go through an OS-level exclusive create, so two racing
  * first-writers can never both win — exactly what enrollment-slot claims rely
- * on. Compare-and-set updates (`ifMatch: etag`) remain **last-write-wins with
- * conflict detection**: the read-then-rename gap is a documented TOCTOU ceiling
- * that only the SQLite backend fully closes (atomicity is scoped to a local
- * filesystem; networked filesystems are out of scope). `etag` is a fresh uuid
- * on every write, never a content hash, so an identical rewrite still advances
- * the token — matching what SQLite and Cosmos do. See
+ * on. Compare-and-set updates (`ifMatch: etag`) serialise through a
+ * per-document in-process lock, so the read-check-write critical section is
+ * atomic against other writers IN THE SAME PROCESS: two concurrent stale-etag
+ * updates can never both win, and `enroll()`'s active-slot reclaim resolves to
+ * a single winner on this backend. Cross-process / networked-filesystem
+ * atomicity remains out of scope — that is the SQLite backend's job (its
+ * `BEGIN IMMEDIATE` transaction closes the gap for every client). `etag` is a
+ * fresh uuid on every write, never a content hash, so an identical rewrite
+ * still advances the token — matching what SQLite and Cosmos do. See
  * `files/v20-storage-and-tracks-plan.md` §A.3.
  *
  * @module storage/document-store/file-adapter
@@ -99,12 +102,47 @@ class FileDocumentStore implements DocumentStore {
   readonly #ops: StorageFileOps;
 
   /**
+   * One-shot async mutexes keyed by `container/partitionKey/id`. Each value is
+   * the tail of a promise chain; a writer awaits the current tail, then appends
+   * its own release promise. This serialises every `put` to a given document so
+   * the `ifMatch` read-check-write is atomic against concurrent in-process
+   * writers. Entries self-evict once their chain drains (see
+   * {@link FileDocumentStore.withDocumentLock}).
+   */
+  readonly #documentLocks = new Map<string, Promise<void>>();
+
+  /**
    * @param dataDir - Base directory for this store's `_docstore` tree; defaults
    *   to the process storage root via {@link resolveDataDir}.
    */
   constructor(dataDir?: string) {
     const root = resolveDataDir(dataDir);
     this.#ops = createStorageFileOps(() => root);
+  }
+
+  /**
+   * Run `work` while holding the exclusive per-document lock for `lockKey`,
+   * releasing it (and evicting the map entry when no writer is queued behind us)
+   * even if `work` throws. Reads run outside this lock; only writes contend.
+   */
+  async #withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
+    const predecessor = this.#documentLocks.get(lockKey) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = predecessor.then(() => held);
+    this.#documentLocks.set(lockKey, tail);
+
+    await predecessor;
+    try {
+      return await work();
+    } finally {
+      release();
+      if (this.#documentLocks.get(lockKey) === tail) {
+        this.#documentLocks.delete(lockKey);
+      }
+    }
   }
 
   async get<T>(container: ContainerName, partitionKey: string, id: string): Promise<T | null> {
@@ -149,29 +187,33 @@ class FileDocumentStore implements DocumentStore {
     };
     const serialized = JSON.stringify(stored, null, 2);
 
-    // Create-only writes take an atomic exclusive-create path: the OS guarantees
-    // exactly one of two racing first-writers succeeds, so `ifNoneMatch: '*'`
-    // confers true uniqueness instead of the read-then-rename TOCTOU the upsert
-    // path carries. The loser observes EEXIST and surfaces a conflict.
-    if (opts.ifNoneMatch === '*') {
-      const created = await this.#ops.createFileExclusive(dir, filename, serialized);
-      if (!created) {
-        throw new DocumentConflictError(`document ${container}/${partitionKey}/${id} already exists`);
+    // Serialise all writes to this exact document so the read-check-write below
+    // is atomic against concurrent in-process writers (see class docs).
+    return this.#withDocumentLock(`${container}/${partitionKey}/${id}`, async () => {
+      // Create-only writes take an atomic exclusive-create path: the OS guarantees
+      // exactly one of two racing first-writers succeeds, so `ifNoneMatch: '*'`
+      // confers true uniqueness instead of the read-then-rename TOCTOU the upsert
+      // path carries. The loser observes EEXIST and surfaces a conflict.
+      if (opts.ifNoneMatch === '*') {
+        const created = await this.#ops.createFileExclusive(dir, filename, serialized);
+        if (!created) {
+          throw new DocumentConflictError(`document ${container}/${partitionKey}/${id} already exists`);
+        }
+        return { id, partitionKey, ...stored };
       }
+
+      const existing = await this.getEnvelope<T>(container, partitionKey, id);
+      if (opts.ifMatch !== undefined && (!existing || existing.etag !== opts.ifMatch)) {
+        throw new DocumentConflictError(
+          `etag mismatch for ${container}/${partitionKey}/${id} (expected ${opts.ifMatch})`,
+        );
+      }
+
+      await this.#ops.ensureDir(dir, { mode: DIR_MODE });
+      await this.#ops.writeFile(dir, filename, serialized);
+
       return { id, partitionKey, ...stored };
-    }
-
-    const existing = await this.getEnvelope<T>(container, partitionKey, id);
-    if (opts.ifMatch !== undefined && (!existing || existing.etag !== opts.ifMatch)) {
-      throw new DocumentConflictError(
-        `etag mismatch for ${container}/${partitionKey}/${id} (expected ${opts.ifMatch})`,
-      );
-    }
-
-    await this.#ops.ensureDir(dir, { mode: DIR_MODE });
-    await this.#ops.writeFile(dir, filename, serialized);
-
-    return { id, partitionKey, ...stored };
+    });
   }
 
   async remove(container: ContainerName, partitionKey: string, id: string): Promise<void> {

@@ -94,6 +94,31 @@ describe.each(adapterCases)('TracksRepo enroll on the $name adapter', ({ name, m
     expect(active?.enrollmentId).toBe(first.enrollmentId);
   });
 
+  maybeIt('resolves a single winner when two enrollers race to RECLAIM a stale slot', async () => {
+    // Unlike the empty-slot race (atomic create), reclaim swaps an existing slot
+    // off a terminal target via `ifMatch` CAS. Both racers read the SAME slot
+    // etag; the backend must still admit exactly one writer.
+    await seedEnrollment(store, 'term-1', TRACK_A, 'abandoned');
+    await store.put(
+      ENROLLMENTS,
+      activeSlotId(TRACK_A),
+      { enrollmentId: 'term-1' },
+      { metadata: { type: 'active-slot' } },
+    );
+
+    const repoOne = createTracksRepo(store, deterministicOptions('c1'));
+    const repoTwo = createTracksRepo(store, deterministicOptions('c2'));
+
+    const [first, second] = await Promise.all([repoOne.enroll(TRACK_A), repoTwo.enroll(TRACK_A)]);
+
+    expect(first.enrollmentId).toBe(second.enrollmentId);
+    expect(first.enrollmentId).not.toBe('term-1');
+    const active = await repoOne.getActiveEnrollment(TRACK_A);
+    expect(active?.enrollmentId).toBe(first.enrollmentId);
+    // Exactly one fresh winner joined the abandoned target — no double-claim.
+    expect(await activeEnrollments(store)).toHaveLength(1);
+  });
+
   maybeIt('keeps independent slots for two different tracks', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
 

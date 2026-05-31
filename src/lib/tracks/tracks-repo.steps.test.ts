@@ -25,13 +25,14 @@ import type { UserScopedStore } from '../storage/document-store/user-scoped-stor
 import { stepInstanceId } from './ids';
 import { createTracksRepo } from './tracks-repo';
 import type { TrackStepInstance } from './types';
-import { StepContentionError } from './types';
+import { EnrollmentNotActiveError, StepContentionError } from './types';
 import {
   adapterCases,
   deterministicOptions,
   freshTempDir,
   makeScopedStore,
   RecordingStore,
+  seedSlot,
   SQLITE_AVAILABLE,
   TRACK_A,
   TRACK_B,
@@ -235,5 +236,25 @@ describe('TracksRepo step CAS simulations (file adapter)', () => {
 
     const id = stepInstanceId(ENROLLMENT, STEP);
     expect(spy.putCalls.filter((call) => isStepCasPut(call) && call.id === id)).toHaveLength(3);
+  });
+
+  it('completeStep aborts when the active slot is repointed mid-CAS-retry', async () => {
+    const repo = createTracksRepo(spy, deterministicOptions());
+    await repo.enroll(TRACK_A);
+    await repo.startStep(ENROLLMENT, STEP);
+
+    // Lose the first CAS attempt AND, in the same race, let a rival re-enroll
+    // repoint the active slot away from us. The retry's currency re-check must
+    // then reject rather than finalize a step on a now-displaced enrollment.
+    spy.failNextPutWhere(isStepCasPut, async () => {
+      await seedSlot(inner, TRACK_A, 'enr-rival');
+    });
+
+    await expect(repo.completeStep(ENROLLMENT, STEP)).rejects.toBeInstanceOf(EnrollmentNotActiveError);
+
+    // The instance never advanced: it remains in-progress, not completed.
+    const after = await readInstance(inner, ENROLLMENT, STEP);
+    expect(after?.status).toBe('in-progress');
+    expect(after?.completedAt).toBeUndefined();
   });
 });

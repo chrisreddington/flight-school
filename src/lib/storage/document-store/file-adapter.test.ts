@@ -16,7 +16,7 @@ import path from 'path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { describeDocumentStoreContract } from './contract';
-import { SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
+import { DocumentConflictError, SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
 
 const TEST_STORAGE_DIR = path.join(os.tmpdir(), `flight-school-docstore-${Date.now()}`);
 
@@ -88,5 +88,30 @@ describe('FileDocumentStore dataDir override', () => {
     } finally {
       await fs.rm(overrideDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('FileDocumentStore concurrent ifMatch CAS', () => {
+  it('resolves two concurrent stale-etag updates to exactly one winner', async () => {
+    const store = createFileDocumentStore();
+    const seeded = await store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
+
+    // Both writers hold the SAME pre-race etag, so absent a per-document lock the
+    // read-check-write windows could interleave and BOTH could win. The lock
+    // serialises them: the first commits, the second observes the advanced etag.
+    const outcomes = await Promise.allSettled([
+      store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 1 }, { ifMatch: seeded.etag }),
+      store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 2 }, { ifMatch: seeded.etag }),
+    ]);
+
+    const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+    const rejected = outcomes.filter((outcome) => outcome.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
+
+    // The surviving document is whichever writer won — never a torn or lost write.
+    const persisted = await store.get<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
+    expect([1, 2]).toContain(persisted?.value);
   });
 });
