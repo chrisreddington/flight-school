@@ -130,3 +130,37 @@ export class EnrollmentContentionError extends Error {
     this.name = 'EnrollmentContentionError';
   }
 }
+
+/**
+ * Thrown by a step mutation ({@link TrackStepInstance} transition) when its CAS
+ * loop exhausts every retry against a concurrent writer. Distinct from
+ * {@link EnrollmentContentionError} — that names a *track* whose active slot
+ * could not be resolved; this names the *step instance* whose status could not
+ * be advanced — so the caller can tell "re-enroll" apart from "retry this step".
+ */
+export class StepContentionError extends Error {
+  readonly code = 'STEP_CONTENTION';
+
+  constructor(stepInstanceId: string) {
+    super(`Could not advance step instance after retries: ${stepInstanceId}`);
+    this.name = 'StepContentionError';
+  }
+}
+
+/**
+ * Thrown by a step mutation when the enrollment it targets is not the track's
+ * current, active enrollment. Covers three cases that all mean "this progress
+ * write would land on a stale or non-existent enrollment": the enrollment
+ * document is absent, its `status` is not `'active'`, or it IS active but the
+ * track's active slot points at a different (rival) enrollment — i.e. it has
+ * been displaced. Step methods validate currency at call time so a client
+ * holding a stale `enrollmentId` cannot silently mutate history.
+ */
+export class EnrollmentNotActiveError extends Error {
+  readonly code = 'ENROLLMENT_NOT_ACTIVE';
+
+  constructor(enrollmentId: string) {
+    super(`Enrollment is not the active enrollment for its track: ${enrollmentId}`);
+    this.name = 'EnrollmentNotActiveError';
+  }
+}

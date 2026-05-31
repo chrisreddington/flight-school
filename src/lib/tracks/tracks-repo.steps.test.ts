@@ -25,6 +25,7 @@ import type { UserScopedStore } from '../storage/document-store/user-scoped-stor
 import { stepInstanceId } from './ids';
 import { createTracksRepo } from './tracks-repo';
 import type { TrackStepInstance } from './types';
+import { StepContentionError } from './types';
 import {
   adapterCases,
   deterministicOptions,
@@ -32,6 +33,8 @@ import {
   makeScopedStore,
   RecordingStore,
   SQLITE_AVAILABLE,
+  TRACK_A,
+  TRACK_B,
   USER_ID,
 } from './tracks-repo.harness';
 
@@ -67,6 +70,7 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('startStep creates an in-progress instance the list returns', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
 
     const instance = await repo.startStep(ENROLLMENT, STEP);
 
@@ -80,6 +84,7 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('repeated startStep is idempotent — exactly one instance', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
 
     const first = await repo.startStep(ENROLLMENT, STEP);
     const second = await repo.startStep(ENROLLMENT, STEP);
@@ -93,6 +98,9 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
   });
 
   maybeIt('concurrent startStep resolves to a single instance', async () => {
+    // A setup repo plants the active enrollment + slot the rival repos validate against.
+    const setup = createTracksRepo(store, deterministicOptions());
+    await setup.enroll(TRACK_A);
     const repoA = createTracksRepo(store, deterministicOptions('a'));
     const repoB = createTracksRepo(store, deterministicOptions('b'));
 
@@ -105,6 +113,7 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('accessStep on an unstarted step is a no-op', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
 
     await expect(repo.accessStep(ENROLLMENT, STEP)).resolves.toBeUndefined();
 
@@ -114,6 +123,7 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('accessStep re-stamps lastAccessedAt on a started step', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
     const started = await repo.startStep(ENROLLMENT, STEP);
 
     await repo.accessStep(ENROLLMENT, STEP);
@@ -126,6 +136,7 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('completeStep ensures the instance then advances it to completed', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
 
     const completed = await repo.completeStep(ENROLLMENT, STEP);
 
@@ -137,6 +148,7 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('completeStep is idempotent once the step is completed', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
     const first = await repo.completeStep(ENROLLMENT, STEP);
 
     const second = await repo.completeStep(ENROLLMENT, STEP);
@@ -147,6 +159,8 @@ describe.each(adapterCases)('TracksRepo steps on the $name adapter', ({ name, ma
 
   maybeIt('listStepInstances returns only the given enrollment instances', async () => {
     const repo = createTracksRepo(store, deterministicOptions());
+    await repo.enroll(TRACK_A);
+    await repo.enroll(TRACK_B);
     await repo.startStep(ENROLLMENT, STEP);
     await repo.startStep(ENROLLMENT, 'step-b');
     await repo.startStep('enr-2', STEP);
@@ -181,6 +195,7 @@ describe('TracksRepo step CAS simulations (file adapter)', () => {
 
   it('accessStep swallows a CAS conflict and leaves the last-committed state', async () => {
     const repo = createTracksRepo(spy, deterministicOptions());
+    await repo.enroll(TRACK_A);
     await repo.startStep(ENROLLMENT, STEP);
     const committed = await repo.completeStep(ENROLLMENT, STEP);
 
@@ -195,6 +210,7 @@ describe('TracksRepo step CAS simulations (file adapter)', () => {
 
   it('completeStep retries past a CAS conflict and still completes', async () => {
     const repo = createTracksRepo(spy, deterministicOptions());
+    await repo.enroll(TRACK_A);
     await repo.startStep(ENROLLMENT, STEP);
 
     spy.failNextPutWhere(isStepCasPut);
@@ -204,5 +220,20 @@ describe('TracksRepo step CAS simulations (file adapter)', () => {
     const id = stepInstanceId(ENROLLMENT, STEP);
     // Two ifMatch attempts: the conflicted first, then the winning retry.
     expect(spy.putCalls.filter((call) => isStepCasPut(call) && call.id === id)).toHaveLength(2);
+  });
+
+  it('completeStep throws StepContentionError when every CAS attempt loses', async () => {
+    const repo = createTracksRepo(spy, deterministicOptions());
+    await repo.enroll(TRACK_A);
+    await repo.startStep(ENROLLMENT, STEP);
+
+    // Exhaust the retry budget: a fresh conflict on each of the three attempts.
+    spy.failNextPutWhere(isStepCasPut);
+    spy.failNextPutWhere(isStepCasPut);
+    spy.failNextPutWhere(isStepCasPut);
+    await expect(repo.completeStep(ENROLLMENT, STEP)).rejects.toBeInstanceOf(StepContentionError);
+
+    const id = stepInstanceId(ENROLLMENT, STEP);
+    expect(spy.putCalls.filter((call) => isStepCasPut(call) && call.id === id)).toHaveLength(3);
   });
 });

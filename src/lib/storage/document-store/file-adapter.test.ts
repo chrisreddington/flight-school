@@ -20,7 +20,7 @@ import { SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
 
 const TEST_STORAGE_DIR = path.join(os.tmpdir(), `flight-school-docstore-${Date.now()}`);
 
-let createFileDocumentStore: () => DocumentStore;
+let createFileDocumentStore: (options?: { dataDir?: string }) => DocumentStore;
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_STORAGE_DIR);
@@ -65,5 +65,28 @@ describe('FileDocumentStore path safety', () => {
     const raw = JSON.parse(await fs.readFile(onDisk, 'utf8'));
     expect(raw.body).toEqual({ label: 'x' });
     expect(raw.etag).toBeTruthy();
+  });
+});
+
+describe('FileDocumentStore dataDir override', () => {
+  it('routes writes to an explicit dataDir, not the process storage root', async () => {
+    const overrideDir = path.join(os.tmpdir(), `flight-school-docstore-override-${Date.now()}`);
+    try {
+      const store = createFileDocumentStore({ dataDir: overrideDir });
+      await store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { label: 'override' });
+
+      const overridePath = path.join(overrideDir, '_docstore', 'skills', 'user-a', `${SINGLETON_DOCUMENT_ID}.json`);
+      const raw = JSON.parse(await fs.readFile(overridePath, 'utf8'));
+      expect(raw.body).toEqual({ label: 'override' });
+
+      // The env-stubbed root must stay untouched: the override is honoured, not ignored.
+      const rootPath = path.join(TEST_STORAGE_DIR, '_docstore', 'skills', 'user-a', `${SINGLETON_DOCUMENT_ID}.json`);
+      await expect(fs.readFile(rootPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+
+      // Reads round-trip through the same instance root.
+      expect(await store.get('skills', 'user-a', SINGLETON_DOCUMENT_ID)).toEqual({ label: 'override' });
+    } finally {
+      await fs.rm(overrideDir, { recursive: true, force: true });
+    }
   });
 });

@@ -125,6 +125,42 @@ describe.each(adapterCases)('reconcileTrackEnrollments on the $name adapter', ({
     expect(await readStatus(store, 'enr-orphan')).toBe('abandoned');
   });
 
+  maybeIt('demotes an unslotted active enrollment exactly at the grace boundary (age === graceMs)', async () => {
+    await seedEnrollment(store, 'enr-edge', isoAged(ENROLL_RECONCILE_GRACE_MS));
+
+    const result = await reconcileTrackEnrollments(store, { now: fixedNow });
+
+    expect(result.demoted).toBe(1);
+    expect(await readStatus(store, 'enr-edge')).toBe('abandoned');
+  });
+
+  maybeIt('demotes an old orphan even when its envelope updatedAt was churned recently', async () => {
+    const oldEnrolledAt = isoAged(ENROLL_RECONCILE_GRACE_MS * 5);
+    await seedEnrollment(store, 'enr-churn', oldEnrolledAt);
+    // Re-write the SAME enrollment "now", advancing the envelope's updatedAt
+    // while preserving the immutable enrolledAt. A grace check keyed on updatedAt
+    // would wrongly spare this orphan forever; the enrolledAt-keyed check still
+    // demotes it.
+    await store.put<TrackEnrollment>(
+      ENROLLMENTS,
+      'enr-churn',
+      {
+        enrollmentId: 'enr-churn',
+        trackId: TRACK_A,
+        catalogVersion: 'v1',
+        status: 'active',
+        enrolledAt: oldEnrolledAt,
+        lastAccessedAt: NOW_ISO,
+      },
+      { metadata: { type: 'enrollment', status: 'active', parentId: TRACK_A } },
+    );
+
+    const result = await reconcileTrackEnrollments(store, { now: fixedNow });
+
+    expect(result.demoted).toBe(1);
+    expect(await readStatus(store, 'enr-churn')).toBe('abandoned');
+  });
+
   maybeIt('never demotes the enrollment the active slot points at, however old', async () => {
     await seedEnrollment(store, 'enr-live', isoAged(ENROLL_RECONCILE_GRACE_MS * 10));
     await seedSlot(store, 'enr-live');

@@ -86,7 +86,7 @@ export async function createDocumentStore(options: CreateDocumentStoreOptions = 
   await reconcileBackendSentinel({ dataDir, backend });
 
   if (backend === 'file') {
-    return createFileDocumentStore();
+    return createFileDocumentStore({ dataDir });
   }
 
   assertNodeSupportsSqlite();

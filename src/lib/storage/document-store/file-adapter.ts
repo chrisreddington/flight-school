@@ -25,8 +25,9 @@ import 'server-only';
 import { randomUUID } from 'crypto';
 
 import { logger } from '@/lib/logger';
+import { createStorageFileOps, type StorageFileOps } from '../scoped-file-ops';
 import { SAFE_PATH_SEGMENT } from '../user-scope';
-import { createFileExclusive, deleteDir, deleteFile, ensureDir, listFiles, readFile, writeFile } from '../utils';
+import { resolveDataDir } from '../utils';
 import { canonicalizeMetadata, decodeCursor, encodeCursor } from './canonical';
 import {
   DocumentConflictError,
@@ -87,9 +88,25 @@ function orderValueOf<T>(envelope: DocumentEnvelope<T>, orderBy: 'updatedAt' | '
 
 /**
  * The file-backed document store. Construct one per process via
- * {@link createFileDocumentStore}; it holds no mutable state.
+ * {@link createFileDocumentStore}.
+ *
+ * Each instance binds its filesystem operations to its OWN `dataDir` (defaulting
+ * to the process storage root), so two stores pointed at different directories
+ * never collide through a shared module global. The instance holds no other
+ * mutable state.
  */
 class FileDocumentStore implements DocumentStore {
+  readonly #ops: StorageFileOps;
+
+  /**
+   * @param dataDir - Base directory for this store's `_docstore` tree; defaults
+   *   to the process storage root via {@link resolveDataDir}.
+   */
+  constructor(dataDir?: string) {
+    const root = resolveDataDir(dataDir);
+    this.#ops = createStorageFileOps(() => root);
+  }
+
   async get<T>(container: ContainerName, partitionKey: string, id: string): Promise<T | null> {
     const envelope = await this.getEnvelope<T>(container, partitionKey, id);
     return envelope ? envelope.body : null;
@@ -101,7 +118,7 @@ class FileDocumentStore implements DocumentStore {
     id: string,
   ): Promise<DocumentEnvelope<T> | null> {
     const dir = partitionDir(container, partitionKey);
-    const raw = await readFile(dir, documentFilename(id));
+    const raw = await this.#ops.readFile(dir, documentFilename(id));
     if (raw === null) return null;
 
     const stored = JSON.parse(raw) as StoredEnvelope<T>;
@@ -137,7 +154,7 @@ class FileDocumentStore implements DocumentStore {
     // confers true uniqueness instead of the read-then-rename TOCTOU the upsert
     // path carries. The loser observes EEXIST and surfaces a conflict.
     if (opts.ifNoneMatch === '*') {
-      const created = await createFileExclusive(dir, filename, serialized);
+      const created = await this.#ops.createFileExclusive(dir, filename, serialized);
       if (!created) {
         throw new DocumentConflictError(`document ${container}/${partitionKey}/${id} already exists`);
       }
@@ -151,14 +168,14 @@ class FileDocumentStore implements DocumentStore {
       );
     }
 
-    await ensureDir(dir, { mode: DIR_MODE });
-    await writeFile(dir, filename, serialized);
+    await this.#ops.ensureDir(dir, { mode: DIR_MODE });
+    await this.#ops.writeFile(dir, filename, serialized);
 
     return { id, partitionKey, ...stored };
   }
 
   async remove(container: ContainerName, partitionKey: string, id: string): Promise<void> {
-    await deleteFile(partitionDir(container, partitionKey), documentFilename(id));
+    await this.#ops.deleteFile(partitionDir(container, partitionKey), documentFilename(id));
   }
 
   async list<T>(container: ContainerName, partitionKey: string, opts: ListOptions = {}): Promise<ListResult<T>> {
@@ -186,18 +203,18 @@ class FileDocumentStore implements DocumentStore {
     const envelopes = await this.readPartition(container, partitionKey);
     const targets = envelopes.filter((envelope) => envelope.metadata.parentId === parentId);
     for (const target of targets) {
-      await deleteFile(partitionDir(container, partitionKey), documentFilename(target.id));
+      await this.#ops.deleteFile(partitionDir(container, partitionKey), documentFilename(target.id));
     }
   }
 
   async deletePartition(container: ContainerName, partitionKey: string): Promise<void> {
-    await deleteDir(partitionDir(container, partitionKey));
+    await this.#ops.deleteDir(partitionDir(container, partitionKey));
   }
 
   /** Read and parse every envelope in a partition (skips no files). */
   private async readPartition<T>(container: ContainerName, partitionKey: string): Promise<DocumentEnvelope<T>[]> {
     const dir = partitionDir(container, partitionKey);
-    const filenames = await listFiles(dir);
+    const filenames = await this.#ops.listFiles(dir);
     const envelopes: DocumentEnvelope<T>[] = [];
     for (const filename of filenames) {
       if (!filename.endsWith('.json')) continue;
@@ -252,8 +269,18 @@ function applyCursor<T>(
   });
 }
 
-/** Construct the process-wide file-backed document store. */
-export function createFileDocumentStore(): DocumentStore {
+/** Options for {@link createFileDocumentStore}. */
+export interface CreateFileDocumentStoreOptions {
+  /**
+   * Base directory for this store's `_docstore` tree. Defaults to the process
+   * storage root; pass an explicit value to point a store at its own directory
+   * (e.g. so the storage factory's `dataDir` override actually takes effect).
+   */
+  dataDir?: string;
+}
+
+/** Construct a file-backed document store, optionally rooted at `dataDir`. */
+export function createFileDocumentStore(options: CreateFileDocumentStoreOptions = {}): DocumentStore {
   log.debug('Created file-backed document store');
-  return new FileDocumentStore();
+  return new FileDocumentStore(options.dataDir);
 }

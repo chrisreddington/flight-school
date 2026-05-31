@@ -95,6 +95,11 @@ export async function reconcileTrackEnrollments(
     const slotTarget = await resolveSlotTarget(store, enrollment.trackId, slotTargetCache);
     if (slotTarget === enrollment.enrollmentId) continue;
 
+    // Demote once the orphan is at least `graceMs` old. The boundary is
+    // inclusive — `ageMs === graceMs` demotes — because the guard is `< graceMs`,
+    // so demotion fires for every age `>= graceMs`. Age is measured from the
+    // IMMUTABLE `enrolledAt`, never the envelope's `updatedAt`, so a revisited
+    // orphan cannot churn its way past the window forever.
     const ageMs = nowMs - Date.parse(enrollment.enrolledAt);
     if (ageMs < graceMs) continue;
 

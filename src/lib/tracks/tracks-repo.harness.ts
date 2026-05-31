@@ -48,7 +48,12 @@ import type {
 } from '../storage/document-store/types';
 import { createUserScopedStore } from '../storage/document-store/user-scoped-store';
 import type { UserScopedStore } from '../storage/document-store/user-scoped-store';
+import { activeSlotId } from './ids';
 import type { TracksRepoOptions } from './tracks-repo';
+import type { TrackEnrollment } from './types';
+
+/** The container holding enrollment documents and their active-slot pointers. */
+const ENROLLMENTS = 'track-enrollments';
 
 /** The authenticated user every harness store is partitioned for. */
 export const USER_ID = 'user-a';
@@ -129,14 +134,52 @@ export function deterministicOptions(idPrefix = 'enr'): Required<Pick<TracksRepo
   };
 }
 
+/**
+ * Seed an enrollment document directly, bypassing the repo's create path. Used
+ * to set up enrollment states (active / abandoned / completed, displaced) a
+ * test needs to assert the repo's currency validation against.
+ *
+ * @param enrolledAt - Optional immutable creation stamp; defaults to a fixed
+ *   base. The reconciliation grace check reads this, so callers exercising age
+ *   boundaries override it.
+ */
+export async function seedEnrollment(
+  store: UserScopedStore,
+  enrollmentId: string,
+  trackId: string,
+  status: TrackEnrollment['status'],
+  enrolledAt = '2026-06-01T00:00:00.000Z',
+): Promise<void> {
+  await store.put<TrackEnrollment>(
+    ENROLLMENTS,
+    enrollmentId,
+    {
+      enrollmentId,
+      trackId,
+      catalogVersion: 'test',
+      status,
+      enrolledAt,
+      lastAccessedAt: enrolledAt,
+    },
+    { metadata: { type: 'enrollment', status, parentId: trackId } },
+  );
+}
+
+/**
+ * Point a track's active slot at `enrollmentId`, bypassing the repo. Used to
+ * model a displaced enrollment (slot repointed at a rival) without driving a
+ * full concurrent enroll.
+ */
+export async function seedSlot(store: UserScopedStore, trackId: string, enrollmentId: string): Promise<void> {
+  await store.put(ENROLLMENTS, activeSlotId(trackId), { enrollmentId }, { metadata: { type: 'active-slot' } });
+}
+
 /** A recorded `put` call, captured before the inner store is touched. */
 export interface PutCall {
   container: ContainerName;
   id: string;
   opts: PutOptions | undefined;
 }
-
-/** A predicate selecting which `put` a one-shot conflict injector fires on. */
 export type PutMatcher = (call: PutCall) => boolean;
 
 /** A primed one-shot conflict: fires on the first matching put, then disarms. */

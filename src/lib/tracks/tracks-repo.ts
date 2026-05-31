@@ -29,7 +29,13 @@ import { DocumentConflictError } from '../storage/document-store/types';
 import type { UserScopedStore } from '../storage/document-store/user-scoped-store';
 import { CATALOG_VERSION } from './catalog-data';
 import { activeSlotId, assertSafeSegment, stepInstanceId } from './ids';
-import { EnrollmentContentionError, type TrackEnrollment, type TrackStepInstance } from './types';
+import {
+  EnrollmentContentionError,
+  EnrollmentNotActiveError,
+  StepContentionError,
+  type TrackEnrollment,
+  type TrackStepInstance,
+} from './types';
 
 /** The container holding enrollment documents and their active-slot pointers. */
 const ENROLLMENTS = 'track-enrollments';
@@ -163,10 +169,27 @@ export class TracksRepo {
    * Create or return the in-progress instance for a step, enforcing exactly one
    * instance per `(enrollmentId, stepId)` via a deterministic id + CAS create.
    *
-   * A first call wins; a concurrent or repeated call observes a benign
+   * Validates that `enrollmentId` is the track's current active enrollment
+   * before writing, so a client holding a stale (abandoned, completed, or
+   * displaced) id cannot create progress on a non-current enrollment. A first
+   * call wins; a concurrent or repeated call observes a benign
    * {@link DocumentConflictError} and re-reads the existing instance.
+   *
+   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not the active,
+   *   currently-slotted enrollment for its track.
    */
   async startStep(enrollmentId: string, stepId: string): Promise<TrackStepInstance> {
+    await this.#requireActiveEnrollment(enrollmentId);
+    return this.#startStepUnchecked(enrollmentId, stepId);
+  }
+
+  /**
+   * The CAS-create half of {@link startStep}, WITHOUT the enrollment-currency
+   * check. Callers that have already validated currency in the same logical
+   * operation (e.g. {@link completeStep}) use this to avoid re-validating
+   * redundantly between the ensure and the advance.
+   */
+  async #startStepUnchecked(enrollmentId: string, stepId: string): Promise<TrackStepInstance> {
     assertSafeSegment(enrollmentId);
     assertSafeSegment(stepId);
     const id = stepInstanceId(enrollmentId, stepId);
@@ -196,12 +219,17 @@ export class TracksRepo {
 
   /**
    * Best-effort re-stamp of a started step's `lastAccessedAt` (and, separately,
-   * the enrollment's). Does NOT create an instance: an unstarted step is a
-   * no-op, not an error. A concurrent status change wins on
-   * {@link DocumentConflictError}; the stale stamp self-heals on next access.
+   * the enrollment's). Does NOT create an instance: a started-but-unwritten step
+   * is a no-op, not an error. Validates enrollment currency first, so a stale id
+   * is rejected rather than silently touching history. A concurrent status
+   * change wins on {@link DocumentConflictError}; the stale stamp self-heals on
+   * next access.
+   *
+   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not the active,
+   *   currently-slotted enrollment for its track.
    */
   async accessStep(enrollmentId: string, stepId: string): Promise<void> {
-    assertSafeSegment(enrollmentId);
+    await this.#requireActiveEnrollment(enrollmentId);
     assertSafeSegment(stepId);
     const id = stepInstanceId(enrollmentId, stepId);
     const envelope = await this.#store.getEnvelope<TrackStepInstance>(STEPS, id);
@@ -222,12 +250,19 @@ export class TracksRepo {
   }
 
   /**
-   * Mark a step completed. Ensures the instance exists (via {@link startStep}),
-   * then CAS-advances its status to `'completed'` with a `completedAt` stamp,
-   * retrying on conflict so a concurrent access-stamp cannot block completion.
+   * Mark a step completed. Validates enrollment currency, ensures the instance
+   * exists (via {@link startStep}), then CAS-advances its status to
+   * `'completed'` with a `completedAt` stamp, retrying on conflict so a
+   * concurrent access-stamp cannot block completion.
+   *
+   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not the active,
+   *   currently-slotted enrollment for its track.
+   * @throws {StepContentionError} when every CAS attempt loses to a concurrent
+   *   writer.
    */
   async completeStep(enrollmentId: string, stepId: string): Promise<TrackStepInstance> {
-    await this.startStep(enrollmentId, stepId);
+    await this.#requireActiveEnrollment(enrollmentId);
+    await this.#startStepUnchecked(enrollmentId, stepId);
     const id = stepInstanceId(enrollmentId, stepId);
 
     for (let attempt = 0; attempt < MAX_STEP_CAS_ATTEMPTS; attempt++) {
@@ -251,7 +286,7 @@ export class TracksRepo {
         // Lost a CAS race with a concurrent writer; re-read and retry.
       }
     }
-    throw new EnrollmentContentionError(enrollmentId);
+    throw new StepContentionError(id);
   }
 
   /** List every step instance for an enrollment (for current-step derivation). */
@@ -259,6 +294,32 @@ export class TracksRepo {
     assertSafeSegment(enrollmentId);
     const result = await this.#store.list<TrackStepInstance>(STEPS, { parentId: enrollmentId });
     return result.items.map((envelope) => envelope.body);
+  }
+
+  /**
+   * Resolve and return the enrollment IFF it is the track's current, active
+   * enrollment; throw {@link EnrollmentNotActiveError} otherwise.
+   *
+   * "Current and active" requires three things to hold together: the enrollment
+   * document exists, its `status` is `'active'`, and the track's active-slot
+   * document points back at this exact enrollment. The third clause is what
+   * distinguishes a live winner from a *displaced* enrollment that is still
+   * `status:'active'` but no longer slotted (a re-enroll created a rival and
+   * repointed the slot). The check is read-only and validated at call time —
+   * it is NOT atomic with the mutation that follows, matching the repo's
+   * CAS-on-write contract.
+   */
+  async #requireActiveEnrollment(enrollmentId: string): Promise<TrackEnrollment> {
+    assertSafeSegment(enrollmentId);
+    const enrollment = await this.#store.get<TrackEnrollment>(ENROLLMENTS, enrollmentId);
+    if (!enrollment || enrollment.status !== 'active') {
+      throw new EnrollmentNotActiveError(enrollmentId);
+    }
+    const slot = await this.#store.get<ActiveSlot>(ENROLLMENTS, activeSlotId(enrollment.trackId));
+    if (slot?.enrollmentId !== enrollmentId) {
+      throw new EnrollmentNotActiveError(enrollmentId);
+    }
+    return enrollment;
   }
 
   /** Create a fresh active (but unslotted) enrollment; returns its id. */

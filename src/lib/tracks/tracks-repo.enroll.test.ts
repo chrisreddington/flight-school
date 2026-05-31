@@ -30,6 +30,7 @@ import {
   freshTempDir,
   makeScopedStore,
   RecordingStore,
+  seedEnrollment,
   SQLITE_AVAILABLE,
   TRACK_A,
   TRACK_B,
@@ -258,26 +259,3 @@ describe('TracksRepo enroll lost-race simulations (file adapter)', () => {
     expect(spy.removeCalls).toEqual([]);
   });
 });
-
-/** Seed an enrollment document directly, bypassing the repo's create path. */
-async function seedEnrollment(
-  store: UserScopedStore,
-  enrollmentId: string,
-  trackId: string,
-  status: TrackEnrollment['status'],
-): Promise<void> {
-  const stamp = '2026-06-01T00:00:00.000Z';
-  await store.put<TrackEnrollment>(
-    ENROLLMENTS,
-    enrollmentId,
-    {
-      enrollmentId,
-      trackId,
-      catalogVersion: 'test',
-      status,
-      enrolledAt: stamp,
-      lastAccessedAt: stamp,
-    },
-    { metadata: { type: 'enrollment', status, parentId: trackId } },
-  );
-}

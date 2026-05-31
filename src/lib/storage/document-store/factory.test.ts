@@ -138,13 +138,21 @@ describe('createDocumentStore', () => {
     expect(createSqliteSpy).not.toHaveBeenCalled();
   });
 
-  it('constructs the sqlite adapter only on the sqlite backend, passing the data-dir db path', async () => {
-    await createDocumentStore({ backend: 'sqlite' });
+  it('routes the file store to an explicit dataDir override', async () => {
+    const overrideDir = path.join(os.tmpdir(), `fs-factory-override-${Date.now()}`);
+    try {
+      const store = await createDocumentStore({ backend: 'file', dataDir: overrideDir });
+      await store.put('system', 'p1', 'doc', { routed: true });
 
-    expect(createSqliteSpy).toHaveBeenCalledTimes(1);
-    const passedPath = createSqliteSpy.mock.calls[0][0].dbPath as string;
-    expect(passedPath.startsWith(TEST_STORAGE_DIR)).toBe(true);
-    expect(passedPath.endsWith('.sqlite')).toBe(true);
-    expect(await readSentinelBackend()).toBe('sqlite');
+      // The document lands under the override dir, not the env-stubbed root.
+      const overridePath = path.join(overrideDir, '_docstore', 'system', 'p1', 'doc.json');
+      const raw = JSON.parse(await fs.readFile(overridePath, 'utf-8'));
+      expect(raw.body).toEqual({ routed: true });
+
+      const rootPath = path.join(TEST_STORAGE_DIR, '_docstore', 'system', 'p1', 'doc.json');
+      await expect(fs.readFile(rootPath, 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await fs.rm(overrideDir, { recursive: true, force: true });
+    }
   });
 });
