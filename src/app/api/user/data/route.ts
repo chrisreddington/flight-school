@@ -75,7 +75,9 @@ interface DeleteSummary {
   /**
    * Every user-data partition was wiped but the discoverable owner registry
    * entry could not be removed. The wipe is complete (safe to sign out); a
-   * later reconciliation sweep prunes the orphaned entry.
+   * later reconciliation sweep prunes the orphaned entry. Only ever emitted
+   * alongside `success: true` — if user data also remains (`partial: true`)
+   * this flag is suppressed, because its contract is "the wipe is complete".
    */
   registryCleanupPending?: boolean;
 }
@@ -245,8 +247,14 @@ export async function DELETE(request: NextRequest) {
     // so the `deleteDir('users/{userId}')` call above never touched it. This
     // second mark is a defensive idempotent re-write, not recovery of a wiped
     // marker — it guarantees the tombstone is present even if a future refactor
-    // moves tombstone storage back under the per-user directory.
-    await markUserDeleted(userId);
+    // moves tombstone storage back under the per-user directory. A failure here
+    // must not 500 the wipe: the data is already gone, so log-and-swallow and
+    // still return the summary the client needs to sign out.
+    try {
+      await markUserDeleted(userId);
+    } catch (err) {
+      log.error(`[user ${userId}] defensive tombstone re-write failed`, { err });
+    }
 
     // `partial` (and the mirrored `success: false`) means user data may still
     // be on the server, so the client keeps the user signed in for a retry.
@@ -263,7 +271,11 @@ export async function DELETE(request: NextRequest) {
       storeDataDeleted,
       ...(failed.length > 0 ? { failed } : {}),
       ...(userDataMayRemain ? { partial: true } : {}),
-      ...(registryCleanupPending ? { registryCleanupPending: true } : {}),
+      // `registryCleanupPending` asserts "the wipe is complete", so it can only
+      // surface when no user data remains. If activity data also failed to
+      // clear, the registry failure stays in `failed` for observability but the
+      // flag is suppressed to keep it mutually exclusive with `partial`.
+      ...(registryCleanupPending && !userDataMayRemain ? { registryCleanupPending: true } : {}),
     };
 
     log.info(`[user ${userId}] data deletion complete`, summary);

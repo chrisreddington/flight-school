@@ -11,11 +11,13 @@
  *
  * On success it calls {@link onConfirmed} (typically signs the user
  * out) so the page doesn't immediately attempt to refetch state for
- * an account that no longer has data. A *partial* deletion (the server
- * cleared some data but reported `summary.partial`) is treated as a
- * failure here: {@link onConfirmed} is NOT called, so the user stays
- * signed in and can retry rather than being logged out while data
- * still lingers on the server.
+ * an account that no longer has data. The authoritative signal is the
+ * response's `success` flag: when it is `false` the server kept some
+ * user data behind, so {@link onConfirmed} is NOT called and the user
+ * stays signed in to retry. The `summary.partial` field is purely
+ * informational/diagnostic — the dialog never branches on it. A
+ * registry-only cleanup failure reports `success: true` (the data is
+ * gone, only the owner record lingers), so it still signs out.
  */
 
 import { ApiError, apiDelete } from '@/lib/api-client';

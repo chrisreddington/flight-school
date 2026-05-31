@@ -238,6 +238,45 @@ describe('DELETE /api/user/data', () => {
     expect(markUserDeletedMock).toHaveBeenCalledTimes(2);
   });
 
+  it('reports a combined activity + partition failure as partial with both causes', async () => {
+    deleteWorkerActivityMock.mockRejectedValue(new Error('worker activity down'));
+    deleteUserDataMock.mockRejectedValue(
+      new UserDataDeletionErrorMock('partition', ['focus'], 'partition wipe failed'),
+    );
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.storeDataDeleted).toBe(false);
+    expect(body.summary.activityEventsCleared).toBe(false);
+    expect(body.summary.failed).toEqual(['activity', 'store-data:focus']);
+    expect(body.summary.registryCleanupPending).toBeUndefined();
+  });
+
+  it('suppresses registryCleanupPending when activity data also remains', async () => {
+    // Combined failure: the activity-buffer clear fails AND the registry-phase
+    // store removal fails. User data (activity) still remains, so the wipe is
+    // partial — `registryCleanupPending` must NOT be set (its invariant is
+    // "the wipe is complete"), though `store-registry` stays in `failed` for
+    // observability.
+    deleteWorkerActivityMock.mockRejectedValue(new Error('worker activity down'));
+    deleteUserDataMock.mockRejectedValue(new UserDataDeletionErrorMock('registry', [], 'registry removal failed'));
+
+    const response = await DELETE(makeRequest({ body: { confirmLogin: 'alice' } }) as never);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(body.summary.partial).toBe(true);
+    expect(body.summary.activityEventsCleared).toBe(false);
+    expect(body.summary.storeDataDeleted).toBe(true);
+    expect(body.summary.failed).toEqual(['activity', 'store-registry']);
+    expect(body.summary.registryCleanupPending).toBeUndefined();
+  });
+
   it('reports partial failure when worker activity DELETE fails', async () => {
     deleteWorkerActivityMock.mockRejectedValue(new Error('worker activity down'));
 

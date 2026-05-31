@@ -93,4 +93,17 @@ describe('DeleteMyDataDialog', () => {
 
     await waitFor(() => expect(getConfirmedCount()).toBe(1));
   });
+
+  it('keeps the user signed in when success is false even without a partial flag', async () => {
+    // Proves the sign-out gate is `!result.success`, not `summary.partial`:
+    // a success:false response carrying no `partial` field must still block
+    // sign-out. The old `summary.partial` branch would have signed out here.
+    apiDeleteMock.mockResolvedValue({ success: false, summary: { failed: ['activity'] } });
+    const { getConfirmedCount } = renderDialog();
+
+    await confirmDeletion();
+
+    await waitFor(() => expect(screen.getByText(/could not be deleted/i)).toBeInTheDocument());
+    expect(getConfirmedCount()).toBe(0);
+  });
 });
