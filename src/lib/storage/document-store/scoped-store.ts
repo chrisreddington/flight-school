@@ -1,16 +1,18 @@
 /**
- * Per-user store resolver (Next-free, worker-safe).
+ * Per-user store resolver for the server request path.
  *
  * Wires the process-wide {@link DocumentStore} to a single user's
  * {@link UserScopedStore}, baking the server-resolved `userId` as the partition
- * key and injecting the deletion-tombstone seam. Both the Web/API request path
- * and the worker job path resolve their store through here, so the tenancy +
- * tombstone guard lives in exactly one place.
+ * key and injecting the deletion-tombstone seam, so the tenancy + tombstone
+ * guard lives in exactly one place.
  *
- * This module is deliberately free of any `@/lib/auth/*` or `next/*` import so
- * the Next-free worker can reach it directly (the worker resolves `userId` from
- * the persisted job payload, not from a request). The request-scoped wrapper
- * that calls {@link requireUserContext} lives in `./request-store`.
+ * @remarks
+ * This module imports the `server-only`-tainted {@link isUserDeleted}, so it is
+ * reachable from Web/API request handlers and CLI tooling but NOT from the
+ * Next-free worker. A worker-safe variant would inject the tombstone seam
+ * rather than importing it directly; that wiring is deferred (tracked as the
+ * S1.5 worker-injection follow-up). The caller resolves `userId` from a trusted
+ * source (Auth.js session) — never client input.
  *
  * @module storage/document-store/scoped-store
  */

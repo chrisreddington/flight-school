@@ -42,11 +42,9 @@ const log = logger.withTag('WorkspaceStore');
 // Utility Functions
 // =============================================================================
 
-/**
- * Calculates the size of a string in bytes (UTF-8).
- */
-function getByteSize(str: string): number {
-  return new Blob([str]).size;
+/** Returns the UTF-8 byte length of `text`. */
+function getByteSize(text: string): number {
+  return new Blob([text]).size;
 }
 
 // =============================================================================
@@ -54,11 +52,11 @@ function getByteSize(str: string): number {
 // =============================================================================
 
 /**
- * Server-backed implementation of WorkspaceStoreInterface using file-based storage.
+ * Server-backed implementation of WorkspaceStoreInterface using file storage.
  *
  * @remarks
- * Each workspace is stored in its own directory under .data/workspaces/{challengeId}/
- * with actual files for content and a _workspace.json metadata sidecar.
+ * Each workspace lives under `users/{userId}/workspaces/{challengeId}/` with
+ * real files for content and a `_workspace.json` metadata sidecar.
  */
 class ServerWorkspaceStore implements WorkspaceStoreInterface {
   /**

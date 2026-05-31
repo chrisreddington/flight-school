@@ -39,9 +39,9 @@ const DEFAULT_QUEUE: CustomChallengeQueue = {
  * difficulty — a malformed entry fails the whole document, which the store then
  * heals to {@link DEFAULT_QUEUE}.
  */
-export function isCustomChallengeQueue(data: unknown): data is CustomChallengeQueue {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
+export function isCustomChallengeQueue(value: unknown): value is CustomChallengeQueue {
+  if (typeof value !== 'object' || value === null) return false;
+  const schema = value as Record<string, unknown>;
 
   if (!Array.isArray(schema.challenges)) return false;
   if (typeof schema.lastUpdated !== 'string') return false;

@@ -29,9 +29,10 @@
  */
 
 import { logger } from '@/lib/logger';
-import type { ContainerName } from './types';
-import { SINGLETON_DOCUMENT_ID } from './types';
-import type { UserScopedStore } from './user-scoped-store';
+import { tryParseJson } from '@/lib/storage/json';
+import type { ContainerName, PutOptions } from './types';
+import { DocumentConflictError, SINGLETON_DOCUMENT_ID } from './types';
+import { UserDeletedError, type UserScopedStore } from './user-scoped-store';
 
 const log = logger.withTag('User Storage Compat');
 
@@ -40,7 +41,7 @@ const log = logger.withTag('User Storage Compat');
  * same schema predicate to the compat core that they passed to the old
  * file-backed helpers.
  */
-export type SchemaGuard<T> = (data: unknown) => data is T;
+export type SchemaGuard<T> = (candidate: unknown) => candidate is T;
 
 /**
  * Read/delete seam over the legacy `users/{userId}/{filename}` file. The compat
@@ -119,26 +120,49 @@ export interface CompatDeps {
  * clobbering a populated file with a no-op payload; the envelope store has no
  * such guard, so the compat core replicates it for parity.
  */
-function assertNonEmptySerialization<T>(data: T, filename: string): void {
-  const serialized = JSON.stringify(data, null, 2);
+function assertNonEmptySerialization<T>(payload: T, filename: string): void {
+  const serialized = JSON.stringify(payload, null, 2);
   if (serialized.length === 0 || serialized === '{}' || serialized === '[]') {
     throw new Error(`Attempted to write empty data to ${filename}`);
   }
 }
 
 /**
- * Parse a raw legacy file body, returning the parsed value on success or
- * `undefined` when the body is empty or not valid JSON. A corrupt legacy file
- * is treated exactly like a missing one by the read-through.
+ * Self-heal a mapped document to `defaultSchema` under CAS, so a concurrent
+ * writer that lands a value between the read and this heal is never clobbered
+ * with the default.
+ *
+ * @param expectedEtag - The etag the read observed (corrupt-envelope branch),
+ *   or `null` when the envelope was absent (create-if-absent branch).
+ * @returns the default; or, when a concurrent writer won the CAS race, that
+ *   winner's body if it passes `guard`, else the default in memory.
+ * @remarks
+ * On {@link UserDeletedError} the default is returned WITHOUT persisting: a read
+ * must never resurrect a tombstoned user.
  */
-function tryParse(raw: string): unknown {
-  if (raw.trim().length === 0) {
-    return undefined;
-  }
+async function healWithDefault<T>(
+  deps: CompatDeps,
+  mapping: ContainerMapping,
+  defaultSchema: T,
+  guard: SchemaGuard<T>,
+  expectedEtag: string | null,
+): Promise<T> {
+  const casOption: PutOptions = expectedEtag === null ? { ifNoneMatch: '*' } : { ifMatch: expectedEtag };
   try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
+    await deps.store.put(mapping.container, mapping.id, defaultSchema, casOption);
+    return defaultSchema;
+  } catch (error) {
+    if (error instanceof UserDeletedError) {
+      return defaultSchema;
+    }
+    if (!(error instanceof DocumentConflictError)) {
+      throw error;
+    }
+    const winner = await deps.store.getEnvelope<T>(mapping.container, mapping.id);
+    if (winner !== null && guard(winner.body)) {
+      return winner.body;
+    }
+    return defaultSchema;
   }
 }
 
@@ -147,8 +171,8 @@ function tryParse(raw: string): unknown {
  *
  * @returns the validated body, or `defaultSchema` when no valid source exists.
  *   When the default is returned because the envelope was absent/corrupt, it is
- *   self-healed into the ENVELOPE store (never the legacy file). A healthy
- *   legacy file is returned as-is and left for the migrator to promote.
+ *   self-healed into the ENVELOPE store (never the legacy file) under CAS. A
+ *   healthy legacy file is returned as-is and left for the migrator to promote.
  */
 export async function readMappedDoc<T>(
   deps: CompatDeps,
@@ -163,13 +187,12 @@ export async function readMappedDoc<T>(
       return envelope.body;
     }
     log.warn('Envelope failed schema guard; healing with default', { filename });
-    await deps.store.put(mapping.container, mapping.id, defaultSchema);
-    return defaultSchema;
+    return healWithDefault(deps, mapping, defaultSchema, guard, envelope.etag);
   }
 
   const raw = await deps.legacy.readRaw(filename);
   if (raw !== null) {
-    const parsed = tryParse(raw);
+    const parsed = tryParseJson(raw);
     if (parsed !== undefined && guard(parsed)) {
       // Healthy legacy file: hand it back without writing an envelope. The
       // migrator is the sole promoter of legacy files into the store.
@@ -177,8 +200,7 @@ export async function readMappedDoc<T>(
     }
   }
 
-  await deps.store.put(mapping.container, mapping.id, defaultSchema);
-  return defaultSchema;
+  return healWithDefault(deps, mapping, defaultSchema, guard, null);
 }
 
 /**
@@ -192,15 +214,15 @@ export async function writeMappedDoc<T>(
   deps: CompatDeps,
   mapping: ContainerMapping,
   filename: string,
-  data: T,
+  payload: T,
   guard: SchemaGuard<T>,
 ): Promise<void> {
-  if (!guard(data)) {
+  if (!guard(payload)) {
     log.error('Refusing to write invalid storage payload', { filename });
     throw new Error(`Invalid storage schema for ${filename}`);
   }
-  assertNonEmptySerialization(data, filename);
-  await deps.store.put(mapping.container, mapping.id, data);
+  assertNonEmptySerialization(payload, filename);
+  await deps.store.put(mapping.container, mapping.id, payload);
 }
 
 /**

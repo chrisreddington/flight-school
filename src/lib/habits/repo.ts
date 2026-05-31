@@ -23,9 +23,9 @@ const DEFAULT_HABIT_COLLECTION: HabitCollection = { habits: [] };
  * Validate the persisted habits-collection shape. A document failing this guard
  * is treated as absent (read heals to the default; write is rejected).
  */
-export function isHabitCollection(data: unknown): data is HabitCollection {
-  if (typeof data !== 'object' || data === null) return false;
-  return Array.isArray((data as Record<string, unknown>).habits);
+export function isHabitCollection(value: unknown): value is HabitCollection {
+  if (typeof value !== 'object' || value === null) return false;
+  return Array.isArray((value as Record<string, unknown>).habits);
 }
 
 /**

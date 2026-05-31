@@ -64,6 +64,8 @@ export function safeChildPath(baseDir: string, ...segments: string[]): string {
   const resolvedBase = path.resolve(/* turbopackIgnore: true */ baseDir);
   const resolvedTarget = path.resolve(/* turbopackIgnore: true */ resolvedBase, ...segments);
 
+  // NOTE: append path.sep so a sibling like "/data-evil" cannot satisfy the
+  //       prefix check against base "/data"; this also requires a true child.
   if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
     throw new Error(`safeChildPath: path "${segments.join('/')}" escapes baseDir`);
   }

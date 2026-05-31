@@ -37,10 +37,10 @@ const DEFAULT_PROFILE_CACHE: ProfileStorageSchema | null = null;
  * (no cache yet); any non-null value must carry a string `date` and an object
  * `profile`. A document failing this guard is treated as absent.
  */
-export function isProfileStorageSchema(data: unknown): data is ProfileStorageSchema | null {
-  if (data === null) return true;
-  if (typeof data !== 'object') return false;
-  const schema = data as Record<string, unknown>;
+export function isProfileStorageSchema(value: unknown): value is ProfileStorageSchema | null {
+  if (value === null) return true;
+  if (typeof value !== 'object') return false;
+  const schema = value as Record<string, unknown>;
   return typeof schema.date === 'string' && typeof schema.profile === 'object' && schema.profile !== null;
 }
 

@@ -24,9 +24,9 @@ const DEFAULT_FOCUS_STORAGE: FocusStorageSchema = { history: {} };
  * Validate the persisted focus-storage shape. A document failing this guard is
  * treated as absent (read heals to the default; write is rejected).
  */
-export function isFocusStorageSchema(data: unknown): data is FocusStorageSchema {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
+export function isFocusStorageSchema(value: unknown): value is FocusStorageSchema {
+  if (typeof value !== 'object' || value === null) return false;
+  const schema = value as Record<string, unknown>;
   return typeof schema.history === 'object' && schema.history !== null;
 }
 

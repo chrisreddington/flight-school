@@ -22,6 +22,7 @@
  * @module workspace/legacy-tree
  */
 
+import { tryParseJson } from '../storage/json';
 import { assertSafeWorkspaceFilename } from './filename';
 import type { ChallengeWorkspace, WorkspaceFile, WorkspaceFileMetadata, WorkspaceMetadata } from './types';
 
@@ -86,19 +87,6 @@ export function isWorkspaceMetadata(value: unknown): value is WorkspaceMetadata 
 }
 
 /**
- * Parses a raw legacy file body, returning the parsed value or `undefined` when
- * the body is empty or not valid JSON.
- */
-export function tryParse(raw: string): unknown {
-  if (raw.trim().length === 0) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Reconstructs a {@link ChallengeWorkspace} from the legacy file tree, or `null`
  * when the metadata sidecar is absent or corrupt. Re-validates each on-disk file
  * name with {@link assertSafeWorkspaceFilename} before reading it — an unsafe
@@ -121,7 +109,7 @@ export async function readLegacyWorkspaceTree(
   const metadataRaw = await readRaw(`${WORKSPACES_DIR}/${challengeId}/${METADATA_FILENAME}`);
   if (metadataRaw === null) return null;
 
-  const parsed = tryParse(metadataRaw);
+  const parsed = tryParseJson(metadataRaw);
   if (!isWorkspaceMetadata(parsed)) {
     onWarn('Legacy workspace metadata missing or invalid; treating as missing', { challengeId });
     return null;

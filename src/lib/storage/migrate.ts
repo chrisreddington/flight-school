@@ -34,8 +34,10 @@ import { DocumentConflictError, type ContainerName, type DocumentStore } from '@
 import { ensureUserRegistered } from '@/lib/storage/document-store/user-registry';
 import { allDescriptors, enumerateUsers } from '@/lib/storage/migrate-descriptors';
 import { acquireLock, releaseLock } from '@/lib/storage/migrate-lock';
+import { isUserDeleted } from '@/lib/storage/tombstone';
 
 export { StorageMigrationLockError } from '@/lib/storage/migrate-lock';
+export { StorageMigrationUserError } from '@/lib/storage/migrate-descriptors';
 
 const log = logger.withTag('storage-migrate');
 
@@ -232,6 +234,24 @@ async function writeStateDocument(store: DocumentStore, summary: MigrationSummar
 }
 
 /**
+ * Drops users whose deletion tombstone is set, warning once per skip. The
+ * importer writes through the RAW store (bypassing the user-scoped tombstone
+ * guard), so without this filter a re-run could resurrect a deleted user's
+ * data. Applies to dry-run too, so the preview matches a real run.
+ */
+async function excludeTombstonedUsers(userIds: string[]): Promise<string[]> {
+  const liveUserIds: string[] = [];
+  for (const userId of userIds) {
+    if (await isUserDeleted(userId)) {
+      log.warn('Skipping tombstoned user; not migrating deleted data', { userId });
+      continue;
+    }
+    liveUserIds.push(userId);
+  }
+  return liveUserIds;
+}
+
+/**
  * Promotes every legacy S1 document for the selected users into envelopes.
  *
  * @param options - Behaviour flags and test injection seams.
@@ -266,12 +286,14 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
     failures: 0,
   };
 
-  const store = options.store ?? (await getDocumentStore());
-  const descriptors = allDescriptors();
-  const userIds = await enumerateUsers(user);
-
+  // Acquire the advisory lock BEFORE constructing the store or enumerating
+  // users, so a second operator is refused before doing any shared-state work.
   const lock = dryRun ? null : await acquireLock(ownerId, now);
   try {
+    const store = options.store ?? (await getDocumentStore());
+    const descriptors = allDescriptors();
+    const userIds = await excludeTombstonedUsers(await enumerateUsers(user));
+
     const registeredUsers = new Set<string>();
     for (const userId of userIds) {
       for (const descriptor of descriptors) {

@@ -53,11 +53,9 @@ async function ensureUserScopedPath(userId: string, filename: string): Promise<s
 }
 
 /**
- * Authenticates the caller and validates that their userId yields a safe
- * scoped path for `filename`, WITHOUT creating any directory. The storage-route
- * factory uses this to authenticate + validate once with no side effects, so an
- * invalid POST body never leaves a stray `users/{userId}` directory behind. The
- * `*ForUser` writers create the directory only when they actually persist data.
+ * Authenticates the caller and validates their userId yields a safe scoped path
+ * for `filename`, creating no directory. The storage-route factory uses this so
+ * an invalid POST never leaves a stray `users/{userId}` dir behind.
  *
  * @throws when the caller isn't authenticated or the userId isn't path-safe.
  */

@@ -19,9 +19,9 @@ import { DEFAULT_SKILL_PROFILE, type SkillProfile } from './types';
  * Validate the persisted skills-profile shape. A document failing this guard is
  * treated as absent (read heals to the default; write is rejected).
  */
-export function isSkillProfile(data: unknown): data is SkillProfile {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
+export function isSkillProfile(value: unknown): value is SkillProfile {
+  if (typeof value !== 'object' || value === null) return false;
+  const schema = value as Record<string, unknown>;
 
   if (!Array.isArray(schema.skills)) return false;
   if (typeof schema.lastUpdated !== 'string') return false;

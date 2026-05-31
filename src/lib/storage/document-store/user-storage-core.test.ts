@@ -22,7 +22,7 @@ import path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { DocumentStore } from './types';
+import type { DocumentEnvelope, DocumentStore } from './types';
 import type { LegacyDocumentIO } from './user-storage-core';
 import type { UserScopedStore } from './user-scoped-store';
 
@@ -274,6 +274,83 @@ describe.each(adapterCases)('compat core parity [$name adapter]', ({ available, 
 
     // Idempotent second remove does not throw.
     await expect(core.removeMappedDoc({ store: scoped, legacy }, mapping(), SAMPLE_FILENAME)).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Scripted fake of the methods `readMappedDoc` / `healWithDefault` touch
+ * (`getEnvelope` + `put`). It returns a queued sequence of envelopes from
+ * `getEnvelope` and lets a test make the heal `put` throw, so the CAS-race
+ * branch can be driven deterministically without a real adapter.
+ */
+function createScriptedScopedStore(options: {
+  envelopeQueue: Array<DocumentEnvelope<SampleBody> | null>;
+  putError?: Error;
+}): UserScopedStore {
+  const envelopeQueue = [...options.envelopeQueue];
+  const rejectUnused = (method: string) => async (): Promise<never> => {
+    throw new Error(`unexpected ${method} call in scripted store`);
+  };
+  return {
+    get: rejectUnused('get'),
+    getEnvelope: async () => (envelopeQueue.length > 0 ? envelopeQueue.shift()! : null),
+    put: async () => {
+      if (options.putError) {
+        throw options.putError;
+      }
+      throw new Error('unexpected successful put in scripted store');
+    },
+    remove: rejectUnused('remove'),
+    list: rejectUnused('list'),
+    removeByParent: rejectUnused('removeByParent'),
+    deletePartition: rejectUnused('deletePartition'),
+  } as unknown as UserScopedStore;
+}
+
+describe('readMappedDoc self-heal CAS race (H-A)', () => {
+  const mapping = { container: 'skills' as const, id: 'current' };
+  const winnerBody: SampleBody = { level: 'fromConcurrentWinner' };
+  const corruptEnvelope = { body: { not: 'valid' }, etag: 'corrupt-etag' } as unknown as DocumentEnvelope<SampleBody>;
+
+  it('returns the concurrent winner body when the heal put loses a CAS race', async () => {
+    const { DocumentConflictError } = await import('./types');
+    const store = createScriptedScopedStore({
+      // First read sees the corrupt envelope; after the failed heal put, the
+      // re-read sees the valid body a concurrent writer committed.
+      envelopeQueue: [corruptEnvelope, { body: winnerBody, etag: 'winner-etag' } as DocumentEnvelope<SampleBody>],
+      putError: new DocumentConflictError(),
+    });
+    const legacy = createMemoryLegacy();
+
+    const read = await core.readMappedDoc({ store, legacy }, mapping, SAMPLE_FILENAME, DEFAULT_BODY, isSampleBody);
+
+    expect(read).toEqual(winnerBody);
+  });
+
+  it('falls back to the default when the CAS winner is absent or invalid', async () => {
+    const { DocumentConflictError } = await import('./types');
+    const store = createScriptedScopedStore({
+      envelopeQueue: [corruptEnvelope, null],
+      putError: new DocumentConflictError(),
+    });
+    const legacy = createMemoryLegacy();
+
+    const read = await core.readMappedDoc({ store, legacy }, mapping, SAMPLE_FILENAME, DEFAULT_BODY, isSampleBody);
+
+    expect(read).toEqual(DEFAULT_BODY);
+  });
+
+  it('returns the default when the heal put hits a deletion tombstone', async () => {
+    const { UserDeletedError } = await import('./user-scoped-store');
+    const store = createScriptedScopedStore({
+      envelopeQueue: [corruptEnvelope],
+      putError: new UserDeletedError('compat-user'),
+    });
+    const legacy = createMemoryLegacy();
+
+    const read = await core.readMappedDoc({ store, legacy }, mapping, SAMPLE_FILENAME, DEFAULT_BODY, isSampleBody);
+
+    expect(read).toEqual(DEFAULT_BODY);
   });
 });
 

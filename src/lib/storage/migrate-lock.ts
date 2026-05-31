@@ -76,11 +76,23 @@ export async function acquireLock(ownerId: string, now: () => number): Promise<L
     }
     const existing = await readLockPayload(filePath);
     const expiresAt = existing?.expiresAt ? Date.parse(existing.expiresAt) : Number.NaN;
-    if (!Number.isFinite(expiresAt) || expiresAt >= now()) {
+    // A malformed/unparseable `expiresAt` (NaN) is treated as already-expired so
+    // a corrupt lock file can be taken over rather than deadlocking forever.
+    const isLive = Number.isFinite(expiresAt) && expiresAt >= now();
+    if (isLive) {
       throw new StorageMigrationLockError(existing?.ownerId);
     }
     await fs.rm(filePath, { force: true });
-    await fs.writeFile(filePath, payload, { flag: 'wx' });
+    try {
+      await fs.writeFile(filePath, payload, { flag: 'wx' });
+    } catch (retryError) {
+      // Another racer took over between our rm and write; surface the typed
+      // lock error so the CLI exits 2 instead of leaking a raw EEXIST.
+      if ((retryError as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new StorageMigrationLockError();
+      }
+      throw retryError;
+    }
     return { filePath, ownerId };
   }
 }

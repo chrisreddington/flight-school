@@ -25,6 +25,7 @@ import {
   runStorageMigration,
   StorageMigrationLockError,
   StorageMigrationRefusedError,
+  StorageMigrationUserError,
   type StorageMigrationOptions,
 } from '@/lib/storage/migrate';
 
@@ -77,7 +78,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  if (error instanceof StorageMigrationRefusedError || error instanceof StorageMigrationLockError) {
+  if (
+    error instanceof StorageMigrationRefusedError ||
+    error instanceof StorageMigrationLockError ||
+    error instanceof StorageMigrationUserError
+  ) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 2;
     return;

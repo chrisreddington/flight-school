@@ -31,12 +31,18 @@ const LOCK_PATH = path.join(TEST_ROOT, '.storage-migration-lock');
 let runStorageMigration: typeof import('./migrate').runStorageMigration;
 let StorageMigrationRefusedError: typeof import('./migrate').StorageMigrationRefusedError;
 let StorageMigrationLockError: typeof import('./migrate').StorageMigrationLockError;
+let StorageMigrationUserError: typeof import('./migrate').StorageMigrationUserError;
+let DocumentConflictError: typeof import('./document-store/types').DocumentConflictError;
+let releaseLock: typeof import('./migrate-lock').releaseLock;
 let createFileDocumentStore: () => DocumentStore;
 let readLegacyWorkspaceTree: typeof import('../workspace/legacy-tree').readLegacyWorkspaceTree;
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_DATA_DIR);
-  ({ runStorageMigration, StorageMigrationRefusedError, StorageMigrationLockError } = await import('./migrate'));
+  ({ runStorageMigration, StorageMigrationRefusedError, StorageMigrationLockError, StorageMigrationUserError } =
+    await import('./migrate'));
+  ({ DocumentConflictError } = await import('./document-store/types'));
+  ({ releaseLock } = await import('./migrate-lock'));
   ({ createFileDocumentStore } = await import('./document-store/file-adapter'));
   ({ readLegacyWorkspaceTree } = await import('../workspace/legacy-tree'));
 });
@@ -89,6 +95,24 @@ function failingPutStore(base: DocumentStore, failId: string): DocumentStore {
     async put(container, partitionKey, id, body, opts) {
       if (id === failId) {
         throw new Error('simulated store failure');
+      }
+      return base.put(container, partitionKey, id, body, opts);
+    },
+  };
+}
+
+/** A store whose `put` always rejects the migration-state doc with a CAS conflict. */
+function conflictingStateStore(base: DocumentStore): DocumentStore {
+  return {
+    get: (container, partitionKey, id) => base.get(container, partitionKey, id),
+    getEnvelope: (container, partitionKey, id) => base.getEnvelope(container, partitionKey, id),
+    list: (container, partitionKey, opts) => base.list(container, partitionKey, opts),
+    remove: (container, partitionKey, id) => base.remove(container, partitionKey, id),
+    removeByParent: (container, partitionKey, parentId) => base.removeByParent(container, partitionKey, parentId),
+    deletePartition: (container, partitionKey) => base.deletePartition(container, partitionKey),
+    async put(container, partitionKey, id, body, opts) {
+      if (container === 'system' && id === 'state') {
+        throw new DocumentConflictError();
       }
       return base.put(container, partitionKey, id, body, opts);
     },
@@ -246,6 +270,16 @@ describe('runStorageMigration — tenancy and selection', () => {
     expect(await store.getEnvelope('skills', 'alice', 'current')).not.toBeNull();
     expect(await store.getEnvelope('skills', 'bob', 'current')).toBeNull();
   });
+
+  it('refuses a path-traversing --user value without enumerating any user', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'a' });
+
+    await expect(runStorageMigration({ ...SQLITE_RUN, store, user: '../evil' })).rejects.toBeInstanceOf(
+      StorageMigrationUserError,
+    );
+    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
+  });
 });
 
 describe('runStorageMigration — dry run', () => {
@@ -272,6 +306,43 @@ describe('runStorageMigration — state document', () => {
     const state = await store.getEnvelope('system', 'migration-storage-v1', 'state');
     expect(state).not.toBeNull();
     expect((state!.body as { status: string }).status).toBe('successful');
+  });
+
+  it('rethrows the CAS conflict when the state document cannot be persisted after retries', async () => {
+    const store = conflictingStateStore(createFileDocumentStore());
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(DocumentConflictError);
+    // The advisory lock must still be released even when state persistence throws.
+    await expect(fs.access(LOCK_PATH)).rejects.toThrow();
+  });
+});
+
+describe('releaseLock — owner guard', () => {
+  it('does not delete a lock file owned by a different owner', async () => {
+    await fs.mkdir(TEST_ROOT, { recursive: true });
+    await fs.writeFile(
+      LOCK_PATH,
+      JSON.stringify({ ownerId: 'someone-else', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      'utf8',
+    );
+
+    await releaseLock({ filePath: LOCK_PATH, ownerId: 'me' });
+
+    await expect(fs.access(LOCK_PATH)).resolves.toBeUndefined();
+  });
+
+  it('deletes the lock file when the caller still owns it', async () => {
+    await fs.mkdir(TEST_ROOT, { recursive: true });
+    await fs.writeFile(
+      LOCK_PATH,
+      JSON.stringify({ ownerId: 'me', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      'utf8',
+    );
+
+    await releaseLock({ filePath: LOCK_PATH, ownerId: 'me' });
+
+    await expect(fs.access(LOCK_PATH)).rejects.toThrow();
   });
 });
 

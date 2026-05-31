@@ -17,6 +17,7 @@ import {
   MIGRATABLE_SINGLETON_FILENAMES,
   resolveContainerMapping,
 } from '@/lib/storage/document-store/user-storage-core';
+import { tryParseJson } from '@/lib/storage/json';
 import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 import { listDirs, listFiles, readFile } from '@/lib/storage/utils';
 import {
@@ -30,6 +31,16 @@ const log = logger.withTag('storage-migrate');
 
 /** The legacy directory (under a user's root) that holds challenge specs. */
 const CHALLENGES_DIR = 'challenges';
+
+/** Thrown when an explicit `--user` filter is not a safe path segment. */
+export class StorageMigrationUserError extends Error {
+  readonly code = 'MIGRATION_UNSAFE_USER';
+
+  constructor(filter: string) {
+    super(`Refusing unsafe --user value: ${JSON.stringify(filter)}`);
+    this.name = 'StorageMigrationUserError';
+  }
+}
 
 /**
  * Enumerates legacy ids for one container and loads each legacy body. A `null`
@@ -54,12 +65,12 @@ function parseLegacyJson(raw: string | null, context: Record<string, unknown>): 
   if (raw === null) {
     return null;
   }
-  try {
-    return JSON.parse(raw);
-  } catch {
+  const parsed = tryParseJson(raw);
+  if (parsed === undefined) {
     log.warn('Legacy file is not valid JSON; skipping', context);
     return null;
   }
+  return parsed;
 }
 
 /** Builds descriptors for the five singleton containers from the canonical map. */
@@ -138,6 +149,11 @@ export function allDescriptors(): ContainerDescriptor[] {
 /** Resolves the set of user ids to process, honouring a single-user filter. */
 export async function enumerateUsers(filter: string | undefined): Promise<string[]> {
   if (filter !== undefined) {
+    // An explicit `--user` value reaches the filesystem unmediated, so validate
+    // it the same way as enumerated directories before trusting it.
+    if (!SAFE_PATH_SEGMENT.test(filter)) {
+      throw new StorageMigrationUserError(filter);
+    }
     return [filter];
   }
   const dirs = await listDirs('users');

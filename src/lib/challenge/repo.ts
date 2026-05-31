@@ -32,6 +32,7 @@
 import type { DailyChallenge } from '@/lib/focus/base-types';
 import { logger } from '@/lib/logger';
 import { buildCompatDeps } from '@/lib/storage/document-store/compat-deps';
+import { tryParseJson } from '@/lib/storage/json';
 import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 
 const log = logger.withTag('Challenge Spec Repo');
@@ -90,20 +91,6 @@ function assertSafeChallengeId(id: string): void {
 }
 
 /**
- * Parse a raw legacy file body, returning the parsed value or `undefined` when
- * the body is empty or not valid JSON. A corrupt legacy file degrades to the
- * same `null` a missing one yields.
- */
-function tryParse(raw: string): unknown {
-  if (raw.trim().length === 0) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Typed, explicit-`userId` accessor for a user's by-id challenge specs. The
  * `userId` is already trusted (resolved from a server auth context by the
  * caller); the repo never re-authenticates.
@@ -145,9 +132,9 @@ export const challengeSpecRepo: ChallengeSpecRepo = {
       return null;
     }
 
-    const raw = await deps.legacy.readRaw(`challenges/${id}.json`);
+    const raw = await deps.legacy.readRaw(`${CHALLENGES_CONTAINER}/${id}.json`);
     if (raw === null) return null;
-    const parsed = tryParse(raw);
+    const parsed = tryParseJson(raw);
     if (parsed !== undefined && isChallengeSpec(parsed)) {
       // Healthy legacy file: hand it back without promoting it to an envelope.
       // The standalone migrator is the sole legacy→envelope writer.

@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
   try {
     const workspace: ChallengeWorkspace = await request.json();
 
-    if (!workspace.challengeId || !workspace.files) {
+    if (!workspace.challengeId || !Array.isArray(workspace.files)) {
       return NextResponse.json({ error: 'Invalid workspace data' }, { status: 400 });
     }
     if (!SAFE_PATH_SEGMENT.test(workspace.challengeId)) {
