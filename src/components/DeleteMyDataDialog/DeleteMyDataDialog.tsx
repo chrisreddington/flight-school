@@ -28,9 +28,10 @@ import { signIn } from 'next-auth/react';
 interface DeleteDataResponse {
   /**
    * Authoritative completion signal: `false` means user data may still be on
-   * the server (a partition or activity-buffer failure), so the dialog keeps
-   * the user signed in for a retry. A registry-only cleanup failure still
-   * reports `true` — the data is gone, only the owner record lingers.
+   * the server (a partition, activity-buffer, or legacy storage-dir wipe
+   * failure), so the dialog keeps the user signed in for a retry. A
+   * registry-only cleanup failure still reports `true` — the data is gone,
+   * only the owner record lingers.
    */
   success: boolean;
   summary?: {
