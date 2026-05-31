@@ -7,7 +7,7 @@
     "src/lib/security/__fixtures__/audit-hash-probe.ts"
   ],
   "project": ["src/**/*.{ts,tsx}"],
-  "ignore": ["src/test/**"],
+  "ignore": ["src/test/**", "**/__fixtures__/**"],
   "ignoreBinaries": ["aspire", "wait-on"],
   "ignoreDependencies": ["eslint-plugin-react-hooks", "tsx"]
 }

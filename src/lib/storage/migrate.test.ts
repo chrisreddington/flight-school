@@ -1,0 +1,338 @@
+/**
+ * Tests for the standalone legacy → docstore importer
+ * ({@link runStorageMigration}).
+ *
+ * The data dir is stubbed to an isolated, NESTED temp directory **before**
+ * `migrate.ts` (and the `../utils` primitives it wraps, which capture the dir
+ * at module load) are dynamically imported. The nesting matters: the advisory
+ * lock lives at `getStorageRoot()/../.storage-migration-lock`, so a nested data
+ * root keeps each suite's lock file inside its own temp tree.
+ *
+ * Runs drive a real file-backed {@link DocumentStore} (injected) while labelling
+ * the backend `sqlite`, so the file-backend refusal guard never trips except in
+ * the tests that exercise it directly.
+ *
+ * @module storage/migrate.test
+ */
+
+import { promises as fs } from 'fs';
+import os from 'os';
+import path from 'path';
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { canonicalizeBody } from './document-store/canonical';
+import type { DocumentStore } from './document-store/types';
+
+const TEST_ROOT = path.join(os.tmpdir(), `flight-school-migrate-${Date.now()}-${process.pid}`);
+const TEST_DATA_DIR = path.join(TEST_ROOT, 'data');
+const LOCK_PATH = path.join(TEST_ROOT, '.storage-migration-lock');
+
+let runStorageMigration: typeof import('./migrate').runStorageMigration;
+let StorageMigrationRefusedError: typeof import('./migrate').StorageMigrationRefusedError;
+let StorageMigrationLockError: typeof import('./migrate').StorageMigrationLockError;
+let createFileDocumentStore: () => DocumentStore;
+let readLegacyWorkspaceTree: typeof import('../workspace/legacy-tree').readLegacyWorkspaceTree;
+
+beforeAll(async () => {
+  vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_DATA_DIR);
+  ({ runStorageMigration, StorageMigrationRefusedError, StorageMigrationLockError } = await import('./migrate'));
+  ({ createFileDocumentStore } = await import('./document-store/file-adapter'));
+  ({ readLegacyWorkspaceTree } = await import('../workspace/legacy-tree'));
+});
+
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await fs.rm(TEST_ROOT, { recursive: true, force: true });
+});
+
+beforeEach(async () => {
+  await fs.rm(TEST_ROOT, { recursive: true, force: true });
+  await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+});
+
+/** Writes a legacy file under `users/{userId}/{relativePath}`. */
+async function seedLegacyFile(userId: string, relativePath: string, body: unknown): Promise<void> {
+  const filePath = path.join(TEST_DATA_DIR, 'users', userId, relativePath);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const serialized = typeof body === 'string' ? body : JSON.stringify(body);
+  await fs.writeFile(filePath, serialized, 'utf8');
+}
+
+/** Builds a structurally valid legacy workspace metadata sidecar fixture. */
+function workspaceMetadata(challengeId: string, fileNames: string[]): Record<string, unknown> {
+  return {
+    version: 1,
+    challengeId,
+    activeFileId: fileNames.length > 0 ? `file-${fileNames[0]}` : 'none',
+    files: fileNames.map((name) => ({
+      id: `file-${name}`,
+      name,
+      language: 'typescript',
+      createdAt: 1,
+      updatedAt: 2,
+    })),
+    createdAt: 1,
+    updatedAt: 2,
+  };
+}
+
+/** A store whose `put` throws a non-conflict error for one target id. */
+function failingPutStore(base: DocumentStore, failId: string): DocumentStore {
+  return {
+    get: (container, partitionKey, id) => base.get(container, partitionKey, id),
+    getEnvelope: (container, partitionKey, id) => base.getEnvelope(container, partitionKey, id),
+    list: (container, partitionKey, opts) => base.list(container, partitionKey, opts),
+    remove: (container, partitionKey, id) => base.remove(container, partitionKey, id),
+    removeByParent: (container, partitionKey, parentId) => base.removeByParent(container, partitionKey, parentId),
+    deletePartition: (container, partitionKey) => base.deletePartition(container, partitionKey),
+    async put(container, partitionKey, id, body, opts) {
+      if (id === failId) {
+        throw new Error('simulated store failure');
+      }
+      return base.put(container, partitionKey, id, body, opts);
+    },
+  };
+}
+
+const SQLITE_RUN = { backend: 'sqlite' as const };
+
+describe('runStorageMigration — singleton containers', () => {
+  it('migrates a skills singleton with a body matching the legacy source', async () => {
+    const store = createFileDocumentStore();
+    const legacy = { level: 'intermediate', topics: ['testing'] };
+    await seedLegacyFile('alice', 'skills-profile.json', legacy);
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.inserted).toBe(1);
+    expect(summary.status).toBe('successful');
+    const envelope = await store.getEnvelope('skills', 'alice', 'current');
+    expect(envelope).not.toBeNull();
+    expect(canonicalizeBody(envelope!.body)).toBe(canonicalizeBody(legacy));
+  });
+
+  it('migrates all five singleton containers in one run', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'beginner' });
+    await seedLegacyFile('alice', 'habits.json', { streak: 3 });
+    await seedLegacyFile('alice', 'focus-storage.json', { focus: 'go' });
+    await seedLegacyFile('alice', 'profile-cache.json', { login: 'alice' });
+    await seedLegacyFile('alice', 'challenge-queue.json', { challenges: [], lastUpdated: 'x' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.inserted).toBe(5);
+    for (const container of ['skills', 'habits', 'focus', 'profile', 'challenge-queue'] as const) {
+      expect(await store.getEnvelope(container, 'alice', 'current')).not.toBeNull();
+    }
+  });
+});
+
+describe('runStorageMigration — by-id containers', () => {
+  it('migrates a by-id challenge spec', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'challenges/chal-1.json', { title: 'Reverse a string' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.inserted).toBe(1);
+    expect(await store.getEnvelope('challenges', 'alice', 'chal-1')).not.toBeNull();
+  });
+
+  it('reassembles a multi-file workspace identically to the shared leaf', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'workspaces/chal-1/_workspace.json', workspaceMetadata('chal-1', ['a.ts', 'b.ts']));
+    await seedLegacyFile('alice', 'workspaces/chal-1/a.ts', 'export const a = 1;');
+    await seedLegacyFile('alice', 'workspaces/chal-1/b.ts', 'export const b = 2;');
+
+    await runStorageMigration({ ...SQLITE_RUN, store });
+
+    const envelope = await store.getEnvelope('workspaces', 'alice', 'chal-1');
+    expect(envelope).not.toBeNull();
+    const expected = await readLegacyWorkspaceTree(
+      (relativePath) => fs.readFile(path.join(TEST_DATA_DIR, 'users', 'alice', relativePath), 'utf8').catch(() => null),
+      () => {},
+      'alice',
+      'chal-1',
+    );
+    expect(canonicalizeBody(envelope!.body)).toBe(canonicalizeBody(expected));
+  });
+
+  it('skips a challenge spec with an unsafe id without migrating it', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'challenges/ok.json', { title: 'kept' });
+    await seedLegacyFile('alice', 'challenges/..evil.json', { title: 'dropped' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.inserted).toBe(1);
+    expect(await store.getEnvelope('challenges', 'alice', 'ok')).not.toBeNull();
+  });
+});
+
+describe('runStorageMigration — conflict policy', () => {
+  it('is idempotent: a re-run reports the document unchanged', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    const first = await runStorageMigration({ ...SQLITE_RUN, store });
+    const second = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(first.counts.inserted).toBe(1);
+    expect(second.counts.inserted).toBe(0);
+    expect(second.counts.unchanged).toBe(1);
+    expect(second.status).toBe('successful');
+  });
+
+  it('skips a divergent envelope without --force', async () => {
+    const store = createFileDocumentStore();
+    await store.put('skills', 'alice', 'current', { level: 'advanced' }, { ifNoneMatch: '*' });
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'beginner' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.skippedDivergent).toBe(1);
+    expect(summary.status).toBe('completedWithSkips');
+    const envelope = await store.getEnvelope('skills', 'alice', 'current');
+    expect((envelope!.body as { level: string }).level).toBe('advanced');
+  });
+
+  it('overwrites a divergent envelope with --force', async () => {
+    const store = createFileDocumentStore();
+    await store.put('skills', 'alice', 'current', { level: 'advanced' }, { ifNoneMatch: '*' });
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'beginner' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store, force: true });
+
+    expect(summary.counts.overwritten).toBe(1);
+    const envelope = await store.getEnvelope('skills', 'alice', 'current');
+    expect((envelope!.body as { level: string }).level).toBe('beginner');
+  });
+});
+
+describe('runStorageMigration — corrupt and absent sources', () => {
+  it('counts an unparseable legacy file as skippedCorrupt', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', '{not valid json');
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.skippedCorrupt).toBe(1);
+    expect(summary.counts.inserted).toBe(0);
+    expect(summary.status).toBe('completedWithSkips');
+  });
+
+  it('counts a workspace dir with no metadata sidecar as skippedCorrupt', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'workspaces/chal-1/a.ts', 'orphan file, no metadata');
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.skippedCorrupt).toBe(1);
+    expect(await store.getEnvelope('workspaces', 'alice', 'chal-1')).toBeNull();
+  });
+});
+
+describe('runStorageMigration — tenancy and selection', () => {
+  it('migrates only the requested user when --user is set', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'a' });
+    await seedLegacyFile('bob', 'skills-profile.json', { level: 'b' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store, user: 'alice' });
+
+    expect(summary.usersProcessed).toBe(1);
+    expect(await store.getEnvelope('skills', 'alice', 'current')).not.toBeNull();
+    expect(await store.getEnvelope('skills', 'bob', 'current')).toBeNull();
+  });
+});
+
+describe('runStorageMigration — dry run', () => {
+  it('reports counts without writing envelopes or the state document', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store, dryRun: true });
+
+    expect(summary.dryRun).toBe(true);
+    expect(summary.counts.inserted).toBe(1);
+    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
+    expect(await store.getEnvelope('system', 'migration-storage-v1', 'state')).toBeNull();
+  });
+});
+
+describe('runStorageMigration — state document', () => {
+  it('persists the migration-state summary on a non-dry run', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    await runStorageMigration({ ...SQLITE_RUN, store });
+
+    const state = await store.getEnvelope('system', 'migration-storage-v1', 'state');
+    expect(state).not.toBeNull();
+    expect((state!.body as { status: string }).status).toBe('successful');
+  });
+});
+
+describe('runStorageMigration — failures', () => {
+  it('records a non-conflict store error as a failure and reports completedWithFailures', async () => {
+    const base = createFileDocumentStore();
+    const store = failingPutStore(base, 'current');
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.failures).toBe(1);
+    expect(summary.status).toBe('completedWithFailures');
+  });
+});
+
+describe('runStorageMigration — file backend guard', () => {
+  it('refuses a file-backend run without assumeQuiesced', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    await expect(runStorageMigration({ backend: 'file', store })).rejects.toBeInstanceOf(StorageMigrationRefusedError);
+    expect(await store.getEnvelope('skills', 'alice', 'current')).toBeNull();
+  });
+
+  it('runs a file-backend migration when assumeQuiesced is set', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+
+    const summary = await runStorageMigration({ backend: 'file', store, assumeQuiesced: true });
+
+    expect(summary.counts.inserted).toBe(1);
+    expect(await store.getEnvelope('skills', 'alice', 'current')).not.toBeNull();
+  });
+});
+
+describe('runStorageMigration — advisory lock', () => {
+  it('refuses to start when a live lock is held by another owner', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+    await fs.writeFile(
+      LOCK_PATH,
+      JSON.stringify({ ownerId: 'other', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      'utf8',
+    );
+
+    await expect(runStorageMigration({ ...SQLITE_RUN, store })).rejects.toBeInstanceOf(StorageMigrationLockError);
+  });
+
+  it('takes over a stale lock and releases its own on completion', async () => {
+    const store = createFileDocumentStore();
+    await seedLegacyFile('alice', 'skills-profile.json', { level: 'intermediate' });
+    await fs.writeFile(
+      LOCK_PATH,
+      JSON.stringify({ ownerId: 'dead', expiresAt: new Date(Date.now() - 60_000).toISOString() }),
+      'utf8',
+    );
+
+    const summary = await runStorageMigration({ ...SQLITE_RUN, store });
+
+    expect(summary.counts.inserted).toBe(1);
+    await expect(fs.access(LOCK_PATH)).rejects.toThrow();
+  });
+});

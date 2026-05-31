@@ -15,13 +15,15 @@
  * implementation means the write boundary and the migrating read boundary can
  * never drift apart.
  *
- * This module is SERVER-SIDE: {@link safeChildPath} lives in the `node:fs`-bound
- * storage utils. Do not import it from client/browser code.
+ * This module is framework-free and client-safe: it imports
+ * {@link safeChildPath} from the `node:fs`-free {@link import('@/lib/storage/safe-path')}
+ * leaf, so it can be reached from the client workspace store (which reassembles
+ * legacy trees in the browser) without dragging `node:fs` into the bundle.
  *
  * @module workspace/filename
  */
 
-import { safeChildPath } from '@/lib/storage/utils';
+import { safeChildPath } from '@/lib/storage/safe-path';
 
 /** Maximum length allowed for a workspace filename (incl. any subpath). */
 export const MAX_WORKSPACE_FILENAME_LENGTH = 255;
