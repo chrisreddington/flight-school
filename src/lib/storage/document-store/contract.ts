@@ -36,10 +36,16 @@ const CONTAINER: ContainerName = 'skills';
  * @param label - Human label for the adapter (shown in test output).
  * @param getStore - Factory returning a ready, empty store. Called once per
  *   `it`, so each test gets a clean backend with no cross-test bleed.
+ * @param options - Optional adapter-specific hooks. `getPairedStores` returns
+ *   TWO independent store instances over the SAME physical backend; when
+ *   provided, the suite adds a cross-instance CAS case proving the single-winner
+ *   invariant holds across instances, not just within one. Adapters that cannot
+ *   express two instances over one backend simply omit it.
  */
 export function describeDocumentStoreContract(
   label: string,
   getStore: () => Promise<DocumentStore> | DocumentStore,
+  options: { getPairedStores?: () => Promise<[DocumentStore, DocumentStore]> } = {},
 ): void {
   describe(`DocumentStore contract: ${label}`, () => {
     const body: SampleBody = { label: 'alpha', count: 1, note: null };
@@ -155,10 +161,15 @@ export function describeDocumentStoreContract(
       const store = await getStore();
       const seeded = await store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
 
-      // Both writers hold the SAME pre-race etag. Launched synchronously, both
-      // reach their read-check before either write resolves, so without atomic
-      // CAS both would observe a matching etag and both would win. The adapter
-      // must serialise them: one commits, the other sees the advanced etag.
+      // Both writers hold the SAME pre-race etag. For async-I/O adapters (file)
+      // both calls reach their read-check before either write commits — a read
+      // (fs.readFile) never resolves synchronously, so both are in-flight before
+      // either write — so without serialisation both would observe a matching
+      // etag and both would win. For synchronous adapters (sqlite, DatabaseSync)
+      // the two calls run strictly sequentially and one-winner falls out of the
+      // ordering itself; the assertions below still pin CAS correctness (one
+      // winner, one DocumentConflictError) on every backend. Cross-connection
+      // atomicity for sqlite is exercised in cross-process.integration.test.ts.
       const outcomes = await Promise.allSettled([
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 1 }, { ifMatch: seeded.etag }),
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 2 }, { ifMatch: seeded.etag }),
@@ -174,6 +185,50 @@ export function describeDocumentStoreContract(
       const persisted = await store.get<SampleBody>(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID);
       expect(persisted).toEqual(winner.body);
     });
+
+    it('never resurrects a document removed concurrently with a stale ifMatch update', async () => {
+      const store = await getStore();
+      const seeded = await store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
+
+      // A stale-etag update racing a remove must never leave the losing write's
+      // body behind. If the update commits first, the remove then deletes it; if
+      // the remove commits first, the update sees an absent doc and its etag
+      // check fails. Either ordering ends with no document — the put outcome
+      // itself is order-dependent, so only the no-resurrection invariant is
+      // asserted.
+      await Promise.allSettled([
+        store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 99 }, { ifMatch: seeded.etag }),
+        store.remove(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID),
+      ]);
+
+      expect(await store.get(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID)).toBeNull();
+    });
+
+    if (options.getPairedStores) {
+      it('resolves concurrent ifMatch updates across two instances over one backend to one winner', async () => {
+        // Two SEPARATE instances over the SAME physical backend. A per-instance
+        // lock (the round-3 regression) would give each its own mutex and let
+        // both observe the seeded etag and both win; the invariant demands a
+        // single winner regardless of which instance issued the write.
+        const [storeOne, storeTwo] = await options.getPairedStores!();
+        const seeded = await storeOne.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
+
+        const outcomes = await Promise.allSettled([
+          storeOne.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 1 }, { ifMatch: seeded.etag }),
+          storeTwo.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 2 }, { ifMatch: seeded.etag }),
+        ]);
+
+        const winners = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+        const losers = outcomes.filter((outcome) => outcome.status === 'rejected');
+        expect(winners).toHaveLength(1);
+        expect(losers).toHaveLength(1);
+        expect((losers[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
+
+        // A read through EITHER instance agrees on the single coherent winner.
+        const winner = (winners[0] as PromiseFulfilledResult<DocumentEnvelope<SampleBody>>).value;
+        expect(await storeTwo.get<SampleBody>(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID)).toEqual(winner.body);
+      });
+    }
 
     it('rejects an ifMatch update against an absent document', async () => {
       const store = await getStore();

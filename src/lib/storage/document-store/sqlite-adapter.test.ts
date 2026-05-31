@@ -51,7 +51,16 @@ afterEach(async () => {
 });
 
 describe.skipIf(!SQLITE_AVAILABLE)('sqlite adapter', () => {
-  describeDocumentStoreContract('sqlite', async () => createSqliteDocumentStore({ dbPath: await freshDbPath() }));
+  describeDocumentStoreContract('sqlite', async () => createSqliteDocumentStore({ dbPath: await freshDbPath() }), {
+    // Two connections over the same on-disk database. node:sqlite executes
+    // synchronously so the two writers run strictly sequentially (one winner
+    // falls out of the ordering); the paired case still pins that CAS holds
+    // across separate connections, not just within one store instance.
+    getPairedStores: async () => {
+      const dbPath = await freshDbPath();
+      return Promise.all([createSqliteDocumentStore({ dbPath }), createSqliteDocumentStore({ dbPath })]);
+    },
+  });
 
   describe('SqliteDocumentStore backend specifics', () => {
     let dbPath: string;

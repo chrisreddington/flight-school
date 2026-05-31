@@ -10,13 +10,19 @@
  * CAS guarantees differ by write kind. Create-only writes (`ifNoneMatch: '*'`)
  * are **atomic**: they go through an OS-level exclusive create, so two racing
  * first-writers can never both win — exactly what enrollment-slot claims rely
- * on. Compare-and-set updates (`ifMatch: etag`) serialise through a
- * **process-wide** per-document lock (keyed by resolved data dir + document
- * path, see {@link withDocumentLock}), so the read-check-write critical section
- * is atomic against every other writer in the same process — including writers
- * issued through a SEPARATE `FileDocumentStore` instance pointed at the same
- * `dataDir`. Two concurrent stale-etag updates can never both win, and
- * `enroll()`'s active-slot reclaim resolves to a single winner on this backend.
+ * on. Compare-and-set updates (`ifMatch: etag`) and single-document `remove`s
+ * serialise through a **process-wide** per-document lock (keyed by the
+ * symlink-canonical data dir + document path, see {@link withDocumentLock}), so
+ * the read-check-write critical section is atomic against every other writer in
+ * the same process — including writers issued through a SEPARATE
+ * `FileDocumentStore` instance pointed at the same `dataDir`, even when the two
+ * instances spell that directory differently (a symlink, or `/tmp` vs
+ * `/private/tmp`). Two concurrent stale-etag updates can never both win, a
+ * concurrent `remove` can never resurrect a deleted document via a stale write,
+ * and `enroll()`'s active-slot reclaim resolves to a single winner on this
+ * backend. Bulk deletes (`removeByParent`, `deletePartition`) are teardown
+ * operations and are deliberately NOT serialised against single-document
+ * writes; callers must not race them against live writes to the same partition.
  * Cross-process / networked-filesystem atomicity remains out of scope — that is
  * the SQLite backend's job (its `BEGIN IMMEDIATE` transaction closes the gap for
  * every client). `etag` is a fresh uuid on every write, never a content hash, so
@@ -28,6 +34,8 @@
 
 import 'server-only';
 import { randomUUID } from 'crypto';
+import { realpathSync } from 'fs';
+import path from 'path';
 
 import { logger } from '@/lib/logger';
 import { createStorageFileOps, type StorageFileOps } from '../scoped-file-ops';
@@ -92,14 +100,39 @@ function orderValueOf<T>(envelope: DocumentEnvelope<T>, orderBy: 'updatedAt' | '
 }
 
 /**
- * Process-wide async-mutex registry, keyed by `${resolvedRoot}\0${container}/
+ * Process-wide async-mutex registry, keyed by `${canonicalRoot}\0${container}/
  * ${partitionKey}/${id}`. Module scope (NOT per-instance) is deliberate: the
  * single-winner `ifMatch` reclaim invariant must hold across every
  * `FileDocumentStore` in the process, so two instances pointed at the same
  * `dataDir` serialise writes to the same physical document. Keying by the
- * resolved root keeps stores rooted at different directories fully independent.
+ * symlink-canonical root keeps stores rooted at different directories fully
+ * independent while still collapsing two spellings of the same directory.
  */
 const documentWriteLocks = new Map<string, Promise<void>>();
+
+/**
+ * Collapse symlinks and case aliases in `resolvedRoot` so two stores that
+ * resolve to the same PHYSICAL directory via different spellings (a symlink, or
+ * `/tmp` vs `/private/tmp` on macOS) share one lock key. `realpathSync` only
+ * resolves paths that exist, so walk up to the nearest existing ancestor,
+ * canonicalize that, and re-append the not-yet-created tail. The data dir is
+ * created on first write, so once it exists every instance canonicalizes alike.
+ */
+function canonicalRootForLockKey(resolvedRoot: string): string {
+  const pendingSegments: string[] = [];
+  let candidate = resolvedRoot;
+
+  while (candidate !== path.dirname(candidate)) {
+    try {
+      const realCandidate = realpathSync.native(candidate);
+      return pendingSegments.length === 0 ? realCandidate : path.join(realCandidate, ...pendingSegments);
+    } catch {
+      pendingSegments.unshift(path.basename(candidate));
+      candidate = path.dirname(candidate);
+    }
+  }
+  return resolvedRoot;
+}
 
 /**
  * Run `work` while holding the exclusive lock for `lockKey`, releasing it (and
@@ -138,22 +171,35 @@ async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Pro
  * to the process storage root), so two stores pointed at different directories
  * never collide. The instance holds no mutable state of its own; write
  * serialisation lives in the process-wide {@link documentWriteLocks} registry,
- * keyed by the instance's resolved root so concurrent writers reach the same
- * lock even when issued through different instances over the same `dataDir`.
+ * keyed by the instance's symlink-canonical root so concurrent writers reach the
+ * same lock even when issued through different instances over the same `dataDir`
+ * — including when those instances spell the directory differently.
  */
 class FileDocumentStore implements DocumentStore {
   readonly #ops: StorageFileOps;
 
-  /** Resolved data-dir root; namespaces this store's keys in {@link documentWriteLocks}. */
-  readonly #root: string;
+  /**
+   * Symlink-canonical data-dir root; namespaces this store's keys in
+   * {@link documentWriteLocks}. Kept separate from the path used for file I/O
+   * (which honours the directory exactly as configured) so that two stores
+   * reaching the same physical directory via different spellings still share a
+   * lock. See {@link canonicalRootForLockKey}.
+   */
+  readonly #lockRoot: string;
 
   /**
    * @param dataDir - Base directory for this store's `_docstore` tree; defaults
    *   to the process storage root via {@link resolveDataDir}.
    */
   constructor(dataDir?: string) {
-    this.#root = resolveDataDir(dataDir);
-    this.#ops = createStorageFileOps(() => this.#root);
+    const root = resolveDataDir(dataDir);
+    this.#ops = createStorageFileOps(() => root);
+    this.#lockRoot = canonicalRootForLockKey(root);
+  }
+
+  /** The {@link documentWriteLocks} key for one physical document under this store. */
+  #lockKey(container: ContainerName, partitionKey: string, id: string): string {
+    return `${this.#lockRoot}\u0000${container}/${partitionKey}/${id}`;
   }
 
   async get<T>(container: ContainerName, partitionKey: string, id: string): Promise<T | null> {
@@ -200,9 +246,9 @@ class FileDocumentStore implements DocumentStore {
 
     // Serialise all writes to this exact document so the read-check-write below
     // is atomic against concurrent in-process writers (see class docs). The key
-    // is namespaced by the resolved root so two instances over the same dataDir
+    // is namespaced by the canonical root so two instances over the same dataDir
     // share the lock, while stores rooted elsewhere stay independent.
-    return withDocumentLock(`${this.#root}\u0000${container}/${partitionKey}/${id}`, async () => {
+    return withDocumentLock(this.#lockKey(container, partitionKey, id), async () => {
       // Create-only writes take an atomic exclusive-create path: the OS guarantees
       // exactly one of two racing first-writers succeeds, so `ifNoneMatch: '*'`
       // confers true uniqueness instead of the read-then-rename TOCTOU the upsert
@@ -229,8 +275,16 @@ class FileDocumentStore implements DocumentStore {
     });
   }
 
+  /**
+   * Delete one document, idempotently. Holds the same per-document lock as
+   * {@link put}, so a `remove` racing a stale `ifMatch` update can never let the
+   * losing writer resurrect the document: the two serialise, and whichever runs
+   * second observes the other's effect (an absent doc fails the etag check).
+   */
   async remove(container: ContainerName, partitionKey: string, id: string): Promise<void> {
-    await this.#ops.deleteFile(partitionDir(container, partitionKey), documentFilename(id));
+    await withDocumentLock(this.#lockKey(container, partitionKey, id), async () => {
+      await this.#ops.deleteFile(partitionDir(container, partitionKey), documentFilename(id));
+    });
   }
 
   async list<T>(container: ContainerName, partitionKey: string, opts: ListOptions = {}): Promise<ListResult<T>> {
@@ -254,6 +308,12 @@ class FileDocumentStore implements DocumentStore {
     };
   }
 
+  /**
+   * Delete every document whose `parentId` metadata matches. This is a teardown
+   * operation and is NOT serialised against single-document writes via
+   * {@link documentWriteLocks}; callers must not race it against live `put`s to
+   * the same partition (see class docs).
+   */
   async removeByParent(container: ContainerName, partitionKey: string, parentId: string): Promise<void> {
     const envelopes = await this.readPartition(container, partitionKey);
     const targets = envelopes.filter((envelope) => envelope.metadata.parentId === parentId);
@@ -262,6 +322,11 @@ class FileDocumentStore implements DocumentStore {
     }
   }
 
+  /**
+   * Delete an entire partition directory. Like {@link removeByParent} this is a
+   * teardown operation and is NOT serialised against single-document writes;
+   * callers must not race it against live `put`s to the same partition.
+   */
   async deletePartition(container: ContainerName, partitionKey: string): Promise<void> {
     await this.#ops.deleteDir(partitionDir(container, partitionKey));
   }

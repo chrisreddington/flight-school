@@ -9,14 +9,16 @@
  * @module storage/document-store/file-adapter.test
  */
 
+import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createStorageFileOps } from '../scoped-file-ops';
 import { describeDocumentStoreContract } from './contract';
-import { DocumentConflictError, SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
+import { SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
 
 const TEST_STORAGE_DIR = path.join(os.tmpdir(), `flight-school-docstore-${Date.now()}`);
 
@@ -37,7 +39,11 @@ beforeEach(async () => {
   await fs.mkdir(TEST_STORAGE_DIR, { recursive: true });
 });
 
-describeDocumentStoreContract('file', () => createFileDocumentStore());
+describeDocumentStoreContract('file', () => createFileDocumentStore(), {
+  // Two instances over the same env-stubbed root exercise the process-wide
+  // (module-level) lock that a per-instance lock would have missed.
+  getPairedStores: async () => [createFileDocumentStore(), createFileDocumentStore()],
+});
 
 describe('FileDocumentStore path safety', () => {
   it('rejects an unsafe container segment', async () => {
@@ -91,31 +97,35 @@ describe('FileDocumentStore dataDir override', () => {
   });
 });
 
-describe('FileDocumentStore cross-instance ifMatch CAS', () => {
-  it('serialises stale-etag writes issued through two stores over the same dataDir', async () => {
-    // Two SEPARATE instances rooted at the same dataDir. A per-instance lock
-    // would give each its own mutex, letting both observe the seeded etag and
-    // both win; the process-wide registry keyed by resolved root serialises
-    // them. Launched synchronously, both reach their read-check before either
-    // write resolves, so this deterministically exposes a per-instance lock.
-    const storeOne = createFileDocumentStore();
-    const storeTwo = createFileDocumentStore();
-    const seeded = await storeOne.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
+describe('FileDocumentStore concurrent-CAS harness is non-vacuous', () => {
+  it('a lock-free read-check-write over the same document yields TWO winners', async () => {
+    // Positive control for the one-winner CAS assertions in the shared contract.
+    // It mirrors the adapter's ifMatch path (read envelope, compare etag, write)
+    // but WITHOUT withDocumentLock. A read (fs.readFile) never resolves
+    // synchronously, so both reads below are GUARANTEED in-flight before either
+    // write — both observe the seeded etag and both pass their check. The lock is
+    // therefore the only thing that collapses this to one winner: if a regression
+    // silently dropped it, the real adapter would behave exactly like this
+    // control. (A barrier that instead forced "both reads before either write"
+    // cannot exist with the lock present — the lock serialises the whole
+    // read-check-write, so the second read waits behind the first write and such
+    // a barrier would deadlock. This control is the deterministic alternative.)
+    const store = createFileDocumentStore();
+    const seeded = await store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
+    const ops = createStorageFileOps(() => TEST_STORAGE_DIR);
 
-    const outcomes = await Promise.allSettled([
-      storeOne.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 1 }, { ifMatch: seeded.etag }),
-      storeTwo.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 2 }, { ifMatch: seeded.etag }),
-    ]);
+    async function lockFreeStaleUpdate(value: number): Promise<boolean> {
+      const current = await store.getEnvelope<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
+      if (!current || current.etag !== seeded.etag) return false;
+      await ops.writeFile(
+        '_docstore/skills/user-a',
+        `${SINGLETON_DOCUMENT_ID}.json`,
+        JSON.stringify({ body: { value }, metadata: {}, etag: randomUUID(), updatedAt: new Date().toISOString() }),
+      );
+      return true;
+    }
 
-    const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled');
-    const rejected = outcomes.filter((outcome) => outcome.status === 'rejected');
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
-
-    // Whichever instance won, the read through a THIRD instance agrees — a single
-    // coherent winner, never a torn or doubly-applied write.
-    const persisted = await createFileDocumentStore().get<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
-    expect([1, 2]).toContain(persisted?.value);
+    const passedCheck = await Promise.all([lockFreeStaleUpdate(1), lockFreeStaleUpdate(2)]);
+    expect(passedCheck.filter(Boolean)).toHaveLength(2);
   });
 });
