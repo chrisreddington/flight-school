@@ -32,23 +32,11 @@
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
-import type {
-  ChallengeWorkspace,
-  WorkspaceFile,
-  WorkspaceFileMetadata,
-  WorkspaceMetadata,
-  WorkspaceStoreInterface,
-} from './types';
+import { METADATA_FILENAME, WORKSPACES_DIR, toFileMetadata, toWorkspaceFile } from './legacy-tree';
+import type { ChallengeWorkspace, WorkspaceMetadata, WorkspaceStoreInterface } from './types';
 import { MAX_WORKSPACE_SIZE_BYTES } from './types';
 
 const log = logger.withTag('WorkspaceStore');
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const WORKSPACES_DIR = 'workspaces';
-const METADATA_FILENAME = '_workspace.json';
 
 // =============================================================================
 // Utility Functions
@@ -59,29 +47,6 @@ const METADATA_FILENAME = '_workspace.json';
  */
 function getByteSize(str: string): number {
   return new Blob([str]).size;
-}
-
-/**
- * Converts a WorkspaceFile to metadata (strips content).
- */
-function toFileMetadata(file: WorkspaceFile): WorkspaceFileMetadata {
-  return {
-    id: file.id,
-    name: file.name,
-    language: file.language,
-    createdAt: file.createdAt,
-    updatedAt: file.updatedAt,
-  };
-}
-
-/**
- * Converts metadata + content back to a WorkspaceFile.
- */
-function toWorkspaceFile(meta: WorkspaceFileMetadata, content: string): WorkspaceFile {
-  return {
-    ...meta,
-    content,
-  };
 }
 
 // =============================================================================

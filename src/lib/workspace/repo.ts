@@ -42,9 +42,8 @@ import { logger } from '@/lib/logger';
 import { buildCompatDeps } from '@/lib/storage/document-store/compat-deps';
 import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 import { deleteDir, listDirs } from '@/lib/storage/utils';
-import { assertSafeWorkspaceFilename } from './filename';
-import { METADATA_FILENAME, WORKSPACES_DIR, toWorkspaceFile } from './storage';
-import type { ChallengeWorkspace, WorkspaceFile, WorkspaceMetadata } from './types';
+import { WORKSPACES_DIR, readLegacyWorkspaceTree } from './legacy-tree';
+import type { ChallengeWorkspace } from './types';
 
 const log = logger.withTag('Workspace Repo');
 
@@ -92,78 +91,23 @@ function isChallengeWorkspace(value: unknown): value is ChallengeWorkspace {
   );
 }
 
-/** Shape check for a parsed legacy `_workspace.json` sidecar. */
-function isWorkspaceMetadata(value: unknown): value is WorkspaceMetadata {
-  if (typeof value !== 'object' || value === null) return false;
-  const metadata = value as Record<string, unknown>;
-  return (
-    typeof metadata.version === 'number' &&
-    typeof metadata.challengeId === 'string' &&
-    Array.isArray(metadata.files) &&
-    typeof metadata.activeFileId === 'string'
-  );
-}
-
-/**
- * Parse a raw legacy file body, returning the parsed value or `undefined` when
- * the body is empty or not valid JSON.
- */
-function tryParse(raw: string): unknown {
-  if (raw.trim().length === 0) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Reconstruct a {@link ChallengeWorkspace} from the legacy file tree, or `null`
- * when the metadata sidecar is absent or corrupt. Re-validates each on-disk file
- * name with {@link assertSafeWorkspaceFilename} before reading it — an unsafe
- * name (which `readRaw` would otherwise THROW on) degrades to empty content and
- * a warning, never an error. Performs NO write-back.
+ * when the metadata sidecar is absent or corrupt. Delegates the byte-identical
+ * reassembly to the shared, Next-free {@link readLegacyWorkspaceTree} leaf,
+ * wiring it to this repo's legacy raw-read seam and logger.
  */
 async function readLegacyWorkspace(
   deps: Awaited<ReturnType<typeof buildCompatDeps>>,
   userId: string,
   challengeId: string,
 ): Promise<ChallengeWorkspace | null> {
-  const workspaceDir = `users/${userId}/${WORKSPACES_DIR}/${challengeId}`;
-  const metadataRaw = await deps.legacy.readRaw(`${WORKSPACES_DIR}/${challengeId}/${METADATA_FILENAME}`);
-  if (metadataRaw === null) return null;
-
-  const parsed = tryParse(metadataRaw);
-  if (!isWorkspaceMetadata(parsed)) {
-    log.warn('Legacy workspace metadata missing or invalid; treating as missing', { challengeId });
-    return null;
-  }
-
-  const files: WorkspaceFile[] = await Promise.all(
-    parsed.files.map(async (fileMeta) => {
-      try {
-        assertSafeWorkspaceFilename(workspaceDir, fileMeta.name);
-      } catch (validationError) {
-        log.warn('Skipping legacy workspace file with unsafe name on read', {
-          challengeId,
-          name: fileMeta.name,
-          error: validationError instanceof Error ? validationError.message : String(validationError),
-        });
-        return toWorkspaceFile(fileMeta, '');
-      }
-      const content = (await deps.legacy.readRaw(`${WORKSPACES_DIR}/${challengeId}/${fileMeta.name}`)) ?? '';
-      return toWorkspaceFile(fileMeta, content);
-    }),
+  return readLegacyWorkspaceTree(
+    (relativePath) => deps.legacy.readRaw(relativePath),
+    (message, context) => log.warn(message, context),
+    userId,
+    challengeId,
   );
-
-  return {
-    version: parsed.version,
-    challengeId: parsed.challengeId,
-    files,
-    activeFileId: parsed.activeFileId,
-    createdAt: parsed.createdAt,
-    updatedAt: parsed.updatedAt,
-  };
 }
 
 /**

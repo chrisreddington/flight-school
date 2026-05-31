@@ -100,6 +100,13 @@ export function resolveContainerMapping(filename: string): ContainerMapping | nu
   return { container, id: SINGLETON_DOCUMENT_ID };
 }
 
+/**
+ * The legacy filenames that map onto per-user singleton envelopes, in insertion
+ * order. The storage migrator iterates this list to discover which singleton
+ * files to import; every entry resolves through {@link resolveContainerMapping}.
+ */
+export const MIGRATABLE_SINGLETON_FILENAMES: readonly string[] = [...FILENAME_TO_CONTAINER.keys()];
+
 /** Dependencies the compat core operates against. */
 export interface CompatDeps {
   store: UserScopedStore;
