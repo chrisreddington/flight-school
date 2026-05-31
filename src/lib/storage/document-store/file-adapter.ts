@@ -11,15 +11,17 @@
  * are **atomic**: they go through an OS-level exclusive create, so two racing
  * first-writers can never both win — exactly what enrollment-slot claims rely
  * on. Compare-and-set updates (`ifMatch: etag`) serialise through a
- * per-document in-process lock, so the read-check-write critical section is
- * atomic against other writers IN THE SAME PROCESS: two concurrent stale-etag
- * updates can never both win, and `enroll()`'s active-slot reclaim resolves to
- * a single winner on this backend. Cross-process / networked-filesystem
- * atomicity remains out of scope — that is the SQLite backend's job (its
- * `BEGIN IMMEDIATE` transaction closes the gap for every client). `etag` is a
- * fresh uuid on every write, never a content hash, so an identical rewrite
- * still advances the token — matching what SQLite and Cosmos do. See
- * `files/v20-storage-and-tracks-plan.md` §A.3.
+ * **process-wide** per-document lock (keyed by resolved data dir + document
+ * path, see {@link withDocumentLock}), so the read-check-write critical section
+ * is atomic against every other writer in the same process — including writers
+ * issued through a SEPARATE `FileDocumentStore` instance pointed at the same
+ * `dataDir`. Two concurrent stale-etag updates can never both win, and
+ * `enroll()`'s active-slot reclaim resolves to a single winner on this backend.
+ * Cross-process / networked-filesystem atomicity remains out of scope — that is
+ * the SQLite backend's job (its `BEGIN IMMEDIATE` transaction closes the gap for
+ * every client). `etag` is a fresh uuid on every write, never a content hash, so
+ * an identical rewrite still advances the token — matching what SQLite and
+ * Cosmos do. See `files/v20-storage-and-tracks-plan.md` §A.3.
  *
  * @module storage/document-store/file-adapter
  */
@@ -90,59 +92,68 @@ function orderValueOf<T>(envelope: DocumentEnvelope<T>, orderBy: 'updatedAt' | '
 }
 
 /**
+ * Process-wide async-mutex registry, keyed by `${resolvedRoot}\0${container}/
+ * ${partitionKey}/${id}`. Module scope (NOT per-instance) is deliberate: the
+ * single-winner `ifMatch` reclaim invariant must hold across every
+ * `FileDocumentStore` in the process, so two instances pointed at the same
+ * `dataDir` serialise writes to the same physical document. Keying by the
+ * resolved root keeps stores rooted at different directories fully independent.
+ */
+const documentWriteLocks = new Map<string, Promise<void>>();
+
+/**
+ * Run `work` while holding the exclusive lock for `lockKey`, releasing it (and
+ * evicting the registry entry when no writer is queued behind us) even if `work`
+ * throws. Each value in {@link documentWriteLocks} is the tail of a promise
+ * chain; a writer awaits the current tail, then appends its own release promise,
+ * so `put`s to one document run strictly one at a time. The tail is registered
+ * synchronously (before the first `await`), closing the window where two callers
+ * could both read an empty slot. Reads are not locked — only writes contend.
+ */
+async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
+  const predecessor = documentWriteLocks.get(lockKey) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = predecessor.then(() => held);
+  documentWriteLocks.set(lockKey, tail);
+
+  await predecessor;
+  try {
+    return await work();
+  } finally {
+    release();
+    if (documentWriteLocks.get(lockKey) === tail) {
+      documentWriteLocks.delete(lockKey);
+    }
+  }
+}
+
+/**
  * The file-backed document store. Construct one per process via
  * {@link createFileDocumentStore}.
  *
  * Each instance binds its filesystem operations to its OWN `dataDir` (defaulting
  * to the process storage root), so two stores pointed at different directories
- * never collide through a shared module global. The instance holds no other
- * mutable state.
+ * never collide. The instance holds no mutable state of its own; write
+ * serialisation lives in the process-wide {@link documentWriteLocks} registry,
+ * keyed by the instance's resolved root so concurrent writers reach the same
+ * lock even when issued through different instances over the same `dataDir`.
  */
 class FileDocumentStore implements DocumentStore {
   readonly #ops: StorageFileOps;
 
-  /**
-   * One-shot async mutexes keyed by `container/partitionKey/id`. Each value is
-   * the tail of a promise chain; a writer awaits the current tail, then appends
-   * its own release promise. This serialises every `put` to a given document so
-   * the `ifMatch` read-check-write is atomic against concurrent in-process
-   * writers. Entries self-evict once their chain drains (see
-   * {@link FileDocumentStore.withDocumentLock}).
-   */
-  readonly #documentLocks = new Map<string, Promise<void>>();
+  /** Resolved data-dir root; namespaces this store's keys in {@link documentWriteLocks}. */
+  readonly #root: string;
 
   /**
    * @param dataDir - Base directory for this store's `_docstore` tree; defaults
    *   to the process storage root via {@link resolveDataDir}.
    */
   constructor(dataDir?: string) {
-    const root = resolveDataDir(dataDir);
-    this.#ops = createStorageFileOps(() => root);
-  }
-
-  /**
-   * Run `work` while holding the exclusive per-document lock for `lockKey`,
-   * releasing it (and evicting the map entry when no writer is queued behind us)
-   * even if `work` throws. Reads run outside this lock; only writes contend.
-   */
-  async #withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
-    const predecessor = this.#documentLocks.get(lockKey) ?? Promise.resolve();
-    let release: () => void = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const tail = predecessor.then(() => held);
-    this.#documentLocks.set(lockKey, tail);
-
-    await predecessor;
-    try {
-      return await work();
-    } finally {
-      release();
-      if (this.#documentLocks.get(lockKey) === tail) {
-        this.#documentLocks.delete(lockKey);
-      }
-    }
+    this.#root = resolveDataDir(dataDir);
+    this.#ops = createStorageFileOps(() => this.#root);
   }
 
   async get<T>(container: ContainerName, partitionKey: string, id: string): Promise<T | null> {
@@ -188,8 +199,10 @@ class FileDocumentStore implements DocumentStore {
     const serialized = JSON.stringify(stored, null, 2);
 
     // Serialise all writes to this exact document so the read-check-write below
-    // is atomic against concurrent in-process writers (see class docs).
-    return this.#withDocumentLock(`${container}/${partitionKey}/${id}`, async () => {
+    // is atomic against concurrent in-process writers (see class docs). The key
+    // is namespaced by the resolved root so two instances over the same dataDir
+    // share the lock, while stores rooted elsewhere stay independent.
+    return withDocumentLock(`${this.#root}\u0000${container}/${partitionKey}/${id}`, async () => {
       // Create-only writes take an atomic exclusive-create path: the OS guarantees
       // exactly one of two racing first-writers succeeds, so `ifNoneMatch: '*'`
       // confers true uniqueness instead of the read-then-rename TOCTOU the upsert

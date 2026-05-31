@@ -91,17 +91,20 @@ describe('FileDocumentStore dataDir override', () => {
   });
 });
 
-describe('FileDocumentStore concurrent ifMatch CAS', () => {
-  it('resolves two concurrent stale-etag updates to exactly one winner', async () => {
-    const store = createFileDocumentStore();
-    const seeded = await store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
+describe('FileDocumentStore cross-instance ifMatch CAS', () => {
+  it('serialises stale-etag writes issued through two stores over the same dataDir', async () => {
+    // Two SEPARATE instances rooted at the same dataDir. A per-instance lock
+    // would give each its own mutex, letting both observe the seeded etag and
+    // both win; the process-wide registry keyed by resolved root serialises
+    // them. Launched synchronously, both reach their read-check before either
+    // write resolves, so this deterministically exposes a per-instance lock.
+    const storeOne = createFileDocumentStore();
+    const storeTwo = createFileDocumentStore();
+    const seeded = await storeOne.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 0 });
 
-    // Both writers hold the SAME pre-race etag, so absent a per-document lock the
-    // read-check-write windows could interleave and BOTH could win. The lock
-    // serialises them: the first commits, the second observes the advanced etag.
     const outcomes = await Promise.allSettled([
-      store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 1 }, { ifMatch: seeded.etag }),
-      store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 2 }, { ifMatch: seeded.etag }),
+      storeOne.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 1 }, { ifMatch: seeded.etag }),
+      storeTwo.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { value: 2 }, { ifMatch: seeded.etag }),
     ]);
 
     const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled');
@@ -110,8 +113,9 @@ describe('FileDocumentStore concurrent ifMatch CAS', () => {
     expect(rejected).toHaveLength(1);
     expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
 
-    // The surviving document is whichever writer won — never a torn or lost write.
-    const persisted = await store.get<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
+    // Whichever instance won, the read through a THIRD instance agrees — a single
+    // coherent winner, never a torn or doubly-applied write.
+    const persisted = await createFileDocumentStore().get<{ value: number }>('skills', 'user-a', SINGLETON_DOCUMENT_ID);
     expect([1, 2]).toContain(persisted?.value);
   });
 });

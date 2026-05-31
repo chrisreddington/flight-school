@@ -151,6 +151,30 @@ export function describeDocumentStoreContract(
       ).rejects.toBeInstanceOf(DocumentConflictError);
     });
 
+    it('resolves concurrent ifMatch updates to exactly one winner', async () => {
+      const store = await getStore();
+      const seeded = await store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
+
+      // Both writers hold the SAME pre-race etag. Launched synchronously, both
+      // reach their read-check before either write resolves, so without atomic
+      // CAS both would observe a matching etag and both would win. The adapter
+      // must serialise them: one commits, the other sees the advanced etag.
+      const outcomes = await Promise.allSettled([
+        store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 1 }, { ifMatch: seeded.etag }),
+        store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 2 }, { ifMatch: seeded.etag }),
+      ]);
+
+      const winners = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+      const losers = outcomes.filter((outcome) => outcome.status === 'rejected');
+      expect(winners).toHaveLength(1);
+      expect(losers).toHaveLength(1);
+      expect((losers[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
+
+      const winner = (winners[0] as PromiseFulfilledResult<DocumentEnvelope<SampleBody>>).value;
+      const persisted = await store.get<SampleBody>(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID);
+      expect(persisted).toEqual(winner.body);
+    });
+
     it('rejects an ifMatch update against an absent document', async () => {
       const store = await getStore();
       await expect(

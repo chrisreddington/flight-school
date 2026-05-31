@@ -255,10 +255,21 @@ export class TracksRepo {
    * `'completed'` with a `completedAt` stamp, retrying on conflict so a
    * concurrent access-stamp cannot block completion. Each retry re-validates
    * enrollment currency, so a rival re-enroll that displaces this enrollment
-   * mid-race aborts the completion rather than finalizing a displaced step.
+   * **and provokes a CAS conflict** aborts the completion rather than finalizing
+   * a displaced step.
    *
-   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not (or, mid-race,
-   *   ceases to be) the active, currently-slotted enrollment for its track.
+   * The currency guarantee is scoped to the conflict-retry path: a displacement
+   * that lands without provoking a CAS conflict (e.g. between the entry check and
+   * a successful first-attempt write) is not detected here. That window is inert
+   * today because {@link enroll} never displaces a live winner — a slot only
+   * moves when its target is already terminal/absent/foreign. Any future
+   * operation that can displace an ACTIVE enrollment must introduce a
+   * slot-version/currency token (or a multi-document conditional write) before
+   * relying on this guard for first-attempt writes.
+   *
+   * @throws {EnrollmentNotActiveError} when `enrollmentId` is not (or, on a CAS
+   *   conflict mid-race, ceases to be) the active, currently-slotted enrollment
+   *   for its track.
    * @throws {StepContentionError} when every CAS attempt loses to a concurrent
    *   writer.
    */
