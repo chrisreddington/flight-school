@@ -77,11 +77,15 @@ export const ActivityGraph = memo(function ActivityGraph({ activity, selectedDat
                   <button
                     key={day.date}
                     type="button"
+                    // Selected state is exposed via aria-pressed, not baked into
+                    // the label, so screen readers announce it once and the
+                    // aria-label stays identical to the title tooltip.
+                    aria-pressed={isSelected}
                     className={`${styles.activityCell52} ${isSelected ? styles.activityCellSelected : ''} ${isToday ? styles.activityCellToday : ''}`}
                     data-intensity={intensity}
                     onClick={() => onSelectDate(isSelected ? null : day.date)}
                     title={`${day.date}: ${day.count} item${day.count === 1 ? '' : 's'}`}
-                    aria-label={`${day.date}: ${day.count} item${day.count === 1 ? '' : 's'}${isSelected ? ' (selected)' : ''}`}
+                    aria-label={`${day.date}: ${day.count} item${day.count === 1 ? '' : 's'}`}
                   />
                 );
               })}
