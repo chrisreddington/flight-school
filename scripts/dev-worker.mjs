@@ -25,7 +25,7 @@
  */
 import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { context } from 'esbuild';
 
@@ -34,6 +34,12 @@ import { buildWorkerEsbuildOptions } from './worker-esbuild-config.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..');
 const ENTRY = resolve(REPO_ROOT, 'dist-worker/bootstrap.mjs');
+
+// Preloaded into the worker child via `--import` so it self-terminates if
+// this supervisor dies without gracefully stopping it (SIGKILL, force-stop,
+// crash, or `npm` not forwarding the signal). Prevents orphaned workers from
+// squatting port 3001 and crash-looping the replacement with EADDRINUSE.
+const PARENT_DEATH_WATCHDOG = pathToFileURL(resolve(HERE, 'dev-worker-watchdog.mjs')).href;
 
 // `next dev` loads `.env.local` for the web tier automatically, but Aspire
 // launches the worker as a bare executable that only inherits this runner's
@@ -93,8 +99,12 @@ function stopChild(dying) {
 }
 
 function startChild() {
-  const proc = spawn(process.execPath, [ENTRY], {
-    stdio: 'inherit',
+  // `--import` runs the watchdog preload before the entry without changing
+  // `process.argv[1]`, so the bootstrap still detects itself as the main
+  // entry. The 4th `ipc` stdio slot opens the channel the watchdog watches:
+  // when this supervisor dies, the OS closes our end and the child exits.
+  const proc = spawn(process.execPath, ['--import', PARENT_DEATH_WATCHDOG, ENTRY], {
+    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
     env: process.env,
   });
   child = proc;
