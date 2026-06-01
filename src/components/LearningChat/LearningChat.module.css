@@ -104,7 +104,10 @@
 .emptyState {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Stretch (not center) so the Blankslate child fills the column width.
+     With align-items:center the flex child shrink-wraps to its min-content
+     width, collapsing the description to one word per line. */
+  align-items: stretch;
   justify-content: center;
   height: 100%;
   text-align: center;

@@ -277,7 +277,7 @@ export const LearningChat = memo(function LearningChat({
         <div className={styles.messagesContainer} role="log" aria-label="Chat messages">
           {messages.length === 0 && !isStreamingInActiveThread ? (
             <div className={styles.emptyState}>
-              <Blankslate spacious>
+              <Blankslate spacious narrow>
                 <Blankslate.Visual>
                   <CopilotIcon size={48} />
                 </Blankslate.Visual>

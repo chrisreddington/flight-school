@@ -36,8 +36,12 @@ export function PageHeader({ title, headingLevel = 'h1', description, leadingVis
           <PrimerPageHeader.LeadingVisual>{leadingVisual}</PrimerPageHeader.LeadingVisual>
         )}
         <PrimerPageHeader.Title as={headingLevel}>{title}</PrimerPageHeader.Title>
-        {actions !== undefined && <PrimerPageHeader.Actions>{actions}</PrimerPageHeader.Actions>}
       </PrimerPageHeader.TitleArea>
+      {/* Actions must be a direct child of PageHeader (a sibling of TitleArea),
+          not nested inside it. Primer places Actions in its own grid cell on
+          the title row, right-aligned. Nesting it inside the shrink-wrapped
+          TitleArea instead renders it left of the title. */}
+      {actions !== undefined && <PrimerPageHeader.Actions>{actions}</PrimerPageHeader.Actions>}
       {description !== undefined && <PrimerPageHeader.Description>{description}</PrimerPageHeader.Description>}
     </PrimerPageHeader>
   );

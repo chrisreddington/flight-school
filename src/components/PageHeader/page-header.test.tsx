@@ -46,6 +46,18 @@ describe('PageHeader', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('renders actions outside the title area so Primer right-aligns them', () => {
+    // Regression guard: nesting PageHeader.Actions inside TitleArea collapses
+    // it into the shrink-wrapped title row and renders it left of the title.
+    // Actions must be a direct sibling of TitleArea under the PageHeader root.
+    const { container } = render(<PageHeader title="Page" actions={<button>New item</button>} />);
+    const actionsButton = screen.getByRole('button', { name: 'New item' });
+    const titleArea = container.querySelector('[class*="PageHeader-TitleArea"]');
+
+    expect(titleArea).not.toBeNull();
+    expect(titleArea?.contains(actionsButton)).toBe(false);
+  });
+
   it('accepts a ReactNode description for inline skeleton composition', () => {
     render(<PageHeader title="Dashboard" description={<span data-testid="greeting-skeleton">Loading…</span>} />);
     expect(screen.getByTestId('greeting-skeleton')).toBeInTheDocument();
