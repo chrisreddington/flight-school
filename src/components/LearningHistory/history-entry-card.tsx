@@ -10,9 +10,9 @@ import { Stack, VisuallyHidden } from '@primer/react';
 import { useId } from 'react';
 import { ItemCard } from './item-card';
 import styles from './LearningHistory.module.css';
-import type { HistoryEntry, HistoryEntryHandlers } from './types';
+import type { HistoryEntry, HistoryEntryContext } from './types';
 
-interface HistoryEntryCardProps extends HistoryEntryHandlers {
+interface HistoryEntryCardProps extends HistoryEntryContext {
   entry: HistoryEntry;
   isToday: boolean;
   isCollapsed: boolean;
@@ -68,9 +68,10 @@ export function HistoryEntryCard({
           {isToday ? (
             <span className={styles.todayBadge}>
               Today
-              {/* The visible "Today" label drops the date; expose it to
-                  assistive tech since the rail's calendar badge is decorative. */}
-              <VisuallyHidden>, {entry.displayDate}</VisuallyHidden>
+              {/* The visible "Today" label drops the date; expose the absolute
+                  date to assistive tech (displayDate would just repeat "Today")
+                  since the rail's calendar badge is decorative. */}
+              <VisuallyHidden>, {entry.accessibleDate}</VisuallyHidden>
             </span>
           ) : (
             <span className={styles.dateSectionTitle}>{entry.displayDate}</span>
@@ -80,7 +81,12 @@ export function HistoryEntryCard({
           {entry.items.length} item{entry.items.length !== 1 ? 's' : ''}
         </span>
       </button>
-      <div id={itemsRegionId} role="region" aria-label={entry.displayDate} hidden={isCollapsed}>
+      {/* role="group" (not "region") intentionally: a labelled group conveys
+          that the day's items belong together without registering a page
+          landmark. With many days expanded, named regions would flood the AT
+          landmark list; the button's aria-expanded/aria-controls already
+          communicates the disclosure relationship. */}
+      <div id={itemsRegionId} role="group" aria-label={entry.accessibleDate} hidden={isCollapsed}>
         <Stack direction="vertical" gap="condensed">
           {entry.items.map((item) => (
             <div

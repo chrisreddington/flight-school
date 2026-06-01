@@ -3,6 +3,7 @@ import type { DailyFocusRecord, FocusHistory } from '@/lib/focus/types';
 import type { DailyCheckIn, HabitCollection, HabitWithHistory } from '@/lib/habits/types';
 import type { HistoryEntry, HistoryItem, ItemStatus, Stats, StatusFilter, TypeFilter } from './types';
 import {
+  formatAccessibleDate,
   formatDateForDisplay,
   generate52WeekActivity,
   getItemStatus,
@@ -115,6 +116,7 @@ function buildHistoryEntry(
   return {
     dateKey,
     displayDate: formatDateForDisplay(dateKey),
+    accessibleDate: formatAccessibleDate(dateKey),
     items,
     totalCount: items.length,
     completedCount,

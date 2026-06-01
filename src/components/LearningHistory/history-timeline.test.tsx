@@ -33,6 +33,7 @@ function makeEntry(dateKey: string): HistoryEntry {
   return {
     dateKey,
     displayDate: dateKey,
+    accessibleDate: dateKey,
     items: [],
     totalCount: 0,
     completedCount: 0,
@@ -58,10 +59,12 @@ const handlers = {
 };
 
 describe('HistoryTimeline', () => {
-  it('threads one timeline item per day and accents only today', () => {
+  it('threads one timeline item per day and accents the rail badge of today only', () => {
+    // Today is deliberately the SECOND entry so the test fails if the badge
+    // accent is tied to position rather than to the today day.
     const { container } = render(
       <HistoryTimeline
-        entries={[makeEntry('2024-01-02'), makeEntry('2024-01-01')]}
+        entries={[makeEntry('2024-01-01'), makeEntry('2024-01-02')]}
         todayDateKey="2024-01-02"
         collapsedDays={new Set()}
         onToggleDayCollapse={() => {}}
@@ -69,16 +72,16 @@ describe('HistoryTimeline', () => {
       />,
     );
 
-    const days = screen.getAllByTestId('history-entry');
-    expect(days).toHaveLength(2);
-    expect(days[0]).toHaveAttribute('data-today', 'true');
-    expect(days[1]).toHaveAttribute('data-today', 'false');
+    expect(screen.getAllByTestId('history-entry')).toHaveLength(2);
 
-    // Exactly one rail badge carries the accent variant, and it is today's:
-    // past days fall back to Primer's neutral badge (no data-variant attribute).
-    const accentBadges = container.querySelectorAll('[data-variant="accent"]');
-    expect(accentBadges).toHaveLength(1);
-    expect(container.querySelectorAll('[data-variant]')).toHaveLength(1);
+    // The accent badge must live in the SAME Timeline.Item as the today day,
+    // and the past day's item must carry no variant at all.
+    const todayItem = container.querySelector('[data-today="true"]')?.closest('.Timeline-Item');
+    const pastItem = container.querySelector('[data-today="false"]')?.closest('.Timeline-Item');
+    expect(todayItem).not.toBeNull();
+    expect(pastItem).not.toBeNull();
+    expect(todayItem?.querySelectorAll('[data-variant="accent"]')).toHaveLength(1);
+    expect(pastItem?.querySelectorAll('[data-variant]')).toHaveLength(0);
   });
 
   it('renders the rail calendar badge as a decorative, unnamed marker', () => {

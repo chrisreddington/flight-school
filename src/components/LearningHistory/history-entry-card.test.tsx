@@ -27,6 +27,7 @@ function makeEntry(): HistoryEntry {
   return {
     dateKey: '2024-01-01',
     displayDate: 'Jan 1, 2024',
+    accessibleDate: 'Monday, January 1, 2024',
     items: [completedTopic()],
     totalCount: 1,
     completedCount: 1,
@@ -75,7 +76,7 @@ describe('HistoryEntryCard day collapse', () => {
     // The visible chip reads "Today"; the date is preserved for screen readers
     // via a visually-hidden suffix so the toggle still announces which day it is.
     const todayHeader = screen.getByRole('button', { name: /Today/ });
-    expect(todayHeader).toHaveAccessibleName(/Today.*Jan 1, 2024/);
+    expect(todayHeader).toHaveAccessibleName(/Today.*Monday, January 1, 2024/);
   });
 
   it('exposes the day header as a real toggle button with aria-expanded', () => {
@@ -120,5 +121,25 @@ describe('HistoryEntryCard day collapse', () => {
     fireEvent.click(dayHeader);
 
     expect(screen.getByTestId('topic-card')).toBeVisible();
+  });
+
+  it('gives each card instance a distinct items-region id when days share a dateKey', () => {
+    // Two feeds of the same day must not collide on the aria-controls target,
+    // which is why the region id is salted with useId() rather than the dateKey
+    // alone. Each header must point at its own, in-document region.
+    render(
+      <>
+        <DayHarness entry={makeEntry()} />
+        <DayHarness entry={makeEntry()} />
+      </>,
+    );
+
+    const [firstHeader, secondHeader] = screen.getAllByRole('button', { name: /Jan 1, 2024/ });
+    const firstRegionId = firstHeader.getAttribute('aria-controls') as string;
+    const secondRegionId = secondHeader.getAttribute('aria-controls') as string;
+
+    expect(firstRegionId).not.toBe(secondRegionId);
+    expect(document.getElementById(firstRegionId)).toBeInTheDocument();
+    expect(document.getElementById(secondRegionId)).toBeInTheDocument();
   });
 });

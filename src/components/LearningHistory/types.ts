@@ -39,7 +39,14 @@ export type StatusFilter = 'all' | 'active' | 'completed' | 'skipped';
 
 export interface HistoryEntry {
   dateKey: string;
+  /** Relative, human-friendly label for the visible header (e.g. "Today", "Yesterday", "Mon, Jan 1"). */
   displayDate: string;
+  /**
+   * Absolute, unambiguous date for assistive tech (e.g. "Monday, January 1, 2024").
+   * `displayDate` collapses to "Today"/"Yesterday", which would make the day
+   * toggle announce "Today, Today"; this field gives screen readers the real date.
+   */
+  accessibleDate: string;
   items: HistoryItem[];
   totalCount: number;
   completedCount: number;
@@ -52,7 +59,7 @@ export interface HistoryEntry {
  * wrapper, and the day card extend a single prop shape, so adding a handler is
  * a one-line change here instead of three parallel edits.
  */
-export interface HistoryEntryHandlers {
+export interface HistoryEntryContext {
   onRefresh: () => void;
   onSkipTopic: (topicId: string, existingTitles: string[]) => Promise<void>;
   onSkipChallenge: (challengeId: string, existingTitles: string[]) => Promise<void>;

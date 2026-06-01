@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { generate52WeekActivity, getItemStatus, groupEntriesByMonth, matchesSearch } from './utils';
+import {
+  formatAccessibleDate,
+  generate52WeekActivity,
+  getItemStatus,
+  groupEntriesByMonth,
+  matchesSearch,
+} from './utils';
+import { getDateKey } from '@/lib/utils/date-utils';
 import type { HistoryEntry, HistoryItem } from './types';
 
 function createChallengeItem(overrides?: Partial<Extract<HistoryItem, { type: 'challenge' }>['data']>): HistoryItem {
@@ -80,6 +87,7 @@ function createEntry(dateKey: string, count = 0): HistoryEntry {
   return {
     dateKey,
     displayDate: dateKey,
+    accessibleDate: dateKey,
     items: Array.from({ length: count }, (_, i) =>
       createChallengeItem({ id: `challenge-${dateKey}-${i}`, title: `Challenge ${i}` }),
     ),
@@ -88,6 +96,22 @@ function createEntry(dateKey: string, count = 0): HistoryEntry {
     skippedCount: 0,
   };
 }
+
+describe('formatAccessibleDate', () => {
+  it('returns an absolute spoken date for today, never the relative "Today"', () => {
+    const todayKey = getDateKey();
+    const accessibleDate = formatAccessibleDate(todayKey);
+
+    // The whole point of this field: assistive tech must hear the real date,
+    // not "Today" (which formatDateForDisplay would return for the same key).
+    expect(accessibleDate).not.toBe('Today');
+    expect(accessibleDate).toMatch(/\d{4}/);
+  });
+
+  it('formats an arbitrary day as weekday, month, day, year', () => {
+    expect(formatAccessibleDate('2024-01-01')).toBe('Monday, January 1, 2024');
+  });
+});
 
 describe('getItemStatus', () => {
   it.each([

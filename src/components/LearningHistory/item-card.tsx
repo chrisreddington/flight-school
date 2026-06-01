@@ -34,7 +34,7 @@ interface ItemCardProps {
   onStopSkipTopic?: (topicId: string) => void;
   onStopSkipChallenge?: (challengeId: string) => void;
   onStopSkipGoal?: (goalId: string) => void;
-  onExploreTopic?: (topic: LearningTopic) => void;
+  onExploreTopic?: (topic: LearningTopic) => Promise<void>;
   isSkippingTopic?: boolean;
   isSkippingChallenge?: boolean;
   isSkippingGoal?: boolean;

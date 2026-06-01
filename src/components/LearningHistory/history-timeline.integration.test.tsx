@@ -30,6 +30,7 @@ function makeEntry(dateKey: string, title: string): HistoryEntry {
   return {
     dateKey,
     displayDate: dateKey,
+    accessibleDate: dateKey,
     items: [completedTopic(`${dateKey}-topic`, title)],
     totalCount: 1,
     completedCount: 1,
@@ -107,10 +108,12 @@ describe('HistoryTimeline composition', () => {
     const dayRegion = document.getElementById(dayHeader.getAttribute('aria-controls') as string);
     expect(dayRegion).not.toBeNull();
 
-    const itemCard = (dayRegion as HTMLElement).querySelector('[data-item-id="2024-01-01-topic"]') as HTMLElement;
-    const itemHeader = within(itemCard).getByRole('button');
+    // The completed item renders collapsed, so its header still shows the title;
+    // locate it by that user-visible name rather than an internal data attribute.
+    const itemHeader = within(dayRegion as HTMLElement).getByRole('button', { name: /Closures/ });
 
-    // Completed items render collapsed; expand the item to reveal its detail.
+    // Expand the item to reveal its detail. After expansion the header drops the
+    // title, so keep the captured node to re-check state later.
     fireEvent.click(itemHeader);
     expect(itemHeader).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByTestId('topic-detail')).toBeInTheDocument();

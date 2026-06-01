@@ -3,11 +3,11 @@ import { Banner, Button, Spinner, Stack } from '@primer/react';
 import { Blankslate } from '@primer/react/experimental';
 import { GeneratingBanner } from './generating-banner';
 import { HistoryTimeline } from './history-timeline';
-import type { HistoryEntry, HistoryEntryHandlers } from './types';
+import type { HistoryEntry, HistoryEntryContext } from './types';
 import { formatDateForDisplay } from './utils';
 import styles from './LearningHistory.module.css';
 
-interface HistoryPanelProps extends HistoryEntryHandlers {
+interface HistoryPanelProps extends HistoryEntryContext {
   loadError: string | null;
   isLoading: boolean;
   selectedDate: string | null;

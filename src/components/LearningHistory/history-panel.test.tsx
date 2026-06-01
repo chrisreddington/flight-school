@@ -16,10 +16,12 @@ vi.mock('./history-timeline', () => ({
     entries,
     todayDateKey,
     collapsedDays,
+    onToggleDayCollapse,
   }: {
     entries: HistoryEntry[];
     todayDateKey: string;
     collapsedDays: Set<string>;
+    onToggleDayCollapse: (dateKey: string) => void;
   }) => (
     <div data-testid="history-timeline" data-today={todayDateKey}>
       {entries.map((entry) => (
@@ -28,7 +30,11 @@ vi.mock('./history-timeline', () => ({
           data-testid="history-entry"
           data-date={entry.dateKey}
           data-collapsed={String(collapsedDays.has(entry.dateKey))}
-        />
+        >
+          <button type="button" onClick={() => onToggleDayCollapse(entry.dateKey)}>
+            toggle {entry.dateKey}
+          </button>
+        </div>
       ))}
     </div>
   ),
@@ -38,6 +44,7 @@ function makeEntry(dateKey: string): HistoryEntry {
   return {
     dateKey,
     displayDate: dateKey,
+    accessibleDate: dateKey,
     items: [],
     totalCount: 0,
     completedCount: 0,
@@ -104,6 +111,62 @@ describe('HistoryPanel states', () => {
     const [firstDay, secondDay] = screen.getAllByTestId('history-entry');
     expect(firstDay).toHaveAttribute('data-collapsed', 'true');
     expect(secondDay).toHaveAttribute('data-collapsed', 'false');
+  });
+
+  it('forwards day-collapse toggles so the timeline reflects the new state', () => {
+    // A stateful harness stands in for the LearningHistory root: it owns the
+    // collapsedDays Set and wires onToggleDayCollapse, so clicking a day's
+    // toggle is observable as a data-collapsed flip rather than a spy call.
+    function StatefulPanelHarness() {
+      const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+      const noop = () => {};
+      const asyncNoop = async () => {};
+      return (
+        <HistoryPanel
+          loadError={null}
+          isLoading={false}
+          selectedDate={null}
+          onClearSelectedDate={noop}
+          hasGenerating={false}
+          activeTopicIds={new Set()}
+          activeChallengeIds={new Set()}
+          activeGoalIds={new Set()}
+          filteredEntries={[makeEntry('2024-01-01')]}
+          todayDateKey="2024-01-01"
+          collapsedDays={collapsedDays}
+          onToggleDayCollapse={(dateKey) =>
+            setCollapsedDays((previous) => {
+              const next = new Set(previous);
+              if (next.has(dateKey)) {
+                next.delete(dateKey);
+              } else {
+                next.add(dateKey);
+              }
+              return next;
+            })
+          }
+          onRefresh={noop}
+          onSkipTopic={asyncNoop}
+          onSkipChallenge={asyncNoop}
+          onSkipGoal={asyncNoop}
+          onStopSkipTopic={noop}
+          onStopSkipChallenge={noop}
+          onStopSkipGoal={noop}
+          onExploreTopic={asyncNoop}
+          skippingTopicIds={new Set()}
+          skippingChallengeIds={new Set()}
+          skippingGoalIds={new Set()}
+          searchQuery=""
+        />
+      );
+    }
+
+    render(<StatefulPanelHarness />);
+    const day = screen.getByTestId('history-entry');
+    expect(day).toHaveAttribute('data-collapsed', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle 2024-01-01/ }));
+    expect(day).toHaveAttribute('data-collapsed', 'true');
   });
 
   it('renders a Blankslate when there are no entries and nothing generating', () => {

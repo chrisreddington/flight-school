@@ -15,9 +15,9 @@
 import { CalendarIcon } from '@primer/octicons-react';
 import { Timeline } from '@primer/react';
 import { HistoryEntryCard } from './history-entry-card';
-import type { HistoryEntry, HistoryEntryHandlers } from './types';
+import type { HistoryEntry, HistoryEntryContext } from './types';
 
-interface HistoryTimelineProps extends HistoryEntryHandlers {
+interface HistoryTimelineProps extends HistoryEntryContext {
   entries: HistoryEntry[];
   todayDateKey: string;
   collapsedDays: Set<string>;

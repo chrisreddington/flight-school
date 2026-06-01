@@ -28,6 +28,20 @@ export function formatDateForDisplay(dateKey: string): string {
   });
 }
 
+/**
+ * Absolute, unambiguous date for assistive tech — never relative.
+ * `formatDateForDisplay` collapses today/yesterday to relative words, which is
+ * friendly visually but useless as a screen-reader date; this is the spoken date.
+ */
+export function formatAccessibleDate(dateKey: string): string {
+  return new Date(dateKey + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 /** Format an ISO timestamp to a time string */
 export function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString('en-US', {
