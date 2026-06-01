@@ -7,7 +7,6 @@
 
 'use client';
 
-import { ProfileNav } from '@/components/ProfileNav';
 import { LearningPathPanel } from '@/components/LearningPathPanel';
 import type { SkillLevel, SkillProfile } from '@/lib/skills/types';
 import { SKILL_LEVEL_DESCRIPTIONS, SKILL_LEVEL_LABELS } from '@/lib/skills/types';
@@ -33,8 +32,6 @@ export function SkillsSidebar({ profile, onAddLearningPathSkill }: SkillsSidebar
 
   return (
     <Stack direction="vertical" gap="normal">
-      <ProfileNav />
-
       <div className={styles.sidebarCard}>
         <div className={styles.sidebarHeader}>
           <MortarBoardIcon size={20} className={styles.sidebarIcon} />

@@ -19,20 +19,10 @@
 import { useBreadcrumbContext } from '@/contexts/breadcrumb-context';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useUserProfile } from '@/hooks/use-user-profile';
-import {
-  ChevronRightIcon,
-  CopilotIcon,
-  FlameIcon,
-  GearIcon,
-  HistoryIcon,
-  HomeIcon,
-  MortarBoardIcon,
-  PersonIcon,
-  RocketIcon,
-  StarIcon,
-} from '@primer/octicons-react';
+import { ChevronRightIcon, CopilotIcon, GearIcon, PersonIcon, RocketIcon, StarIcon } from '@primer/octicons-react';
 import { ActionList, ActionMenu, Avatar, Label, Spinner, Stack } from '@primer/react';
 import Link from 'next/link';
+import { PrimaryNav } from './PrimaryNav';
 import styles from './AppHeader.module.css';
 
 /**
@@ -52,7 +42,14 @@ export function AppHeader() {
 
   return (
     <header className={styles.header}>
-      <Stack direction="horizontal" align="center" justify="space-between" wrap="nowrap" gap="normal">
+      <Stack
+        direction="horizontal"
+        align="center"
+        justify="space-between"
+        wrap="nowrap"
+        gap="normal"
+        className={styles.topRow}
+      >
         {/* Left side: Logo + Breadcrumbs */}
         <Stack direction="horizontal" align="center" gap="condensed" className={styles.leftGroup}>
           <Link href="/" className={styles.logoLink}>
@@ -122,37 +119,6 @@ export function AppHeader() {
                   <ActionList.Description>View your GitHub profile</ActionList.Description>
                 </ActionList.LinkItem>
                 <ActionList.Divider />
-                <ActionList.Group title="Learning">
-                  <ActionList.LinkItem href="/">
-                    <ActionList.LeadingVisual>
-                      <HomeIcon />
-                    </ActionList.LeadingVisual>
-                    Dashboard
-                    <ActionList.Description>Your learning overview</ActionList.Description>
-                  </ActionList.LinkItem>
-                  <ActionList.LinkItem href="/skills">
-                    <ActionList.LeadingVisual>
-                      <MortarBoardIcon />
-                    </ActionList.LeadingVisual>
-                    Skills
-                    <ActionList.Description>Calibrate your skill levels</ActionList.Description>
-                  </ActionList.LinkItem>
-                  <ActionList.LinkItem href="/habits">
-                    <ActionList.LeadingVisual>
-                      <FlameIcon />
-                    </ActionList.LeadingVisual>
-                    Habits
-                    <ActionList.Description>Track your learning habits</ActionList.Description>
-                  </ActionList.LinkItem>
-                  <ActionList.LinkItem href="/history">
-                    <ActionList.LeadingVisual>
-                      <HistoryIcon />
-                    </ActionList.LeadingVisual>
-                    History
-                    <ActionList.Description>View past learning items</ActionList.Description>
-                  </ActionList.LinkItem>
-                </ActionList.Group>
-                <ActionList.Divider />
                 <ActionList.LinkItem href="/settings">
                   <ActionList.LeadingVisual>
                     <GearIcon />
@@ -188,6 +154,10 @@ export function AppHeader() {
           </ActionMenu>
         </Stack>
       </Stack>
+
+      <div className={styles.navRow}>
+        <PrimaryNav />
+      </div>
     </header>
   );
 }

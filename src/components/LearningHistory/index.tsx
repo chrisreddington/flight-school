@@ -10,7 +10,6 @@
  * - Stats shown in sidebar
  */
 
-import { ProfileNav } from '@/components/ProfileNav';
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
 import { computeInsights, type LearningInsights } from '@/lib/focus/analytics';
@@ -19,7 +18,7 @@ import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { LearningTopic } from '@/lib/focus/types';
 import { PageHeader } from '@/components/PageHeader';
-import { CalendarIcon, HistoryIcon } from '@primer/octicons-react';
+import { HistoryIcon } from '@primer/octicons-react';
 import { Banner, SplitPageLayout } from '@primer/react';
 import { Blankslate, UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
@@ -233,29 +232,11 @@ export function LearningHistory({ activeTab = 'history' }: LearningHistoryProps)
     [activeTab, router],
   );
 
-  // Empty state
+  // Empty state — no sidebar pane (its activity graph/filters have nothing to
+  // drive yet), so the tabs span the full content width.
   if (!isLoading && allEntries.length === 0) {
     return (
       <SplitPageLayout className={styles.layout}>
-        <SplitPageLayout.Pane
-          position={{ regular: 'start', narrow: 'end' }}
-          width="large"
-          aria-label="Activity and filters"
-        >
-          <aside className={styles.sidebar}>
-            <ProfileNav />
-            <div className={styles.sidebarCard}>
-              <div className={styles.sidebarHeader}>
-                <CalendarIcon size={20} className={styles.sidebarIcon} />
-                <div className={styles.sidebarTitleGroup}>
-                  <h2 className={styles.sidebarTitle}>Activity</h2>
-                  <p className={styles.sidebarDescription}>Your learning journey</p>
-                </div>
-              </div>
-            </div>
-          </aside>
-        </SplitPageLayout.Pane>
-
         <SplitPageLayout.Content>
           <div className={styles.mainContent}>
             <PageHeader title="Learning History" description="Browse your learning journey over time" />
@@ -317,28 +298,29 @@ export function LearningHistory({ activeTab = 'history' }: LearningHistoryProps)
       )}
 
       <SplitPageLayout className={styles.layout}>
-        <SplitPageLayout.Pane
-          position={{ regular: 'start', narrow: 'end' }}
-          width="large"
-          aria-label="Activity and filters"
-        >
-          <LearningHistorySidebar
-            activeTab={activeTab}
-            activityData={activityData}
-            selectedDate={selectedDate}
-            onSelectDate={handleSelectDate}
-            stats={stats}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            typeFilter={typeFilter}
-            onTypeFilterChange={setTypeFilter}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            groupedEntries={groupedEntries}
-            expandedMonths={expandedMonths}
-            onToggleMonth={toggleMonth}
-          />
-        </SplitPageLayout.Pane>
+        {activeTab === 'history' && (
+          <SplitPageLayout.Pane
+            position={{ regular: 'start', narrow: 'end' }}
+            width="large"
+            aria-label="Activity and filters"
+          >
+            <LearningHistorySidebar
+              activityData={activityData}
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
+              stats={stats}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              typeFilter={typeFilter}
+              onTypeFilterChange={setTypeFilter}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              groupedEntries={groupedEntries}
+              expandedMonths={expandedMonths}
+              onToggleMonth={toggleMonth}
+            />
+          </SplitPageLayout.Pane>
+        )}
 
         <SplitPageLayout.Content>
           <div className={styles.mainContent}>

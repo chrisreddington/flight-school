@@ -15,7 +15,6 @@ import { CheckInActivity } from '@/components/Habits/CheckInActivity';
 import { HabitListSection } from '@/components/Habits/habit-list-section';
 import { HabitStatsSection } from '@/components/Habits/habit-stats-section';
 import { PageHeader } from '@/components/PageHeader';
-import { ProfileNav } from '@/components/ProfileNav';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useHabitActions } from '@/hooks/use-habit-actions';
 import { habitStore } from '@/lib/habits';
@@ -81,8 +80,6 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
       <SplitPageLayout className={styles.layout}>
         <SplitPageLayout.Pane position={{ regular: 'start', narrow: 'end' }} aria-label="Habit tracking sidebar">
           <Stack direction="vertical" gap="normal">
-            <ProfileNav />
-
             <HabitStatsSection
               activeHabitsCount={activeHabits.length}
               totalCheckIns={totalCheckIns}

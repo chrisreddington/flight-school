@@ -4,9 +4,16 @@
  */
 
 .header {
-  padding: var(--base-size-16, 16px) var(--base-size-24, 24px);
+  padding: var(--base-size-16, 16px) var(--base-size-24, 24px) 0;
   background-color: var(--bgColor-default, #ffffff);
-  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+/* The primary-nav row carries the header's bottom edge: UnderlineNav's own
+   track is the divider, so .header no longer sets a border-bottom (which would
+   double the line). */
+.navRow {
+  margin-top: var(--base-size-8, 8px);
+  min-width: 0;
 }
 
 /* Left group must be able to shrink so the avatar never wraps below the logo
@@ -18,7 +25,7 @@
 
 @media (max-width: 767px) {
   .header {
-    padding: var(--base-size-12, 12px) var(--base-size-16, 16px);
+    padding: var(--base-size-12, 12px) var(--base-size-16, 16px) 0;
   }
 }
 

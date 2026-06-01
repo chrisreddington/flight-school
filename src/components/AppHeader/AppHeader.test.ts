@@ -14,3 +14,14 @@ describe('AppHeader debug mode consolidation', () => {
     expect(appHeaderSource).toMatch(/github\.com\/\$\{username\}/);
   });
 });
+
+describe('AppHeader primary navigation', () => {
+  it('renders the persistent PrimaryNav row', () => {
+    expect(appHeaderSource).toMatch(/import \{ PrimaryNav \}/);
+    expect(appHeaderSource).toMatch(/<PrimaryNav \/>/);
+  });
+
+  it('drops the redundant "Learning" menu group now that PrimaryNav owns those links', () => {
+    expect(appHeaderSource).not.toMatch(/title="Learning"/);
+  });
+});

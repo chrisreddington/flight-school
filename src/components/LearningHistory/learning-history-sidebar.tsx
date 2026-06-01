@@ -1,4 +1,3 @@
-import { ProfileNav } from '@/components/ProfileNav';
 import { CalendarIcon } from '@primer/octicons-react';
 import { memo } from 'react';
 import { ActivityGraph } from './activity-graph';
@@ -8,7 +7,6 @@ import type { ActivityDay, HistoryEntry, Stats, StatusFilter, TypeFilter } from 
 import styles from './LearningHistory.module.css';
 
 interface LearningHistorySidebarProps {
-  activeTab: 'history' | 'stats';
   activityData: ActivityDay[];
   selectedDate: string | null;
   onSelectDate: (date: string | null) => void;
@@ -25,7 +23,6 @@ interface LearningHistorySidebarProps {
 }
 
 export const LearningHistorySidebar = memo(function LearningHistorySidebar({
-  activeTab,
   activityData,
   selectedDate,
   onSelectDate,
@@ -40,21 +37,10 @@ export const LearningHistorySidebar = memo(function LearningHistorySidebar({
   expandedMonths,
   onToggleMonth,
 }: LearningHistorySidebarProps) {
-  // The activity graph, filters, and date navigation only drive the History
-  // timeline. On the Stats tab they control nothing, so the sidebar collapses
-  // to just the section nav rather than showing dead controls.
-  if (activeTab === 'stats') {
-    return (
-      <aside className={styles.sidebar}>
-        <ProfileNav />
-      </aside>
-    );
-  }
-
+  // This sidebar drives only the History timeline (activity graph, filters,
+  // date navigation), so the caller renders it for the History tab alone.
   return (
     <aside className={styles.sidebar}>
-      <ProfileNav />
-
       <div className={styles.sidebarCard}>
         <div className={styles.sidebarHeader}>
           <CalendarIcon size={20} className={styles.sidebarIcon} />
