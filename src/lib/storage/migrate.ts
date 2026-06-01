@@ -17,8 +17,8 @@
  * - **Insert-if-absent, body-only.** An existing envelope wins; the importer
  *   only fills gaps. A divergent envelope is skipped (or overwritten under
  *   `--force`), never silently clobbered.
- * - **Non-destructive.** Legacy files are never modified or deleted, so
- *   `STORAGE_BACKEND=file` rolls the migration back.
+ * - **Non-destructive.** Legacy files are never modified or deleted, so the
+ *   original `file`-backed data stays intact on disk after an import.
  * - **File-backend refusal.** The file adapter's CAS has a documented TOCTOU
  *   ceiling, so a `file`-backend run REFUSES unless the operator passes
  *   `--assume-quiesced` to assert the app is stopped. sqlite runs freely.
@@ -29,12 +29,13 @@
 import { logger } from '@/lib/logger';
 import type { StorageBackend } from '@/lib/storage/document-store/backend-sentinel';
 import { canonicalizeBody } from '@/lib/storage/document-store/canonical';
-import { getDocumentStore, resolveStorageBackend } from '@/lib/storage/document-store/factory';
+import { getDocumentStore, resolveEffectiveBackend } from '@/lib/storage/document-store/factory';
 import { DocumentConflictError, type ContainerName, type DocumentStore } from '@/lib/storage/document-store/types';
 import { ensureUserRegistered } from '@/lib/storage/document-store/user-registry';
 import { allDescriptors, enumerateUsers } from '@/lib/storage/migrate-descriptors';
 import { acquireLock, releaseLock } from '@/lib/storage/migrate-lock';
 import { isUserDeleted } from '@/lib/storage/tombstone';
+import { getStorageRoot } from '@/lib/storage/utils';
 
 export { StorageMigrationLockError, StaleStorageMigrationLockError } from '@/lib/storage/migrate-lock';
 export { StorageMigrationUserError } from '@/lib/storage/migrate-descriptors';
@@ -92,7 +93,7 @@ export interface StorageMigrationOptions {
   assumeQuiesced?: boolean;
   /** Pre-built store (tests); defaults to {@link getDocumentStore}. */
   store?: DocumentStore;
-  /** Backend override (tests); defaults to {@link resolveStorageBackend}. */
+  /** Backend override (tests); defaults to {@link resolveEffectiveBackend}. */
   backend?: StorageBackend;
   /** Lock-owner identity; defaults to the process id. */
   ownerId?: string;
@@ -280,7 +281,7 @@ export async function runStorageMigration(options: StorageMigrationOptions = {})
     isDeleted = isUserDeleted,
   } = options;
 
-  const backend = options.backend ?? resolveStorageBackend();
+  const backend = options.backend ?? (await resolveEffectiveBackend({ dataDir: getStorageRoot() }));
   if (backend === 'file' && !assumeQuiesced) {
     throw new StorageMigrationRefusedError();
   }

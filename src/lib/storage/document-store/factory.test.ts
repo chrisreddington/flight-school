@@ -28,13 +28,14 @@ vi.mock('./sqlite-adapter', () => ({
 
 let createDocumentStore: typeof import('./factory').createDocumentStore;
 let resolveStorageBackend: typeof import('./factory').resolveStorageBackend;
+let resolveEffectiveBackend: typeof import('./factory').resolveEffectiveBackend;
 let assertNodeSupportsSqlite: typeof import('./factory').assertNodeSupportsSqlite;
 let getDocumentStore: typeof import('./factory').getDocumentStore;
 let SENTINEL_FILENAME: string;
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_STORAGE_DIR);
-  ({ createDocumentStore, resolveStorageBackend, assertNodeSupportsSqlite, getDocumentStore } =
+  ({ createDocumentStore, resolveStorageBackend, resolveEffectiveBackend, assertNodeSupportsSqlite, getDocumentStore } =
     await import('./factory'));
   ({ SENTINEL_FILENAME } = await import('./backend-sentinel'));
 });
@@ -61,6 +62,15 @@ async function readSentinelBackend(): Promise<string> {
   return JSON.parse(raw).backend;
 }
 
+/** Seed an existing sentinel so the data dir is "committed" to a backend. */
+async function seedSentinel(backend: 'file' | 'sqlite'): Promise<void> {
+  await fs.writeFile(
+    path.join(TEST_STORAGE_DIR, SENTINEL_FILENAME),
+    `${JSON.stringify({ backend, schemaVersion: 1 })}\n`,
+    'utf-8',
+  );
+}
+
 describe('getDocumentStore memoisation', () => {
   it('does not cache a rejected construction, so a later call retries', async () => {
     // A bogus STORAGE_BACKEND makes the first construction reject. The memo
@@ -77,11 +87,16 @@ describe('getDocumentStore memoisation', () => {
 });
 
 describe('resolveStorageBackend', () => {
-  it('defaults to file when STORAGE_BACKEND is unset, empty, or "file"', () => {
-    expect(resolveStorageBackend(undefined)).toBe('file');
-    expect(resolveStorageBackend('')).toBe('file');
-    expect(resolveStorageBackend('  ')).toBe('file');
+  it('defaults to sqlite when STORAGE_BACKEND is unset or empty', () => {
+    expect(resolveStorageBackend(undefined)).toBe('sqlite');
+    expect(resolveStorageBackend('')).toBe('sqlite');
+    expect(resolveStorageBackend('  ')).toBe('sqlite');
+  });
+
+  it('still honours an explicit file backend case-insensitively', () => {
+    expect(resolveStorageBackend('file')).toBe('file');
     expect(resolveStorageBackend('FILE')).toBe('file');
+    expect(resolveStorageBackend(' File ')).toBe('file');
   });
 
   it('selects sqlite case-insensitively', () => {
@@ -154,5 +169,83 @@ describe('createDocumentStore', () => {
     } finally {
       await fs.rm(overrideDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('sentinel-wins resolution (default flip to sqlite)', () => {
+  it('constructs a sqlite store for a fresh dir when STORAGE_BACKEND is unset', async () => {
+    // The default flip: a brand-new data dir moves forward to sqlite without
+    // any opt-in env, and records that choice in the sentinel.
+    await createDocumentStore();
+
+    expect(createSqliteSpy.mock.calls).toHaveLength(1);
+    expect(await readSentinelBackend()).toBe('sqlite');
+  });
+
+  it('keeps an existing file-backed dir on file with no env set (the no-throw regression guard)', async () => {
+    // A naive default flip would make this throw a backend mismatch on every
+    // existing install. Sentinel-wins: the persisted backend is authoritative.
+    await seedSentinel('file');
+
+    const store = await createDocumentStore();
+    await store.put('system', 'p1', 'doc', { kept: 'on-file' });
+    expect(await store.get('system', 'p1', 'doc')).toEqual({ kept: 'on-file' });
+
+    expect(createSqliteSpy.mock.calls).toHaveLength(0);
+    expect(await readSentinelBackend()).toBe('file');
+  });
+
+  it('keeps an existing sqlite-backed dir on sqlite with no env set', async () => {
+    await seedSentinel('sqlite');
+
+    await createDocumentStore();
+
+    expect(createSqliteSpy.mock.calls).toHaveLength(1);
+    expect(await readSentinelBackend()).toBe('sqlite');
+  });
+
+  it('throws when STORAGE_BACKEND=file contradicts an existing sqlite sentinel', async () => {
+    await seedSentinel('sqlite');
+    vi.stubEnv('STORAGE_BACKEND', 'file');
+
+    await expect(createDocumentStore()).rejects.toThrow(/backend mismatch/i);
+    expect(createSqliteSpy.mock.calls).toHaveLength(0);
+  });
+
+  it('throws when STORAGE_BACKEND=sqlite contradicts an existing file sentinel', async () => {
+    await seedSentinel('file');
+    vi.stubEnv('STORAGE_BACKEND', 'sqlite');
+
+    await expect(createDocumentStore()).rejects.toThrow(/backend mismatch/i);
+    expect(createSqliteSpy.mock.calls).toHaveLength(0);
+  });
+});
+
+describe('resolveEffectiveBackend', () => {
+  it('returns sqlite for a fresh dir with no env (the process default)', async () => {
+    expect(await resolveEffectiveBackend({ dataDir: TEST_STORAGE_DIR })).toBe('sqlite');
+  });
+
+  it('returns the persisted backend over the default when a sentinel exists', async () => {
+    await seedSentinel('file');
+    expect(await resolveEffectiveBackend({ dataDir: TEST_STORAGE_DIR })).toBe('file');
+  });
+
+  it('lets an explicit STORAGE_BACKEND pick the backend for a fresh dir', async () => {
+    vi.stubEnv('STORAGE_BACKEND', 'file');
+    expect(await resolveEffectiveBackend({ dataDir: TEST_STORAGE_DIR })).toBe('file');
+  });
+
+  it('throws when an explicit STORAGE_BACKEND contradicts the persisted sentinel', async () => {
+    await seedSentinel('sqlite');
+    vi.stubEnv('STORAGE_BACKEND', 'file');
+    await expect(resolveEffectiveBackend({ dataDir: TEST_STORAGE_DIR })).rejects.toThrow(/backend mismatch/i);
+  });
+
+  it('does not treat a differing default as a mismatch — the sentinel silently wins', async () => {
+    // No env set: the sqlite default differs from the file sentinel, but that
+    // is forward movement, not an operator conflict, so it must not throw.
+    await seedSentinel('file');
+    await expect(resolveEffectiveBackend({ dataDir: TEST_STORAGE_DIR })).resolves.toBe('file');
   });
 });

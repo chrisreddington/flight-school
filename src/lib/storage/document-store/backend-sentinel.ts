@@ -103,6 +103,32 @@ function parseSentinel(raw: string, sentinelFile: string): BackendSentinel {
 }
 
 /**
+ * Read and shape-check the sentinel without creating one.
+ *
+ * Returns `null` for a fresh data directory (no sentinel yet) so a caller can
+ * tell "nothing committed here" apart from "committed to a backend". A sentinel
+ * that exists but cannot be parsed is corrupt, never absent: it still throws
+ * {@link BackendSentinelCorruptError} rather than reporting `null`, so a partial
+ * write from a prior crash can never be silently overwritten.
+ *
+ * @returns the parsed `{backend, schemaVersion}` record, or `null` when absent.
+ * @throws BackendSentinelCorruptError when an existing sentinel is unreadable.
+ */
+export async function readSentinel(dataDir: string): Promise<BackendSentinel | null> {
+  const sentinelFile = path.join(dataDir, SENTINEL_FILENAME);
+
+  let raw: string;
+  try {
+    raw = await fs.readFile(sentinelFile, 'utf-8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+
+  return parseSentinel(raw, sentinelFile);
+}
+
+/**
  * Reconcile this process's chosen backend against the on-disk sentinel,
  * creating it on first run and refusing to start on any disagreement.
  *

@@ -16,6 +16,7 @@ import {
   BackendSentinelMismatchError,
   STORAGE_SCHEMA_VERSION,
   SENTINEL_FILENAME,
+  readSentinel,
   reconcileBackendSentinel,
 } from './backend-sentinel';
 
@@ -109,5 +110,34 @@ describe('reconcileBackendSentinel', () => {
     expect(result.backend).toBe('file');
     const onDisk: unknown = JSON.parse(await fs.readFile(sentinelPath(dataDir), 'utf-8'));
     expect(onDisk).toMatchObject({ backend: 'file' });
+  });
+});
+
+describe('readSentinel', () => {
+  it('returns null when no sentinel file exists (a fresh data dir)', async () => {
+    const dataDir = await freshDataDir();
+
+    expect(await readSentinel(dataDir)).toBeNull();
+  });
+
+  it('returns the parsed record for an existing sentinel without creating one', async () => {
+    const dataDir = await freshDataDir();
+    await reconcileBackendSentinel({ dataDir, backend: 'sqlite' });
+
+    expect(await readSentinel(dataDir)).toEqual({ backend: 'sqlite', schemaVersion: STORAGE_SCHEMA_VERSION });
+  });
+
+  it('hard-fails on a corrupt sentinel rather than reporting it absent', async () => {
+    const dataDir = await freshDataDir();
+    await fs.writeFile(sentinelPath(dataDir), Buffer.from('{ not json', 'utf-8'));
+
+    await expect(readSentinel(dataDir)).rejects.toBeInstanceOf(BackendSentinelCorruptError);
+  });
+
+  it('hard-fails on a structurally invalid sentinel (missing backend)', async () => {
+    const dataDir = await freshDataDir();
+    await fs.writeFile(sentinelPath(dataDir), JSON.stringify({ schemaVersion: STORAGE_SCHEMA_VERSION }));
+
+    await expect(readSentinel(dataDir)).rejects.toBeInstanceOf(BackendSentinelCorruptError);
   });
 });
