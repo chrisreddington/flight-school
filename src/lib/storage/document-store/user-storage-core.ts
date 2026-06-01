@@ -93,6 +93,7 @@ const FILENAME_TO_CONTAINER: ReadonlyMap<string, ContainerName> = new Map([
   ['profile-cache.json', 'profile'],
   ['challenge-queue.json', 'challenge-queue'],
   ['evaluations', 'evaluations'],
+  ['threads.json', 'threads'],
 ]);
 
 /**

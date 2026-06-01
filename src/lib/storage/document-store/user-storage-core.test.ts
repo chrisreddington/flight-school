@@ -379,6 +379,7 @@ describe('resolveContainerMapping', () => {
       ['profile-cache.json', 'profile'],
       ['challenge-queue.json', 'challenge-queue'],
       ['evaluations', 'evaluations'],
+      ['threads.json', 'threads'],
     ];
     for (const [filename, container] of cases) {
       expect(core.resolveContainerMapping(filename)).toEqual({
@@ -389,6 +390,6 @@ describe('resolveContainerMapping', () => {
   });
 
   it('returns null for an unmapped filename', () => {
-    expect(core.resolveContainerMapping('threads.json')).toBeNull();
+    expect(core.resolveContainerMapping('unmapped-file.json')).toBeNull();
   });
 });
