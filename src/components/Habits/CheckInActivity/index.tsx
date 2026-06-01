@@ -103,7 +103,7 @@ export function CheckInActivity({ habits, days = DEFAULT_ACTIVITY_DAYS }: CheckI
         <Text className={styles.subtitle}>Last {days} days</Text>
       </div>
 
-      <div className={styles.grid} role="img" aria-label={`${totalCompleted} check-ins in the last ${days} days`}>
+      <div className={styles.grid} role="group" aria-label={`${totalCompleted} check-ins in the last ${days} days`}>
         {activityDays.map((activityDay) => {
           const dayLabel = `${activityDay.dateKey}: ${checkInLabel(activityDay.completedCount)}`;
 
@@ -111,6 +111,7 @@ export function CheckInActivity({ habits, days = DEFAULT_ACTIVITY_DAYS }: CheckI
             <span
               key={activityDay.dateKey}
               className={`${styles.dayCell} ${intensityClassForCount(activityDay.completedCount)}`}
+              role="img"
               title={dayLabel}
               aria-label={dayLabel}
             />

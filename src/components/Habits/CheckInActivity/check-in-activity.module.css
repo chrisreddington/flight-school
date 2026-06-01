@@ -58,22 +58,28 @@
   margin-block-start: var(--base-size-8);
 }
 
+/* Primer ships only two functional success backgrounds (muted, emphasis), so
+   the four "active" levels derive a monotonic green ramp by mixing the
+   strongest success background into the page background. Both endpoints are
+   functional tokens, so the scale stays theme-aware (light/dark/high-contrast)
+   without any hardcoded color. Level 0 is the neutral "no activity" cell,
+   matching GitHub's contribution graph. */
 .level0 {
   background: var(--bgColor-neutral-muted);
 }
 
 .level1 {
-  background: var(--bgColor-success-muted);
+  background: color-mix(in srgb, var(--bgColor-success-emphasis) 25%, var(--bgColor-default));
 }
 
 .level2 {
-  background: var(--bgColor-success-subtle);
+  background: color-mix(in srgb, var(--bgColor-success-emphasis) 50%, var(--bgColor-default));
 }
 
 .level3 {
-  background: var(--bgColor-success-emphasis);
+  background: color-mix(in srgb, var(--bgColor-success-emphasis) 75%, var(--bgColor-default));
 }
 
 .level4 {
-  background: var(--fgColor-success);
+  background: var(--bgColor-success-emphasis);
 }

@@ -48,7 +48,7 @@ describe('CheckInActivity', () => {
 
     render(<CheckInActivity habits={habits} />);
 
-    expect(screen.getByRole('img', { name: '2 check-ins in the last 30 days' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '2 check-ins in the last 30 days' })).toBeInTheDocument();
   });
 
   it('marks days with completed check-ins using intensity levels', () => {
@@ -65,6 +65,16 @@ describe('CheckInActivity', () => {
     expect(screen.getByTitle('2026-05-29: 4 check-ins')).toHaveClass(styles.level4);
   });
 
+  it('exposes each day as a labelled graphic for assistive technology', () => {
+    const habits = [createHabitWithHistory('one', [createCheckIn('2026-05-29', true)])];
+
+    render(<CheckInActivity habits={habits} />);
+
+    // The per-day cell carries its own role="img" name, so assistive tech reads
+    // it directly instead of relying on the mouse-hover title tooltip.
+    expect(screen.getByRole('img', { name: '2026-05-29: 1 check-in' })).toBeInTheDocument();
+  });
+
   it('excludes completed check-ins outside the activity window', () => {
     const habits = [
       createHabitWithHistory('one', [createCheckIn('2026-04-19', true), createCheckIn('2026-05-29', true)]),
@@ -72,7 +82,7 @@ describe('CheckInActivity', () => {
 
     render(<CheckInActivity habits={habits} />);
 
-    expect(screen.getByRole('img', { name: '1 check-ins in the last 30 days' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '1 check-ins in the last 30 days' })).toBeInTheDocument();
     expect(screen.queryByTitle('2026-04-19: 1 check-in')).not.toBeInTheDocument();
   });
 
@@ -81,7 +91,7 @@ describe('CheckInActivity', () => {
 
     render(<CheckInActivity habits={habits} />);
 
-    expect(screen.getByRole('img', { name: '0 check-ins in the last 30 days' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '0 check-ins in the last 30 days' })).toBeInTheDocument();
     expect(screen.getByTitle('2026-05-29: 0 check-ins')).toHaveClass(styles.level0);
   });
 

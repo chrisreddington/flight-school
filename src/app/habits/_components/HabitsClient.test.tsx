@@ -58,7 +58,7 @@ describe('HabitsClient', () => {
 
   it('renders the check-in activity heatmap', () => {
     renderHabits();
-    expect(screen.getByRole('img', { name: /check-ins in the last 30 days/i })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /check-ins in the last 30 days/i })).toBeInTheDocument();
   });
 
   it('summarises the current streak count from props', () => {
