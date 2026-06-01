@@ -381,7 +381,7 @@ What each script actually does:
 | --- | --- | --- |
 | `npm run dev` (alias `npm run aspire:run`) | AppHost → web on `:3000` + worker on `:3001` + dashboard wiring. | **Default.** Mirrors prod shape; AI features work. |
 | `npm run dev:web-only` | Just Next.js web on `:3000`, no worker. | UI work that doesn't exercise Copilot chat. AI routes intentionally fail fast. |
-| `npm run dev:worker` | Just the Hono worker on `:3001` (`tsx watch src/worker/bootstrap.ts`). | Combine with `dev:web-worker` to debug the worker in isolation. |
+| `npm run dev:worker` | Just the Hono worker on `:3001` via the esbuild-watch supervisor (`scripts/dev-worker.mjs`). | Combine with `dev:web-worker` to debug the worker in isolation. |
 | `npm run dev:web-worker` | Web on `:3000` pointed at a manually started local worker. | Two-terminal debug flow. |
 | `npm run build:worker` | Bundles the worker to `dist-worker/*.mjs` via esbuild + writes a minimal runtime `package.json`. | Container build (consumed by `Dockerfile.worker`). |
 | `npm run start:worker` | Runs the bundled worker (`node dist-worker/bootstrap.mjs`). | Local production-shape check. |
@@ -391,13 +391,21 @@ AppHost wiring (read alongside the code):
 
 - The resource graph is declared in [`apphost.ts`](../apphost.ts). The
   worker is wired via `addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])`
-  which spawns `tsx watch src/worker/bootstrap.ts` as a plain Node
-  process — Aspire never treats it as a Next.js app. The deployed
-  container ([`Dockerfile.worker`](../Dockerfile.worker) over
-  `dist-worker/`) runs the same plain-Node process shape — no Next.js
-  machinery in either environment — though the toolchain differs (local
-  dev runs `tsx watch` against TypeScript source; the container runs
-  the esbuild-compiled `bootstrap.mjs`).
+  which spawns a plain Node process — Aspire never treats it as a Next.js
+  app. The deployed container ([`Dockerfile.worker`](../Dockerfile.worker)
+  over `dist-worker/`) runs the same plain-Node process shape — no Next.js
+  machinery in either environment — though the toolchain differs. Local
+  `dev:worker` runs a small esbuild-watch supervisor
+  ([`scripts/dev-worker.mjs`](../scripts/dev-worker.mjs)) that mirrors the
+  production bundle options and respawns `node dist-worker/bootstrap.mjs`
+  on each rebuild; the container runs that same esbuild-compiled
+  `bootstrap.mjs` directly. (We can't use `tsx watch` here: it doesn't
+  apply esbuild's bundle-time `server-only` alias, so worker boot would
+  fail — see the `dev-worker.mjs` header for the full rationale.) The
+  supervisor spawns the worker over an IPC channel with a `--import`
+  parent-death watchdog ([`scripts/dev-worker-watchdog.mjs`](../scripts/dev-worker-watchdog.mjs))
+  so an Aspire force-stop or crash of the supervisor can't orphan a worker
+  that keeps squatting `:3001` and EADDRINUSE-crash-loops the replacement.
 - The worker resource sets a shared `COPILOT_WORKER_SECRET` and a
   distinct `OTEL_SERVICE_NAME=flight-school-worker` so the dashboard
   can tell the two processes apart.
