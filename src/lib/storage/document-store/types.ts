@@ -89,15 +89,30 @@ export interface DocumentEnvelope<T> {
   body: T;
 }
 
+/**
+ * CAS precondition for a {@link DocumentStore.put}. The two modes are mutually
+ * exclusive: `ifMatch` updates only when the stored etag is unchanged, while
+ * `ifNoneMatch: '*'` creates only when the document is absent. The `never`
+ * branches make the combination a compile error; {@link assertExclusiveCas}
+ * enforces the same invariant at runtime for non-TypeScript callers.
+ */
+export type PutCasCondition =
+  | {
+      /** Update only if the stored etag still equals this token (CAS). */
+      ifMatch?: string;
+      ifNoneMatch?: never;
+    }
+  | {
+      ifMatch?: never;
+      /** Create only if the document is absent. */
+      ifNoneMatch?: '*';
+    };
+
 /** Options accepted by {@link DocumentStore.put}. */
-export interface PutOptions {
-  /** Update only if the stored etag still equals this token (CAS). */
-  ifMatch?: string;
-  /** Create only if the document is absent. */
-  ifNoneMatch?: '*';
+export type PutOptions = PutCasCondition & {
   /** Populate the indexed columns so `list` can filter/order. */
   metadata?: DocumentMetadata;
-}
+};
 
 /** Options accepted by {@link DocumentStore.list}. */
 export interface ListOptions {

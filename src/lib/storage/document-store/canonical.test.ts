@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalizeBody } from './canonical';
+import { assertExclusiveCas, canonicalizeBody } from './canonical';
+import { DocumentConflictError } from './types';
 
 describe('canonicalizeBody', () => {
   it('produces identical output regardless of object key insertion order', () => {
@@ -55,5 +56,17 @@ describe('canonicalizeBody', () => {
     const original = canonicalizeBody({ challenges: [{ id: 'x' }], lastUpdated: '2026-01-01' });
     const changed = canonicalizeBody({ challenges: [{ id: 'y' }], lastUpdated: '2026-01-01' });
     expect(original).not.toBe(changed);
+  });
+});
+
+describe('assertExclusiveCas', () => {
+  it('throws a DocumentConflictError when both ifMatch and ifNoneMatch are set', () => {
+    expect(() => assertExclusiveCas({ ifMatch: 'etag-1', ifNoneMatch: '*' })).toThrow(DocumentConflictError);
+  });
+
+  it('accepts ifMatch alone, ifNoneMatch alone, and neither', () => {
+    expect(() => assertExclusiveCas({ ifMatch: 'etag-1' })).not.toThrow();
+    expect(() => assertExclusiveCas({ ifNoneMatch: '*' })).not.toThrow();
+    expect(() => assertExclusiveCas({})).not.toThrow();
   });
 });

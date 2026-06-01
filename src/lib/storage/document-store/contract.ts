@@ -19,6 +19,7 @@ import {
   type ContainerName,
   type DocumentEnvelope,
   type DocumentStore,
+  type PutOptions,
 } from './types';
 
 /** A small domain body used throughout the contract tests. */
@@ -252,6 +253,19 @@ export function describeDocumentStoreContract(
       const store = await getStore();
       await expect(
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body, { ifMatch: 'whatever' }),
+      ).rejects.toBeInstanceOf(DocumentConflictError);
+    });
+
+    it('rejects a put that sets both ifMatch and ifNoneMatch identically on every backend', async () => {
+      // The two CAS modes are mutually exclusive; the union type forbids the
+      // combination for TypeScript callers, but a dynamically-built options
+      // object could still set both. Every adapter must reject it the SAME way
+      // (DocumentConflictError) so a swappable backend can never honour ifMatch
+      // on one store and ifNoneMatch on another. The cast mimics a non-TS caller.
+      const store = await getStore();
+      const bothPreconditions = { ifMatch: 'x', ifNoneMatch: '*' } as unknown as PutOptions;
+      await expect(
+        store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body, bothPreconditions),
       ).rejects.toBeInstanceOf(DocumentConflictError);
     });
 

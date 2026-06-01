@@ -18,15 +18,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { createStorageFileOps } from '../scoped-file-ops';
 import { describeDocumentStoreContract } from './contract';
-import { SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
+import { DocumentConflictError, SINGLETON_DOCUMENT_ID, type DocumentStore } from './types';
 
 const TEST_STORAGE_DIR = path.join(os.tmpdir(), `flight-school-docstore-${Date.now()}`);
 
 let createFileDocumentStore: (options?: { dataDir?: string }) => DocumentStore;
+// Test seams exported from the adapter; imported via the same dynamic import so
+// the module's lazy data-dir read still happens AFTER the env stub below.
+let canonicalRootForLockKey: (resolvedRoot: string) => string;
+let withDocumentLock: <T>(lockKey: string, work: () => Promise<T>) => Promise<T>;
 
 beforeAll(async () => {
   vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_STORAGE_DIR);
-  ({ createFileDocumentStore } = await import('./file-adapter'));
+  ({ createFileDocumentStore, canonicalRootForLockKey, withDocumentLock } = await import('./file-adapter'));
 });
 
 afterAll(async () => {
@@ -157,9 +161,96 @@ describe('FileDocumentStore concurrent-CAS harness is non-vacuous', () => {
       ]);
 
       expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
-      expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
+      const rejected = outcomes.filter((outcome) => outcome.status === 'rejected');
+      expect(rejected).toHaveLength(1);
+      // The loser must fail as a CAS conflict, not some incidental error (e.g. an
+      // EACCES from canonicalisation), which would make the one-winner assertion
+      // pass for the wrong reason.
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(DocumentConflictError);
     } finally {
       await fs.unlink(symlinkDir);
     }
+  });
+});
+
+describe('FileDocumentStore lock-key determinism', () => {
+  it('derives an identical lock-key root for a symlinked and canonical spelling of one dir', async () => {
+    // Airtight, timing-free regression for canonicalRootForLockKey: two spellings
+    // of the SAME physical directory MUST canonicalise to a byte-identical root,
+    // since that root is what namespaces the write lock. A lexical key would
+    // differ here and re-open the dual-winner CAS race the symlink test guards.
+    const symlinkDir = path.join(os.tmpdir(), `flight-school-keyeq-${Date.now()}`);
+    await fs.symlink(TEST_STORAGE_DIR, symlinkDir);
+    try {
+      expect(canonicalRootForLockKey(symlinkDir)).toBe(canonicalRootForLockKey(TEST_STORAGE_DIR));
+    } finally {
+      await fs.unlink(symlinkDir);
+    }
+  });
+
+  it('derives different lock-key roots for genuinely different dirs', async () => {
+    const otherDir = path.join(os.tmpdir(), `flight-school-keyeq-other-${Date.now()}`);
+    await fs.mkdir(otherDir, { recursive: true });
+    try {
+      expect(canonicalRootForLockKey(otherDir)).not.toBe(canonicalRootForLockKey(TEST_STORAGE_DIR));
+    } finally {
+      await fs.rm(otherDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('withDocumentLock serialises by key', () => {
+  it('runs two ops that share a key strictly one after the other', async () => {
+    // Deterministic proof that a shared lock key serialises critical sections,
+    // with no reliance on libuv scheduling: op A enters and parks on a gate the
+    // test controls, so op B (same key) cannot enter until A is released.
+    const order: string[] = [];
+    let releaseA: () => void = () => {};
+    const aGate = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+
+    const aDone = withDocumentLock('shared-key', async () => {
+      order.push('A-enter');
+      await aGate;
+      order.push('A-exit');
+    });
+    const bDone = withDocumentLock('shared-key', async () => {
+      order.push('B-run');
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(order).toEqual(['A-enter']); // B is parked behind A, not run
+
+    releaseA();
+    await Promise.all([aDone, bDone]);
+    expect(order).toEqual(['A-enter', 'A-exit', 'B-run']);
+  });
+
+  it('runs two ops under different keys concurrently', async () => {
+    // Negative control: distinct keys must NOT serialise, so B completes while A
+    // is still parked. This is what proves the serialisation above is the key's
+    // doing, not an artefact of the harness.
+    const order: string[] = [];
+    let releaseA: () => void = () => {};
+    const aGate = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+
+    const aDone = withDocumentLock('key-a', async () => {
+      order.push('A-enter');
+      await aGate;
+      order.push('A-exit');
+    });
+    const bDone = withDocumentLock('key-b', async () => {
+      order.push('B-run');
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(order).toEqual(['A-enter', 'B-run']); // B did not wait on A's gate
+
+    releaseA();
+    await Promise.all([aDone, bDone]);
+    expect(order).toEqual(['A-enter', 'B-run', 'A-exit']);
   });
 });

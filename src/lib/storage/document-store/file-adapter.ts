@@ -41,7 +41,7 @@ import { logger } from '@/lib/logger';
 import { createStorageFileOps, type StorageFileOps } from '../scoped-file-ops';
 import { SAFE_PATH_SEGMENT } from '../user-scope';
 import { resolveDataDir } from '../utils';
-import { canonicalizeMetadata, decodeCursor, encodeCursor } from './canonical';
+import { assertExclusiveCas, canonicalizeMetadata, decodeCursor, encodeCursor } from './canonical';
 import {
   DocumentConflictError,
   type ContainerName,
@@ -115,19 +115,15 @@ const documentWriteLocks = new Map<string, Promise<void>>();
  * resolve to the same PHYSICAL directory via different spellings (a symlink, or
  * `/tmp` vs `/private/tmp` on macOS) share one lock key. `realpathSync` only
  * resolves paths that exist, so walk up to the nearest existing ancestor,
- * canonicalize that, and re-append the not-yet-created tail. The data dir is
- * created on first write, so once it exists every instance canonicalizes alike;
- * before then the ancestor-based key and the later dir-based key are identical
- * because the re-appended tail segments are real (non-symlink) directories.
+ * canonicalize that, and re-append the not-yet-created tail (real, non-symlink
+ * segments, so the ancestor-based and later dir-based keys agree).
  *
- * Only the "missing path" error shapes (`ENOENT`, `ENOTDIR`) are expected while
- * the tree is still being created lazily — those drive the walk-up. Any other
- * error (`EACCES`, `ELOOP`, …) means the root genuinely cannot be canonicalized,
- * so we must NOT silently fall back to a lexical key that could diverge from
- * another spelling of the same directory and re-open the dual-winner CAS race;
- * we surface it instead.
+ * Only the "missing path" shapes (`ENOENT`, `ENOTDIR`) are expected during lazy
+ * tree creation — they drive the walk-up. Any other error (`EACCES`, `ELOOP`, …)
+ * means the root genuinely cannot be canonicalized, so we surface it rather than
+ * fall back to a lexical key that could re-open the dual-winner CAS race.
  */
-function canonicalRootForLockKey(resolvedRoot: string): string {
+export function canonicalRootForLockKey(resolvedRoot: string): string {
   const pendingSegments: string[] = [];
   let candidate = resolvedRoot;
 
@@ -157,7 +153,7 @@ function canonicalRootForLockKey(resolvedRoot: string): string {
  * synchronously (before the first `await`), closing the window where two callers
  * could both read an empty slot. Reads are not locked — only writes contend.
  */
-async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
+export async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Promise<T> {
   const predecessor = documentWriteLocks.get(lockKey) ?? Promise.resolve();
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {
@@ -178,6 +174,31 @@ async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Pro
 }
 
 /**
+ * Read and decode the stored envelope for one document through the given `ops`,
+ * or null when the file is absent. Shared by {@link FileDocumentStore.getEnvelope}
+ * and the read-check inside {@link FileDocumentStore.put} so both decode alike.
+ */
+async function readEnvelopeWith<T>(
+  ops: StorageFileOps,
+  container: ContainerName,
+  partitionKey: string,
+  id: string,
+): Promise<DocumentEnvelope<T> | null> {
+  const raw = await ops.readFile(partitionDir(container, partitionKey), documentFilename(id));
+  if (raw === null) return null;
+
+  const stored = JSON.parse(raw) as StoredEnvelope<T>;
+  return {
+    id,
+    partitionKey,
+    etag: stored.etag,
+    updatedAt: stored.updatedAt,
+    metadata: stored.metadata ?? {},
+    body: stored.body,
+  };
+}
+
+/**
  * The file-backed document store. Construct one per process via
  * {@link createFileDocumentStore}.
  *
@@ -188,18 +209,19 @@ async function withDocumentLock<T>(lockKey: string, work: () => Promise<T>): Pro
  * keyed by the store's symlink-canonical root so concurrent writers reach the
  * same lock even when issued through different instances over the same `dataDir`
  * — including when those instances spell the directory differently. The
- * canonical root is recomputed at every lock acquisition (not cached at
- * construction) so the key always tracks the directory the I/O actually hits,
- * even if a symlink in the configured path is retargeted mid-process.
+ * canonical root is recomputed at every write (not cached at construction) and
+ * bound to BOTH the lock key and the file I/O ({@link #lockedIo}), so the key
+ * always tracks the directory the syscalls hit even if a symlink in the
+ * configured path is retargeted mid-process, and a write can never hold the lock
+ * for one physical directory while writing another.
  */
 class FileDocumentStore implements DocumentStore {
   readonly #ops: StorageFileOps;
 
   /**
-   * Data-dir root exactly as configured (resolved but NOT symlink-canonical);
-   * the path file I/O is bound to. {@link #lockKey} canonicalizes this per call
-   * to derive the {@link documentWriteLocks} namespace, keeping the lock key in
-   * step with the physical directory the OS resolves at syscall time.
+   * Data-dir root exactly as configured (resolved but NOT symlink-canonical).
+   * {@link #lockedIo} canonicalizes this per write to derive both the
+   * {@link documentWriteLocks} namespace and the I/O root.
    */
   readonly #ioRoot: string;
 
@@ -214,13 +236,18 @@ class FileDocumentStore implements DocumentStore {
   }
 
   /**
-   * The {@link documentWriteLocks} key for one physical document under this
-   * store. The canonical root is resolved on every call so two spellings of the
-   * same directory — or a symlink retargeted since construction — always map to
-   * the same lock. See {@link canonicalRootForLockKey}.
+   * Resolve the symlink-canonical root once for a single write and bind both the
+   * lock key and the file I/O to it. Deriving the I/O ops from the same realpath
+   * that names the lock closes the residual TOCTOU window: a realpath has no
+   * symlinks left to re-resolve, so a mid-op retarget cannot split lock namespace
+   * from write target. When the root is already canonical the instance ops are
+   * reused; otherwise a thin ops bound to the canonical root is created for this
+   * write only, so the instance keeps holding no mutable state.
    */
-  #lockKey(container: ContainerName, partitionKey: string, id: string): string {
-    return `${canonicalRootForLockKey(this.#ioRoot)}\u0000${container}/${partitionKey}/${id}`;
+  #lockedIo(container: ContainerName, partitionKey: string, id: string): { lockKey: string; ops: StorageFileOps } {
+    const canonicalRoot = canonicalRootForLockKey(this.#ioRoot);
+    const ops = canonicalRoot === this.#ioRoot ? this.#ops : createStorageFileOps(() => canonicalRoot);
+    return { lockKey: `${canonicalRoot}\u0000${container}/${partitionKey}/${id}`, ops };
   }
 
   async get<T>(container: ContainerName, partitionKey: string, id: string): Promise<T | null> {
@@ -233,19 +260,7 @@ class FileDocumentStore implements DocumentStore {
     partitionKey: string,
     id: string,
   ): Promise<DocumentEnvelope<T> | null> {
-    const dir = partitionDir(container, partitionKey);
-    const raw = await this.#ops.readFile(dir, documentFilename(id));
-    if (raw === null) return null;
-
-    const stored = JSON.parse(raw) as StoredEnvelope<T>;
-    return {
-      id,
-      partitionKey,
-      etag: stored.etag,
-      updatedAt: stored.updatedAt,
-      metadata: stored.metadata ?? {},
-      body: stored.body,
-    };
+    return readEnvelopeWith<T>(this.#ops, container, partitionKey, id);
   }
 
   async put<T>(
@@ -255,6 +270,7 @@ class FileDocumentStore implements DocumentStore {
     body: T,
     opts: PutOptions = {},
   ): Promise<DocumentEnvelope<T>> {
+    assertExclusiveCas(opts);
     const dir = partitionDir(container, partitionKey);
     const filename = documentFilename(id);
     const stored: StoredEnvelope<T> = {
@@ -266,31 +282,32 @@ class FileDocumentStore implements DocumentStore {
     const serialized = JSON.stringify(stored, null, 2);
 
     // Serialise all writes to this exact document so the read-check-write below
-    // is atomic against concurrent in-process writers (see class docs). The key
-    // is namespaced by the canonical root so two instances over the same dataDir
-    // share the lock, while stores rooted elsewhere stay independent.
-    return withDocumentLock(this.#lockKey(container, partitionKey, id), async () => {
+    // is atomic against concurrent in-process writers (see class docs). The lock
+    // key and I/O ops are both bound to the canonical root, so two instances over
+    // the same dataDir share the lock AND write the same physical file.
+    const { lockKey, ops } = this.#lockedIo(container, partitionKey, id);
+    return withDocumentLock(lockKey, async () => {
       // Create-only writes take an atomic exclusive-create path: the OS guarantees
       // exactly one of two racing first-writers succeeds, so `ifNoneMatch: '*'`
       // confers true uniqueness instead of the read-then-rename TOCTOU the upsert
       // path carries. The loser observes EEXIST and surfaces a conflict.
       if (opts.ifNoneMatch === '*') {
-        const created = await this.#ops.createFileExclusive(dir, filename, serialized);
+        const created = await ops.createFileExclusive(dir, filename, serialized);
         if (!created) {
           throw new DocumentConflictError(`document ${container}/${partitionKey}/${id} already exists`);
         }
         return { id, partitionKey, ...stored };
       }
 
-      const existing = await this.getEnvelope<T>(container, partitionKey, id);
+      const existing = await readEnvelopeWith<T>(ops, container, partitionKey, id);
       if (opts.ifMatch !== undefined && (!existing || existing.etag !== opts.ifMatch)) {
         throw new DocumentConflictError(
           `etag mismatch for ${container}/${partitionKey}/${id} (expected ${opts.ifMatch})`,
         );
       }
 
-      await this.#ops.ensureDir(dir, { mode: DIR_MODE });
-      await this.#ops.writeFile(dir, filename, serialized);
+      await ops.ensureDir(dir, { mode: DIR_MODE });
+      await ops.writeFile(dir, filename, serialized);
 
       return { id, partitionKey, ...stored };
     });
@@ -305,8 +322,9 @@ class FileDocumentStore implements DocumentStore {
    * written doc and deletes it. Either ordering ends with no document.
    */
   async remove(container: ContainerName, partitionKey: string, id: string): Promise<void> {
-    await withDocumentLock(this.#lockKey(container, partitionKey, id), async () => {
-      await this.#ops.deleteFile(partitionDir(container, partitionKey), documentFilename(id));
+    const { lockKey, ops } = this.#lockedIo(container, partitionKey, id);
+    await withDocumentLock(lockKey, async () => {
+      await ops.deleteFile(partitionDir(container, partitionKey), documentFilename(id));
     });
   }
 

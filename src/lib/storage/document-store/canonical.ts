@@ -9,7 +9,7 @@
  * @module storage/document-store/canonical
  */
 
-import type { DocumentMetadata } from './types';
+import { DocumentConflictError, type DocumentMetadata } from './types';
 
 /** The four indexed metadata fields, in a fixed order for stable hashing. */
 const INDEXED_FIELDS: readonly (keyof DocumentMetadata)[] = ['type', 'status', 'parentId', 'sortKey'];
@@ -110,5 +110,23 @@ export function decodeCursor(cursor: string): DecodedCursor | null {
     return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Reject a {@link PutOptions} that sets both `ifMatch` and `ifNoneMatch`.
+ *
+ * The two preconditions are mutually exclusive — `ifMatch` is an
+ * update-if-unchanged CAS, `ifNoneMatch: '*'` is a create-if-absent CAS — and
+ * the type system already forbids the combination for TypeScript callers. This
+ * runtime guard is the parity backstop: every adapter calls it first, so a
+ * dynamically-built or `as`-cast options object can never make one backend
+ * honour `ifMatch` while another honours `ifNoneMatch`. Throwing
+ * {@link DocumentConflictError} keeps the failure mode identical to a real CAS
+ * miss, which is what callers already handle.
+ */
+export function assertExclusiveCas(options: { ifMatch?: string; ifNoneMatch?: '*' }): void {
+  if (options.ifMatch !== undefined && options.ifNoneMatch !== undefined) {
+    throw new DocumentConflictError('put: ifMatch and ifNoneMatch are mutually exclusive');
   }
 }

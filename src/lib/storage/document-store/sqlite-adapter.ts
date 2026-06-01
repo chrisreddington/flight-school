@@ -29,7 +29,7 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { logger } from '@/lib/logger';
 import { SAFE_PATH_SEGMENT } from '../user-scope';
-import { canonicalizeMetadata, decodeCursor, encodeCursor } from './canonical';
+import { assertExclusiveCas, canonicalizeMetadata, decodeCursor, encodeCursor } from './canonical';
 import {
   DocumentConflictError,
   type ContainerName,
@@ -258,6 +258,7 @@ class SqliteDocumentStore implements DocumentStore {
     assertSafeSegment('container', container);
     assertSafeSegment('partitionKey', partitionKey);
     assertSafeSegment('id', id);
+    assertExclusiveCas(opts);
     const metadata = canonicalizeMetadata(opts.metadata);
     const bodyJson = JSON.stringify(body);
 
