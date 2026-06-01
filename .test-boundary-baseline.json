@@ -30,7 +30,6 @@
   "src/lib/api-error.test.ts": 2,
   "src/lib/api/storage-route-factory.test.ts": 3,
   "src/lib/api/streaming-utils.test.ts": 6,
-  "src/lib/copilot/activity/activity-store.test.ts": 6,
   "src/lib/copilot/activity/logger-worker.test.ts": 2,
   "src/lib/copilot/execution/http-client.test.ts": 1,
   "src/lib/copilot/execution/index.test.ts": 2,
