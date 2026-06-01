@@ -119,7 +119,7 @@ describe('createUserScopedStore tombstone guard', () => {
 
     await expect(racer.put('skills', 'current', { level: 'beginner' })).rejects.toBeInstanceOf(UserDeletedError);
 
-    expect(isUserDeleted).toHaveBeenCalledTimes(3);
+    expect(isUserDeleted.mock.calls).toHaveLength(3);
     expect(await store.get('skills', 'racer', 'current')).toBeNull();
     expect(await store.get('system', registryShardFor('racer'), registryItemId('racer'))).toBeNull();
   });

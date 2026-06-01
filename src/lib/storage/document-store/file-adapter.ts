@@ -35,7 +35,6 @@
 import 'server-only';
 import { randomUUID } from 'crypto';
 import { mkdirSync, realpathSync } from 'fs';
-import path from 'path';
 
 import { logger } from '@/lib/logger';
 import { createStorageFileOps, type StorageFileOps } from '../scoped-file-ops';
@@ -113,35 +112,16 @@ const documentWriteLocks = new Map<string, Promise<void>>();
 /**
  * Collapse symlinks and case aliases in `resolvedRoot` so two stores that
  * resolve to the same PHYSICAL directory via different spellings (a symlink, or
- * `/tmp` vs `/private/tmp` on macOS) share one lock key. `realpathSync` only
- * resolves paths that exist, so walk up to the nearest existing ancestor,
- * canonicalize that, and re-append the not-yet-created tail (real, non-symlink
- * segments, so the ancestor-based and later dir-based keys agree).
+ * `/tmp` vs `/private/tmp` on macOS) share one lock key.
  *
- * Only the "missing path" shapes (`ENOENT`, `ENOTDIR`) are expected during lazy
- * tree creation — they drive the walk-up. Any other error (`EACCES`, `ELOOP`, …)
- * means the root genuinely cannot be canonicalized, so we surface it rather than
- * fall back to a lexical key that could re-open the dual-winner CAS race.
+ * STRICT by design: `realpathSync.native` only resolves a path that exists, and
+ * {@link FileDocumentStore.#lockedIo} always materialises the root immediately
+ * before calling this. If a concurrent unlink/retarget removes the root in that
+ * window, the throw propagates (fail closed) rather than degrading to a lexical
+ * key that could re-open the dual-winner CAS race.
  */
 export function canonicalRootForLockKey(resolvedRoot: string): string {
-  const pendingSegments: string[] = [];
-  let candidate = resolvedRoot;
-
-  // Loops at most once per path segment; the terminal filesystem root is
-  // canonicalized too (it is tried before the parent-equals-self check below).
-  for (;;) {
-    try {
-      const realCandidate = realpathSync.native(candidate);
-      return pendingSegments.length === 0 ? realCandidate : path.join(realCandidate, ...pendingSegments);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
-      const parent = path.dirname(candidate);
-      if (parent === candidate) return resolvedRoot; // reached the FS root with nothing to resolve
-      pendingSegments.unshift(path.basename(candidate));
-      candidate = parent;
-    }
-  }
+  return realpathSync.native(resolvedRoot);
 }
 
 /**
@@ -239,12 +219,12 @@ class FileDocumentStore implements DocumentStore {
    * Resolve the symlink-canonical root once for a single write and bind both the
    * lock key and the file I/O to it, closing the residual TOCTOU window: a
    * realpath has no symlinks left to re-resolve, so a mid-op retarget cannot
-   * split lock namespace from write target. The root is materialised FIRST so
-   * the realpath resolves the whole path with no lazily-created lexical tail that
-   * a symlink swapped into a not-yet-created segment could later divert. When the
-   * root is already canonical the instance ops are reused; otherwise a thin ops
-   * bound to the canonical root is created for this write only, so the instance
-   * keeps holding no mutable state.
+   * split lock namespace from write target. The root is materialised FIRST, then
+   * canonicalized with a STRICT realpath (no walk-up fallback) so a concurrent
+   * unlink/retarget in the post-mkdir window fails closed instead of yielding a
+   * partly lexical key. When the root is already canonical the instance ops are
+   * reused; otherwise a thin ops bound to the canonical root is created for this
+   * write only, so the instance keeps holding no mutable state.
    */
   #lockedIo(container: ContainerName, partitionKey: string, id: string): { lockKey: string; ops: StorageFileOps } {
     mkdirSync(this.#ioRoot, { recursive: true, mode: DIR_MODE });

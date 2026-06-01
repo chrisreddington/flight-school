@@ -115,7 +115,7 @@ describe('createDocumentStore', () => {
     await store.put('system', 'p1', 'doc', { hello: 'world' });
     expect(await store.get('system', 'p1', 'doc')).toEqual({ hello: 'world' });
 
-    expect(createSqliteSpy).not.toHaveBeenCalled();
+    expect(createSqliteSpy.mock.calls).toHaveLength(0);
     expect(await readSentinelBackend()).toBe('file');
   });
 
@@ -128,14 +128,14 @@ describe('createDocumentStore', () => {
     await createDocumentStore({ backend: 'file' });
     await expect(createDocumentStore({ backend: 'sqlite' })).rejects.toThrow(/backend mismatch/i);
     // The mismatch is caught before the sqlite adapter is ever constructed.
-    expect(createSqliteSpy).not.toHaveBeenCalled();
+    expect(createSqliteSpy.mock.calls).toHaveLength(0);
   });
 
   it('selects the backend from STORAGE_BACKEND when no explicit backend is passed', async () => {
     vi.stubEnv('STORAGE_BACKEND', 'file');
     await createDocumentStore();
     expect(await readSentinelBackend()).toBe('file');
-    expect(createSqliteSpy).not.toHaveBeenCalled();
+    expect(createSqliteSpy.mock.calls).toHaveLength(0);
   });
 
   it('routes the file store to an explicit dataDir override', async () => {

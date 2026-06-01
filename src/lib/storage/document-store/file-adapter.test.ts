@@ -101,9 +101,12 @@ describe('FileDocumentStore dataDir override', () => {
   });
 
   it('lazily creates a deeply-nested, not-yet-existent dataDir on first write', async () => {
-    // Guards #lockedIo's root-materialisation step (the lock-key TOCTOU fix for
-    // lazily-created roots): a put against a root whose parents do not yet exist
-    // must still create the tree and round-trip.
+    // Non-vacuous guard for #lockedIo's root-materialisation step: it calls
+    // mkdirSync(this.#ioRoot) and then canonicalRootForLockKey, which is now a
+    // STRICT realpath. If the mkdirSync were removed, realpath would throw
+    // ENOENT on this not-yet-existent root and the put below would reject — so
+    // this round-trip only passes because the root is materialised BEFORE the
+    // lock key is derived.
     const base = path.join(os.tmpdir(), `flight-school-lazy-${Date.now()}`);
     const nestedRoot = path.join(base, 'a', 'b', 'c');
     try {
@@ -211,6 +214,16 @@ describe('FileDocumentStore lock-key determinism', () => {
     } finally {
       await fs.rm(otherDir, { recursive: true, force: true });
     }
+  });
+
+  it('fails closed (throws) on a non-existent root instead of returning a lexical key', () => {
+    // Pins the STRICT contract: canonicalRootForLockKey must NOT walk up and
+    // re-append a lexical tail for a missing root (which would re-open the
+    // dual-winner CAS race if a symlink were later swapped into the gap). A
+    // realpath of a path that does not exist throws ENOENT — that is the
+    // fail-closed behaviour #lockedIo relies on after it materialises the root.
+    const missingRoot = path.join(os.tmpdir(), `flight-school-missing-${Date.now()}`, 'x', 'y');
+    expect(() => canonicalRootForLockKey(missingRoot)).toThrow();
   });
 });
 
