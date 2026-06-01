@@ -277,6 +277,16 @@ Rules of the road:
   network promise. See `src/hooks/use-user-profile.ts` `refetch()` for
   the reference implementation and the divergent-settlement regression
   test alongside it.
+- **Session-validating queries must defeat the cache.** A query whose fetch
+  doubles as the live GitHub-token check (e.g. `useUserProfile` → `/api/profile`)
+  must use `staleTime: 0` **and** `refetchOnMount: 'always'` +
+  `refetchOnWindowFocus: 'always'`. The plain `true` form only refetches STALE
+  queries, so a remount or window-focus inside the stale window would serve
+  cached `query.data` and mask a revoked token (HTTP 200 with stale data
+  instead of a `/sign-in` redirect). With these options the cached value may
+  flash SWR-style for a sub-second background refetch, but it never suppresses
+  the revalidation. See `src/hooks/use-user-profile.ts` and its
+  remount-within-stale-window regression test.
 - **Focus invalidation is cross-tab and storage-first.** `invalidateFocusCache()`
   in `src/lib/operations/focus-broadcast.ts` clears today's focus record
   and then calls `broadcastFocusInvalidate()`, which fans out through a
