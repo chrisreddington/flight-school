@@ -3,7 +3,7 @@ import { SearchIcon } from '@primer/octicons-react';
 import { Banner, Button, Spinner, Stack } from '@primer/react';
 import { Blankslate } from '@primer/react/experimental';
 import { GeneratingBanner } from './generating-banner';
-import { HistoryEntryCard } from './history-entry-card';
+import { HistoryTimeline } from './history-timeline';
 import type { HistoryEntry } from './types';
 import { formatDateForDisplay } from './utils';
 import styles from './LearningHistory.module.css';
@@ -87,13 +87,12 @@ export function HistoryPanel({
           <GeneratingBanner topicIds={activeTopicIds} challengeIds={activeChallengeIds} goalIds={activeGoalIds} />
         )}
 
-        {filteredEntries.map((entry) => (
-          <HistoryEntryCard
-            key={entry.dateKey}
-            entry={entry}
-            isToday={entry.dateKey === todayDateKey}
-            isCollapsed={collapsedDays.has(entry.dateKey)}
-            onToggleCollapse={() => onToggleDayCollapse(entry.dateKey)}
+        {filteredEntries.length > 0 && (
+          <HistoryTimeline
+            entries={filteredEntries}
+            todayDateKey={todayDateKey}
+            collapsedDays={collapsedDays}
+            onToggleDayCollapse={onToggleDayCollapse}
             onRefresh={onRefresh}
             onSkipTopic={onSkipTopic}
             onSkipChallenge={onSkipChallenge}
@@ -109,7 +108,7 @@ export function HistoryPanel({
             activeChallengeIds={activeChallengeIds}
             activeGoalIds={activeGoalIds}
           />
-        ))}
+        )}
 
         {filteredEntries.length === 0 && !hasGenerating && (
           <Blankslate>

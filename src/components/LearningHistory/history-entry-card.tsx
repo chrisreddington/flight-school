@@ -12,11 +12,12 @@ import { ItemCard } from './item-card';
 import styles from './LearningHistory.module.css';
 import type { HistoryEntry } from './types';
 
-interface HistoryEntryCardProps {
-  entry: HistoryEntry;
-  isToday: boolean;
-  isCollapsed: boolean;
-  onToggleCollapse: () => void;
+/**
+ * Per-entry handlers and live-operation sets shared by every day in the feed.
+ * Lifting these into one type lets the day card and the Timeline wrapper share
+ * a single prop contract instead of restating ~14 fields each.
+ */
+export interface HistoryEntryHandlers {
   onRefresh: () => void;
   onSkipTopic: (topicId: string, existingTitles: string[]) => Promise<void>;
   onSkipChallenge: (challengeId: string, existingTitles: string[]) => Promise<void>;
@@ -31,6 +32,13 @@ interface HistoryEntryCardProps {
   activeTopicIds: Set<string>;
   activeChallengeIds: Set<string>;
   activeGoalIds: Set<string>;
+}
+
+interface HistoryEntryCardProps extends HistoryEntryHandlers {
+  entry: HistoryEntry;
+  isToday: boolean;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export function HistoryEntryCard({

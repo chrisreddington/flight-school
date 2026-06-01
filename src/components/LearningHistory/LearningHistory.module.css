@@ -574,6 +574,8 @@
   display: flex;
   align-items: center;
   gap: var(--base-size-8);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .itemCardChevron {
@@ -593,7 +595,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .itemCardTime {
