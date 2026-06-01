@@ -186,4 +186,40 @@ describe('LearningHistory view model', () => {
   it('should count goals that were ever completed', () => {
     expect(countCompletedGoals(createHistory())).toBe(1);
   });
+
+  it('should include days that only have habit check-ins and no focus record', () => {
+    const habit = createHabit();
+    // A check-in on a date that has no focus record at all — the kind of day
+    // (e.g. a weekend habit log with no generated focus) the timeline used to
+    // drop entirely because it only iterated focus-history dates.
+    habit.checkIns.push({
+      date: '2025-12-31',
+      value: 25,
+      completed: true,
+      timestamp: '2025-12-31T08:00:00.000Z',
+    });
+
+    const entries = buildHistoryEntries(createHistory(), { habits: [habit] }, todayDateKey);
+
+    const habitOnlyDay = entries.find((entry) => entry.dateKey === '2025-12-31');
+    expect(habitOnlyDay?.items.map((item) => item.type)).toEqual(['habit']);
+    expect(habitOnlyDay?.completedCount).toBe(1);
+    // The habit-only day threads into the same descending day order as focus days.
+    expect(entries.map((entry) => entry.dateKey)).toEqual([todayDateKey, '2026-01-02', '2025-12-31']);
+
+    const viewModel = buildLearningHistoryViewModel({
+      entries,
+      selectedDate: null,
+      typeFilter: 'all',
+      statusFilter: 'all',
+      searchQuery: '',
+      todayDateKey,
+      activeTopicCount: 0,
+      insights: null,
+      totalGoalsCompleted: 0,
+    });
+    // The activity graph cell and stats now reflect the habit-only day.
+    expect(viewModel.activityData.find((day) => day.date === '2025-12-31')?.count).toBe(1);
+    expect(viewModel.stats.habits).toBe(3);
+  });
 });

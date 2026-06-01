@@ -23,13 +23,42 @@ interface LearningHistoryViewModelInput {
   totalGoalsCompleted: number;
 }
 
+/**
+ * Empty focus record reused for habit-only days. `buildHistoryEntry` only reads
+ * from the record (never mutates it), so a single frozen instance is safe to
+ * share across every habit-only date in the feed.
+ */
+const EMPTY_FOCUS_RECORD: DailyFocusRecord = Object.freeze({
+  challenges: [],
+  goals: [],
+  learningTopics: [],
+});
+
+/**
+ * Collect every date that should become a history row: the union of focus-history
+ * dates and habit check-in dates. Keying on focus dates alone would silently drop
+ * days where the only activity was a habit check-in (e.g. a weekend log with no
+ * generated focus), hiding them from the timeline, activity graph, and stats.
+ */
+function collectHistoryDateKeys(rawHistory: FocusHistory, habits: HabitWithHistory[]): string[] {
+  const dateKeys = new Set<string>(Object.keys(rawHistory));
+  for (const habit of habits) {
+    for (const checkIn of habit.checkIns) {
+      dateKeys.add(checkIn.date);
+    }
+  }
+  return Array.from(dateKeys);
+}
+
 export function buildHistoryEntries(
   rawHistory: FocusHistory,
   habitsCollection: HabitCollection,
   todayDateKey: string,
 ): HistoryEntry[] {
-  return Object.entries(rawHistory)
-    .map(([dateKey, record]) => buildHistoryEntry(dateKey, record, habitsCollection.habits, todayDateKey))
+  return collectHistoryDateKeys(rawHistory, habitsCollection.habits)
+    .map((dateKey) =>
+      buildHistoryEntry(dateKey, rawHistory[dateKey] ?? EMPTY_FOCUS_RECORD, habitsCollection.habits, todayDateKey),
+    )
     .filter((entry) => entry.items.length > 0)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 }
