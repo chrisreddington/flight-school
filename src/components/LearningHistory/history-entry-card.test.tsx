@@ -88,6 +88,16 @@ describe('HistoryEntryCard day collapse', () => {
     expect(yesterdayHeader).toHaveAccessibleName(/Yesterday.*Monday, January 1, 2024/);
   });
 
+  it('keeps the absolute date in the accessible name for year-omitting absolute headers', () => {
+    // makeEntry()'s displayDate "Jan 1, 2024" is the absolute-header path, and
+    // formatDateForDisplay omits the year for older entries ("Mon, Jan 1"). The
+    // visually-hidden full accessibleDate must stay in the accessible name so a
+    // reverted/conditional VisuallyHidden (relative-only) is caught here.
+    render(<DayHarness entry={makeEntry()} />);
+
+    expect(getDayHeader()).toHaveAccessibleName(/Monday, January 1, 2024/);
+  });
+
   it('exposes the day header as a real toggle button with aria-expanded', () => {
     render(<DayHarness entry={makeEntry()} />);
     const dayHeader = getDayHeader();
