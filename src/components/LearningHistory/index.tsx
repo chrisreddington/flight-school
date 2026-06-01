@@ -5,7 +5,7 @@
  *
  * Two-column layout with:
  * - Left sidebar: 52-week activity graph, search, filters, date navigation
- * - Right main: Flat card list for selected date range
+ * - Right main: Timeline-threaded day sections with collapsible item cards
  * - Click on activity day to filter to that day
  * - Stats shown in sidebar
  */
