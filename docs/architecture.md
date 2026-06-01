@@ -456,6 +456,21 @@ call. See
 [`architecture-multitenant.md#storage-isolation`](architecture-multitenant.md#storage-isolation)
 for the full invariant list and migration notes.
 
+### Storage backend (document store)
+
+Per-user documents are persisted through a pluggable document store
+([`src/lib/storage/document-store/`](../src/lib/storage/document-store/)).
+A **fresh** data directory defaults to the SQLite backend; an **existing**
+directory is pinned by a `.storage-backend` sentinel that is authoritative —
+a dir already committed to `file` stays on `file` with no migration. The
+shared `resolveEffectiveBackend(dataDir)` resolves the backend with
+precedence `override > persisted sentinel > explicit STORAGE_BACKEND env >
+default`; an explicit `STORAGE_BACKEND` that contradicts the sentinel throws
+(operator misconfig), but the default deferring to the sentinel does not.
+The one-shot legacy-JSON importer ([`migrate.ts`](../src/lib/storage/migrate.ts))
+shares the same resolver so its file-backend quiesce guard always matches the
+live store.
+
 ## Observability
 
 OpenTelemetry is registered via `@vercel/otel` in the Next.js web
