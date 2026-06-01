@@ -3,6 +3,8 @@
 import { PageHeader as PrimerPageHeader } from '@primer/react';
 import type { ReactNode } from 'react';
 
+import styles from './page-header.module.css';
+
 interface PageHeaderProps {
   /** The page title text. */
   title: string;
@@ -30,8 +32,8 @@ interface PageHeaderProps {
  */
 export function PageHeader({ title, headingLevel = 'h1', description, leadingVisual, actions }: PageHeaderProps) {
   return (
-    <PrimerPageHeader>
-      <PrimerPageHeader.TitleArea>
+    <PrimerPageHeader className={styles.header}>
+      <PrimerPageHeader.TitleArea variant={headingLevel === 'h1' ? 'large' : 'medium'}>
         {leadingVisual !== undefined && (
           <PrimerPageHeader.LeadingVisual>{leadingVisual}</PrimerPageHeader.LeadingVisual>
         )}

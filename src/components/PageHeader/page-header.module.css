@@ -1,0 +1,12 @@
+/* Consistent rhythm below every page header before content begins.
+   Spacious on wide viewports, condensed on narrow so the title block never
+   pushes content below the fold on mobile. */
+.header {
+  margin-bottom: var(--base-size-24);
+}
+
+@media (max-width: 47.99rem) /* < --breakpoint-medium */ {
+  .header {
+    margin-bottom: var(--base-size-16);
+  }
+}

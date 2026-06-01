@@ -15,6 +15,7 @@
 }
 
 .sectionGroupHeading {
+  font: var(--text-title-shorthand-medium);
   margin-bottom: var(--base-size-16, 16px);
   padding-bottom: var(--base-size-8, 8px);
   border-bottom: 1px solid var(--borderColor-default, #d0d7de);
@@ -31,11 +32,14 @@
   font-size: var(--text-body-size-small, 12px);
 }
 
+/* Danger-zone heading matches the section rhythm and stays typographically
+   neutral — the destructive signal lives on the red action buttons, not on
+   oversized red heading text (GitHub's danger-zone pattern). */
 .dangerZoneHeading {
+  font: var(--text-title-shorthand-medium);
   margin-bottom: var(--base-size-16, 16px);
   padding-bottom: var(--base-size-8, 8px);
-  border-bottom: 1px solid var(--borderColor-danger, #f85149);
-  color: var(--fgColor-danger, #d1242f);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
 }
 
 .card {
@@ -46,6 +50,7 @@
 }
 
 .sectionHeading {
+  font: var(--text-title-shorthand-small);
   margin-bottom: var(--base-size-8, 8px);
 }
 
