@@ -53,6 +53,10 @@ export function HistoryEntryCard({
   activeChallengeIds,
   activeGoalIds,
 }: HistoryEntryCardProps) {
+  // Items stay mounted and are hidden with `hidden` when the day collapses, so
+  // each ItemCard keeps its local expand/collapse state across day toggles.
+  const itemsRegionId = `history-day-items-${entry.dateKey}`;
+
   return (
     <div className={styles.dateSection}>
       <button
@@ -60,6 +64,7 @@ export function HistoryEntryCard({
         className={styles.dateSectionHeader}
         onClick={onToggleCollapse}
         aria-expanded={!isCollapsed}
+        aria-controls={itemsRegionId}
       >
         <div className={styles.dateSectionLeft}>
           <span className={styles.dateSectionChevron}>
@@ -75,10 +80,13 @@ export function HistoryEntryCard({
           {entry.items.length} item{entry.items.length !== 1 ? 's' : ''}
         </span>
       </button>
-      {!isCollapsed && (
+      <div id={itemsRegionId} hidden={isCollapsed}>
         <Stack direction="vertical" gap="condensed">
-          {entry.items.map((item, index) => (
-            <div key={`${entry.dateKey}-${item.type}-${item.timestamp}-${index}`} className={styles.historyItemGroup}>
+          {entry.items.map((item) => (
+            <div
+              key={`${entry.dateKey}-${item.type}-${item.data.id}-${item.timestamp}`}
+              className={styles.historyItemGroup}
+            >
               <ItemCard
                 item={item}
                 dateKey={entry.dateKey}
@@ -112,7 +120,7 @@ export function HistoryEntryCard({
             </div>
           ))}
         </Stack>
-      )}
+      </div>
     </div>
   );
 }
