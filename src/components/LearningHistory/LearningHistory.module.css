@@ -7,7 +7,7 @@
  */
 
 /* ============================================================================
-   Container V2 - Clean two-column layout
+   Container - Clean two-column layout
    ============================================================================ */
 
 /* Page layout wrapper — inset background to match the app shell */
@@ -542,8 +542,10 @@
   opacity: 0.7;
 }
 
-.itemCardCollapsed {
-  /* Slightly more compact when collapsed */
+.itemCardCollapsed .itemCardHeader {
+  /* Tighten the header's vertical padding when the card is collapsed. */
+  padding-top: var(--base-size-6);
+  padding-bottom: var(--base-size-6);
 }
 
 .itemCardHeader {

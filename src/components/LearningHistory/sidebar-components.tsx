@@ -80,6 +80,7 @@ export const DateNavigation = memo(function DateNavigation({
                     <button
                       key={entry.dateKey}
                       type="button"
+                      aria-pressed={selectedDate === entry.dateKey}
                       className={`${styles.dateNavDay} ${selectedDate === entry.dateKey ? styles.dateNavDaySelected : ''}`}
                       onClick={() => onSelectDate(entry.dateKey)}
                     >

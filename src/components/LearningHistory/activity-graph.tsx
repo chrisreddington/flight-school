@@ -81,7 +81,7 @@ export const ActivityGraph = memo(function ActivityGraph({ activity, selectedDat
                     data-intensity={intensity}
                     onClick={() => onSelectDate(isSelected ? null : day.date)}
                     title={`${day.date}: ${day.count} item${day.count === 1 ? '' : 's'}`}
-                    aria-label={`${day.date}: ${day.count} items${isSelected ? ' (selected)' : ''}`}
+                    aria-label={`${day.date}: ${day.count} item${day.count === 1 ? '' : 's'}${isSelected ? ' (selected)' : ''}`}
                   />
                 );
               })}
