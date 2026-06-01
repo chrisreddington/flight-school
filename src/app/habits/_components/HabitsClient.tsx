@@ -85,7 +85,6 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
               totalCheckIns={totalCheckIns}
               currentStreaks={activeHabits.filter((h) => h.currentDay > 0).length}
               totalCompletions={completedHabits.length}
-              onNewHabitClick={() => setIsCreateDialogOpen(true)}
             />
 
             <CheckInActivity habits={[...activeHabits, ...completedHabits]} />
@@ -106,7 +105,15 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
             title="My Habits"
             description="Track your progress and build lasting habits"
             actions={
-              <Button variant="primary" leadingVisual={PlusIcon} onClick={() => setIsCreateDialogOpen(true)}>
+              // The empty-state Blankslate owns the single green primary ("Create
+              // a habit"), so the persistent header action steps down to default
+              // there to avoid two competing primaries; once habits exist it is
+              // the page's one primary action.
+              <Button
+                variant={activeHabits.length === 0 ? 'default' : 'primary'}
+                leadingVisual={PlusIcon}
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
                 New Habit
               </Button>
             }

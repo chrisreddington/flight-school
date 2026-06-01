@@ -201,15 +201,17 @@ export function HabitListSection({
     <>
       {/* Active Habits */}
       <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <Stack direction="horizontal" gap="condensed" align="center">
-            <FlameIcon size={20} />
-            <Heading as="h2" className={styles.sectionHeading}>
-              Active Habits
-            </Heading>
-            <CounterLabel>{activeHabits.length}</CounterLabel>
-          </Stack>
-        </div>
+        {activeHabits.length > 0 && (
+          <div className={styles.sectionHeader}>
+            <Stack direction="horizontal" gap="condensed" align="center">
+              <FlameIcon size={20} />
+              <Heading as="h2" className={styles.sectionHeading}>
+                Active Habits
+              </Heading>
+              <CounterLabel>{activeHabits.length}</CounterLabel>
+            </Stack>
+          </div>
+        )}
 
         {activeHabits.length === 0 ? (
           <Blankslate>

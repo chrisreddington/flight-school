@@ -56,6 +56,11 @@
   color: var(--fgColor-default, #1f2328);
 }
 
+.statValueMuted {
+  /* A zero stat reads as calm, not as an emphatic count. */
+  color: var(--fgColor-muted, #656d76);
+}
+
 .statLabel {
   font-size: var(--text-body-size-small, 12px);
   color: var(--fgColor-muted, #656d76);
@@ -171,8 +176,4 @@
 .sectionHeading {
   font-size: var(--text-title-size-medium, 20px);
   font-weight: var(--base-text-weight-semibold, 600);
-}
-
-.newHabitButton {
-  margin-top: var(--base-size-16, 16px);
 }
