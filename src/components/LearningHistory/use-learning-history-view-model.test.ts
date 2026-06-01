@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FocusHistory } from '@/lib/focus/types';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import {
@@ -106,6 +106,10 @@ function createHabit(): HabitWithHistory {
 }
 
 describe('LearningHistory view model', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should build sorted entries with focus items and habit check-ins', () => {
     const entries = buildHistoryEntries(createHistory(), { habits: [createHabit()] }, todayDateKey);
 
@@ -188,6 +192,12 @@ describe('LearningHistory view model', () => {
   });
 
   it('should include days that only have habit check-ins and no focus record', () => {
+    // Pin the clock so the 52-week activity window is anchored to the fixture's
+    // todayDateKey (2026-01-03); otherwise 2025-12-31 would eventually fall out
+    // of the rolling window and the activity-cell assertion would age out.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-03T12:00:00'));
+
     const habit = createHabit();
     // A check-in on a date that has no focus record at all — the kind of day
     // (e.g. a weekend habit log with no generated focus) the timeline used to
@@ -221,5 +231,42 @@ describe('LearningHistory view model', () => {
     // The activity graph cell and stats now reflect the habit-only day.
     expect(viewModel.activityData.find((day) => day.date === '2025-12-31')?.count).toBe(1);
     expect(viewModel.stats.habits).toBe(3);
+  });
+
+  it('should mark a habit-only skipped check-in as skipped, not active', () => {
+    const habit = createHabit();
+    // `skipHabitDay` records a skip as `value: false`. The day must read as
+    // skipped — matching the Skipped filter and stats — not a plain incomplete
+    // (active) check-in, which would hide the skip from the skipped views.
+    habit.checkIns.push({
+      date: '2025-12-30',
+      value: false,
+      completed: false,
+      timestamp: '2025-12-30T08:00:00.000Z',
+    });
+
+    const entries = buildHistoryEntries(createHistory(), { habits: [habit] }, todayDateKey);
+
+    const skippedDay = entries.find((entry) => entry.dateKey === '2025-12-30');
+    expect(skippedDay?.items.map((item) => item.status)).toEqual(['skipped']);
+    expect(skippedDay?.skippedCount).toBe(1);
+
+    const viewModel = buildLearningHistoryViewModel({
+      entries,
+      selectedDate: null,
+      typeFilter: 'all',
+      statusFilter: 'skipped',
+      searchQuery: '',
+      todayDateKey,
+      activeTopicCount: 0,
+      insights: null,
+      totalGoalsCompleted: 0,
+    });
+    // The skipped habit day survives the Skipped filter and lifts skipped stats
+    // alongside the existing skipped topic on today.
+    expect(
+      viewModel.filteredEntries.find((entry) => entry.dateKey === '2025-12-30')?.items.map((item) => item.status),
+    ).toEqual(['skipped']);
+    expect(viewModel.stats.skipped).toBe(2);
   });
 });

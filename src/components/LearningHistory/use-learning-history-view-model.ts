@@ -50,6 +50,16 @@ function collectHistoryDateKeys(rawHistory: FocusHistory, habits: HabitWithHisto
   return Array.from(dateKeys);
 }
 
+/**
+ * Map a habit check-in to a status: a skip (`value: false`, set by
+ * `skipHabitDay`) is 'skipped'; an otherwise-incomplete check-in is 'active'.
+ */
+function deriveHabitCheckInStatus(checkIn: DailyCheckIn): ItemStatus {
+  if (checkIn.value === false) return 'skipped';
+  if (checkIn.completed) return 'completed';
+  return 'active';
+}
+
 export function buildHistoryEntries(
   rawHistory: FocusHistory,
   habitsCollection: HabitCollection,
@@ -122,7 +132,7 @@ function buildHistoryEntry(
     const isActiveHabit = habit.state === 'active' || habit.state === 'not-started';
 
     if (checkInForDate) {
-      const status: ItemStatus = checkInForDate.completed ? 'completed' : 'active';
+      const status = deriveHabitCheckInStatus(checkInForDate);
       items.push({
         type: 'habit',
         data: habit,
@@ -130,6 +140,7 @@ function buildHistoryEntry(
         status,
       });
       if (status === 'completed') completedCount++;
+      if (status === 'skipped') skippedCount++;
     } else if (dateKey === todayDateKey && isActiveHabit) {
       items.push({
         type: 'habit',
