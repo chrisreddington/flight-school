@@ -25,14 +25,15 @@ function renderItem(item: HistoryItem) {
   return render(<ItemCard item={item} dateKey="2024-01-01" onRefresh={noop} />);
 }
 
-describe('ItemCard auto-collapse behaviour', () => {
-  it('renders an active item expanded and non-collapsible', () => {
+describe('ItemCard collapse-by-default behaviour', () => {
+  it('renders an active item collapsed by default with a title summary', () => {
     renderItem(makeTopic('active'));
 
-    expect(screen.getByTestId('topic-card')).toBeVisible();
+    expect(screen.queryByTestId('topic-card')).not.toBeInTheDocument();
+    expect(screen.getByText('Recursion deep dive')).toBeVisible();
     const header = screen.getByRole('button');
-    expect(header).toBeDisabled();
-    expect(header).not.toHaveAttribute('aria-expanded');
+    expect(header).toBeEnabled();
+    expect(header).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('renders a completed item collapsed by default with a title summary', () => {
@@ -52,6 +53,19 @@ describe('ItemCard auto-collapse behaviour', () => {
 });
 
 describe('ItemCard user toggle', () => {
+  it('expands an active item when the header is clicked, then re-collapses', () => {
+    renderItem(makeTopic('active'));
+    const header = screen.getByRole('button');
+
+    fireEvent.click(header);
+    expect(screen.getByTestId('topic-card')).toBeVisible();
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(header);
+    expect(screen.queryByTestId('topic-card')).not.toBeInTheDocument();
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('expands a completed item when the header is clicked, then re-collapses', () => {
     renderItem(makeTopic('completed'));
     const header = screen.getByRole('button');

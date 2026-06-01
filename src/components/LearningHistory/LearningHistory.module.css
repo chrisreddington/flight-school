@@ -552,6 +552,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--base-size-8);
   padding: var(--base-size-8) var(--base-size-12);
   background-color: var(--bgColor-muted);
   border: none;
@@ -566,10 +567,6 @@
 
 .itemCardHeaderClickable:hover {
   background-color: var(--bgColor-neutral-muted);
-}
-
-.itemCardHeader:disabled {
-  cursor: default;
 }
 
 .itemCardMeta {
