@@ -7,12 +7,14 @@
  * guard lives in exactly one place.
  *
  * @remarks
- * This module imports the `server-only`-tainted {@link isUserDeleted}, so it is
- * reachable from Web/API request handlers and CLI tooling but NOT from the
- * Next-free worker. A worker-safe variant would inject the tombstone seam
- * rather than importing it directly; that wiring is deferred (tracked as the
- * S1.5 worker-injection follow-up). The caller resolves `userId` from a trusted
- * source (Auth.js session) — never client input.
+ * This module imports {@link isUserDeleted} from the tombstone seam. It is
+ * reachable from Web/API request handlers, CLI tooling, AND the Next-free
+ * worker (via the evaluations/threads singleton repos): the worker esbuild
+ * shims `server-only` and neither this module nor `../tombstone` imports
+ * `next/*`, so the worker bundle stays Next-free (enforced by
+ * `scripts/check-worker-next-free.mjs`). The caller resolves `userId` from a
+ * trusted source (Auth.js session or persisted job payload) — never client
+ * input.
  *
  * @module storage/document-store/scoped-store
  */

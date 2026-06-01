@@ -6,10 +6,12 @@
  * deps-injected so it can be parity-tested without auth or env. This module
  * supplies the REAL dependencies for an already-resolved `userId`: the
  * user-scoped envelope store plus a legacy seam that reads/clears the user's
- * `users/{userId}/...` file. It is intentionally SERVER-SIDE — it imports the
- * `server-only`-marked envelope backend ({@link getUserScopedStoreForUser}) —
- * so the singleton repos built on top of it are web/server accessors, never
- * worker-reached. (The worker uses the Next-free `@/lib/storage/utils` seam.)
+ * `users/{userId}/...` file. It imports the `server-only`-marked envelope
+ * backend ({@link getUserScopedStoreForUser}), but is **reachable from the
+ * Next-free worker** for the worker-consumed singletons (evaluations, threads):
+ * the worker esbuild config aliases `server-only` to an empty shim and this
+ * module's transitive imports pull in no `next/*`, so the bundle stays
+ * Next-free. `scripts/check-worker-next-free.mjs` enforces that invariant.
  *
  * Splitting this out of `../user-storage` keeps the repos free of the auth
  * dependency (`requireUserContext`): a repo takes an explicit, already-trusted

@@ -16,7 +16,10 @@
  *
  * This module is SERVER-SIDE: it resolves real {@link CompatDeps} via
  * {@link buildCompatDeps}, which imports the `server-only` envelope backend.
- * Repos are therefore web/server accessors and never worker-reached.
+ * Most repos are web/server accessors, but the evaluations and threads
+ * singletons are also **worker-reached** — safe because the worker esbuild
+ * shims `server-only` and this chain imports no `next/*`
+ * (`scripts/check-worker-next-free.mjs` enforces it).
  *
  * @module storage/document-store/singleton-repo
  */

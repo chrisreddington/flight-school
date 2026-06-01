@@ -80,6 +80,11 @@ export interface ContainerMapping {
  * `src/app/challenge/actions.ts` — with a structurally identical
  * `{ challenges, lastUpdated }` body. Both resolve to the same envelope here,
  * so the two callers share one document exactly as they shared one file before.
+ *
+ * `evaluations` has no `.json` extension — it matches the legacy flat path
+ * `users/{userId}/evaluations` the evaluation store has always used. It is
+ * **worker-reached** (the evaluation executor writes progress), unlike the
+ * other web-only singletons here.
  */
 const FILENAME_TO_CONTAINER: ReadonlyMap<string, ContainerName> = new Map([
   ['skills-profile.json', 'skills'],
@@ -87,6 +92,7 @@ const FILENAME_TO_CONTAINER: ReadonlyMap<string, ContainerName> = new Map([
   ['focus-storage.json', 'focus'],
   ['profile-cache.json', 'profile'],
   ['challenge-queue.json', 'challenge-queue'],
+  ['evaluations', 'evaluations'],
 ]);
 
 /**

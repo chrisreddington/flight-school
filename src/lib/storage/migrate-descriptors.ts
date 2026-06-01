@@ -73,7 +73,7 @@ function parseLegacyJson(raw: string | null, context: Record<string, unknown>): 
   return parsed;
 }
 
-/** Builds descriptors for the five singleton containers from the canonical map. */
+/** Builds descriptors for the singleton containers from the canonical map. */
 function singletonDescriptors(): ContainerDescriptor[] {
   return MIGRATABLE_SINGLETON_FILENAMES.map((filename) => {
     const mapping = resolveContainerMapping(filename);

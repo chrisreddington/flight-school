@@ -378,6 +378,7 @@ describe('resolveContainerMapping', () => {
       ['focus-storage.json', 'focus'],
       ['profile-cache.json', 'profile'],
       ['challenge-queue.json', 'challenge-queue'],
+      ['evaluations', 'evaluations'],
     ];
     for (const [filename, container] of cases) {
       expect(core.resolveContainerMapping(filename)).toEqual({
