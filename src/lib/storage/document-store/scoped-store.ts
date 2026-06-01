@@ -9,9 +9,10 @@
  * @remarks
  * This module imports {@link isUserDeleted} from the tombstone seam. It is
  * reachable from Web/API request handlers, CLI tooling, AND the Next-free
- * worker (via the evaluations/threads singleton repos): the worker esbuild
- * shims `server-only` and neither this module nor `../tombstone` imports
- * `next/*`, so the worker bundle stays Next-free (enforced by
+ * worker (via the evaluations/threads singleton repos and the worker activity
+ * store, which calls {@link getUserScopedStoreForUser} directly): the worker
+ * esbuild shims `server-only` and neither this module nor `../tombstone`
+ * imports `next/*`, so the worker bundle stays Next-free (enforced by
  * `scripts/check-worker-next-free.mjs`). The caller resolves `userId` from a
  * trusted source (Auth.js session or persisted job payload) — never client
  * input.
