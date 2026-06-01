@@ -8,6 +8,29 @@
   margin-top: var(--base-size-24, 24px);
 }
 
+/* Neutral section group (Account, Preferences) — same rhythm as the danger
+   zone but with default foreground/border instead of the danger palette. */
+.section {
+  margin-top: var(--base-size-24, 24px);
+}
+
+.sectionGroupHeading {
+  margin-bottom: var(--base-size-16, 16px);
+  padding-bottom: var(--base-size-8, 8px);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.accountName {
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.accountLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+  font-size: var(--text-body-size-small, 12px);
+}
+
 .dangerZoneHeading {
   margin-bottom: var(--base-size-16, 16px);
   padding-bottom: var(--base-size-8, 8px);

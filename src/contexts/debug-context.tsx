@@ -71,6 +71,11 @@ export function DebugProvider({ children }: { children: React.ReactNode }) {
 
   const setDebugMode = useCallback((enabled: boolean) => {
     if (typeof window === 'undefined') return;
+    // Skip no-op writes: a same-value write would still notify subscribers and
+    // re-render every consumer. Guarding here keeps a controlled component that
+    // echoes its own value back (e.g. a toggle whose checked prop is this store)
+    // from driving a write -> notify -> re-render -> write feedback loop.
+    if (getDebugSnapshot() === enabled) return;
     localStorage.setItem(DEBUG_STORAGE_KEY, String(enabled));
     notifyDebugModeChange();
   }, []);

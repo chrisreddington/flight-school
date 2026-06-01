@@ -3,9 +3,21 @@
 import { DeleteMyDataDialog } from '@/components/DeleteMyDataDialog/DeleteMyDataDialog';
 import { PageHeader } from '@/components/PageHeader';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
+import { useDebugMode } from '@/contexts/debug-context';
 import { clearAllLocalData } from '@/lib/storage/clear-local-data';
-import { Banner, Button, Heading, SplitPageLayout, Stack, Text } from '@primer/react';
-import { TrashIcon } from '@primer/octicons-react';
+import {
+  Avatar,
+  Banner,
+  Button,
+  Checkbox,
+  FormControl,
+  Heading,
+  Link,
+  SplitPageLayout,
+  Stack,
+  Text,
+} from '@primer/react';
+import { MarkGithubIcon, SignOutIcon, TrashIcon } from '@primer/octicons-react';
 import { useCallback, useState } from 'react';
 
 import { signOutAction } from './actions';
@@ -16,15 +28,21 @@ interface SettingsClientProps {
 }
 
 /**
- * Client portion of the Settings page. Hosts the two destructive data
- * actions: a server-side account wipe (typed-confirmation dialog) and a
- * device-local reset (inline critical banner). The server page component
- * (`page.tsx`) resolves the authenticated identity and passes the GitHub
- * login down so the account-deletion modal can enforce typed-confirmation.
+ * Client portion of the Settings page. Surfaces the signed-in GitHub account,
+ * device-local preferences (the developer-mode toggle), and the two
+ * destructive data actions — ordered least-to-most dangerous so the danger
+ * zone sits last. The server page component (`page.tsx`) resolves the
+ * authenticated identity and passes the GitHub login down so the avatar,
+ * profile link, and account-deletion modal all bind to the real user.
+ *
+ * Developer mode is a per-device view setting (localStorage, via
+ * `useDebugMode`), not server-persisted account data — so it doesn't need the
+ * multi-tenant server storage the data actions use.
  */
 export function SettingsClient({ login }: SettingsClientProps) {
   useBreadcrumb('/settings', 'Settings', '/settings');
 
+  const { isDebugMode, setDebugMode } = useDebugMode();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showLocalResetConfirm, setShowLocalResetConfirm] = useState(false);
 
@@ -43,8 +61,51 @@ export function SettingsClient({ login }: SettingsClientProps) {
       <SplitPageLayout.Content>
         <PageHeader
           title="Settings"
-          description="Manage your account preferences and the data Flight School stores for you."
+          description="Manage your account, preferences, and the data Flight School stores for you."
         />
+
+        <section aria-labelledby="account-heading" className={styles.section}>
+          <Heading as="h2" id="account-heading" className={styles.sectionGroupHeading}>
+            Account
+          </Heading>
+          <section className={styles.card}>
+            <Stack direction="horizontal" align="center" justify="space-between" gap="normal" wrap="wrap">
+              <Stack direction="horizontal" align="center" gap="normal">
+                <Avatar src={`https://github.com/${login}.png?size=80`} size={48} alt="" />
+                <Stack direction="vertical" gap="none">
+                  <Text className={styles.accountName}>@{login}</Text>
+                  <Link
+                    href={`https://github.com/${login}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.accountLink}
+                  >
+                    <MarkGithubIcon size={14} /> View your GitHub profile
+                  </Link>
+                </Stack>
+              </Stack>
+              <Button leadingVisual={SignOutIcon} onClick={() => void signOutAction()}>
+                Sign out
+              </Button>
+            </Stack>
+          </section>
+        </section>
+
+        <section aria-labelledby="preferences-heading" className={styles.section}>
+          <Heading as="h2" id="preferences-heading" className={styles.sectionGroupHeading}>
+            Preferences
+          </Heading>
+          <section className={styles.card}>
+            <FormControl>
+              <Checkbox checked={isDebugMode} onChange={(event) => setDebugMode(event.target.checked)} />
+              <FormControl.Label>Developer mode</FormControl.Label>
+              <FormControl.Caption>
+                Show tool names, performance metrics, and the AI activity panel (⌘⇧A on this device).
+              </FormControl.Caption>
+            </FormControl>
+          </section>
+        </section>
+
         <section aria-labelledby="danger-zone-heading" className={styles.dangerZoneSection}>
           <Heading as="h2" id="danger-zone-heading" className={styles.dangerZoneHeading}>
             Danger zone

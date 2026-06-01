@@ -99,6 +99,22 @@
   display: none;
 }
 
+/* On phones the four tabs are wider than the content column and the scrollbar
+   is hidden above, so fade the right edge as an affordance that more tabs lie
+   beyond the fold. The mask is alpha-only (black = opaque), not a brand color.
+   Trade-off: scrolled fully right, the last tab's trailing edge softens
+   slightly — acceptable versus a hard, unhinted clip. */
+@media (max-width: 767px) {
+  .focusTabs [role='tablist'] {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    /* Trailing padding equal to the fade width so the last tab can scroll clear
+       of the mask — its label, active underline, and focus ring stay crisp for
+       keyboard users instead of softening under the fade at scroll end. */
+    padding-inline-end: var(--base-size-24, 24px);
+  }
+}
+
 .focusContent {
   /* Container for tab content */
 }

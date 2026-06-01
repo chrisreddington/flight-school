@@ -3,6 +3,12 @@
 .container {
   display: flex;
   height: 100%;
+  /* Anchor a chat-shaped panel height even when few threads keep the inline
+     sidebar short. Without a floor the panel collapses to its content height,
+     letting the composer ride up under the header and leaving dead space
+     below it on the dashboard. Cap the floor against the viewport (70svh) so
+     short phones / landscape don't get a chat block that dominates the page. */
+  min-height: min(30rem, 70svh);
   width: 100%;
   overflow: hidden;
 }

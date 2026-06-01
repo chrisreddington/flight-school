@@ -2,11 +2,26 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { SettingsClient } from './SettingsClient';
+import { signOutAction } from './actions';
+
+// Hoisted mock fns so the module factories below can reference them. The
+// debugState object lets individual tests flip the initial developer-mode
+// value (the mock reads it live) to cover both the off->on and on->off paths.
+const { setDebugMode, debugState } = vi.hoisted(() => ({
+  setDebugMode: vi.fn(),
+  debugState: { isDebugMode: false },
+}));
 
 // Breadcrumb context is only used for side-effects (registration); stub it
 // so the hook doesn't error in a bare render tree.
 vi.mock('@/contexts/breadcrumb-context', () => ({
   useBreadcrumb: vi.fn(),
+}));
+
+// Developer-mode preference comes from the debug context (localStorage-backed
+// in the app); stub it so the toggle has a deterministic initial state.
+vi.mock('@/contexts/debug-context', () => ({
+  useDebugMode: () => ({ isDebugMode: debugState.isDebugMode, setDebugMode, toggleDebugMode: vi.fn() }),
 }));
 
 // Server action — cannot run in jsdom.
@@ -31,6 +46,7 @@ function renderSettings(login = 'octocat') {
 describe('SettingsClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    debugState.isDebugMode = false;
   });
 
   it('renders "Settings" as the page h1', () => {
@@ -41,6 +57,66 @@ describe('SettingsClient', () => {
   it('exposes a "Danger zone" region landmark', () => {
     renderSettings();
     expect(screen.getByRole('region', { name: 'Danger zone' })).toBeInTheDocument();
+  });
+
+  it('orders the sections account -> preferences -> danger zone so destructive actions sit last', () => {
+    renderSettings();
+    const account = screen.getByRole('region', { name: 'Account' });
+    const preferences = screen.getByRole('region', { name: 'Preferences' });
+    const dangerZone = screen.getByRole('region', { name: 'Danger zone' });
+
+    expect(account.compareDocumentPosition(preferences) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(preferences.compareDocumentPosition(dangerZone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  describe('account section', () => {
+    it('shows the signed-in GitHub handle and a link to that profile', () => {
+      renderSettings('monalisa');
+      const account = screen.getByRole('region', { name: 'Account' });
+
+      expect(within(account).getByText('@monalisa')).toBeInTheDocument();
+      expect(within(account).getByRole('link', { name: /view your github profile/i })).toHaveAttribute(
+        'href',
+        'https://github.com/monalisa',
+      );
+    });
+
+    it('signs the user out when "Sign out" is clicked', () => {
+      renderSettings();
+      const account = screen.getByRole('region', { name: 'Account' });
+
+      fireEvent.click(within(account).getByRole('button', { name: /sign out/i }));
+
+      expect(signOutAction).toHaveBeenLastCalledWith();
+    });
+  });
+
+  describe('preferences section', () => {
+    it('renders the developer-mode toggle reflecting the current state', () => {
+      renderSettings();
+      const toggle = screen.getByRole('checkbox', { name: /developer mode/i });
+      expect(toggle).not.toBeChecked();
+    });
+
+    it('updates the developer-mode preference when the toggle is flipped', () => {
+      renderSettings();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: /developer mode/i }));
+
+      expect(setDebugMode).toHaveBeenLastCalledWith(true);
+    });
+
+    it('reflects developer mode already enabled and turns it back off when flipped', () => {
+      debugState.isDebugMode = true;
+      renderSettings();
+
+      const toggle = screen.getByRole('checkbox', { name: /developer mode/i });
+      expect(toggle).toBeChecked();
+
+      fireEvent.click(toggle);
+
+      expect(setDebugMode).toHaveBeenLastCalledWith(false);
+    });
   });
 
   it('contains both destructive action buttons inside the Danger zone region', () => {
