@@ -255,10 +255,13 @@ class SqliteDocumentStore implements DocumentStore {
     body: T,
     opts: PutOptions = {},
   ): Promise<DocumentEnvelope<T>> {
+    // CAS-mode validation runs before segment validation so a call that is both
+    // malformed (both CAS modes) and has an unsafe segment fails identically to
+    // the file adapter — a DocumentConflictError, never the segment error.
+    assertExclusiveCas(opts);
     assertSafeSegment('container', container);
     assertSafeSegment('partitionKey', partitionKey);
     assertSafeSegment('id', id);
-    assertExclusiveCas(opts);
     const metadata = canonicalizeMetadata(opts.metadata);
     const bodyJson = JSON.stringify(body);
 

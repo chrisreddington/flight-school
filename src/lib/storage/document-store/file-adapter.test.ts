@@ -99,6 +99,21 @@ describe('FileDocumentStore dataDir override', () => {
       await fs.rm(overrideDir, { recursive: true, force: true });
     }
   });
+
+  it('lazily creates a deeply-nested, not-yet-existent dataDir on first write', async () => {
+    // Guards #lockedIo's root-materialisation step (the lock-key TOCTOU fix for
+    // lazily-created roots): a put against a root whose parents do not yet exist
+    // must still create the tree and round-trip.
+    const base = path.join(os.tmpdir(), `flight-school-lazy-${Date.now()}`);
+    const nestedRoot = path.join(base, 'a', 'b', 'c');
+    try {
+      const store = createFileDocumentStore({ dataDir: nestedRoot });
+      await store.put('skills', 'user-a', SINGLETON_DOCUMENT_ID, { label: 'lazy' });
+      expect(await store.get('skills', 'user-a', SINGLETON_DOCUMENT_ID)).toEqual({ label: 'lazy' });
+    } finally {
+      await fs.rm(base, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('FileDocumentStore concurrent-CAS harness is non-vacuous', () => {

@@ -162,15 +162,12 @@ export function describeDocumentStoreContract(
       const store = await getStore();
       const seeded = await store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
 
-      // Both writers hold the SAME pre-race etag. For async-I/O adapters (file)
-      // both calls reach their read-check before either write commits — a read
-      // (fs.readFile) never resolves synchronously, so both are in-flight before
-      // either write — so without serialisation both would observe a matching
-      // etag and both would win. For synchronous adapters (sqlite, DatabaseSync)
-      // the two calls run strictly sequentially and one-winner falls out of the
-      // ordering itself; the assertions below still pin CAS correctness (one
-      // winner, one DocumentConflictError) on every backend. Cross-connection
-      // atomicity for sqlite is exercised in cross-process.integration.test.ts.
+      // Both writers hold the SAME pre-race etag. On async-I/O adapters (file)
+      // both reach their read-check before either write commits, so without
+      // serialisation both would observe a matching etag and win; on synchronous
+      // adapters (sqlite) the calls run sequentially and one-winner falls out of
+      // ordering. The assertions pin CAS correctness (one winner, one conflict)
+      // on every backend. sqlite cross-connection: cross-process.integration.test.ts.
       const outcomes = await Promise.allSettled([
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 1 }, { ifMatch: seeded.etag }),
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 2 }, { ifMatch: seeded.etag }),
@@ -192,11 +189,9 @@ export function describeDocumentStoreContract(
       const seeded = await store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
 
       // A stale-etag update racing a remove must never leave the losing write's
-      // body behind. If the update commits first, the remove then deletes it; if
-      // the remove commits first, the update sees an absent doc and its etag
-      // check fails. Either ordering ends with no document — the put outcome
-      // itself is order-dependent, so only the no-resurrection invariant is
-      // asserted.
+      // body behind: whichever commits first, the other observes it and the doc
+      // ends absent. The put outcome is order-dependent, so only the
+      // no-resurrection invariant is asserted.
       await Promise.allSettled([
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, { ...body, count: 99 }, { ifMatch: seeded.etag }),
         store.remove(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID),
@@ -209,8 +204,7 @@ export function describeDocumentStoreContract(
       it('resolves concurrent ifMatch updates across two instances over one backend to one winner', async () => {
         // Two SEPARATE instances over the SAME physical backend. A per-instance
         // lock (the round-3 regression) would give each its own mutex and let
-        // both observe the seeded etag and both win; the invariant demands a
-        // single winner regardless of which instance issued the write.
+        // both win; the invariant demands a single winner across instances.
         const [storeOne, storeTwo] = await options.getPairedStores!();
         const seeded = await storeOne.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
 
@@ -231,10 +225,9 @@ export function describeDocumentStoreContract(
       });
 
       it('never resurrects a document removed through one instance while another updates it', async () => {
-        // The remove-vs-put no-resurrection invariant must also hold when the two
-        // racers are SEPARATE instances over one backend: remove() takes the same
-        // canonical per-document lock as put(), so a stale update on one instance
-        // cannot reinstate a document deleted through the other.
+        // The remove-vs-put no-resurrection invariant must also hold across two
+        // SEPARATE instances over one backend: remove() takes the same canonical
+        // per-document lock as put().
         const [storeOne, storeTwo] = await options.getPairedStores!();
         const seeded = await storeOne.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body);
 
@@ -260,12 +253,21 @@ export function describeDocumentStoreContract(
       // The two CAS modes are mutually exclusive; the union type forbids the
       // combination for TypeScript callers, but a dynamically-built options
       // object could still set both. Every adapter must reject it the SAME way
-      // (DocumentConflictError) so a swappable backend can never honour ifMatch
-      // on one store and ifNoneMatch on another. The cast mimics a non-TS caller.
+      // (DocumentConflictError). The cast mimics a non-TS caller.
       const store = await getStore();
       const bothPreconditions = { ifMatch: 'x', ifNoneMatch: '*' } as unknown as PutOptions;
       await expect(
         store.put(CONTAINER, 'user-a', SINGLETON_DOCUMENT_ID, body, bothPreconditions),
+      ).rejects.toBeInstanceOf(DocumentConflictError);
+    });
+
+    it('rejects both CAS options before validating an unsafe segment on every backend', async () => {
+      // Precedence parity: a both-CAS + unsafe-segment call rejects with the CAS
+      // error (DocumentConflictError), not the segment error, on every adapter.
+      const store = await getStore();
+      const bothPreconditions = { ifMatch: 'x', ifNoneMatch: '*' } as unknown as PutOptions;
+      await expect(
+        store.put(CONTAINER, '../escape', SINGLETON_DOCUMENT_ID, body, bothPreconditions),
       ).rejects.toBeInstanceOf(DocumentConflictError);
     });
 

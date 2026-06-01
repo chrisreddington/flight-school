@@ -34,7 +34,7 @@
 
 import 'server-only';
 import { randomUUID } from 'crypto';
-import { realpathSync } from 'fs';
+import { mkdirSync, realpathSync } from 'fs';
 import path from 'path';
 
 import { logger } from '@/lib/logger';
@@ -237,14 +237,17 @@ class FileDocumentStore implements DocumentStore {
 
   /**
    * Resolve the symlink-canonical root once for a single write and bind both the
-   * lock key and the file I/O to it. Deriving the I/O ops from the same realpath
-   * that names the lock closes the residual TOCTOU window: a realpath has no
-   * symlinks left to re-resolve, so a mid-op retarget cannot split lock namespace
-   * from write target. When the root is already canonical the instance ops are
-   * reused; otherwise a thin ops bound to the canonical root is created for this
-   * write only, so the instance keeps holding no mutable state.
+   * lock key and the file I/O to it, closing the residual TOCTOU window: a
+   * realpath has no symlinks left to re-resolve, so a mid-op retarget cannot
+   * split lock namespace from write target. The root is materialised FIRST so
+   * the realpath resolves the whole path with no lazily-created lexical tail that
+   * a symlink swapped into a not-yet-created segment could later divert. When the
+   * root is already canonical the instance ops are reused; otherwise a thin ops
+   * bound to the canonical root is created for this write only, so the instance
+   * keeps holding no mutable state.
    */
   #lockedIo(container: ContainerName, partitionKey: string, id: string): { lockKey: string; ops: StorageFileOps } {
+    mkdirSync(this.#ioRoot, { recursive: true, mode: DIR_MODE });
     const canonicalRoot = canonicalRootForLockKey(this.#ioRoot);
     const ops = canonicalRoot === this.#ioRoot ? this.#ops : createStorageFileOps(() => canonicalRoot);
     return { lockKey: `${canonicalRoot}\u0000${container}/${partitionKey}/${id}`, ops };
