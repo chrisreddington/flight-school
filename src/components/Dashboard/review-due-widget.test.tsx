@@ -54,23 +54,12 @@ describe('ReviewDueWidget', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders nothing for a brand-new user with no history', async () => {
+  it('renders nothing when no candidates are due', () => {
     useSpacedRepCandidatesMock.mockReturnValue({ candidates: [], isLoading: false });
-    getHistoryMock.mockResolvedValue({});
 
     const { container } = render(<ReviewDueWidget />);
 
-    await waitFor(() => expect(getHistoryMock).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
-  });
-
-  it('shows a caught-up state when history exists but nothing is due', async () => {
-    useSpacedRepCandidatesMock.mockReturnValue({ candidates: [], isLoading: false });
-    getHistoryMock.mockResolvedValue({ '2026-01-01': {} });
-
-    render(<ReviewDueWidget />);
-
-    expect(await screen.findByText(/You're all caught up/)).toBeInTheDocument();
   });
 
   it('lists due candidates with a quiz action', () => {

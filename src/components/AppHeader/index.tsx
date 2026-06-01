@@ -20,7 +20,6 @@ import { useBreadcrumbContext } from '@/contexts/breadcrumb-context';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import {
-  BugIcon,
   ChevronRightIcon,
   CopilotIcon,
   FlameIcon,
@@ -42,14 +41,13 @@ import styles from './AppHeader.module.css';
  * Features:
  * - Flight School logo (always links home)
  * - Dynamic breadcrumb trail based on navigation history
- * - Debug mode toggle
  * - User profile menu
  */
 export function AppHeader() {
   const { data: profile, isLoading } = useUserProfile();
   const avatarUrl = profile?.user?.avatarUrl || 'https://avatars.githubusercontent.com/u/0?v=4';
   const username = profile?.user?.login || 'user';
-  const { isDebugMode, toggleDebugMode } = useDebugMode();
+  const { isDebugMode } = useDebugMode();
   const { breadcrumbs } = useBreadcrumbContext();
 
   return (
@@ -65,17 +63,6 @@ export function AppHeader() {
               <span className={styles.logoText}>Flight School</span>
             </Stack>
           </Link>
-
-          <a
-            href="https://github.com/github/copilot-sdk"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.sdkBadgeLink}
-          >
-            <Label variant="accent" size="small">
-              Copilot SDK Demo
-            </Label>
-          </a>
 
           {isDebugMode && (
             <Label variant="danger" size="small">
@@ -127,12 +114,13 @@ export function AppHeader() {
             </ActionMenu.Anchor>
             <ActionMenu.Overlay width="medium">
               <ActionList>
-                <ActionList.Item inert>
+                <ActionList.LinkItem href={`https://github.com/${username}`} target="_blank" rel="noopener noreferrer">
                   <ActionList.LeadingVisual>
                     <PersonIcon />
                   </ActionList.LeadingVisual>
                   @{username}
-                </ActionList.Item>
+                  <ActionList.Description>View your GitHub profile</ActionList.Description>
+                </ActionList.LinkItem>
                 <ActionList.Divider />
                 <ActionList.Group title="Learning">
                   <ActionList.LinkItem href="/">
@@ -195,26 +183,6 @@ export function AppHeader() {
                   Copilot SDK
                   <ActionList.Description>Build your own AI apps</ActionList.Description>
                 </ActionList.LinkItem>
-                {process.env.NODE_ENV === 'development' && (
-                  <>
-                    <ActionList.Divider />
-                    <ActionList.Item onSelect={toggleDebugMode}>
-                      <ActionList.LeadingVisual>
-                        <BugIcon />
-                      </ActionList.LeadingVisual>
-                      Debug Mode
-                      <ActionList.TrailingVisual>{isDebugMode ? 'On' : 'Off'}</ActionList.TrailingVisual>
-                    </ActionList.Item>
-                  </>
-                )}
-                <ActionList.Divider />
-                <ActionList.Item disabled>
-                  {profile?.meta?.authMethod === 'github-oauth' && 'Signed in with GitHub'}
-                  {(!profile?.meta?.authMethod || profile?.meta?.authMethod === 'none') &&
-                    (profile?.user?.login && profile.user.login !== 'demo-user'
-                      ? 'Signed in with GitHub'
-                      : 'Not authenticated')}
-                </ActionList.Item>
               </ActionList>
             </ActionMenu.Overlay>
           </ActionMenu>

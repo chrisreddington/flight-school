@@ -323,6 +323,7 @@ export function LearningHistory({ activeTab = 'history' }: LearningHistoryProps)
           aria-label="Activity and filters"
         >
           <LearningHistorySidebar
+            activeTab={activeTab}
             activityData={activityData}
             selectedDate={selectedDate}
             onSelectDate={handleSelectDate}

@@ -9,7 +9,7 @@
  */
 
 import { FlameIcon, PlusIcon } from '@primer/octicons-react';
-import { Button } from '@primer/react';
+import { Button, Text } from '@primer/react';
 import styles from '@/app/habits/habits.module.css';
 
 interface HabitStatsSectionProps {
@@ -31,7 +31,9 @@ export function HabitStatsSection({
     <div className={styles.sidebarCard}>
       <div className={styles.sidebarHeader}>
         <FlameIcon size={20} className={styles.sidebarIcon} />
-        <p className={styles.sidebarTitle}>Habit Tracker</p>
+        <Text as="h2" className={styles.sidebarTitle}>
+          Habit Tracker
+        </Text>
       </div>
       <p className={styles.sidebarSubtitle}>Build lasting habits</p>
 

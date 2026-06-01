@@ -20,11 +20,6 @@
   .header {
     padding: var(--base-size-12, 12px) var(--base-size-16, 16px);
   }
-
-  /* Marketing badge is non-essential chrome on small screens. */
-  .sdkBadgeLink {
-    display: none;
-  }
 }
 
 .logoLink {
@@ -94,7 +89,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  border-radius: 50%;
+  border-radius: var(--borderRadius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -120,16 +115,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--borderRadius-full);
   background-color: var(--bgColor-muted, #f6f8fa);
-}
-
-/* SDK Badge Link */
-.sdkBadgeLink {
-  text-decoration: none;
-}
-
-.sdkBadgeLink:hover {
-  text-decoration: none;
-  opacity: 0.8;
 }

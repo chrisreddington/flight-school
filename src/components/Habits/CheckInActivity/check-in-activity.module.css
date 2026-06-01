@@ -13,7 +13,10 @@
 }
 
 .title {
+  font-size: var(--text-body-size-large, 16px);
   font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-default);
+  margin: 0;
 }
 
 .subtitle,

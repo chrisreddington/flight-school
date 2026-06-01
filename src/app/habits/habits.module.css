@@ -169,7 +169,8 @@
 }
 
 .sectionHeading {
-  font-size: 1.25rem;
+  font-size: var(--text-title-size-medium, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
 }
 
 .newHabitButton {

@@ -6,8 +6,8 @@
  * all mutations, dialogs, and re-fetch on completion.
  */
 
-import { LightBulbIcon } from '@primer/octicons-react';
-import { Banner, Spinner, SplitPageLayout, Stack } from '@primer/react';
+import { LightBulbIcon, PlusIcon } from '@primer/octicons-react';
+import { Banner, Button, Spinner, SplitPageLayout, Stack } from '@primer/react';
 import dynamic from 'next/dynamic';
 import { useCallback, useState } from 'react';
 
@@ -105,7 +105,15 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
         </SplitPageLayout.Pane>
 
         <SplitPageLayout.Content>
-          <PageHeader title="My Habits" description="Track your progress and build lasting habits" />
+          <PageHeader
+            title="My Habits"
+            description="Track your progress and build lasting habits"
+            actions={
+              <Button variant="primary" leadingVisual={PlusIcon} onClick={() => setIsCreateDialogOpen(true)}>
+                New Habit
+              </Button>
+            }
+          />
 
           {isReloading && (
             <Stack direction="horizontal" align="center" gap="condensed">

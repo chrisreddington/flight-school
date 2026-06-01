@@ -2,7 +2,7 @@
 
 import { Banner, Button, Label, Stack } from '@primer/react';
 import { BookIcon } from '@primer/octicons-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { TopicQuiz } from '@/components/TopicQuiz';
 import { useSpacedRepCandidates } from '@/hooks/use-spaced-rep-candidates';
@@ -47,27 +47,7 @@ function findLatestTopicRecord(
 export function ReviewDueWidget() {
   const { candidates, isLoading } = useSpacedRepCandidates();
   const [selectedTopic, setSelectedTopic] = useState<SelectedTopic | null>(null);
-  const [hasHistory, setHasHistory] = useState<boolean>(false);
   const [quizError, setQuizError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isActive = true;
-
-    (async () => {
-      try {
-        const history = await focusStore.getHistory();
-        if (isActive) {
-          setHasHistory(Object.keys(history).length > 0);
-        }
-      } catch {
-        // ignore
-      }
-    })();
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
 
   const handleStartQuiz = useCallback(async (candidate: SpacedRepCandidate) => {
     try {
@@ -101,22 +81,11 @@ export function ReviewDueWidget() {
     return null;
   }
 
+  // Nothing due: stay out of the way entirely rather than occupying prime
+  // dashboard space with an empty "all caught up" banner. The widget only
+  // appears when there is something actionable to review.
   if (candidates.length === 0) {
-    if (!hasHistory) {
-      return null;
-    }
-
-    return (
-      <section className={styles.card}>
-        <header className={styles.header}>
-          <h3 className={styles.title}>
-            <BookIcon size={16} className={styles.titleIcon} />
-            Spaced Review
-          </h3>
-          <p className={styles.subtitle}>You&apos;re all caught up! Topics will appear here when due for review.</p>
-        </header>
-      </section>
-    );
+    return null;
   }
 
   return (

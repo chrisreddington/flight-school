@@ -13,7 +13,6 @@ import {
   GraphIcon,
   KebabHorizontalIcon,
   PencilIcon,
-  PlusIcon,
   SkipIcon,
   StopIcon,
   TrashIcon,
@@ -210,9 +209,6 @@ export function HabitListSection({
             </Heading>
             <CounterLabel>{activeHabits.length}</CounterLabel>
           </Stack>
-          <Button variant="primary" size="small" leadingVisual={PlusIcon} onClick={onNewHabitClick}>
-            New Habit
-          </Button>
         </div>
 
         {activeHabits.length === 0 ? (

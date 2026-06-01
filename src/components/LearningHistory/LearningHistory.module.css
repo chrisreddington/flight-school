@@ -210,19 +210,19 @@
 }
 
 .activityCell52[data-intensity='1'] {
-  background-color: #9be9a8;
+  background-color: var(--bgColor-success-muted);
 }
 
 .activityCell52[data-intensity='2'] {
-  background-color: #40c463;
+  background-color: var(--bgColor-success-subtle);
 }
 
 .activityCell52[data-intensity='3'] {
-  background-color: #30a14e;
+  background-color: var(--bgColor-success-emphasis);
 }
 
 .activityCell52[data-intensity='4'] {
-  background-color: #216e39;
+  background-color: var(--fgColor-success);
 }
 
 .activityCellSelected {
@@ -875,19 +875,19 @@
 }
 
 .activityCell[data-intensity='1'] {
-  background-color: var(--bgColor-success-muted, #9be9a8);
+  background-color: var(--bgColor-success-muted);
 }
 
 .activityCell[data-intensity='2'] {
-  background-color: var(--bgColor-success-emphasis, #40c463);
+  background-color: var(--bgColor-success-subtle);
 }
 
 .activityCell[data-intensity='3'] {
-  background-color: #30a14e;
+  background-color: var(--bgColor-success-emphasis);
 }
 
 .activityCell[data-intensity='4'] {
-  background-color: #216e39;
+  background-color: var(--fgColor-success);
 }
 
 /* Filters V1 */
