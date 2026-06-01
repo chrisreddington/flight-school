@@ -216,14 +216,18 @@ describe('FileDocumentStore lock-key determinism', () => {
     }
   });
 
-  it('fails closed (throws) on a non-existent root instead of returning a lexical key', () => {
+  it('fails closed (throws ENOENT) on a non-existent root instead of returning a lexical key', async () => {
     // Pins the STRICT contract: canonicalRootForLockKey must NOT walk up and
     // re-append a lexical tail for a missing root (which would re-open the
     // dual-winner CAS race if a symlink were later swapped into the gap). A
     // realpath of a path that does not exist throws ENOENT — that is the
     // fail-closed behaviour #lockedIo relies on after it materialises the root.
     const missingRoot = path.join(os.tmpdir(), `flight-school-missing-${Date.now()}`, 'x', 'y');
-    expect(() => canonicalRootForLockKey(missingRoot)).toThrow();
+    // Prove the precondition: the root genuinely does not exist at assertion time.
+    await expect(fs.stat(missingRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    // And assert the SPECIFIC missing-path failure mode, not just any throw, so
+    // a future unrelated error path can't make this guard pass vacuously.
+    expect(() => canonicalRootForLockKey(missingRoot)).toThrow(expect.objectContaining({ code: 'ENOENT' }));
   });
 });
 
