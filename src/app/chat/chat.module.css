@@ -1,0 +1,38 @@
+/* chat.module.css
+ *
+ * Full-height wrapper for the dedicated /chat surface. The page fills the
+ * viewport beneath the AppHeader so the LearningChat transcript and composer
+ * get real height instead of collapsing to the component's min-height floor.
+ */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+.content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--breakpoint-xlarge, 1280px);
+  margin-inline: auto;
+  padding: var(--base-size-24, 24px);
+}
+
+/* The chat host is a flex child that grows to fill the content column; the
+   LearningChat root is height:100%, so it stretches to this resolved height. */
+.chatHost {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+@media (max-width: 47.99rem) /* --breakpoint-medium */ {
+  .content {
+    padding: var(--base-size-16, 16px);
+  }
+}

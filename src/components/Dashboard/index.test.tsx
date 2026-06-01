@@ -15,7 +15,11 @@ vi.mock('@/hooks/use-ai-focus', () => ({
 }));
 
 vi.mock('@/hooks/use-learning-chat', () => ({
-  useLearningChat: () => ({ threads: [], activeThreadId: null }),
+  useLearningChat: () => ({ threads: [], createThread: vi.fn(), sendMessage: vi.fn() }),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock('@/hooks/use-user-profile', () => ({
@@ -24,7 +28,9 @@ vi.mock('@/hooks/use-user-profile', () => ({
 }));
 
 vi.mock('../AppHeader', () => ({ AppHeader: () => <div>app-header</div> }));
-vi.mock('../LearningChat', () => ({ LearningChat: () => <div>learning-chat</div> }));
+vi.mock('./continue-learning-section', () => ({
+  ContinueLearningSection: () => <div>continue-learning</div>,
+}));
 vi.mock('./daily-focus-section', () => ({ DailyFocusSection: () => <div>daily-focus</div> }));
 vi.mock('./review-due-widget', () => ({ ReviewDueWidget: () => <div>review-due</div> }));
 vi.mock('./profile-activity-section', () => ({ ProfileActivitySection: () => <div>profile-activity</div> }));
@@ -52,7 +58,7 @@ describe('Dashboard', () => {
 
     expect(screen.getByText('daily-focus')).toBeInTheDocument();
     expect(screen.getByText('review-due')).toBeInTheDocument();
-    expect(screen.getByText('learning-chat')).toBeInTheDocument();
+    expect(screen.getByText('continue-learning')).toBeInTheDocument();
   });
 
   it('renders the activity sidebar pane', () => {

@@ -9,7 +9,7 @@
 
 'use client';
 
-import { FlameIcon, HistoryIcon, HomeIcon, MortarBoardIcon } from '@primer/octicons-react';
+import { CopilotIcon, FlameIcon, HistoryIcon, HomeIcon, MortarBoardIcon } from '@primer/octicons-react';
 import { UnderlineNav } from '@primer/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -22,6 +22,7 @@ interface PrimaryNavItem {
 
 const PRIMARY_NAV_ITEMS: PrimaryNavItem[] = [
   { href: '/', label: 'Dashboard', icon: HomeIcon },
+  { href: '/chat', label: 'Chat', icon: CopilotIcon },
   { href: '/skills', label: 'Skills', icon: MortarBoardIcon },
   { href: '/habits', label: 'Habits', icon: FlameIcon },
   { href: '/history', label: 'History', icon: HistoryIcon },

@@ -126,13 +126,14 @@ export function LearningHistory({ activeTab = 'history' }: LearningHistoryProps)
         });
 
         // Show toast notification
-        setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
+        setToastMessage(`Chat started: "${topic.title}" - opening in Chat`);
 
         // Auto-dismiss toast after 3 seconds
         setTimeout(() => setToastMessage(null), 3000);
 
-        // Navigate to dashboard after a short delay to let the stream start
-        setTimeout(() => router.push('/'), 500);
+        // Navigate to the dedicated chat surface; the awaited send above has
+        // already registered the stream + operation, so the thread reattaches.
+        router.push(`/chat?thread=${thread.id}`);
       } catch {
         setToastMessage('Failed to start chat. Please try again.');
       }

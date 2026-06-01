@@ -27,6 +27,7 @@ describe('PrimaryNav', () => {
   it('renders every core destination as a link', () => {
     renderNav();
     expect(screen.getByRole('link', { name: /Dashboard/ })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /Chat/ })).toHaveAttribute('href', '/chat');
     expect(screen.getByRole('link', { name: /Skills/ })).toHaveAttribute('href', '/skills');
     expect(screen.getByRole('link', { name: /Habits/ })).toHaveAttribute('href', '/habits');
     expect(screen.getByRole('link', { name: /History/ })).toHaveAttribute('href', '/history');

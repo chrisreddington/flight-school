@@ -6,10 +6,14 @@
  * A polished, GitHub-inspired interface for AI-powered developer learning.
  * Built with Primer React components following modern GitHub design patterns.
  *
+ * Reads as a true overview: the full learning chat now lives on the
+ * dedicated `/chat` surface, and the dashboard only links into it via the
+ * compact ContinueLearningSection.
+ *
  * Features:
  * - Dynamic user profile from GitHub API
  * - Daily Focus tabs (Challenge, Goal, Learn)
- * - Multi-thread Learning Chat with STREAMING responses
+ * - Compact "Continue learning" entry point to /chat
  * - Real-time GitHub activity stats
  */
 
@@ -18,11 +22,11 @@ import { useAIFocus } from '@/hooks/use-ai-focus';
 import { useLearningChat } from '@/hooks/use-learning-chat';
 import { getDisplayName, useUserProfile } from '@/hooks/use-user-profile';
 import type { LearningTopic } from '@/lib/focus/types';
-import type { RepoReference } from '@/lib/threads/types';
 import { PageHeader } from '@/components/PageHeader';
 import { SkeletonBox, SplitPageLayout, Stack } from '@primer/react';
+import { useRouter } from 'next/navigation';
 import { AppHeader } from '../AppHeader';
-import { LearningChat } from '../LearningChat';
+import { ContinueLearningSection } from './continue-learning-section';
 import { DailyFocusSection } from './daily-focus-section';
 import { getGreeting } from './dashboard-helpers';
 import styles from './Dashboard.module.css';
@@ -38,6 +42,7 @@ import { ReviewDueWidget } from './review-due-widget';
 export function Dashboard() {
   // Initialize operations manager on mount (ensures cross-page state sync)
   useActiveOperations();
+  const router = useRouter();
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useUserProfile();
   const {
@@ -96,52 +101,16 @@ export function Dashboard() {
     stopGoalSkip(goalId);
   };
 
-  const {
-    threads,
-    activeThreadId,
-    isThreadsLoading,
-    isStreaming,
-    streamingAssistantMessageId,
-    streamingContent,
-    streamingThreadIds,
-    streamingToolEvents,
-    sendMessage,
-    stopStreaming,
-    createThread,
-    selectThread,
-    deleteThread,
-    renameThread,
-    updateContext,
-  } = useLearningChat();
+  const { threads, createThread, sendMessage } = useLearningChat();
 
   const displayName = getDisplayName(profile);
   const showName = displayName !== 'Developer';
 
-  const availableRepos =
-    profile?.repos?.map((repo) => ({
-      fullName: repo.fullName,
-      owner: repo.owner,
-      name: repo.name,
-      language: repo.language ?? undefined,
-    })) ?? [];
-
-  const chatHandlers = {
-    sendMessage: async (message: string, repos?: RepoReference[]) => {
-      await sendMessage(message, { profile: 'learning', capabilities: ['github'], repos });
-    },
-    createThread,
-    selectThread: (threadId: string | null) => {
-      if (threadId) selectThread(threadId);
-    },
-    deleteThread,
-    renameThread,
-    updateContext,
-    stopStreaming,
-  };
-
   /**
    * Handle exploring a learning topic (AC7.1-AC7.4).
-   * Creates a new thread pre-seeded with the topic context and sends an initial message.
+   * Creates a new thread pre-seeded with the topic context, sends the seed
+   * message, then navigates to the dedicated `/chat` surface where the
+   * in-flight stream reattaches via the shared operations manager.
    */
   const handleExploreTopic = async (topic: LearningTopic) => {
     // Create a new thread with the topic as title
@@ -165,6 +134,10 @@ export function Dashboard() {
       capabilities: ['github'],
       threadId: thread.id,
     });
+
+    // Navigate only after the send has registered the stream + operation, so
+    // /chat reattaches deterministically (no arbitrary settle delay needed).
+    router.push(`/chat?thread=${thread.id}`);
   };
 
   // Skeleton-aware greeting shown in the page header description while the
@@ -212,21 +185,8 @@ export function Dashboard() {
               skippingGoalIds={skippingGoalIds}
               onExploreTopic={handleExploreTopic}
             />
-            {/* Multi-thread Learning Chat Experience */}
-            <LearningChat
-              threads={threads}
-              activeThreadId={activeThreadId}
-              handlers={chatHandlers}
-              availableRepos={availableRepos}
-              isReposLoading={profileLoading}
-              isThreadsLoading={isThreadsLoading}
-              isStreaming={isStreaming}
-              streamingThreadIds={streamingThreadIds}
-              streamingAssistantMessageId={streamingAssistantMessageId}
-              streamingContent={streamingContent}
-              streamingToolEvents={streamingToolEvents}
-              userAvatarUrl={profile?.user?.avatarUrl}
-            />
+            {/* Compact entry point to the dedicated /chat surface */}
+            <ContinueLearningSection threads={threads} />
           </Stack>
         </SplitPageLayout.Content>
 
