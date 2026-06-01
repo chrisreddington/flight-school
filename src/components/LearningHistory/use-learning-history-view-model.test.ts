@@ -161,6 +161,12 @@ describe('LearningHistory view model', () => {
   });
 
   it('should derive grouped navigation and activity buckets from all entries', () => {
+    // Pin the clock so the 52-week activity window includes the fixture's
+    // 2026-01-02 cell; otherwise the activity-bucket assertion would age out
+    // as real "today" advances past the rolling window.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-03T12:00:00'));
+
     const entries = buildHistoryEntries(createHistory(), { habits: [createHabit()] }, todayDateKey);
     const viewModel = buildLearningHistoryViewModel({
       entries,

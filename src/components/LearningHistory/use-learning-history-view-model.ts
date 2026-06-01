@@ -58,9 +58,8 @@ function collectHistoryDateKeys(rawHistory: FocusHistory, habits: HabitWithHisto
 }
 
 /**
- * Map a habit check-in to a status: a skip (`value: false`, written only by
- * `skipHabitDay`) is 'skipped'; a met requirement (`completed`) is 'completed';
- * any other logged check-in is 'active'.
+ * Map a habit check-in to a status: a skip (`value: false`) is 'skipped',
+ * a met requirement (`completed`) is 'completed', otherwise 'active'.
  */
 function deriveHabitCheckInStatus(checkIn: DailyCheckIn): ItemStatus {
   if (checkIn.value === false) return 'skipped';
