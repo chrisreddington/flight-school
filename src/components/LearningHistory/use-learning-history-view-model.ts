@@ -36,23 +36,31 @@ const EMPTY_FOCUS_RECORD: DailyFocusRecord = Object.freeze({
 
 /**
  * Collect every date that should become a history row: the union of focus-history
- * dates and habit check-in dates. Keying on focus dates alone would silently drop
- * days where the only activity was a habit check-in (e.g. a weekend log with no
- * generated focus), hiding them from the timeline, activity graph, and stats.
+ * dates, habit check-in dates, and today when any habit is still pending. Keying
+ * on focus dates alone would silently drop habit-only days (e.g. a weekend log
+ * with no generated focus) and today's not-yet-checked-in active habits, hiding
+ * them from the timeline, activity graph, and stats.
  */
-function collectHistoryDateKeys(rawHistory: FocusHistory, habits: HabitWithHistory[]): string[] {
+function collectHistoryDateKeys(rawHistory: FocusHistory, habits: HabitWithHistory[], todayDateKey: string): string[] {
   const dateKeys = new Set<string>(Object.keys(rawHistory));
   for (const habit of habits) {
     for (const checkIn of habit.checkIns) {
       dateKeys.add(checkIn.date);
     }
   }
+  // A pending (active or not-started) habit gives today a not-yet-logged habit
+  // to surface; buildHistoryEntry injects it, but only when today is a key.
+  const hasPendingHabitToday = habits.some((habit) => habit.state === 'active' || habit.state === 'not-started');
+  if (hasPendingHabitToday) {
+    dateKeys.add(todayDateKey);
+  }
   return Array.from(dateKeys);
 }
 
 /**
- * Map a habit check-in to a status: a skip (`value: false`, set by
- * `skipHabitDay`) is 'skipped'; an otherwise-incomplete check-in is 'active'.
+ * Map a habit check-in to a status: a skip (`value: false`, written only by
+ * `skipHabitDay`) is 'skipped'; a met requirement (`completed`) is 'completed';
+ * any other logged check-in is 'active'.
  */
 function deriveHabitCheckInStatus(checkIn: DailyCheckIn): ItemStatus {
   if (checkIn.value === false) return 'skipped';
@@ -65,7 +73,7 @@ export function buildHistoryEntries(
   habitsCollection: HabitCollection,
   todayDateKey: string,
 ): HistoryEntry[] {
-  return collectHistoryDateKeys(rawHistory, habitsCollection.habits)
+  return collectHistoryDateKeys(rawHistory, habitsCollection.habits, todayDateKey)
     .map((dateKey) =>
       buildHistoryEntry(dateKey, rawHistory[dateKey] ?? EMPTY_FOCUS_RECORD, habitsCollection.habits, todayDateKey),
     )

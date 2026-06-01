@@ -269,4 +269,35 @@ describe('LearningHistory view model', () => {
     ).toEqual(['skipped']);
     expect(viewModel.stats.skipped).toBe(2);
   });
+
+  it('should surface today pending active habits even with no focus record or check-in', () => {
+    // Pin the clock so the activity window aligns with todayDateKey.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-03T12:00:00'));
+
+    const habit = createHabit();
+    habit.checkIns = [];
+
+    // Empty focus history and no check-in: the only reason today is a learning
+    // day is the pending active habit, which the timeline must still surface.
+    const entries = buildHistoryEntries({}, { habits: [habit] }, todayDateKey);
+
+    const todayEntry = entries.find((entry) => entry.dateKey === todayDateKey);
+    expect(todayEntry?.items.map((item) => item.type)).toEqual(['habit']);
+    expect(todayEntry?.items.map((item) => item.status)).toEqual(['active']);
+
+    const viewModel = buildLearningHistoryViewModel({
+      entries,
+      selectedDate: null,
+      typeFilter: 'all',
+      statusFilter: 'all',
+      searchQuery: '',
+      todayDateKey,
+      activeTopicCount: 0,
+      insights: null,
+      totalGoalsCompleted: 0,
+    });
+    expect(viewModel.stats.active).toBe(1);
+    expect(viewModel.stats.habits).toBe(1);
+  });
 });
