@@ -103,7 +103,19 @@ function toRepoReference(repo: { fullName: string; language: string | null }) {
   return { fullName: repo.fullName, owner, name, language: repo.language };
 }
 
-/** Best-effort activity metrics — never throws; logs and degrades. */
+/**
+ * Activity metrics — best-effort for transient failures, fail-closed on auth.
+ *
+ * @remarks
+ * Activity counts are supplementary (the profile is complete without them), so
+ * a transient hiccup on the events endpoint degrades to an empty tally rather
+ * than failing the whole profile. A GitHub 401 is the exception: although
+ * `getAuthenticatedUser` validated the token earlier in the request, the token
+ * can be revoked in the window before this call (and on the cached-repo path
+ * this is the only live GitHub call), so an auth failure here is rethrown and
+ * converted by the callers into a 401 re-auth response rather than masked as a
+ * successful profile with zero activity.
+ */
 async function getRecentActivity(octokit: Octokit, login: string): Promise<ProfileResponse['pastSevenDays']> {
   try {
     const events = await getUserEvents(octokit, login, 100);
@@ -114,6 +126,7 @@ async function getRecentActivity(octokit: Octokit, login: string): Promise<Profi
       reposUpdated: metrics.reposUpdated,
     };
   } catch (error) {
+    if (isGitHubUnauthorized(error)) throw error;
     log.warn('Could not fetch activity:', error);
     return { ...EMPTY_ACTIVITY };
   }
@@ -171,6 +184,26 @@ function octokitOrErrorResponse(error: unknown): Response | null {
 }
 
 /**
+ * Detect a GitHub 401 (an expired or revoked user token). Octokit's
+ * `RequestError` carries a numeric `.status`; some lower layers only surface
+ * the "Bad credentials" message. Either signals that the session is no longer
+ * valid, so the handler must return a real 401 — which `api-client.ts`
+ * redirects to `/sign-in` — instead of masking the dead session behind
+ * demo fallback data served as HTTP 200.
+ */
+function isGitHubUnauthorized(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  if (status === 401) return true;
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  return message.includes('bad credentials');
+}
+
+/** The 401 response that drives the client to re-authenticate. */
+function unauthorizedProfileResponse(): Response {
+  return NextResponse.json({ error: 'GitHub authentication failed' }, { status: 401 });
+}
+
+/**
  * Produce the `/api/profile` response. Handles cache lookup, repo fetch,
  * activity fetch, and the static fallback. Throws only when the
  * per-request Octokit cannot be resolved due to a non-auth error.
@@ -193,23 +226,38 @@ export async function handleProfileRequest(): Promise<Response> {
   try {
     user = await getAuthenticatedUser(octokit);
   } catch (error) {
+    if (isGitHubUnauthorized(error)) {
+      log.warn('GitHub rejected the session token (401) fetching user; signalling re-auth');
+      return unauthorizedProfileResponse();
+    }
     log.error('Failed to fetch authenticated user:', error instanceof Error ? error.message : error);
     return NextResponse.json(getFallbackResponse(startTime));
   }
 
   const cached = getCachedProfile(user.login);
   if (cached) {
-    log.info('Returning cached profile');
-    const pastSevenDays = await getRecentActivity(octokit, cached.user.login);
-    return NextResponse.json(
-      buildProfileResponse({
-        user: cached.user,
-        repos: cached.repos,
-        pastSevenDays,
-        cached: true,
-        totalTimeMs: nowMs() - startTime,
-      }),
-    );
+    try {
+      log.info('Returning cached profile');
+      const pastSevenDays = await getRecentActivity(octokit, cached.user.login);
+      return NextResponse.json(
+        buildProfileResponse({
+          user: cached.user,
+          repos: cached.repos,
+          pastSevenDays,
+          cached: true,
+          totalTimeMs: nowMs() - startTime,
+        }),
+      );
+    } catch (error) {
+      // The cached path's only live GitHub call is activity; a 401 here means
+      // the token died after `getAuthenticatedUser` succeeded, so signal
+      // re-auth instead of returning stale data.
+      if (isGitHubUnauthorized(error)) {
+        log.warn('GitHub rejected the session token (401) fetching activity on the cached path; signalling re-auth');
+        return unauthorizedProfileResponse();
+      }
+      throw error;
+    }
   }
 
   try {
@@ -227,6 +275,10 @@ export async function handleProfileRequest(): Promise<Response> {
     );
   } catch (error) {
     const totalTime = nowMs() - startTime;
+    if (isGitHubUnauthorized(error)) {
+      log.warn(`GitHub rejected the session token (401) fetching repos after ${totalTime}ms; signalling re-auth`);
+      return unauthorizedProfileResponse();
+    }
     log.error(`Error after ${totalTime}ms:`, error instanceof Error ? error.message : error);
     return NextResponse.json(getFallbackResponse(startTime));
   }

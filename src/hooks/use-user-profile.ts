@@ -1,9 +1,19 @@
 /**
  * useUserProfile Hook
  *
- * Fetches and caches the authenticated user's GitHub profile and activity data.
- * Server-side JSON storage acts as a day-keyed cache; the React state machine
- * is provided by TanStack Query.
+ * Fetches the authenticated user's GitHub profile and activity data through
+ * `/api/profile`, which validates the live GitHub token on every request. The
+ * React state machine (caching, staleness, refetch) is provided by TanStack
+ * Query.
+ *
+ * @remarks
+ * There is deliberately NO client-side persistent cache here. An earlier
+ * day-keyed JSON cache short-circuited `/api/profile`, so a revoked GitHub
+ * token whose Auth.js session cookie was still valid kept rendering stale
+ * profile data instead of redirecting to `/sign-in`. Every read now goes
+ * through `/api/profile`; its 401 on a dead token is what drives
+ * `api-client` to redirect. Warm reads stay fast because the server keeps a
+ * short-lived in-memory repo cache behind that same token validation.
  */
 
 'use client';
@@ -14,56 +24,12 @@ import { useCallback, useRef, useState } from 'react';
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { apiGet } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
-import { getDateKey } from '@/lib/utils/date-utils';
 
 interface UseUserProfileResult {
   data: ProfileResponse | null;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
-}
-
-/** Schema for profile storage API */
-interface ProfileStorageSchema {
-  date: string;
-  profile: ProfileResponse;
-}
-
-/** Fetch cached profile from server-side storage */
-async function getCachedProfile(): Promise<ProfileResponse | null> {
-  try {
-    const response = await fetch('/api/profile/storage');
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as ProfileStorageSchema | null;
-    if (!data) return null;
-
-    if (data.date !== getDateKey()) return null;
-
-    // Invalidate cache if it's missing authMethod (old schema)
-    if (!data.profile?.meta?.authMethod) return null;
-
-    return data.profile;
-  } catch {
-    return null;
-  }
-}
-
-/** Save profile to server-side storage */
-async function setCachedProfile(profile: ProfileResponse): Promise<void> {
-  try {
-    const schema: ProfileStorageSchema = {
-      date: getDateKey(),
-      profile,
-    };
-    await fetch('/api/profile/storage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(schema),
-    });
-  } catch {
-    // Silent fail for cache writes
-  }
 }
 
 const DEFAULT_AVATAR_URL = 'https://avatars.githubusercontent.com/u/0?v=4';
@@ -115,30 +81,18 @@ function normalizeProfileResponse(profile: ProfileResponse | null): ProfileRespo
 }
 
 /**
- * Fetch + cache the user's profile.
+ * Fetch the user's profile through `/api/profile`.
  *
  * @remarks
- * Cache resolution happens inside `queryFn` (not `initialData`) because
- * `getCachedProfile` is async — `initialData` requires a synchronous value.
- * Running on the client only also avoids SSR hydration mismatch.
- *
- * `bypassCache: true` is used by manual `refetch()` (routed through
- * `queryClient.fetchQuery`) to force a fresh `/api/profile` request even
- * when the day-keyed server cache is warm.
+ * Every call validates the live GitHub token server-side. There is no
+ * client-side short-circuit: a dead token surfaces as a thrown error here
+ * (and a 401 → `/sign-in` redirect inside `apiGet`) rather than being masked
+ * by stale cached data.
  */
-async function fetchUserProfile({ bypassCache }: { bypassCache: boolean }): Promise<ProfileResponse | null> {
-  if (!bypassCache) {
-    const cached = await getCachedProfile();
-    if (cached) return normalizeProfileResponse(cached);
-  }
-
+async function fetchUserProfile(): Promise<ProfileResponse | null> {
   try {
     const profile = await apiGet<ProfileResponse>('/api/profile');
-    const normalized = normalizeProfileResponse(profile);
-    if (normalized) {
-      await setCachedProfile(normalized);
-    }
-    return normalized;
+    return normalizeProfileResponse(profile);
   } catch (err) {
     logger.error(
       'Error loading profile',
@@ -149,14 +103,14 @@ async function fetchUserProfile({ bypassCache }: { bypassCache: boolean }): Prom
   }
 }
 
-// Bounded staleness: the server-side day cache owns the canonical TTL
-// (entries expire at midnight). A finite client-side stale window lets
-// TanStack's own freshness machinery re-enter `getCachedProfile()` after
-// roughly an hour of foreground activity, which catches the date-key
-// rollover for long-lived tabs without flooding the cache endpoint on
-// every subscriber mount. Window-focus refetches (TanStack default) cover
-// users returning to the tab after midnight.
-const PROFILE_STALE_TIME_MS = 60 * 60 * 1000;
+// No client-side staleness window: the profile endpoint is the live
+// token-validation gate, so each mount and each window-focus must re-hit it.
+// `staleTime: 0` + the `'always'` refetch policies guarantee that a profile
+// served from TanStack's in-memory cache on an SPA remount is revalidated
+// against `/api/profile` (whose 401 → `/sign-in`) rather than trusted for up
+// to an hour. TanStack dedupes concurrent observers, so simultaneous mounts
+// still share a single validation request.
+const PROFILE_STALE_TIME_MS = 0;
 
 export function useUserProfile(): UseUserProfileResult {
   const queryClient = useQueryClient();
@@ -176,31 +130,34 @@ export function useUserProfile(): UseUserProfileResult {
   const query = useQuery({
     queryKey: ['profile'],
     staleTime: PROFILE_STALE_TIME_MS,
-    // Explicit opt-in: the global QueryProvider disables window-focus
-    // refetches, but this query needs them as the backstop that catches
-    // the server-side day-cache rollover when a long-lived tab returns
-    // to the foreground after midnight. The cache-check endpoint inside
-    // the queryFn is a single cheap JSON read.
-    refetchOnWindowFocus: true,
-    queryFn: () => fetchUserProfile({ bypassCache: false }),
+    // Every mount and every window-focus must revalidate the GitHub token,
+    // even when TanStack already holds profile data from an earlier mount in
+    // this SPA session. `'always'` (not the default `true`, which only fires
+    // for STALE queries) makes the policy independent of `staleTime` so a
+    // token revoked mid-session is caught on the next mount/focus.
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    queryFn: () => fetchUserProfile(),
   });
 
   const refetch = useCallback(async () => {
     inflightRefetchCount.current += 1;
     setIsManuallyRefetching(true);
     try {
-      // Cancel any in-flight non-bypass query for this key first.
-      // Without this, `fetchQuery` would dedupe and return the existing
-      // promise (which was kicked off with `bypassCache: false`), so the
-      // bypass intent would be lost in the narrow window where the user
-      // clicks refresh before initial mount finishes.
+      // Cancel any in-flight query for this key first so `fetchQuery` starts
+      // a new run through TanStack's observer pipeline rather than awaiting
+      // the initial-mount promise. Note the underlying `/api/profile` request
+      // may still dedupe onto an in-flight one via `api-client`'s
+      // pending-request map; the refetch contract is "route through the
+      // pipeline so success/failure update query.data/query.error", not
+      // "guarantee a brand-new socket".
       await queryClient.cancelQueries({ queryKey: ['profile'] });
-      // `fetchQuery` with `staleTime: 0` then runs the bypass queryFn
-      // through TanStack's observer pipeline, so success populates
-      // `query.data` and failure populates `query.error`.
+      // `fetchQuery` with `staleTime: 0` then runs the queryFn through
+      // TanStack's observer pipeline, so success populates `query.data`
+      // and failure populates `query.error`.
       await queryClient.fetchQuery({
         queryKey: ['profile'],
-        queryFn: () => fetchUserProfile({ bypassCache: true }),
+        queryFn: () => fetchUserProfile(),
         staleTime: 0,
       });
     } catch {
