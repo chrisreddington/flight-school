@@ -76,11 +76,12 @@ export function HistoryEntryCard({
           ) : (
             <span className={styles.dateSectionTitle}>
               {entry.displayDate}
-              {/* "Yesterday" is the only other relative label formatDateForDisplay
-                  emits; like "Today" it hides the real date, so expose the
-                  absolute date to assistive tech. Absolute headers (e.g.
-                  "Mon, Jan 1") already carry the date and need no suffix. */}
-              {entry.displayDate === 'Yesterday' && <VisuallyHidden>, {entry.accessibleDate}</VisuallyHidden>}
+              {/* The visible label is either relative ("Yesterday") or omits the
+                  year ("Mon, Jan 1"), so expose the full absolute date to
+                  assistive tech for an unambiguous announcement across
+                  multi-year history. Visually hidden, so sighted users keep the
+                  compact label. */}
+              <VisuallyHidden>, {entry.accessibleDate}</VisuallyHidden>
             </span>
           )}
         </div>

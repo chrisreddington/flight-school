@@ -79,6 +79,15 @@ describe('HistoryEntryCard day collapse', () => {
     expect(todayHeader).toHaveAccessibleName(/Today.*Monday, January 1, 2024/);
   });
 
+  it('keeps the absolute date in the accessible name for relative non-today headers', () => {
+    // "Yesterday" hides the real date the same way "Today" does, so the
+    // visually-hidden absolute date must still be announced to screen readers.
+    render(<DayHarness entry={{ ...makeEntry(), displayDate: 'Yesterday' }} />);
+
+    const yesterdayHeader = screen.getByRole('button', { name: /Yesterday/ });
+    expect(yesterdayHeader).toHaveAccessibleName(/Yesterday.*Monday, January 1, 2024/);
+  });
+
   it('exposes the day header as a real toggle button with aria-expanded', () => {
     render(<DayHarness entry={makeEntry()} />);
     const dayHeader = getDayHeader();

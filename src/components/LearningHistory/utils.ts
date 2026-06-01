@@ -18,7 +18,9 @@ export function formatDateForDisplay(dateKey: string): string {
   yesterday.setDate(yesterday.getDate() - 1);
   // Use the local date key (not toISOString, which is UTC) so the "Yesterday"
   // label matches the local-date keys the rest of the feature produces; a UTC
-  // split would mislabel days for users in timezones behind UTC near midnight.
+  // split mislabels days for any timezone with a non-zero UTC offset near the
+  // local midnight boundary (next UTC day for negative offsets, previous for
+  // positive).
   const yesterdayKey = getDateKey(yesterday);
 
   if (dateKey === today) return 'Today';

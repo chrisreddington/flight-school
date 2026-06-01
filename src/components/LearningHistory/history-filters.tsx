@@ -52,8 +52,10 @@ export function HistoryFilters({
       {/* Filters - cleaner button group style */}
       <div className={styles.sidebarFilters}>
         <div className={styles.filterSection}>
-          <span className={styles.filterLabel}>Type</span>
-          <div className={styles.filterButtons}>
+          <span id="history-type-filter-label" className={styles.filterLabel}>
+            Type
+          </span>
+          <div className={styles.filterButtons} role="group" aria-labelledby="history-type-filter-label">
             <button
               type="button"
               aria-pressed={typeFilter === 'all'}
@@ -98,8 +100,10 @@ export function HistoryFilters({
         </div>
 
         <div className={styles.filterSection}>
-          <span className={styles.filterLabel}>Status</span>
-          <div className={styles.filterButtons}>
+          <span id="history-status-filter-label" className={styles.filterLabel}>
+            Status
+          </span>
+          <div className={styles.filterButtons} role="group" aria-labelledby="history-status-filter-label">
             <button
               type="button"
               aria-pressed={statusFilter === 'all'}

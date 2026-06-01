@@ -179,7 +179,9 @@ describe('matchesSearch', () => {
 describe('generate52WeekActivity', () => {
   it('should return activity where no date is in the future when generating the grid', () => {
     const activity = generate52WeekActivity([]);
-    const todayKey = new Date().toISOString().split('T')[0];
+    // Local date key (matches generate52WeekActivity's local-keyed cells); a UTC
+    // split could sit a day behind the local "today" cell near midnight.
+    const todayKey = getDateKey();
 
     expect(activity.length).toBeGreaterThan(0);
     expect(activity.every((day) => day.date <= todayKey)).toBe(true);
