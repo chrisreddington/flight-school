@@ -46,6 +46,29 @@ export interface HistoryEntry {
   skippedCount: number;
 }
 
+/**
+ * Per-entry handlers and live-operation sets shared by every day in the feed.
+ * Owning this contract in one neutral module lets the panel, the Timeline
+ * wrapper, and the day card extend a single prop shape, so adding a handler is
+ * a one-line change here instead of three parallel edits.
+ */
+export interface HistoryEntryHandlers {
+  onRefresh: () => void;
+  onSkipTopic: (topicId: string, existingTitles: string[]) => Promise<void>;
+  onSkipChallenge: (challengeId: string, existingTitles: string[]) => Promise<void>;
+  onSkipGoal: (goalId: string, existingTitles: string[]) => Promise<void>;
+  onStopSkipTopic: (topicId: string) => void;
+  onStopSkipChallenge: (challengeId: string) => void;
+  onStopSkipGoal: (goalId: string) => void;
+  onExploreTopic: (topic: LearningTopic) => Promise<void>;
+  skippingTopicIds: Set<string>;
+  skippingChallengeIds: Set<string>;
+  skippingGoalIds: Set<string>;
+  activeTopicIds: Set<string>;
+  activeChallengeIds: Set<string>;
+  activeGoalIds: Set<string>;
+}
+
 export interface ActivityDay {
   date: string;
   count: number;

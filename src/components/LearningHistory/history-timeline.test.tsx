@@ -58,8 +58,8 @@ const handlers = {
 };
 
 describe('HistoryTimeline', () => {
-  it('threads one timeline item per day and flags only today', () => {
-    render(
+  it('threads one timeline item per day and accents only today', () => {
+    const { container } = render(
       <HistoryTimeline
         entries={[makeEntry('2024-01-02'), makeEntry('2024-01-01')]}
         todayDateKey="2024-01-02"
@@ -73,10 +73,16 @@ describe('HistoryTimeline', () => {
     expect(days).toHaveLength(2);
     expect(days[0]).toHaveAttribute('data-today', 'true');
     expect(days[1]).toHaveAttribute('data-today', 'false');
+
+    // Exactly one rail badge carries the accent variant, and it is today's:
+    // past days fall back to Primer's neutral badge (no data-variant attribute).
+    const accentBadges = container.querySelectorAll('[data-variant="accent"]');
+    expect(accentBadges).toHaveLength(1);
+    expect(container.querySelectorAll('[data-variant]')).toHaveLength(1);
   });
 
-  it('renders the rail calendar badge as a decorative (aria-hidden) marker', () => {
-    render(
+  it('renders the rail calendar badge as a decorative, unnamed marker', () => {
+    const { container } = render(
       <HistoryTimeline
         entries={[makeEntry('2024-01-01'), makeEntry('2024-01-02')]}
         todayDateKey="2024-01-02"
@@ -86,9 +92,13 @@ describe('HistoryTimeline', () => {
       />,
     );
 
-    // One decorative calendar icon per day; the accessible date lives in the
-    // day header inside Timeline.Body, never on the rail badge.
-    expect(document.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(2);
+    // One decorative calendar icon per day, scoped to the Timeline badge rail so
+    // unrelated icons elsewhere can't satisfy the count. The accessible date
+    // lives in the day header inside Timeline.Body, never on the rail badge, so
+    // the rail must contribute no accessible image to the tree.
+    const railIcons = container.querySelectorAll('[class*="TimelineBadge"] svg[aria-hidden="true"]');
+    expect(railIcons).toHaveLength(2);
+    expect(screen.queryByRole('img')).toBeNull();
   });
 
   it('reflects per-day collapse state changes through the timeline', () => {

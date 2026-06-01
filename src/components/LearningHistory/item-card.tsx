@@ -40,7 +40,7 @@ interface ItemCardProps {
   isSkippingGoal?: boolean;
 }
 
-/** Individual item card with collapsible support for skipped items */
+/** Individual item card with collapsible support for completed/skipped items */
 export const ItemCard = memo(function ItemCard({
   item,
   dateKey,

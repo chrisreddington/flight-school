@@ -1,37 +1,22 @@
-import type { LearningTopic } from '@/lib/focus/types';
 import { SearchIcon } from '@primer/octicons-react';
 import { Banner, Button, Spinner, Stack } from '@primer/react';
 import { Blankslate } from '@primer/react/experimental';
 import { GeneratingBanner } from './generating-banner';
 import { HistoryTimeline } from './history-timeline';
-import type { HistoryEntry } from './types';
+import type { HistoryEntry, HistoryEntryHandlers } from './types';
 import { formatDateForDisplay } from './utils';
 import styles from './LearningHistory.module.css';
 
-interface HistoryPanelProps {
+interface HistoryPanelProps extends HistoryEntryHandlers {
   loadError: string | null;
   isLoading: boolean;
   selectedDate: string | null;
   onClearSelectedDate: () => void;
   hasGenerating: boolean;
-  activeTopicIds: Set<string>;
-  activeChallengeIds: Set<string>;
-  activeGoalIds: Set<string>;
   filteredEntries: HistoryEntry[];
   todayDateKey: string;
   collapsedDays: Set<string>;
   onToggleDayCollapse: (dateKey: string) => void;
-  onRefresh: () => void;
-  onSkipTopic: (topicId: string, existingTitles: string[]) => Promise<void>;
-  onSkipChallenge: (challengeId: string, existingTitles: string[]) => Promise<void>;
-  onSkipGoal: (goalId: string, existingTitles: string[]) => Promise<void>;
-  onStopSkipTopic: (topicId: string) => void;
-  onStopSkipChallenge: (challengeId: string) => void;
-  onStopSkipGoal: (goalId: string) => void;
-  onExploreTopic: (topic: LearningTopic) => Promise<void>;
-  skippingTopicIds: Set<string>;
-  skippingChallengeIds: Set<string>;
-  skippingGoalIds: Set<string>;
   searchQuery: string;
 }
 
@@ -41,25 +26,12 @@ export function HistoryPanel({
   selectedDate,
   onClearSelectedDate,
   hasGenerating,
-  activeTopicIds,
-  activeChallengeIds,
-  activeGoalIds,
   filteredEntries,
   todayDateKey,
   collapsedDays,
   onToggleDayCollapse,
-  onRefresh,
-  onSkipTopic,
-  onSkipChallenge,
-  onSkipGoal,
-  onStopSkipTopic,
-  onStopSkipChallenge,
-  onStopSkipGoal,
-  onExploreTopic,
-  skippingTopicIds,
-  skippingChallengeIds,
-  skippingGoalIds,
   searchQuery,
+  ...handlers
 }: HistoryPanelProps) {
   if (isLoading) {
     return (
@@ -84,7 +56,11 @@ export function HistoryPanel({
         )}
 
         {hasGenerating && (
-          <GeneratingBanner topicIds={activeTopicIds} challengeIds={activeChallengeIds} goalIds={activeGoalIds} />
+          <GeneratingBanner
+            topicIds={handlers.activeTopicIds}
+            challengeIds={handlers.activeChallengeIds}
+            goalIds={handlers.activeGoalIds}
+          />
         )}
 
         {filteredEntries.length > 0 && (
@@ -93,20 +69,7 @@ export function HistoryPanel({
             todayDateKey={todayDateKey}
             collapsedDays={collapsedDays}
             onToggleDayCollapse={onToggleDayCollapse}
-            onRefresh={onRefresh}
-            onSkipTopic={onSkipTopic}
-            onSkipChallenge={onSkipChallenge}
-            onSkipGoal={onSkipGoal}
-            onStopSkipTopic={onStopSkipTopic}
-            onStopSkipChallenge={onStopSkipChallenge}
-            onStopSkipGoal={onStopSkipGoal}
-            onExploreTopic={onExploreTopic}
-            skippingTopicIds={skippingTopicIds}
-            skippingChallengeIds={skippingChallengeIds}
-            skippingGoalIds={skippingGoalIds}
-            activeTopicIds={activeTopicIds}
-            activeChallengeIds={activeChallengeIds}
-            activeGoalIds={activeGoalIds}
+            {...handlers}
           />
         )}
 

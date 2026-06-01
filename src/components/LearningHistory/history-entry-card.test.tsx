@@ -38,12 +38,12 @@ function makeEntry(): HistoryEntry {
  * Controlled wrapper that owns the day-collapse state the way the real
  * LearningHistory root does, so the test can drive the day header.
  */
-function DayHarness({ entry }: { entry: HistoryEntry }) {
+function DayHarness({ entry, isToday = false }: { entry: HistoryEntry; isToday?: boolean }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <HistoryEntryCard
       entry={entry}
-      isToday={false}
+      isToday={isToday}
       isCollapsed={collapsed}
       onToggleCollapse={() => setCollapsed((value) => !value)}
       onRefresh={noop}
@@ -69,6 +69,15 @@ function getDayHeader() {
 }
 
 describe('HistoryEntryCard day collapse', () => {
+  it('labels today with "Today" while keeping the date in the accessible name', () => {
+    render(<DayHarness entry={makeEntry()} isToday />);
+
+    // The visible chip reads "Today"; the date is preserved for screen readers
+    // via a visually-hidden suffix so the toggle still announces which day it is.
+    const todayHeader = screen.getByRole('button', { name: /Today/ });
+    expect(todayHeader).toHaveAccessibleName(/Today.*Jan 1, 2024/);
+  });
+
   it('exposes the day header as a real toggle button with aria-expanded', () => {
     render(<DayHarness entry={makeEntry()} />);
     const dayHeader = getDayHeader();
@@ -78,14 +87,22 @@ describe('HistoryEntryCard day collapse', () => {
     expect(dayHeader).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('hides day items via aria-controls target when collapsed', () => {
+  it('keeps the day items region mounted but hidden when collapsed', () => {
     render(<DayHarness entry={makeEntry()} />);
     const dayHeader = getDayHeader();
     const controlledId = dayHeader.getAttribute('aria-controls');
     expect(controlledId).toBeTruthy();
 
-    fireEvent.click(dayHeader);
+    // Mounted and visible before collapse.
     const itemsRegion = document.getElementById(controlledId as string);
+    expect(itemsRegion).toBeInTheDocument();
+    expect(itemsRegion).toBeVisible();
+
+    fireEvent.click(dayHeader);
+
+    // Still in the document after collapse (hidden, not unmounted) — this is the
+    // invariant that preserves each item's local expand state across day toggles.
+    expect(document.getElementById(controlledId as string)).toBeInTheDocument();
     expect(itemsRegion).not.toBeVisible();
   });
 

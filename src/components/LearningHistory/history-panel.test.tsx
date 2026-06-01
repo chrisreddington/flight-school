@@ -8,9 +8,29 @@ vi.mock('./generating-banner', () => ({
   GeneratingBanner: () => <div data-testid="generating-banner" />,
 }));
 
-vi.mock('./history-entry-card', () => ({
-  HistoryEntryCard: ({ entry }: { entry: HistoryEntry }) => (
-    <div data-testid="history-entry" data-date={entry.dateKey} />
+// Mock the panel's actual child (HistoryTimeline), not the grandchild card, so
+// these tests verify the panel -> timeline prop contract directly and stay
+// insulated from the timeline's internal composition.
+vi.mock('./history-timeline', () => ({
+  HistoryTimeline: ({
+    entries,
+    todayDateKey,
+    collapsedDays,
+  }: {
+    entries: HistoryEntry[];
+    todayDateKey: string;
+    collapsedDays: Set<string>;
+  }) => (
+    <div data-testid="history-timeline" data-today={todayDateKey}>
+      {entries.map((entry) => (
+        <div
+          key={entry.dateKey}
+          data-testid="history-entry"
+          data-date={entry.dateKey}
+          data-collapsed={String(collapsedDays.has(entry.dateKey))}
+        />
+      ))}
+    </div>
   ),
 }));
 
@@ -71,6 +91,19 @@ describe('HistoryPanel states', () => {
   it('renders one entry per filtered day', () => {
     renderPanel({ filteredEntries: [makeEntry('2024-01-01'), makeEntry('2024-01-02')] });
     expect(screen.getAllByTestId('history-entry')).toHaveLength(2);
+  });
+
+  it('forwards todayDateKey and per-day collapse state to the timeline', () => {
+    renderPanel({
+      filteredEntries: [makeEntry('2024-01-01'), makeEntry('2024-01-02')],
+      todayDateKey: '2024-01-02',
+      collapsedDays: new Set(['2024-01-01']),
+    });
+
+    expect(screen.getByTestId('history-timeline')).toHaveAttribute('data-today', '2024-01-02');
+    const [firstDay, secondDay] = screen.getAllByTestId('history-entry');
+    expect(firstDay).toHaveAttribute('data-collapsed', 'true');
+    expect(secondDay).toHaveAttribute('data-collapsed', 'false');
   });
 
   it('renders a Blankslate when there are no entries and nothing generating', () => {

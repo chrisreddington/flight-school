@@ -5,34 +5,12 @@
  * Shows a date header with item count and renders individual ItemCards.
  */
 
-import type { LearningTopic } from '@/lib/focus/types';
 import { ChevronDownIcon, ChevronRightIcon, CommentIcon } from '@primer/octicons-react';
-import { Stack } from '@primer/react';
+import { Stack, VisuallyHidden } from '@primer/react';
+import { useId } from 'react';
 import { ItemCard } from './item-card';
 import styles from './LearningHistory.module.css';
-import type { HistoryEntry } from './types';
-
-/**
- * Per-entry handlers and live-operation sets shared by every day in the feed.
- * Lifting these into one type lets the day card and the Timeline wrapper share
- * a single prop contract instead of restating ~14 fields each.
- */
-export interface HistoryEntryHandlers {
-  onRefresh: () => void;
-  onSkipTopic: (topicId: string, existingTitles: string[]) => Promise<void>;
-  onSkipChallenge: (challengeId: string, existingTitles: string[]) => Promise<void>;
-  onSkipGoal: (goalId: string, existingTitles: string[]) => Promise<void>;
-  onStopSkipTopic: (topicId: string) => void;
-  onStopSkipChallenge: (challengeId: string) => void;
-  onStopSkipGoal: (goalId: string) => void;
-  onExploreTopic: (topic: LearningTopic) => Promise<void>;
-  skippingTopicIds: Set<string>;
-  skippingChallengeIds: Set<string>;
-  skippingGoalIds: Set<string>;
-  activeTopicIds: Set<string>;
-  activeChallengeIds: Set<string>;
-  activeGoalIds: Set<string>;
-}
+import type { HistoryEntry, HistoryEntryHandlers } from './types';
 
 interface HistoryEntryCardProps extends HistoryEntryHandlers {
   entry: HistoryEntry;
@@ -63,7 +41,16 @@ export function HistoryEntryCard({
 }: HistoryEntryCardProps) {
   // Items stay mounted and are hidden with `hidden` when the day collapses, so
   // each ItemCard keeps its local expand/collapse state across day toggles.
-  const itemsRegionId = `history-day-items-${entry.dateKey}`;
+  // This trades a slightly larger render tree for state correctness; at the
+  // feed's scale (tens of days) the prior design panel chose this over lifting
+  // every item's expand state into the parent. Revisit with virtualization only
+  // if the day count grows by an order of magnitude.
+  //
+  // The region id is prefixed with a render-unique `useId()` so two history
+  // feeds mounted in one document can never produce duplicate `aria-controls`
+  // targets.
+  const reactId = useId();
+  const itemsRegionId = `history-day-items-${reactId}-${entry.dateKey}`;
 
   return (
     <div className={styles.dateSection}>
@@ -79,7 +66,12 @@ export function HistoryEntryCard({
             {isCollapsed ? <ChevronRightIcon size={16} /> : <ChevronDownIcon size={16} />}
           </span>
           {isToday ? (
-            <span className={styles.todayBadge}>Today</span>
+            <span className={styles.todayBadge}>
+              Today
+              {/* The visible "Today" label drops the date; expose it to
+                  assistive tech since the rail's calendar badge is decorative. */}
+              <VisuallyHidden>, {entry.displayDate}</VisuallyHidden>
+            </span>
           ) : (
             <span className={styles.dateSectionTitle}>{entry.displayDate}</span>
           )}
@@ -88,7 +80,7 @@ export function HistoryEntryCard({
           {entry.items.length} item{entry.items.length !== 1 ? 's' : ''}
         </span>
       </button>
-      <div id={itemsRegionId} hidden={isCollapsed}>
+      <div id={itemsRegionId} role="region" aria-label={entry.displayDate} hidden={isCollapsed}>
         <Stack direction="vertical" gap="condensed">
           {entry.items.map((item) => (
             <div

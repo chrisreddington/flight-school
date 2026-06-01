@@ -14,8 +14,8 @@
 
 import { CalendarIcon } from '@primer/octicons-react';
 import { Timeline } from '@primer/react';
-import { HistoryEntryCard, type HistoryEntryHandlers } from './history-entry-card';
-import type { HistoryEntry } from './types';
+import { HistoryEntryCard } from './history-entry-card';
+import type { HistoryEntry, HistoryEntryHandlers } from './types';
 
 interface HistoryTimelineProps extends HistoryEntryHandlers {
   entries: HistoryEntry[];
@@ -37,8 +37,14 @@ export function HistoryTimeline({
         const isToday = entry.dateKey === todayDateKey;
         return (
           <Timeline.Item key={entry.dateKey}>
+            {/* Accent marks today; past days use Primer's default neutral badge.
+                `TimelineBadgeVariant` has no 'default' member, so `undefined`
+                is the correct way to request the neutral treatment. */}
             <Timeline.Badge variant={isToday ? 'accent' : undefined}>
-              <CalendarIcon aria-hidden />
+              {/* Unlabelled Primer octicons already carry aria-hidden, so the
+                  rail marker stays decorative; the accessible date lives in the
+                  day header inside Timeline.Body. */}
+              <CalendarIcon />
             </Timeline.Badge>
             <Timeline.Body>
               <HistoryEntryCard
