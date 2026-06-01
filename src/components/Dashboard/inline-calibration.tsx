@@ -143,7 +143,7 @@ export function InlineCalibration({ items, onItemsChange, showProfileLink = true
               <Stack direction="horizontal" gap="condensed">
                 <Button
                   size="small"
-                  variant="primary"
+                  variant="default"
                   leadingVisual={CheckIcon}
                   onClick={() => handleAccept(item)}
                   aria-label={`Confirm ${item.displayName} as ${item.suggestedLevel}`}

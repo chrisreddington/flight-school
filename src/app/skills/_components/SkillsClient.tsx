@@ -95,15 +95,21 @@ export function SkillsClient({ initialProfile }: SkillsClientProps) {
             />
           )}
 
-          <div className={styles.infoBox}>
-            <Stack direction="horizontal" align="start" gap="condensed">
-              <InfoIcon size={16} className={styles.infoIcon} />
-              <p className={styles.infoText}>
-                Skills are initially detected from your GitHub activity. You can adjust levels here to calibrate your
-                recommendations.
-              </p>
-            </Stack>
-          </div>
+          {/* The detected-skills calibration banner below already explains that
+              skills come from GitHub activity, so this baseline explainer only
+              shows when there is nothing to calibrate — never stacked beneath
+              the calibration banner. */}
+          {calibrationItems.length === 0 && (
+            <div className={styles.infoBox}>
+              <Stack direction="horizontal" align="start" gap="condensed">
+                <InfoIcon size={16} className={styles.infoIcon} />
+                <p className={styles.infoText}>
+                  Skills are initially detected from your GitHub activity. You can adjust levels here to calibrate your
+                  recommendations.
+                </p>
+              </Stack>
+            </div>
+          )}
 
           {isLoading && (
             <Stack direction="horizontal" align="center" gap="condensed">
