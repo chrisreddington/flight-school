@@ -19,7 +19,14 @@
 import { useBreadcrumbContext } from '@/contexts/breadcrumb-context';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useUserProfile } from '@/hooks/use-user-profile';
-import { ChevronRightIcon, CopilotIcon, GearIcon, PersonIcon, RocketIcon, StarIcon } from '@primer/octicons-react';
+import {
+  ChevronRightIcon,
+  CopilotIcon,
+  GearIcon,
+  LinkExternalIcon,
+  RocketIcon,
+  StarIcon,
+} from '@primer/octicons-react';
 import { ActionList, ActionMenu, Avatar, Label, Spinner, Stack } from '@primer/react';
 import Link from 'next/link';
 import { PrimaryNav } from './PrimaryNav';
@@ -109,14 +116,20 @@ export function AppHeader() {
                 )}
               </button>
             </ActionMenu.Anchor>
-            <ActionMenu.Overlay width="medium">
+            <ActionMenu.Overlay width="small">
               <ActionList>
+                {/* Identity row: avatar + handle mirrors GitHub's own user menu.
+                    Single-line, no description — the avatar and handle make
+                    "your profile" self-evident; the external-link glyph signals
+                    it opens github.com. */}
                 <ActionList.LinkItem href={`https://github.com/${username}`} target="_blank" rel="noopener noreferrer">
                   <ActionList.LeadingVisual>
-                    <PersonIcon />
+                    <Avatar src={avatarUrl} size={20} alt="" />
                   </ActionList.LeadingVisual>
                   @{username}
-                  <ActionList.Description>View your GitHub profile</ActionList.Description>
+                  <ActionList.TrailingVisual>
+                    <LinkExternalIcon />
+                  </ActionList.TrailingVisual>
                 </ActionList.LinkItem>
                 <ActionList.Divider />
                 <ActionList.LinkItem href="/settings">
@@ -124,31 +137,37 @@ export function AppHeader() {
                     <GearIcon />
                   </ActionList.LeadingVisual>
                   Settings
-                  <ActionList.Description>Privacy &amp; account data</ActionList.Description>
                 </ActionList.LinkItem>
                 <ActionList.Divider />
-                <ActionList.LinkItem
-                  href="https://github.com/chrisreddington/flight-school"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ActionList.LeadingVisual>
-                    <StarIcon />
-                  </ActionList.LeadingVisual>
-                  Flight School
-                  <ActionList.Description>Star or contribute on GitHub</ActionList.Description>
-                </ActionList.LinkItem>
-                <ActionList.LinkItem
-                  href="https://github.com/github/copilot-sdk"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ActionList.LeadingVisual>
-                    <CopilotIcon />
-                  </ActionList.LeadingVisual>
-                  Copilot SDK
-                  <ActionList.Description>Build your own AI apps</ActionList.Description>
-                </ActionList.LinkItem>
+                <ActionList.Group>
+                  <ActionList.GroupHeading>Resources</ActionList.GroupHeading>
+                  <ActionList.LinkItem
+                    href="https://github.com/chrisreddington/flight-school"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ActionList.LeadingVisual>
+                      <StarIcon />
+                    </ActionList.LeadingVisual>
+                    Star Flight School
+                    <ActionList.TrailingVisual>
+                      <LinkExternalIcon />
+                    </ActionList.TrailingVisual>
+                  </ActionList.LinkItem>
+                  <ActionList.LinkItem
+                    href="https://github.com/github/copilot-sdk"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ActionList.LeadingVisual>
+                      <CopilotIcon />
+                    </ActionList.LeadingVisual>
+                    Copilot SDK
+                    <ActionList.TrailingVisual>
+                      <LinkExternalIcon />
+                    </ActionList.TrailingVisual>
+                  </ActionList.LinkItem>
+                </ActionList.Group>
               </ActionList>
             </ActionMenu.Overlay>
           </ActionMenu>
