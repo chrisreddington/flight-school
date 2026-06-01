@@ -240,7 +240,11 @@ export function ChallengeCard({
             </>
           ) : (
             <>
-              <Button variant="primary" onClick={handleStartChallenge} disabled={isSkipped}>
+              <Button
+                variant={showHistoryActions ? 'default' : 'primary'}
+                onClick={handleStartChallenge}
+                disabled={isSkipped}
+              >
                 {isInProgress ? 'Continue Challenge' : 'Start →'}
               </Button>
               {!showHistoryActions && !isCustom && onRefresh && (
