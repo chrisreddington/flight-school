@@ -19,6 +19,7 @@
 
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
+import { useHasMounted } from '@/hooks/use-has-mounted';
 import { useLearningChat } from '@/hooks/use-learning-chat';
 import { getDisplayName, useUserProfile } from '@/hooks/use-user-profile';
 import type { LearningTopic } from '@/lib/focus/types';
@@ -106,6 +107,12 @@ export function Dashboard() {
   const displayName = getDisplayName(profile);
   const showName = displayName !== 'Developer';
 
+  // getGreeting() reads the visitor's local clock, which only exists in the
+  // browser. Computing it during SSR bakes in the server's timezone (UTC in
+  // production) and mismatches the client on hydration, so defer it until
+  // after mount and show a skeleton in its place for the first paint.
+  const hasMounted = useHasMounted();
+
   /**
    * Handle exploring a learning topic (AC7.1-AC7.4).
    * Creates a new thread pre-seeded with the topic context, sends the seed
@@ -140,11 +147,11 @@ export function Dashboard() {
     router.push(`/chat?thread=${thread.id}`);
   };
 
-  // Skeleton-aware greeting shown in the page header description while the
-  // profile loads, then the display name fills in.
+  // Skeleton-aware greeting shown in the page header description. The greeting
+  // word waits for mount (client-local time); the name waits for the profile.
   const greeting = (
     <>
-      {getGreeting()},{' '}
+      {hasMounted ? getGreeting() : <SkeletonBox height="1em" width="110px" className={styles.skeletonInline} />},{' '}
       {profileLoading || !showName ? (
         <SkeletonBox height="1em" width="80px" className={styles.skeletonInline} />
       ) : (
