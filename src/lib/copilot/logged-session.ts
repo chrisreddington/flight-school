@@ -175,8 +175,8 @@ export function wrapSessionWithLogging(
     async destroy(): Promise<void> {
       onDestroy?.();
       if (destroyOnCleanup) {
-        session.destroy().catch((err) => {
-          log.warn('Session destroy warning:', err);
+        session.disconnect().catch((err) => {
+          log.warn('Session disconnect warning:', err);
         });
       }
     },

@@ -98,18 +98,55 @@ INSERT OR IGNORE INTO etag_sequence (rowid, value) VALUES (1, 0);
 `;
 
 /**
+ * Whether `payload` is Node's `node:sqlite` experimental warning.
+ *
+ * Node phrases this warning differently across releases: Node 22 emits
+ * "SQLite is an experimental feature and might change at any time", while other
+ * lines reference the `node:sqlite` specifier directly. Matching either keeps
+ * the suppression working across the Node version skew between local dev and CI.
+ */
+function isNodeSqliteExperimentalWarning(event: string, payload: unknown): boolean {
+  if (event !== 'warning') return false;
+  const warning = payload as { name?: string; message?: string } | undefined;
+  if (warning?.name !== 'ExperimentalWarning' || typeof warning.message !== 'string') {
+    return false;
+  }
+  const message = warning.message.toLowerCase();
+  return message.includes('node:sqlite') || message.includes('sqlite is an experimental');
+}
+
+/**
+ * Install a process-wide `process.emit` filter that swallows ONLY Node's
+ * `node:sqlite` experimental warning and passes every other event straight
+ * through. Installed at most once per process and never uninstalled.
+ *
+ * The filter must be permanent because Node defers the experimental warning to
+ * a later `process.nextTick`, which fires AFTER any synchronous import settles.
+ * An earlier version restored `process.emit` in a `finally` right after the
+ * `import('node:sqlite')` resolved, so the suppression window had always closed
+ * by the time the deferred warning emitted — the warning leaked to stderr and
+ * broke the cross-process integration test on Node 22. Keeping the filter
+ * installed is safe: it is a pure pass-through for every non-sqlite event, so
+ * no genuine warning is ever lost.
+ */
+let sqliteWarningFilterInstalled = false;
+
+function installNodeSqliteWarningFilter(): void {
+  if (sqliteWarningFilterInstalled) return;
+  sqliteWarningFilterInstalled = true;
+
+  const originalEmit = process.emit.bind(process);
+  process.emit = function suppressNodeSqliteWarning(event: string, ...args: unknown[]): boolean {
+    if (isNodeSqliteExperimentalWarning(event, args[0])) return false;
+    return (originalEmit as (...emitArgs: unknown[]) => boolean)(event, ...args);
+  } as typeof process.emit;
+}
+
+/**
  * Lazily load `node:sqlite`'s `DatabaseSync`, suppressing only its
- * `ExperimentalWarning` for the duration of the import.
- *
- * The suppression is deliberately narrow: a wrapper around `process.emit`
- * swallows exactly the `node:sqlite` experimental warning and re-emits every
- * other event, and the original `process.emit` is restored in `finally` so no
- * genuine warning is ever lost — even if the import throws.
- *
- * The result is memoised so the `process.emit` suppression window opens at most
- * once per process: concurrent or repeated store construction shares a single
- * in-flight import and can never leave a wrapper permanently installed by
- * racing each other's restore.
+ * `ExperimentalWarning`. The result is memoised so the import runs at most once
+ * per process; the warning filter it relies on is installed before the import
+ * and stays installed (see {@link installNodeSqliteWarningFilter}).
  */
 let databaseSyncCtorPromise: Promise<DatabaseSyncConstructor> | null = null;
 
@@ -117,28 +154,9 @@ function loadDatabaseSync(): Promise<DatabaseSyncConstructor> {
   if (databaseSyncCtorPromise) return databaseSyncCtorPromise;
 
   databaseSyncCtorPromise = (async () => {
-    const originalEmit = process.emit.bind(process);
-    const isNodeSqliteExperimentalWarning = (event: string, payload: unknown): boolean => {
-      if (event !== 'warning') return false;
-      const warning = payload as { name?: string; message?: string } | undefined;
-      return (
-        warning?.name === 'ExperimentalWarning' &&
-        typeof warning.message === 'string' &&
-        warning.message.includes('node:sqlite')
-      );
-    };
-
-    process.emit = function suppressNodeSqliteWarning(event: string, ...args: unknown[]): boolean {
-      if (isNodeSqliteExperimentalWarning(event, args[0])) return false;
-      return (originalEmit as (...emitArgs: unknown[]) => boolean)(event, ...args);
-    } as typeof process.emit;
-
-    try {
-      const sqlite = await import('node:sqlite');
-      return sqlite.DatabaseSync as unknown as DatabaseSyncConstructor;
-    } finally {
-      process.emit = originalEmit;
-    }
+    installNodeSqliteWarningFilter();
+    const sqlite = await import('node:sqlite');
+    return sqlite.DatabaseSync as unknown as DatabaseSyncConstructor;
   })();
 
   return databaseSyncCtorPromise;

@@ -2,8 +2,29 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+/**
+ * Mark `node:sqlite` as external so vite never tries to bundle it.
+ *
+ * Node 22's `module.builtinModules` omits the still-experimental `node:sqlite`,
+ * so vite's builtin resolver does not recognise it and tries to bundle it into
+ * the jsdom test environment — which fails with "Cannot bundle Node.js built-in
+ * node:sqlite". Resolving it as external (with `enforce: 'pre'`, ahead of vite's
+ * builtin resolver) keeps every storage test working on the CI-pinned Node 22,
+ * present and future, without per-file environment pragmas.
+ */
+const externalizeNodeSqlite = {
+  name: 'externalize-node-sqlite',
+  enforce: 'pre' as const,
+  resolveId(id: string) {
+    if (id === 'node:sqlite') {
+      return { id: 'node:sqlite', external: true };
+    }
+    return null;
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [externalizeNodeSqlite, react()],
   test: {
     environment: 'jsdom',
     globals: true,

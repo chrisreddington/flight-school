@@ -143,8 +143,8 @@ function pruneChatSessions(): void {
   for (const [key, entry] of chatSessionCache.entries()) {
     if (now - entry.lastUsed > CHAT_SESSION_TTL_MS) {
       log.debug('Chat session expired', { key, userId: entry.userId });
-      entry.session.destroy().catch((err) => {
-        log.warn('Session destroy warning', { err });
+      entry.session.disconnect().catch((err) => {
+        log.warn('Session disconnect warning', { err });
       });
       chatSessionCache.delete(key);
     }
@@ -158,8 +158,8 @@ function pruneChatSessions(): void {
   const overflow = sorted.slice(0, chatSessionCache.size - CHAT_SESSION_MAX);
   for (const [key, entry] of overflow) {
     log.debug('Chat session evicted (LRU)', { key, userId: entry.userId });
-    entry.session.destroy().catch((err) => {
-      log.warn('Session destroy warning', { err });
+    entry.session.disconnect().catch((err) => {
+      log.warn('Session disconnect warning', { err });
     });
     chatSessionCache.delete(key);
   }
@@ -397,11 +397,11 @@ export async function shutdownAllPools(): Promise<void> {
   }
   chatSessionCache.clear();
 
-  // Destroy all sessions, suppressing errors
+  // Disconnect all sessions, suppressing errors
   await Promise.allSettled(
     sessions.map(async (session) => {
       try {
-        await session.destroy();
+        await session.disconnect();
       } catch {
         // Suppress stream errors during shutdown
       }
