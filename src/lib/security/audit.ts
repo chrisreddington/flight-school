@@ -12,14 +12,14 @@
  * an append-only blob) so they survive log-rotation policies and can be
  * queried for security review.
  *
- * **Salt**: Set `AUDIT_SALT` to a long random string in production. In
- * development a per-boot random value is used; a warning is emitted on
- * first use so the misconfiguration is visible.
+ * **Salt**: `AUDIT_SALT` is required in all environments. Startup and
+ * first-use call sites enforce this through `requireAuditSalt(...)`.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import { logger } from '@/lib/logger';
+import { requireAuditSalt } from '@/lib/security/audit-salt';
 
 const log = logger.withTag('Audit');
 
@@ -33,7 +33,8 @@ export type AuditEventType =
   | 'job.credentials_refresh_failed'
   | 'storage.write'
   | 'issues.create'
-  | 'page.view';
+  | 'page.view'
+  | 'challenge.view';
 
 export interface AuditEvent {
   type: AuditEventType;
@@ -43,35 +44,17 @@ export interface AuditEvent {
 }
 
 let cachedSalt: string | null = null;
-let warnedAboutDevSalt = false;
 
 function getSalt(): string {
-  if (cachedSalt) return cachedSalt;
-  const fromEnv = process.env.AUDIT_SALT;
-  if (fromEnv && fromEnv.length > 0) {
-    cachedSalt = fromEnv;
-    return cachedSalt;
-  }
-
-  cachedSalt = randomBytes(32).toString('hex');
-  if (!warnedAboutDevSalt) {
-    warnedAboutDevSalt = true;
-    log.warn(
-      'AUDIT_SALT is not set; using a random per-boot salt. ' +
-        'Audit hashes will not be comparable across restarts. ' +
-        'Set AUDIT_SALT in production.',
-    );
-  }
+  if (cachedSalt !== null) return cachedSalt;
+  cachedSalt = requireAuditSalt('audit:first-call');
   return cachedSalt;
 }
 
 /**
  * Hash a raw user identifier with the configured audit salt.
  *
- * @remarks Never throws. When `AUDIT_SALT` is unset, falls back to a
- *   process-lifetime random salt and emits a one-time warning via
- *   {@link logger} — hashes remain stable for the current process but are
- *   not comparable across restarts.
+ * @throws Error when `AUDIT_SALT` is missing.
  */
 export function hashUserId(userId: string): string {
   const salt = getSalt();
@@ -91,11 +74,10 @@ export function auditLog(event: AuditEvent): void {
 }
 
 /**
- * Test-only helper to clear cached salt + warn state between test cases.
+ * Test-only helper to clear cached salt between test cases.
  *
  * @internal
  */
 export function __resetAuditState() {
   cachedSalt = null;
-  warnedAboutDevSalt = false;
 }

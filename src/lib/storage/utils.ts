@@ -15,6 +15,16 @@ import os from 'os';
 import path from 'path';
 import { logger } from '@/lib/logger';
 
+import { createStorageFileOps, resolveStoragePath } from './scoped-file-ops';
+
+/**
+ * Re-exported from the `node:fs`-free {@link import('./safe-path')} leaf so that
+ * `@/lib/storage/utils` remains the public import path for server callers while
+ * client-reachable validators can import the pure helper directly without
+ * pulling `node:fs` into the browser bundle.
+ */
+export { safeChildPath } from './safe-path';
+
 const log = logger.withTag('Storage Utils');
 
 /** Determines the appropriate storage directory based on platform. */
@@ -37,30 +47,37 @@ export function getStorageRoot(): string {
   return path.join(home, '.local', 'share', 'flight-school');
 }
 
-const STORAGE_DIR = getStorageRoot();
+/**
+ * Resolve the data directory a store should use, honouring an explicit override.
+ *
+ * Returns `dataDir` resolved to an absolute path when supplied, otherwise the
+ * process-global {@link getStorageRoot}. The file document-store adapter uses
+ * this so an explicit `dataDir` actually takes effect instead of being silently
+ * ignored in favour of the global root.
+ *
+ * @param dataDir - Optional explicit base directory; defaults to the storage root.
+ */
+export function resolveDataDir(dataDir?: string): string {
+  return path.resolve(/* turbopackIgnore: true */ dataDir ?? getStorageRoot());
+}
 
 /**
- * Safely joins path segments and ensures the result is within STORAGE_DIR.
+ * Safely joins path segments and ensures the result is within the storage root.
  * This is the ONLY function that should construct paths from user input.
  *
- * @param segments - Path segments to join (relative to STORAGE_DIR)
- * @returns Absolute path guaranteed to be within STORAGE_DIR
- * @throws Error if the resulting path would escape STORAGE_DIR
+ * The storage root is resolved per call via {@link getStorageRoot} rather than
+ * captured once at module load: `FLIGHT_SCHOOL_DATA_DIR` is a runtime config
+ * source, so a value set after this module first evaluates (the common case in
+ * per-test isolation, where the env is stubbed before each test) must still
+ * take effect. Caching it here previously made the resolved directory depend on
+ * import order, which silently routed writes to the real home directory.
+ *
+ * @param segments - Path segments to join (relative to the storage root)
+ * @returns Absolute path guaranteed to be within the storage root
+ * @throws Error if the resulting path would escape the storage root
  */
 function safePath(...segments: string[]): string {
-  // Resolve the base storage directory to an absolute path
-  const baseDir = path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
-
-  // Join all segments and resolve to absolute path
-  const targetPath = path.resolve(/* turbopackIgnore: true */ baseDir, ...segments);
-
-  // Ensure the resolved path starts with baseDir
-  // This check MUST happen after path.resolve() to catch traversal attacks
-  if (!targetPath.startsWith(baseDir + path.sep) && targetPath !== baseDir) {
-    throw new Error(`Path traversal detected: ${segments.join('/')}`);
-  }
-
-  return targetPath;
+  return resolveStoragePath(getStorageRoot(), segments);
 }
 
 /**
@@ -74,69 +91,15 @@ function safePath(...segments: string[]): string {
  * (e.g. workspace filenames) where the caller must not be able to escape into
  * a sibling subtree such as another user's data directory.
  *
- * Each segment is rejected if it:
- * - is empty,
- * - equals `.` or `..`,
- * - contains a `/` or `\` separator,
- * - contains a NUL byte (`\0`),
- * - is absolute on its own.
- *
- * The resolved path is then asserted to start with `path.resolve(baseDir) +
- * path.sep`; the baseDir-equals case is rejected because callers always need
- * at least one child segment for file operations.
- *
- * @param baseDir - The directory the resolved path must stay under. May be
- *   relative or absolute; both sides of the comparison use the same anchor.
- * @param segments - One or more path components to append below `baseDir`.
- * @returns The absolute resolved path, guaranteed to be a descendant of
- *   `path.resolve(baseDir)`.
- * @throws {Error} when the resolved path is outside `baseDir` or any segment
- *   is structurally invalid (empty string, `.`, `..`, contains a separator
- *   `/` or `\`, contains NUL, or is an absolute path).
+ * @remarks
+ * The implementation lives in the `node:fs`-free {@link import('./safe-path')}
+ * leaf and is re-exported above; see that module for the full contract.
  */
-export function safeChildPath(baseDir: string, ...segments: string[]): string {
-  if (typeof baseDir !== 'string' || baseDir.length === 0) {
-    throw new Error('safeChildPath: baseDir must be a non-empty string');
-  }
-  if (segments.length === 0) {
-    throw new Error('safeChildPath: at least one child segment is required');
-  }
-
-  for (const segment of segments) {
-    if (typeof segment !== 'string') {
-      throw new Error('safeChildPath: segments must be strings');
-    }
-    if (segment.length === 0) {
-      throw new Error('safeChildPath: empty segment');
-    }
-    if (segment === '.' || segment === '..') {
-      throw new Error(`safeChildPath: forbidden segment "${segment}"`);
-    }
-    if (segment.includes('\0')) {
-      throw new Error('safeChildPath: NUL byte in segment');
-    }
-    if (segment.includes('/') || segment.includes('\\')) {
-      throw new Error(`safeChildPath: separator in segment "${segment}"`);
-    }
-    if (path.isAbsolute(segment)) {
-      throw new Error(`safeChildPath: absolute segment "${segment}"`);
-    }
-  }
-
-  const resolvedBase = path.resolve(/* turbopackIgnore: true */ baseDir);
-  const resolvedTarget = path.resolve(/* turbopackIgnore: true */ resolvedBase, ...segments);
-
-  if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
-    throw new Error(`safeChildPath: path "${segments.join('/')}" escapes baseDir`);
-  }
-
-  return resolvedTarget;
-}
 
 /** Ensures the .data storage directory exists (internal). */
 async function ensureStorageDir(): Promise<void> {
   try {
-    await fs.mkdir(STORAGE_DIR, { recursive: true });
+    await fs.mkdir(getStorageRoot(), { recursive: true });
   } catch (error) {
     log.error('Failed to create storage directory', { error });
     throw error;
@@ -281,6 +244,17 @@ export async function deleteStorage(filename: string): Promise<void> {
 // =============================================================================
 
 /**
+ * The default root-bound filesystem primitives, bound to {@link getStorageRoot}.
+ *
+ * `getStorageRoot` is passed as a thunk (not its value) so each operation
+ * re-resolves the root per call, preserving the runtime-config behaviour the
+ * many existing importers of these helpers depend on. The file document-store
+ * adapter builds its OWN ops bound to an instance root; see
+ * {@link import('./scoped-file-ops').createStorageFileOps}.
+ */
+const defaultOps = createStorageFileOps(getStorageRoot);
+
+/**
  * Ensures a subdirectory exists in .data directory.
  *
  * @param subdir - Subdirectory path relative to .data
@@ -288,22 +262,7 @@ export async function deleteStorage(filename: string): Promise<void> {
  *   restrict the directory permissions on platforms that honour POSIX modes.
  *   On Windows the mode is ignored by the OS.
  */
-export async function ensureDir(subdir: string, options: { mode?: number } = {}): Promise<void> {
-  const dirPath = safePath(subdir);
-  try {
-    await fs.mkdir(dirPath, { recursive: true, mode: options.mode });
-    if (options.mode !== undefined && os.platform() !== 'win32') {
-      try {
-        await fs.chmod(dirPath, options.mode);
-      } catch (chmodError) {
-        log.debug(`chmod ignored on directory: ${subdir}`, { chmodError });
-      }
-    }
-  } catch (error) {
-    log.error(`Failed to create directory: ${subdir}`, { error });
-    throw error;
-  }
-}
+export const ensureDir = defaultOps.ensureDir;
 
 /**
  * Reads a file from a subdirectory.
@@ -312,18 +271,7 @@ export async function ensureDir(subdir: string, options: { mode?: number } = {})
  * @param filename - Name of file in subdirectory
  * @returns File contents or null if not found
  */
-export async function readFile(subdir: string, filename: string): Promise<string | null> {
-  const filePath = safePath(subdir, filename);
-  try {
-    return await fs.readFile(filePath, 'utf-8');
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null;
-    }
-    log.error(`Failed to read file: ${subdir}/${filename}`, { error });
-    throw error;
-  }
-}
+export const readFile = defaultOps.readFile;
 
 /**
  * Writes a file to a subdirectory atomically.
@@ -332,24 +280,28 @@ export async function readFile(subdir: string, filename: string): Promise<string
  * @param filename - Name of file in subdirectory
  * @param content - File content to write
  */
-export async function writeFile(subdir: string, filename: string, content: string): Promise<void> {
-  const filePath = safePath(subdir, filename);
-  const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+export const writeFile = defaultOps.writeFile;
 
-  try {
-    await ensureDir(subdir);
-    await fs.writeFile(tempPath, content, 'utf-8');
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    try {
-      await fs.unlink(tempPath);
-    } catch {
-      /* ignore */
-    }
-    log.error(`Failed to write file: ${subdir}/${filename}`, { error });
-    throw error;
-  }
-}
+/**
+ * Atomically creates a file, failing if it already exists.
+ *
+ * Uses the OS-level exclusive-create flag (`wx`), so two callers racing the
+ * same path can never both succeed: exactly one create wins and every other
+ * caller observes `EEXIST`. This closes the create-only TOCTOU window that the
+ * temp-write-then-rename {@link writeFile} path leaves open. The document-store
+ * file adapter relies on this to give `ifNoneMatch: '*'` real uniqueness under
+ * concurrency (e.g. racing track enrollments claiming the same slot).
+ *
+ * The atomicity guarantee holds for a local POSIX/NTFS filesystem; it is not
+ * claimed for networked filesystems where `O_EXCL` is unreliable.
+ *
+ * @param subdir - Subdirectory path relative to the storage root.
+ * @param filename - Name of the file to create within the subdirectory.
+ * @param content - File content to write.
+ * @returns `true` when this call created the file, `false` when it already
+ *   existed (the caller decides whether that is a conflict).
+ */
+export const createFileExclusive = defaultOps.createFileExclusive;
 
 /**
  * Deletes a file from a subdirectory.
@@ -357,37 +309,14 @@ export async function writeFile(subdir: string, filename: string, content: strin
  * @param subdir - Subdirectory path relative to .data
  * @param filename - Name of file in subdirectory
  */
-export async function deleteFile(subdir: string, filename: string): Promise<void> {
-  const filePath = safePath(subdir, filename);
-  try {
-    await fs.unlink(filePath);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return; // File doesn't exist - that's fine
-    }
-    log.error(`Failed to delete file: ${subdir}/${filename}`, { error });
-    throw error;
-  }
-}
+export const deleteFile = defaultOps.deleteFile;
 
 /**
  * Deletes an entire subdirectory and its contents.
  *
  * @param subdir - Subdirectory path relative to .data
  */
-export async function deleteDir(subdir: string): Promise<void> {
-  const dirPath = safePath(subdir);
-  try {
-    await fs.rm(dirPath, { recursive: true, force: true });
-    log.debug(`Directory deleted: ${subdir}`);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return;
-    }
-    log.error(`Failed to delete directory: ${subdir}`, { error });
-    throw error;
-  }
-}
+export const deleteDir = defaultOps.deleteDir;
 
 /**
  * Lists subdirectories in a directory.
@@ -396,7 +325,7 @@ export async function deleteDir(subdir: string): Promise<void> {
  * @returns Array of subdirectory names
  */
 export async function listDirs(subdir: string): Promise<string[]> {
-  const dirPath = subdir ? safePath(subdir) : path.resolve(/* turbopackIgnore: true */ STORAGE_DIR);
+  const dirPath = subdir ? safePath(subdir) : path.resolve(/* turbopackIgnore: true */ getStorageRoot());
   try {
     await ensureStorageDir();
     if (subdir) await ensureDir(subdir);
@@ -417,16 +346,4 @@ export async function listDirs(subdir: string): Promise<string[]> {
  * @param subdir - Subdirectory path relative to .data
  * @returns Array of filenames
  */
-export async function listFiles(subdir: string): Promise<string[]> {
-  const dirPath = safePath(subdir);
-  try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    return entries.filter((e) => e.isFile()).map((e) => e.name);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
-    }
-    log.error(`Failed to list files: ${subdir}`, { error });
-    throw error;
-  }
-}
+export const listFiles = defaultOps.listFiles;

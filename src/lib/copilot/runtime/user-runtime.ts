@@ -31,7 +31,9 @@ export async function createCopilotUserRuntime({
   const client = new CopilotClient({
     gitHubToken,
     useLoggedInUser: false,
-    copilotHome,
+    // The SDK names this option `baseDirectory`; the app's vocabulary for the
+    // same concept (base dir for Copilot data) is `copilotHome`.
+    baseDirectory: copilotHome,
   });
 
   return {

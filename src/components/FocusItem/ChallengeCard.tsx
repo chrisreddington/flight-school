@@ -13,7 +13,7 @@ import type { ChallengeState } from '@/lib/focus/state-machine';
 import type { DailyChallenge } from '@/lib/focus/types';
 import { logger } from '@/lib/logger';
 import { getDateKey, isTodayDateKey } from '@/lib/utils/date-utils';
-import { ArrowRightIcon, ClockIcon } from '@primer/octicons-react';
+import { ArrowRightIcon, ClockIcon, LinkIcon } from '@primer/octicons-react';
 import { Button, Heading, Label, Stack } from '@primer/react';
 import { InlineMessage } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
@@ -96,36 +96,10 @@ export function ChallengeCard({
   }, [dateKey, challenge.id]);
 
   const handleStartChallenge = useCallback(() => {
-    if (currentState === 'not-started') {
-      // Transition to in-progress when starting
-      (async () => {
-        try {
-          setActionError(null);
-          await focusStore.addChallenge(dateKey, challenge);
-          await focusStore.transitionChallenge(dateKey, challenge.id, 'in-progress', 'dashboard');
-          setCurrentState('in-progress');
-          if (onStateChange) onStateChange();
-        } catch (error) {
-          setActionError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
-          logger.error('Failed to start challenge', { error }, 'ChallengeCard');
-        }
-      })();
-    }
-    // Navigate to sandbox with full challenge details
-    const params = new URLSearchParams();
-    params.set('id', challenge.id);
-    params.set('title', challenge.title);
-    params.set('description', challenge.description);
-    params.set('language', challenge.language);
-    params.set('difficulty', challenge.difficulty);
-    if (challenge.type) {
-      params.set('type', challenge.type);
-    }
-    if (challenge.brokenCode) {
-      params.set('brokenCode', challenge.brokenCode);
-    }
-    router.push(`/challenge?${params.toString()}`);
-  }, [router, challenge, currentState, dateKey, onStateChange]);
+    // M2.5: challenge specs now live server-side under
+    // users/{userId}/challenges/{id}.json, so the URL carries only id.
+    router.push(`/challenge?id=${encodeURIComponent(challenge.id)}`);
+  }, [router, challenge.id]);
 
   const handleMarkComplete = useCallback(async () => {
     try {
@@ -180,7 +154,7 @@ export function ChallengeCard({
     <div className={styles.card}>
       <Stack direction="vertical" gap="normal">
         <Stack direction="horizontal" justify="space-between" align="center">
-          <Stack direction="horizontal" gap="condensed" align="center">
+          <Stack direction="horizontal" gap="condensed" align="center" wrap="wrap">
             {isCustom && (
               <Label size="small" variant="accent">
                 Custom
@@ -231,7 +205,7 @@ export function ChallengeCard({
           <Heading as="h3">{challenge.title}</Heading>
           {showIssueContextBadge && challenge.contextSource === 'issue' && (
             <Label size="small" variant="accent">
-              Inspired by your work 🔗
+              <LinkIcon size={12} /> Inspired by your work
             </Label>
           )}
         </Stack>
@@ -265,9 +239,20 @@ export function ChallengeCard({
               )}
             </>
           ) : (
-            <Button variant="primary" onClick={handleStartChallenge} disabled={isSkipped}>
-              {isInProgress ? 'Continue Challenge' : 'Start Challenge'}
-            </Button>
+            <>
+              <Button
+                variant={showHistoryActions ? 'default' : 'primary'}
+                onClick={handleStartChallenge}
+                disabled={isSkipped}
+              >
+                {isInProgress ? 'Continue Challenge' : 'Start →'}
+              </Button>
+              {!showHistoryActions && !isCustom && onRefresh && (
+                <Button variant="default" onClick={onRefresh} disabled={isSkipped || refreshDisabled}>
+                  ↻ New challenge
+                </Button>
+              )}
+            </>
           )}
         </Stack>
       </Stack>

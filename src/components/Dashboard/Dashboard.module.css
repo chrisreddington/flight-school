@@ -13,41 +13,6 @@
   background-color: var(--bgColor-inset, #f6f8fa);
 }
 
-.main {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: var(--base-size-24, 24px);
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: var(--base-size-24, 24px);
-}
-
-@media (max-width: 1024px) {
-  .main {
-    grid-template-columns: 1fr;
-  }
-}
-
-.mainContent {
-  min-width: 0;
-  /* PERF: Allow browser to skip rendering off-screen content */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 800px;
-}
-
-.sidebar {
-  min-width: 0;
-  /* PERF: Sidebar is not immediately visible on mobile, defer rendering */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 600px;
-}
-
-@media (max-width: 1024px) {
-  .sidebar {
-    order: 2;
-  }
-}
-
 /* ============================================================================
    Header
    ============================================================================ */
@@ -104,32 +69,50 @@
 }
 
 /* ============================================================================
-   Welcome Section (Standalone)
-   ============================================================================ */
-
-.welcomeSection {
-  padding: var(--base-size-8, 8px) 0;
-}
-
-.welcomeHeading {
-  font-size: var(--text-title-size-large, 32px) !important;
-  font-weight: var(--base-text-weight-semibold, 600) !important;
-  margin: 0 0 var(--base-size-4, 4px) 0;
-  line-height: 1.25;
-}
-
-.welcomeSubtext {
-  color: var(--fgColor-muted, #656d76);
-  margin: 0;
-  font-size: var(--text-body-size-medium, 14px);
-}
-
-/* ============================================================================
    Daily Focus Section
    ============================================================================ */
 
+/* Lighten the top of the dashboard on phones: tighter card padding and a
+   trimmed focus-tab gutter so content starts higher up. */
+@media (max-width: 767px) {
+  .card {
+    padding: var(--base-size-16, 16px);
+  }
+
+  .focusTabs {
+    margin-bottom: var(--base-size-16, 16px);
+  }
+}
+
 .focusTabs {
   margin-bottom: var(--base-size-20, 20px);
+}
+
+/* Let the tab strip scroll horizontally instead of widening the page when the
+   four icon+label tabs exceed a narrow content column. */
+.focusTabs [role='tablist'] {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.focusTabs [role='tablist']::-webkit-scrollbar {
+  display: none;
+}
+
+/* On phones the four tabs are wider than the content column and the scrollbar
+   is hidden above, so fade the right edge as an affordance that more tabs lie
+   beyond the fold. The mask is alpha-only (black = opaque), not a brand color.
+   Trade-off: scrolled fully right, the last tab's trailing edge softens
+   slightly — acceptable versus a hard, unhinted clip. */
+@media (max-width: 767px) {
+  .focusTabs [role='tablist'] {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    /* Trailing padding equal to the fade width so the last tab can scroll clear
+       of the mask — its label, active underline, and focus ring stay crisp for
+       keyboard users instead of softening under the fade at scroll end. */
+    padding-inline-end: var(--base-size-24, 24px);
+  }
 }
 
 .focusContent {
@@ -692,6 +675,7 @@
   padding: var(--base-size-12, 12px);
   background-color: var(--bgColor-muted, #f6f8fa);
   border-radius: var(--borderRadius-medium, 6px);
+  min-width: 0;
 }
 
 .statIcon {

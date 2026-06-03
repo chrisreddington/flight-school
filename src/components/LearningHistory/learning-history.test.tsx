@@ -1,17 +1,18 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LearningHistory } from './index';
 
-const { getHistoryMock, loadHabitsMock, loggerErrorMock } = vi.hoisted(() => ({
+const { getHistoryMock, loadHabitsMock, loggerErrorMock, replaceMock } = vi.hoisted(() => ({
   getHistoryMock: vi.fn(),
   loadHabitsMock: vi.fn(),
   loggerErrorMock: vi.fn(),
+  replaceMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),
-    replace: vi.fn(),
+    replace: replaceMock,
   }),
   usePathname: () => '/history',
 }));
@@ -80,5 +81,32 @@ describe('LearningHistory load errors', () => {
     render(<LearningHistory />);
 
     expect(await screen.findAllByText(/Failed to load/i)).not.toHaveLength(0);
+  });
+});
+
+describe('LearningHistory page shell', () => {
+  beforeEach(() => {
+    replaceMock.mockClear();
+    getHistoryMock.mockResolvedValue([]);
+    loadHabitsMock.mockResolvedValue({ habits: [] });
+  });
+
+  it('renders exactly one h1 titled "Learning History"', async () => {
+    render(<LearningHistory />);
+
+    const headings = await screen.findAllByRole('heading', { level: 1, name: 'Learning History' });
+    expect(headings).toHaveLength(1);
+  });
+
+  it('navigates to the stats tab when the Stats tab is selected', async () => {
+    render(<LearningHistory activeTab="history" />);
+
+    // Wait for data loading to settle so the tab nodes are stable before we click.
+    await screen.findByRole('heading', { level: 1, name: 'Learning History' });
+
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole('tab', { name: /stats/i }));
+      expect(replaceMock).toHaveBeenCalledWith('/history?tab=stats');
+    });
   });
 });

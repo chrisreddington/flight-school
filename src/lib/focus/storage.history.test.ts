@@ -148,3 +148,33 @@ describe('focusStore.saveTodaysFocus — history pruning', () => {
     expect(Object.keys(saved.history).length).toBeLessThanOrEqual(MAX_HISTORY_ENTRIES);
   });
 });
+
+describe('focusStore.saveCompleteFocusResponse', () => {
+  it('writes the full focus payload in one schema mutation', async () => {
+    vi.mocked(apiGet).mockResolvedValue({ history: {} });
+
+    await focusStore.saveCompleteFocusResponse({
+      ...mockFocusResponse,
+      meta: {
+        ...mockFocusResponse.meta,
+        generatedAt: '2024-01-15T14:00:00.000Z',
+        toolsUsed: ['copilot'],
+        skillProfileLastUpdated: '2024-01-15T13:30:00.000Z',
+      },
+    });
+
+    expect(vi.mocked(apiGet).mock.calls).toHaveLength(1);
+    expect(vi.mocked(apiPost).mock.calls).toHaveLength(1);
+
+    const saved = lastSavedSchema();
+    const record = saved.history['2024-01-15'];
+    expect(record.challenges).toHaveLength(1);
+    expect(record.goals).toHaveLength(1);
+    expect(record.learningTopics).toHaveLength(1);
+    expect(record.meta).toEqual({
+      generatedAt: '2024-01-15T14:00:00.000Z',
+      toolsUsed: ['copilot'],
+      skillProfileLastUpdated: '2024-01-15T13:30:00.000Z',
+    });
+  });
+});

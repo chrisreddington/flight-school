@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FocusHistory } from '@/lib/focus/types';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import {
@@ -106,6 +106,10 @@ function createHabit(): HabitWithHistory {
 }
 
 describe('LearningHistory view model', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should build sorted entries with focus items and habit check-ins', () => {
     const entries = buildHistoryEntries(createHistory(), { habits: [createHabit()] }, todayDateKey);
 
@@ -157,6 +161,12 @@ describe('LearningHistory view model', () => {
   });
 
   it('should derive grouped navigation and activity buckets from all entries', () => {
+    // Pin the clock so the 52-week activity window includes the fixture's
+    // 2026-01-02 cell; otherwise the activity-bucket assertion would age out
+    // as real "today" advances past the rolling window.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-03T12:00:00'));
+
     const entries = buildHistoryEntries(createHistory(), { habits: [createHabit()] }, todayDateKey);
     const viewModel = buildLearningHistoryViewModel({
       entries,
@@ -185,5 +195,115 @@ describe('LearningHistory view model', () => {
 
   it('should count goals that were ever completed', () => {
     expect(countCompletedGoals(createHistory())).toBe(1);
+  });
+
+  it('should include days that only have habit check-ins and no focus record', () => {
+    // Pin the clock so the 52-week activity window is anchored to the fixture's
+    // todayDateKey (2026-01-03); otherwise 2025-12-31 would eventually fall out
+    // of the rolling window and the activity-cell assertion would age out.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-03T12:00:00'));
+
+    const habit = createHabit();
+    // A check-in on a date that has no focus record at all — the kind of day
+    // (e.g. a weekend habit log with no generated focus) the timeline used to
+    // drop entirely because it only iterated focus-history dates.
+    habit.checkIns.push({
+      date: '2025-12-31',
+      value: 25,
+      completed: true,
+      timestamp: '2025-12-31T08:00:00.000Z',
+    });
+
+    const entries = buildHistoryEntries(createHistory(), { habits: [habit] }, todayDateKey);
+
+    const habitOnlyDay = entries.find((entry) => entry.dateKey === '2025-12-31');
+    expect(habitOnlyDay?.items.map((item) => item.type)).toEqual(['habit']);
+    expect(habitOnlyDay?.completedCount).toBe(1);
+    // The habit-only day threads into the same descending day order as focus days.
+    expect(entries.map((entry) => entry.dateKey)).toEqual([todayDateKey, '2026-01-02', '2025-12-31']);
+
+    const viewModel = buildLearningHistoryViewModel({
+      entries,
+      selectedDate: null,
+      typeFilter: 'all',
+      statusFilter: 'all',
+      searchQuery: '',
+      todayDateKey,
+      activeTopicCount: 0,
+      insights: null,
+      totalGoalsCompleted: 0,
+    });
+    // The activity graph cell and stats now reflect the habit-only day.
+    expect(viewModel.activityData.find((day) => day.date === '2025-12-31')?.count).toBe(1);
+    expect(viewModel.stats.habits).toBe(3);
+  });
+
+  it('should mark a habit-only skipped check-in as skipped, not active', () => {
+    const habit = createHabit();
+    // `skipHabitDay` records a skip as `value: false`. The day must read as
+    // skipped — matching the Skipped filter and stats — not a plain incomplete
+    // (active) check-in, which would hide the skip from the skipped views.
+    habit.checkIns.push({
+      date: '2025-12-30',
+      value: false,
+      completed: false,
+      timestamp: '2025-12-30T08:00:00.000Z',
+    });
+
+    const entries = buildHistoryEntries(createHistory(), { habits: [habit] }, todayDateKey);
+
+    const skippedDay = entries.find((entry) => entry.dateKey === '2025-12-30');
+    expect(skippedDay?.items.map((item) => item.status)).toEqual(['skipped']);
+    expect(skippedDay?.skippedCount).toBe(1);
+
+    const viewModel = buildLearningHistoryViewModel({
+      entries,
+      selectedDate: null,
+      typeFilter: 'all',
+      statusFilter: 'skipped',
+      searchQuery: '',
+      todayDateKey,
+      activeTopicCount: 0,
+      insights: null,
+      totalGoalsCompleted: 0,
+    });
+    // The skipped habit day survives the Skipped filter and lifts skipped stats
+    // alongside the existing skipped topic on today.
+    expect(
+      viewModel.filteredEntries.find((entry) => entry.dateKey === '2025-12-30')?.items.map((item) => item.status),
+    ).toEqual(['skipped']);
+    expect(viewModel.stats.skipped).toBe(2);
+  });
+
+  it('should surface today pending active habits even with no focus record or check-in', () => {
+    // Pin the clock so the activity window aligns with todayDateKey.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-03T12:00:00'));
+
+    const habit = createHabit();
+    habit.checkIns = [];
+
+    // Empty focus history and no check-in: the only reason today is a learning
+    // day is the pending active habit, which the timeline must still surface.
+    const entries = buildHistoryEntries({}, { habits: [habit] }, todayDateKey);
+
+    const todayEntry = entries.find((entry) => entry.dateKey === todayDateKey);
+    expect(todayEntry?.items.map((item) => item.type)).toEqual(['habit']);
+    expect(todayEntry?.items.map((item) => item.status)).toEqual(['active']);
+
+    const viewModel = buildLearningHistoryViewModel({
+      entries,
+      selectedDate: null,
+      typeFilter: 'all',
+      statusFilter: 'all',
+      searchQuery: '',
+      todayDateKey,
+      activeTopicCount: 0,
+      insights: null,
+      totalGoalsCompleted: 0,
+    });
+    expect(viewModel.stats.active).toBe(1);
+    expect(viewModel.stats.habits).toBe(1);
   });
 });

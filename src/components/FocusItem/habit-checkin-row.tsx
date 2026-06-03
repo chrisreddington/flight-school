@@ -35,7 +35,7 @@ export function HabitCheckInRow({ habit, checkIn, isToday, isPending, onUndo }: 
     labelVariant = 'secondary';
   } else {
     icon = <CheckIcon size={16} />;
-    statusText = checkIn.completed ? '✓ Target reached!' : '✓ Checked in';
+    statusText = checkIn.completed ? 'Target reached!' : 'Checked in';
     labelVariant = 'success';
     showProgress = true;
   }

@@ -1,23 +1,37 @@
 /**
  * Worker-local durable activity store.
  *
- * The activity bus (`activity-bus.ts`) holds the authoritative
- * in-memory ring buffer for live SSE delivery. This module persists
- * those events to disk under `users/{userId}/activity/events.json`
- * so that a worker restart can re-hydrate recent activity for a
- * returning client. It is **not** used as a cross-process channel
- * any more — the web tier never reads this file. The only consumer
- * is the worker singleton in `logger-worker.ts`.
+ * The activity bus (`activity-bus.ts`) holds the authoritative in-memory ring
+ * buffer for live SSE delivery. This module persists those events to the
+ * envelope {@link import('@/lib/storage/document-store/scoped-store').getUserScopedStoreForUser}
+ * store under the `'activity'` container (singleton document `current`) so a
+ * worker restart can re-hydrate recent activity for a returning client. It is
+ * **not** a cross-process channel — the web tier never reads it. The only
+ * consumer is the worker singleton in `logger-worker.ts`.
+ *
+ * Unlike the migratable singletons (skills, habits, threads, …) activity is a
+ * disposable rehydration cache, so it is deliberately **absent** from
+ * `FILENAME_TO_CONTAINER` / `MIGRATABLE_SINGLETON_FILENAMES`: it talks to the
+ * store directly rather than through `createSingletonRepo`, keeps its bespoke
+ * per-user write mutex + 400-event ring buffer, and abandons (does not migrate)
+ * the legacy `users/{userId}/activity/events.json` file.
+ *
+ * This module is **worker-reached**. Because a user can delete their account
+ * while the worker is still persisting, writes swallow {@link UserDeletedError}
+ * — the store refuses the write for a tombstoned user and we silently abort.
+ *
+ * @module copilot/activity/activity-store
  */
 
+import { getUserScopedStoreForUser } from '@/lib/storage/document-store/scoped-store';
+import { SINGLETON_DOCUMENT_ID } from '@/lib/storage/document-store/types';
+import { UserDeletedError } from '@/lib/storage/document-store/user-scoped-store';
 import { logger } from '@/lib/logger';
-import { deleteFile, ensureDir, readFile, writeFile } from '@/lib/storage/utils';
 import type { AIActivityEvent } from './types';
 
 const log = logger.withTag('ActivityStore');
 
-const STORE_SUBDIR = (userId: string) => `users/${userId}/activity`;
-const STORE_FILE = 'events.json';
+const ACTIVITY_CONTAINER = 'activity';
 const MAX_STORED_EVENTS = 400;
 
 interface StoredActivityEvent extends Omit<AIActivityEvent, 'timestamp'> {
@@ -48,34 +62,25 @@ function deserializeEvent(event: StoredActivityEvent): AIActivityEvent {
   };
 }
 
-function parseStorePayload(raw: string | null): ActivityStoreFile {
-  if (raw === null || raw.trim().length === 0) {
+function coerceStorePayload(raw: ActivityStoreFile | null): ActivityStoreFile {
+  if (!raw || !Array.isArray(raw.events)) {
     return EMPTY_STORE_FILE;
   }
-
-  try {
-    const parsed = JSON.parse(raw) as ActivityStoreFile;
-    if (!parsed || !Array.isArray(parsed.events)) {
-      return EMPTY_STORE_FILE;
-    }
-    return {
-      version: 1,
-      events: parsed.events.filter((event) => typeof event?.id === 'string'),
-    };
-  } catch (error) {
-    log.warn('Failed to parse activity store payload', { error });
-    return EMPTY_STORE_FILE;
-  }
+  return {
+    version: 1,
+    events: raw.events.filter((event) => typeof event?.id === 'string'),
+  };
 }
 
 async function readStoreFile(userId: string): Promise<ActivityStoreFile> {
-  const raw = await readFile(STORE_SUBDIR(userId), STORE_FILE);
-  return parseStorePayload(raw);
+  const store = await getUserScopedStoreForUser(userId);
+  const raw = await store.get<ActivityStoreFile>(ACTIVITY_CONTAINER, SINGLETON_DOCUMENT_ID);
+  return coerceStorePayload(raw);
 }
 
 async function writeStoreFile(userId: string, payload: ActivityStoreFile): Promise<void> {
-  await ensureDir(STORE_SUBDIR(userId), { mode: 0o700 });
-  await writeFile(STORE_SUBDIR(userId), STORE_FILE, JSON.stringify(payload));
+  const store = await getUserScopedStoreForUser(userId);
+  await store.put<ActivityStoreFile>(ACTIVITY_CONTAINER, SINGLETON_DOCUMENT_ID, payload);
 }
 
 /**
@@ -117,10 +122,12 @@ export async function appendActivityEvent(event: AIActivityEvent): Promise<void>
     }
 
     const trimmed = nextEvents.slice(-MAX_STORED_EVENTS);
-    await writeStoreFile(event.userId, {
-      version: 1,
-      events: trimmed,
-    });
+    try {
+      await writeStoreFile(event.userId, { version: 1, events: trimmed });
+    } catch (error) {
+      if (error instanceof UserDeletedError) return;
+      throw error;
+    }
   });
 }
 
@@ -131,6 +138,12 @@ export async function loadActivityEvents(userId: string): Promise<AIActivityEven
 
 export async function clearActivityEvents(userId: string): Promise<void> {
   await enqueueWrite(userId, async () => {
-    await deleteFile(STORE_SUBDIR(userId), STORE_FILE);
+    try {
+      const store = await getUserScopedStoreForUser(userId);
+      await store.remove(ACTIVITY_CONTAINER, SINGLETON_DOCUMENT_ID);
+    } catch (error) {
+      // Idempotent best-effort: a missing doc or a deleted user is a no-op.
+      log.warn('Failed to clear activity events', { error });
+    }
   });
 }

@@ -7,15 +7,13 @@
  */
 
 import { NextResponse } from 'next/server';
-import { listDirs } from '@/lib/storage/utils';
-import { WORKSPACES_DIR } from '@/lib/workspace/storage';
+import { workspacesRepo } from '@/lib/workspace/repo';
 import { requireUserContext } from '@/lib/auth/context';
 import { handleUnauthorizedError } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 
 const log = logger.withTag('Workspace List API');
-
-const SAFE_PATH_SEGMENT = /^[a-zA-Z0-9_-]+$/;
 
 export async function GET() {
   let userId: string;
@@ -31,7 +29,7 @@ export async function GET() {
   }
 
   try {
-    const challengeIds = await listDirs(`users/${userId}/${WORKSPACES_DIR}`);
+    const challengeIds = await workspacesRepo.list(userId);
     return NextResponse.json({ challengeIds });
   } catch (error) {
     log.error('GET /api/workspace/storage/list failed', { error });

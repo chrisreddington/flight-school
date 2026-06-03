@@ -1,6 +1,6 @@
 /**
  * Per-user retention sweepers — pure, time-driven cleanup primitives for
- * data stored under `users/{userId}/…`.
+ * per-user data held in the envelope {@link DocumentStore}.
  *
  * This module is a no-`jobStorage` peer of `@/worker/jobs/retention`. Both
  * share the same `RETENTION_TTL` table, which is re-exported here as the
@@ -8,19 +8,33 @@
  *
  * ## Retention policy
  *
- * | Store                                            | TTL                       |
- * |--------------------------------------------------|---------------------------|
- * | `users/{userId}/threads.json` (per-thread)       | 7d since `updatedAt`      |
- * | `users/{userId}/evaluations.json` (per entry)    | 24h since terminal state  |
- * | `BackgroundJob` records (terminal)               | existing 1h delete window |
- * | `BackgroundJob` records (running) considered stale | 6h with no progress     |
- * | Orphan `BackgroundJob` records (no `userId`)     | deleted on next sweep     |
+ * | Store                                   | TTL                       |
+ * |-----------------------------------------|---------------------------|
+ * | threads (per-thread, `threads` container) | 7d since `updatedAt`    |
+ * | evaluations (per entry, `evaluations`)    | 24h since terminal state|
+ * | `BackgroundJob` records (terminal)        | existing 1h delete window |
+ * | `BackgroundJob` records (running) stale   | 6h with no progress     |
+ * | Orphan `BackgroundJob` records (no `userId`) | deleted on next sweep |
+ *
+ * Both per-user stores live in the envelope store now, so the sweep reads and
+ * rewrites them through the same domain accessors the app uses
+ * ({@link readThreadsStorage} / {@link readEvaluationStorage}) and enumerates
+ * active users via the sharded user registry rather than a `users/` directory
+ * listing — a user whose data lives only in the SQLite envelope has no such
+ * directory.
  *
  * @module storage/user-retention
  */
 
 import 'server-only';
-import { deleteFile, listDirs, readFile, writeFile } from './utils';
+import {
+  readEvaluationStorage,
+  writeEvaluationStorage,
+  type EvaluationProgress,
+} from '@/lib/jobs/storage/evaluation-storage';
+import { readThreadsStorage, writeThreadsStorage } from '@/lib/jobs/storage/threads-storage';
+import { getDocumentStore } from './document-store/factory';
+import { collectRegisteredUsers } from './document-store/user-registry';
 import { SAFE_USER_ID } from './user-scope';
 import { logger } from '@/lib/logger';
 
@@ -47,23 +61,14 @@ export interface SweepResult {
   inspected: number;
 }
 
-interface ThreadShape {
-  id: string;
-  updatedAt?: string;
-}
-
-interface EvaluationShape {
-  status: 'pending' | 'streaming' | 'completed' | 'failed' | string;
-  updatedAt?: string;
-}
-
-export type UserSweepKey = 'threads' | 'evaluations';
-
 function parseTimestamp(input: unknown): number | null {
   if (typeof input !== 'string' || input.length === 0) return null;
   const ms = Date.parse(input);
   return Number.isFinite(ms) ? ms : null;
 }
+
+/** The per-user stores this module sweeps, keying the aggregate result. */
+export type UserSweepKey = 'threads' | 'evaluations';
 
 function isOlderThanTtl(timestamp: unknown, nowMs: number, ttlMs: number): boolean {
   const ts = parseTimestamp(timestamp);
@@ -80,12 +85,9 @@ function addSweepResult(target: SweepResult, source: SweepResult): void {
 }
 
 /**
- * Sweep individual threads for a single user whose `updatedAt` is older
- * than the threads TTL. If every thread in the file is stale, the file
- * itself is removed so the directory listing stays clean.
- *
- * Reads use {@link readFile} (returns null on ENOENT) — running this
- * over a `users/{userId}/` that has never held threads is a no-op.
+ * Sweep individual threads for a single user whose `updatedAt` is older than
+ * the threads TTL, rewriting the survivors through the envelope accessor. A
+ * user who has never held threads reads back an empty list — a no-op.
  */
 async function sweepThreadsForUser(
   userId: string,
@@ -95,36 +97,16 @@ async function sweepThreadsForUser(
   if (!SAFE_USER_ID.test(userId)) {
     return { deleted: 0, inspected: 0 };
   }
-  const raw = await readFile(`users/${userId}`, 'threads.json');
-  if (raw === null) return { deleted: 0, inspected: 0 };
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    log.warn(`[retention] Could not parse threads.json for ${userId} — skipping`);
-    return { deleted: 0, inspected: 0 };
-  }
-
-  const threads = Array.isArray((parsed as { threads?: unknown }).threads)
-    ? (parsed as { threads: ThreadShape[] }).threads
-    : [];
+  const threads = await readThreadsStorage(userId);
   const inspected = threads.length;
+  if (inspected === 0) return { deleted: 0, inspected: 0 };
 
-  const kept = threads.filter((t) => {
-    return !isOlderThanTtl(t.updatedAt, nowMs, ttlMs);
-  });
-
+  const kept = threads.filter((thread) => !isOlderThanTtl(thread.updatedAt, nowMs, ttlMs));
   const deleted = inspected - kept.length;
   if (deleted === 0) return { deleted: 0, inspected };
 
-  if (kept.length === 0) {
-    await deleteFile(`users/${userId}`, 'threads.json');
-    log.info(`[retention] swept all ${inspected} threads for user ${userId}`);
-  } else {
-    await writeFile(`users/${userId}`, 'threads.json', JSON.stringify({ threads: kept }, null, 2));
-    log.info(`[retention] swept ${deleted}/${inspected} threads for user ${userId}`);
-  }
+  await writeThreadsStorage(userId, kept);
+  log.info(`[retention] swept ${deleted}/${inspected} threads for user ${userId}`);
   return { deleted, inspected };
 }
 
@@ -140,26 +122,15 @@ async function sweepEvaluationsForUser(
   if (!SAFE_USER_ID.test(userId)) {
     return { deleted: 0, inspected: 0 };
   }
-  const raw = await readFile(`users/${userId}`, 'evaluations.json');
-  if (raw === null) return { deleted: 0, inspected: 0 };
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    log.warn(`[retention] Could not parse evaluations.json for ${userId} — skipping`);
-    return { deleted: 0, inspected: 0 };
-  }
-
-  const root = parsed as { evaluations?: Record<string, EvaluationShape>; version?: number };
-  const evaluations = root.evaluations && typeof root.evaluations === 'object' ? root.evaluations : {};
-  const ids = Object.keys(evaluations);
+  const storage = await readEvaluationStorage(userId);
+  const ids = Object.keys(storage.evaluations);
   const inspected = ids.length;
+  if (inspected === 0) return { deleted: 0, inspected: 0 };
 
-  const kept: Record<string, EvaluationShape> = {};
+  const kept: Record<string, EvaluationProgress> = {};
   let deleted = 0;
   for (const id of ids) {
-    const entry = evaluations[id];
+    const entry = storage.evaluations[id];
     if (isTerminalStatus(entry.status) && isOlderThanTtl(entry.updatedAt, nowMs, ttlMs)) {
       deleted += 1;
       continue;
@@ -169,39 +140,33 @@ async function sweepEvaluationsForUser(
 
   if (deleted === 0) return { deleted: 0, inspected };
 
-  if (Object.keys(kept).length === 0) {
-    await deleteFile(`users/${userId}`, 'evaluations.json');
-  } else {
-    await writeFile(
-      `users/${userId}`,
-      'evaluations.json',
-      JSON.stringify({ evaluations: kept, version: root.version ?? 1 }, null, 2),
-    );
-  }
+  await writeEvaluationStorage(userId, { evaluations: kept, version: storage.version });
   log.info(`[retention] swept ${deleted}/${inspected} evaluations for user ${userId}`);
   return { deleted, inspected };
 }
 
 /**
- * Run every per-user sweeper for every user directory on disk.
- * Filters dirnames through {@link SAFE_USER_ID} as defense in depth
- * against unexpected names appearing under the storage root.
+ * Run every per-user sweeper for every registered user. Enumerates the sharded
+ * user registry — the envelope store's active-user index — rather than a
+ * `users/` directory listing, which no longer exists for SQLite-only users.
+ * Filters userIds through {@link SAFE_USER_ID} as defense in depth.
  */
 export async function sweepAllUsers(nowMs: number): Promise<Record<UserSweepKey, SweepResult>> {
-  const userDirs = await listDirs('users');
+  const store = await getDocumentStore();
+  const userIds = await collectRegisteredUsers(store);
   const aggregate: Record<UserSweepKey, SweepResult> = {
     threads: { deleted: 0, inspected: 0 },
     evaluations: { deleted: 0, inspected: 0 },
   };
-  for (const userId of userDirs) {
+  for (const userId of userIds) {
     if (!SAFE_USER_ID.test(userId)) {
-      log.warn(`[retention] skipping unsafe user-dir name`);
+      log.warn(`[retention] skipping unsafe registered userId`);
       continue;
     }
-    const t = await sweepThreadsForUser(userId, nowMs);
-    addSweepResult(aggregate.threads, t);
-    const e = await sweepEvaluationsForUser(userId, nowMs);
-    addSweepResult(aggregate.evaluations, e);
+    const threadSweep = await sweepThreadsForUser(userId, nowMs);
+    addSweepResult(aggregate.threads, threadSweep);
+    const evaluationSweep = await sweepEvaluationsForUser(userId, nowMs);
+    addSweepResult(aggregate.evaluations, evaluationSweep);
   }
   return aggregate;
 }

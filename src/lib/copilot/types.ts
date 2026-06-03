@@ -163,6 +163,8 @@ export interface ChallengeDef {
   language: string;
   /** Difficulty level */
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  /** Human-readable time estimate (e.g. "30 minutes"), shown in the header meta band */
+  estimatedTime?: string;
   /** Optional hints about expected solution patterns */
   expectedPatterns?: string[];
   /** Optional test cases for validation context */

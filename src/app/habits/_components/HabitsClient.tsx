@@ -6,20 +6,20 @@
  * all mutations, dialogs, and re-fetch on completion.
  */
 
-import { LightBulbIcon } from '@primer/octicons-react';
-import { Banner, Heading, Spinner, Stack, Text } from '@primer/react';
+import { LightBulbIcon, PlusIcon } from '@primer/octicons-react';
+import { Banner, Button, Spinner, SplitPageLayout, Stack } from '@primer/react';
 import dynamic from 'next/dynamic';
 import { useCallback, useState } from 'react';
 
+import { CheckInActivity } from '@/components/Habits/CheckInActivity';
 import { HabitListSection } from '@/components/Habits/habit-list-section';
 import { HabitStatsSection } from '@/components/Habits/habit-stats-section';
-import { ProfileNav } from '@/components/ProfileNav';
+import { PageHeader } from '@/components/PageHeader';
 import { useBreadcrumb } from '@/contexts/breadcrumb-context';
 import { useHabitActions } from '@/hooks/use-habit-actions';
 import { habitStore } from '@/lib/habits';
 import type { HabitWithHistory } from '@/lib/habits/types';
 import { logger } from '@/lib/logger';
-import layoutStyles from '@/styles/two-column-layout.module.css';
 import styles from '../habits.module.css';
 
 const HabitCreationDialog = dynamic(
@@ -77,35 +77,47 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
 
   return (
     <>
-      <main className={layoutStyles.main}>
-        <aside className={layoutStyles.sidebar}>
-          <ProfileNav />
+      <SplitPageLayout className={styles.layout}>
+        <SplitPageLayout.Pane position={{ regular: 'start', narrow: 'end' }} aria-label="Habit tracking sidebar">
+          <Stack direction="vertical" gap="normal">
+            <HabitStatsSection
+              activeHabitsCount={activeHabits.length}
+              totalCheckIns={totalCheckIns}
+              currentStreaks={activeHabits.filter((h) => h.currentDay > 0).length}
+              totalCompletions={completedHabits.length}
+            />
 
-          <HabitStatsSection
-            activeHabitsCount={activeHabits.length}
-            totalCheckIns={totalCheckIns}
-            currentStreaks={activeHabits.filter((h) => h.currentDay > 0).length}
-            totalCompletions={completedHabits.length}
-            onNewHabitClick={() => setIsCreateDialogOpen(true)}
+            <CheckInActivity habits={[...activeHabits, ...completedHabits]} />
+
+            <div className={`${styles.sidebarCard} ${styles.tipCard}`}>
+              <p className={styles.tipTitle}>
+                <LightBulbIcon size={12} /> Pro Tip
+              </p>
+              <p className={styles.tipText}>
+                Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
+              </p>
+            </div>
+          </Stack>
+        </SplitPageLayout.Pane>
+
+        <SplitPageLayout.Content>
+          <PageHeader
+            title="My Habits"
+            description="Track your progress and build lasting habits"
+            actions={
+              // The empty-state Blankslate owns the single green primary ("Create
+              // a habit"), so the persistent header action steps down to default
+              // there to avoid two competing primaries; once habits exist it is
+              // the page's one primary action.
+              <Button
+                variant={activeHabits.length === 0 ? 'default' : 'primary'}
+                leadingVisual={PlusIcon}
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                New Habit
+              </Button>
+            }
           />
-
-          <div className={`${layoutStyles.sidebarCard} ${styles.tipCard}`}>
-            <p className={styles.tipTitle}>
-              <LightBulbIcon size={12} /> Pro Tip
-            </p>
-            <p className={styles.tipText}>
-              Start small! It&apos;s easier to build a habit with a 5-minute daily commitment than an hour-long one.
-            </p>
-          </div>
-        </aside>
-
-        <div className={styles.content}>
-          <div className={styles.header}>
-            <Heading as="h1">My Habits</Heading>
-            <Text as="p" style={{ color: 'var(--fgColor-muted)', marginTop: '4px' }}>
-              Track your progress and build lasting habits
-            </Text>
-          </div>
 
           {isReloading && (
             <Stack direction="horizontal" align="center" gap="condensed">
@@ -135,8 +147,8 @@ export function HabitsClient({ initialActive, initialCompleted, initialAbandoned
             onDelete={actions.remove}
             onNewHabitClick={() => setIsCreateDialogOpen(true)}
           />
-        </div>
-      </main>
+        </SplitPageLayout.Content>
+      </SplitPageLayout>
 
       {isCreateDialogOpen && (
         <HabitCreationDialog

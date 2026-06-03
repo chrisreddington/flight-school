@@ -72,7 +72,7 @@ describe('createCopilotUserRuntime', () => {
       expect.objectContaining({
         gitHubToken: 'ghu_user',
         useLoggedInUser: false,
-        copilotHome: '/tmp/runtimes/123',
+        baseDirectory: '/tmp/runtimes/123',
       }),
     );
   });

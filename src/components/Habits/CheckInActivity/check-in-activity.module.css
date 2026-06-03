@@ -1,0 +1,85 @@
+.card {
+  background: var(--bgColor-default);
+  border: 1px solid var(--borderColor-default);
+  border-radius: var(--borderRadius-medium);
+  padding: var(--base-size-16);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-4);
+  margin-block-end: var(--base-size-12);
+}
+
+.title {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold);
+  color: var(--fgColor-default);
+  margin: 0;
+}
+
+.subtitle,
+.emptyMessage,
+.legendLabel {
+  color: var(--fgColor-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 11px);
+  gap: 3px;
+  justify-content: start;
+  padding-block: var(--base-size-4);
+}
+
+.dayCell,
+.legendSwatch {
+  block-size: 11px;
+  border-radius: 2px;
+  inline-size: 11px;
+}
+
+.dayCell {
+  border: 0;
+  padding: 0;
+}
+
+.legend {
+  align-items: center;
+  display: flex;
+  gap: var(--base-size-4);
+  justify-content: flex-end;
+  margin-block-start: var(--base-size-8);
+}
+
+.emptyMessage {
+  display: block;
+  margin-block-start: var(--base-size-8);
+}
+
+/* Primer ships only two functional success backgrounds (muted, emphasis), so
+   the four "active" levels derive a monotonic green ramp by mixing the
+   strongest success background into the page background. Both endpoints are
+   functional tokens, so the scale stays theme-aware (light/dark/high-contrast)
+   without any hardcoded color. Level 0 is the neutral "no activity" cell,
+   matching GitHub's contribution graph. */
+.level0 {
+  background: var(--bgColor-neutral-muted);
+}
+
+.level1 {
+  background: color-mix(in srgb, var(--bgColor-success-emphasis) 25%, var(--bgColor-default));
+}
+
+.level2 {
+  background: color-mix(in srgb, var(--bgColor-success-emphasis) 50%, var(--bgColor-default));
+}
+
+.level3 {
+  background: color-mix(in srgb, var(--bgColor-success-emphasis) 75%, var(--bgColor-default));
+}
+
+.level4 {
+  background: var(--bgColor-success-emphasis);
+}

@@ -2,5 +2,8 @@
 
 .appRoot {
   min-height: 100vh;
-  background-color: var(--bgColor-default);
+  /* App canvas sits one layer behind cards: inset (subtle gray) so white
+     `--bgColor-default` surfaces (header, cards) read as raised. Pages no
+     longer each need their own inset background. */
+  background-color: var(--bgColor-inset);
 }

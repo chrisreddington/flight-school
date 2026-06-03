@@ -4,18 +4,24 @@ import { describe, expect, it } from 'vitest';
 
 const appHeaderSource = readFileSync(resolve(process.cwd(), 'src/components/AppHeader/index.tsx'), 'utf8');
 
-describe('AppHeader debug mode visibility', () => {
-  const hasDevelopmentGuard = /process\.env\.NODE_ENV === 'development'/.test(appHeaderSource);
-
-  function isDebugMenuVisible(nodeEnv: string): boolean {
-    return nodeEnv === 'development' && hasDevelopmentGuard;
-  }
-
-  it('does not render Debug Mode when NODE_ENV is production', () => {
-    expect(isDebugMenuVisible('production')).toBe(false);
+describe('AppHeader debug mode consolidation', () => {
+  it('does not expose a Debug Mode toggle in the header menu (it now lives in Settings)', () => {
+    expect(appHeaderSource).not.toMatch(/Debug Mode/);
+    expect(appHeaderSource).not.toMatch(/toggleDebugMode/);
   });
 
-  it('renders Debug Mode when NODE_ENV is development', () => {
-    expect(isDebugMenuVisible('development')).toBe(true);
+  it('links the username menu item to the user GitHub profile', () => {
+    expect(appHeaderSource).toMatch(/github\.com\/\$\{username\}/);
+  });
+});
+
+describe('AppHeader primary navigation', () => {
+  it('renders the persistent PrimaryNav row', () => {
+    expect(appHeaderSource).toMatch(/import \{ PrimaryNav \}/);
+    expect(appHeaderSource).toMatch(/<PrimaryNav \/>/);
+  });
+
+  it('drops the redundant "Learning" menu group now that PrimaryNav owns those links', () => {
+    expect(appHeaderSource).not.toMatch(/title="Learning"/);
   });
 });

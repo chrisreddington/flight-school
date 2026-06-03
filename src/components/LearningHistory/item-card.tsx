@@ -34,13 +34,13 @@ interface ItemCardProps {
   onStopSkipTopic?: (topicId: string) => void;
   onStopSkipChallenge?: (challengeId: string) => void;
   onStopSkipGoal?: (goalId: string) => void;
-  onExploreTopic?: (topic: LearningTopic) => void;
+  onExploreTopic?: (topic: LearningTopic) => Promise<void>;
   isSkippingTopic?: boolean;
   isSkippingChallenge?: boolean;
   isSkippingGoal?: boolean;
 }
 
-/** Individual item card with collapsible support for skipped items */
+/** Individual item card with collapsible support for completed/skipped items */
 export const ItemCard = memo(function ItemCard({
   item,
   dateKey,
@@ -56,14 +56,12 @@ export const ItemCard = memo(function ItemCard({
   isSkippingChallenge = false,
   isSkippingGoal = false,
 }: ItemCardProps) {
-  // Track user's explicit collapsed preference (null = follow automatic state)
-  const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
-
-  // Compute effective collapsed state:
-  // - Items that are completed/skipped should collapse by default
-  // - User can override by clicking (userCollapsed takes precedence)
-  const shouldAutoCollapse = item.status === 'completed' || item.status === 'skipped';
-  const isCollapsed = userCollapsed !== null ? userCollapsed : shouldAutoCollapse;
+  // Every history item starts collapsed to a one-line summary (status/type
+  // icon + title + time) so the timeline stays scannable instead of rendering
+  // a wall of full focus cards. Expanding reveals the full card and its
+  // actions; the choice is per-item and resets on remount.
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isCollapsed = !isExpanded;
 
   const statusIcon =
     item.status === 'completed' ? (
@@ -85,18 +83,14 @@ export const ItemCard = memo(function ItemCard({
 
   const timeStr = formatTime(item.timestamp);
   const isInactive = item.status === 'skipped';
-  const isCollapsible = item.status === 'skipped' || item.status === 'completed';
 
   // Get item title and ID
   const itemTitle = item.data.title;
   const itemId = item.data.id;
 
   const handleToggle = useCallback(() => {
-    if (isCollapsible) {
-      // Toggle from current state
-      setUserCollapsed((prev) => (prev !== null ? !prev : !shouldAutoCollapse));
-    }
-  }, [isCollapsible, shouldAutoCollapse]);
+    setIsExpanded((prev) => !prev);
+  }, []);
 
   return (
     <div
@@ -105,17 +99,14 @@ export const ItemCard = memo(function ItemCard({
     >
       <button
         type="button"
-        className={`${styles.itemCardHeader} ${isCollapsible ? styles.itemCardHeaderClickable : ''}`}
+        className={`${styles.itemCardHeader} ${styles.itemCardHeaderClickable}`}
         onClick={handleToggle}
-        disabled={!isCollapsible}
-        aria-expanded={isCollapsible ? !isCollapsed : undefined}
+        aria-expanded={!isCollapsed}
       >
         <div className={styles.itemCardMeta}>
-          {isCollapsible && (
-            <span className={styles.itemCardChevron}>
-              {isCollapsed ? <ChevronRightIcon size={14} /> : <ChevronDownIcon size={14} />}
-            </span>
-          )}
+          <span className={styles.itemCardChevron}>
+            {isCollapsed ? <ChevronRightIcon size={14} /> : <ChevronDownIcon size={14} />}
+          </span>
           {statusIcon}
           <span className={styles.itemCardType}>{typeIcon}</span>
           {isCollapsed && <span className={styles.itemCardTitle}>{itemTitle}</span>}

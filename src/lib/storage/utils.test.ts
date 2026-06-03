@@ -389,4 +389,30 @@ describe('Storage Utils', () => {
       expect(() => safeChildPath('', 'foo.ts')).toThrow(/baseDir/);
     });
   });
+
+  // ===========================================================================
+  // Runtime storage-root resolution (regression: import-order independence)
+  // ===========================================================================
+
+  describe('runtime FLIGHT_SCHOOL_DATA_DIR resolution', () => {
+    it('routes writes to a data dir set AFTER the module was first imported', async () => {
+      // The storage root must be resolved per filesystem operation, not cached
+      // at module load. Per-test isolation stubs the env before each test, so a
+      // value applied after this module first evaluated has to take effect;
+      // caching it once made the resolved directory depend on import order and
+      // silently routed writes to the real home directory.
+      const lateDir = path.join(os.tmpdir(), `flight-school-late-${Date.now()}`);
+      vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', lateDir);
+      try {
+        await writeStorage('runtime-root.json', { ok: true });
+        const landed = await fs
+          .readFile(path.join(lateDir, 'runtime-root.json'), 'utf-8')
+          .then((raw) => JSON.parse(raw));
+        expect(landed).toEqual({ ok: true });
+      } finally {
+        vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', TEST_STORAGE_DIR);
+        await fs.rm(lateDir, { recursive: true, force: true });
+      }
+    });
+  });
 });

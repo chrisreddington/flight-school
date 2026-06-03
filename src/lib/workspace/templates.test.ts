@@ -29,7 +29,10 @@ describe('Workspace Templates', () => {
       expect(files[0].name).toBe('solution.ts');
       expect(files[0].language).toBe('typescript');
       expect(files[0].content).toContain('// Reverse String');
+      expect(files[0].content).toContain('// #region Challenge description');
+      expect(files[0].content).toContain('// #endregion');
       expect(files[0].content).toContain('export function solution()');
+      expect(files[0].content).toContain('// Your code here');
     });
 
     it('should include test file when description mentions testing', () => {
@@ -363,6 +366,13 @@ describe('Workspace Templates', () => {
 
       expect(files[0].content).toContain('// First line of description');
       expect(files[0].content).not.toContain('Second line');
+    });
+
+    it('should place challenge description inside a collapsible region comment', () => {
+      const files = getWorkspaceTemplate({ ...baseChallenge, language: 'TypeScript' });
+      const content = files[0].content;
+
+      expect(content.indexOf('// #region Challenge description')).toBeLessThan(content.indexOf('// #endregion'));
     });
   });
 

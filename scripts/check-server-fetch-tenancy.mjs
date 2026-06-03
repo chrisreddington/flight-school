@@ -18,6 +18,7 @@ import path from 'node:path';
 
 const ROOT = process.cwd();
 const SCAN_ROOTS = ['src/app', 'src/lib'];
+const KNOWN_ANONYMOUS_ROUTE_FILES = new Set(['src/app/api/otel/v1/traces/anonymous/route.ts']);
 
 // Skip files that only run client-side; the rule is server-only.
 const CLIENT_FILE_PATTERN = /^['"]use client['"];?/;
@@ -85,6 +86,14 @@ function stripComments(source) {
 }
 
 function checkFile(absolutePath) {
+  const relativePath = path.relative(ROOT, absolutePath).replaceAll('\\', '/');
+  if (KNOWN_ANONYMOUS_ROUTE_FILES.has(relativePath)) {
+    // Intentionally anonymous ingress for pre-auth browser OTel export.
+    // This endpoint is explicitly public-by-design and guarded by per-IP
+    // rate limiting in the route implementation.
+    return [];
+  }
+
   const rawSource = readFileSync(absolutePath, 'utf8');
   // Skip client components.
   const firstNonEmptyLine = rawSource.split('\n').find((line) => line.trim().length > 0) ?? '';

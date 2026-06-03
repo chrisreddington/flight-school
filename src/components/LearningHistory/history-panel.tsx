@@ -1,35 +1,22 @@
-import type { LearningTopic } from '@/lib/focus/types';
+import { SearchIcon } from '@primer/octicons-react';
 import { Banner, Button, Spinner, Stack } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 import { GeneratingBanner } from './generating-banner';
-import { HistoryEntryCard } from './history-entry-card';
-import type { HistoryEntry } from './types';
+import { HistoryTimeline } from './history-timeline';
+import type { HistoryEntry, HistoryEntryContext } from './types';
 import { formatDateForDisplay } from './utils';
 import styles from './LearningHistory.module.css';
 
-interface HistoryPanelProps {
+interface HistoryPanelProps extends HistoryEntryContext {
   loadError: string | null;
   isLoading: boolean;
   selectedDate: string | null;
   onClearSelectedDate: () => void;
   hasGenerating: boolean;
-  activeTopicIds: Set<string>;
-  activeChallengeIds: Set<string>;
-  activeGoalIds: Set<string>;
   filteredEntries: HistoryEntry[];
   todayDateKey: string;
   collapsedDays: Set<string>;
   onToggleDayCollapse: (dateKey: string) => void;
-  onRefresh: () => void;
-  onSkipTopic: (topicId: string, existingTitles: string[]) => Promise<void>;
-  onSkipChallenge: (challengeId: string, existingTitles: string[]) => Promise<void>;
-  onSkipGoal: (goalId: string, existingTitles: string[]) => Promise<void>;
-  onStopSkipTopic: (topicId: string) => void;
-  onStopSkipChallenge: (challengeId: string) => void;
-  onStopSkipGoal: (goalId: string) => void;
-  onExploreTopic: (topic: LearningTopic) => Promise<void>;
-  skippingTopicIds: Set<string>;
-  skippingChallengeIds: Set<string>;
-  skippingGoalIds: Set<string>;
   searchQuery: string;
 }
 
@@ -39,25 +26,12 @@ export function HistoryPanel({
   selectedDate,
   onClearSelectedDate,
   hasGenerating,
-  activeTopicIds,
-  activeChallengeIds,
-  activeGoalIds,
   filteredEntries,
   todayDateKey,
   collapsedDays,
   onToggleDayCollapse,
-  onRefresh,
-  onSkipTopic,
-  onSkipChallenge,
-  onSkipGoal,
-  onStopSkipTopic,
-  onStopSkipChallenge,
-  onStopSkipGoal,
-  onExploreTopic,
-  skippingTopicIds,
-  skippingChallengeIds,
-  skippingGoalIds,
   searchQuery,
+  ...handlers
 }: HistoryPanelProps) {
   if (isLoading) {
     return (
@@ -82,40 +56,33 @@ export function HistoryPanel({
         )}
 
         {hasGenerating && (
-          <GeneratingBanner topicIds={activeTopicIds} challengeIds={activeChallengeIds} goalIds={activeGoalIds} />
+          <GeneratingBanner
+            topicIds={handlers.activeTopicIds}
+            challengeIds={handlers.activeChallengeIds}
+            goalIds={handlers.activeGoalIds}
+          />
         )}
 
-        {filteredEntries.map((entry) => (
-          <HistoryEntryCard
-            key={entry.dateKey}
-            entry={entry}
-            isToday={entry.dateKey === todayDateKey}
-            isCollapsed={collapsedDays.has(entry.dateKey)}
-            onToggleCollapse={() => onToggleDayCollapse(entry.dateKey)}
-            onRefresh={onRefresh}
-            onSkipTopic={onSkipTopic}
-            onSkipChallenge={onSkipChallenge}
-            onSkipGoal={onSkipGoal}
-            onStopSkipTopic={onStopSkipTopic}
-            onStopSkipChallenge={onStopSkipChallenge}
-            onStopSkipGoal={onStopSkipGoal}
-            onExploreTopic={onExploreTopic}
-            skippingTopicIds={skippingTopicIds}
-            skippingChallengeIds={skippingChallengeIds}
-            skippingGoalIds={skippingGoalIds}
-            activeTopicIds={activeTopicIds}
-            activeChallengeIds={activeChallengeIds}
-            activeGoalIds={activeGoalIds}
+        {filteredEntries.length > 0 && (
+          <HistoryTimeline
+            entries={filteredEntries}
+            todayDateKey={todayDateKey}
+            collapsedDays={collapsedDays}
+            onToggleDayCollapse={onToggleDayCollapse}
+            {...handlers}
           />
-        ))}
+        )}
 
         {filteredEntries.length === 0 && !hasGenerating && (
-          <Banner
-            title="No results"
-            description={`No items match your filters.${searchQuery ? ' Try a different search term.' : ''}`}
-            variant="info"
-            hideTitle
-          />
+          <Blankslate>
+            <Blankslate.Visual>
+              <SearchIcon size={24} />
+            </Blankslate.Visual>
+            <Blankslate.Heading>No results</Blankslate.Heading>
+            <Blankslate.Description>
+              No items match your filters.{searchQuery ? ' Try a different search term.' : ''}
+            </Blankslate.Description>
+          </Blankslate>
         )}
       </Stack>
     </>

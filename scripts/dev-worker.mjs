@@ -25,7 +25,7 @@
  */
 import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { context } from 'esbuild';
 
@@ -35,41 +35,123 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..');
 const ENTRY = resolve(REPO_ROOT, 'dist-worker/bootstrap.mjs');
 
+// Preloaded into the worker child via `--import` so it self-terminates if
+// this supervisor dies without gracefully stopping it (SIGKILL, force-stop,
+// crash, or `npm` not forwarding the signal). Prevents orphaned workers from
+// squatting port 3001 and crash-looping the replacement with EADDRINUSE.
+const PARENT_DEATH_WATCHDOG = pathToFileURL(resolve(HERE, 'dev-worker-watchdog.mjs')).href;
+
+// `next dev` loads `.env.local` for the web tier automatically, but Aspire
+// launches the worker as a bare executable that only inherits this runner's
+// environment. Load `.env.local` here so the worker sees the same secrets —
+// notably AUDIT_SALT, which the worker bootstrap requires and which must
+// match the web tier's value for cross-process audit-hash determinism.
+// `--env-file` semantics apply: vars already set (e.g. Aspire-injected PORT)
+// take precedence over the file, so this never clobbers the resource config.
+try {
+  process.loadEnvFile(resolve(REPO_ROOT, '.env.local'));
+} catch {
+  // No `.env.local` (e.g. CI) — rely on the inherited environment.
+}
+
 let child = null;
 let restartTimer = null;
 
-function killChild() {
-  if (!child) return;
-  const dying = child;
-  child = null;
-  try {
-    dying.kill('SIGTERM');
-  } catch {
-    // already gone
-  }
-}
+// Restart coalescing: every successful rebuild bumps `restartRequested`.
+// `runRestarts` drains requests one at a time, fully stopping the previous
+// worker (and waiting for its port to free) before spawning the replacement.
+let restartRequested = 0;
+let restartApplied = 0;
+let draining = false;
 
-function startChild() {
-  killChild();
-  child = spawn(process.execPath, [ENTRY], {
-    stdio: 'inherit',
-    env: process.env,
-  });
-  child.on('exit', (code, signal) => {
-    if (child) {
-      // Unexpected exit (not triggered by our restart)
-      process.stderr.write(`[dev-worker] node exited code=${code} signal=${signal}\n`);
-      child = null;
+// Children we deliberately stop (restart or shutdown). Their `exit` is
+// expected, so the crash logger below stays quiet for them.
+const intentionalExits = new Set();
+
+// Hard ceiling for a graceful SIGTERM before we escalate to SIGKILL. The
+// worker's Hono server must release port 3001 before the replacement binds
+// it, otherwise the fresh child dies with EADDRINUSE.
+const STOP_GRACE_MS = 2000;
+
+/** Stop a worker child, resolving only once it has actually exited. */
+function stopChild(dying) {
+  intentionalExits.add(dying);
+  return new Promise((resolve) => {
+    const killTimer = setTimeout(() => {
+      try {
+        dying.kill('SIGKILL');
+      } catch {
+        // already gone
+      }
+    }, STOP_GRACE_MS);
+    dying.once('exit', () => {
+      clearTimeout(killTimer);
+      resolve();
+    });
+    try {
+      dying.kill('SIGTERM');
+    } catch {
+      // already gone — resolve via the synthetic exit below
+      clearTimeout(killTimer);
+      resolve();
     }
   });
 }
 
+function startChild() {
+  // `--import` runs the watchdog preload before the entry without changing
+  // `process.argv[1]`, so the bootstrap still detects itself as the main
+  // entry. The 4th `ipc` stdio slot opens the channel the watchdog watches:
+  // when this supervisor dies, the OS closes our end and the child exits.
+  const proc = spawn(process.execPath, ['--import', PARENT_DEATH_WATCHDOG, ENTRY], {
+    stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+    env: process.env,
+  });
+  child = proc;
+  proc.on('exit', (code, signal) => {
+    if (intentionalExits.delete(proc)) {
+      // Expected exit from a restart or shutdown — nothing to report.
+      return;
+    }
+    // Unexpected crash: surface it and drop the handle so the next
+    // rebuild spawns a fresh child instead of trying to stop a corpse.
+    process.stderr.write(`[dev-worker] node exited unexpectedly code=${code} signal=${signal}\n`);
+    if (child === proc) child = null;
+  });
+}
+
+/**
+ * Drain pending restart requests serially. Each pass stops the current
+ * worker (awaiting its real exit) before spawning the next, so the port is
+ * always free. Bursts of rebuilds collapse into a single trailing restart.
+ */
+async function runRestarts() {
+  if (draining) return;
+  draining = true;
+  try {
+    while (restartApplied < restartRequested) {
+      const target = restartRequested;
+      if (child) {
+        const dying = child;
+        child = null;
+        await stopChild(dying);
+      }
+      startChild();
+      restartApplied = target;
+    }
+  } finally {
+    draining = false;
+  }
+}
+
 function scheduleRestart() {
-  // Debounce burst rebuilds (esbuild may fire onEnd multiple times)
+  // Debounce burst rebuilds (esbuild may fire onEnd multiple times); the
+  // counter ensures the trailing timer reflects every rebuild seen so far.
+  restartRequested += 1;
   if (restartTimer) clearTimeout(restartTimer);
   restartTimer = setTimeout(() => {
     restartTimer = null;
-    startChild();
+    void runRestarts();
   }, 100);
 }
 
@@ -97,7 +179,11 @@ await ctx.watch();
 
 async function shutdown(signal) {
   process.stdout.write(`[dev-worker] received ${signal} — shutting down\n`);
-  killChild();
+  if (child) {
+    const dying = child;
+    child = null;
+    await stopChild(dying);
+  }
   try {
     await ctx.dispose();
   } catch {

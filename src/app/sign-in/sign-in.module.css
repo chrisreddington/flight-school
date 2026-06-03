@@ -4,23 +4,80 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: var(--base-size-32, 32px);
-  gap: var(--base-size-24, 24px);
+  padding: var(--base-size-24, 24px);
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+/* Centered branded hero card */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--base-size-20, 20px);
+  width: 100%;
+  max-width: 400px;
+  padding: var(--base-size-32, 32px) var(--base-size-24, 24px);
+  text-align: center;
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-large, 12px);
+}
+
+/* Branded GitHub mark badge */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--borderRadius-full, 50%);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  color: var(--fgColor-default, #1f2328);
 }
 
 .header {
-  text-align: center;
-  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8, 8px);
 }
 
 .title {
-  margin-bottom: var(--base-size-8, 8px);
+  font-size: var(--text-title-size-large, 32px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: var(--text-title-lineHeight-large, 1.5);
+  text-wrap: balance;
+  margin: 0;
 }
 
 .subtitle {
   color: var(--fgColor-muted, #656d76);
+  line-height: 1.5;
+  margin: 0;
 }
 
 .error {
+  width: 100%;
+  padding: var(--base-size-8, 8px) var(--base-size-12, 12px);
   color: var(--fgColor-danger, #d1242f);
+  background-color: var(--bgColor-danger-muted, #ffebe9);
+  border: 1px solid var(--borderColor-danger-muted, #ffcecb);
+  border-radius: var(--borderRadius-medium, 6px);
+  margin: 0;
+}
+
+.form {
+  width: 100%;
+}
+
+/* Tighten the hero on small screens so the title doesn't tower */
+@media (max-width: 480px) {
+  .title {
+    font-size: var(--text-title-size-medium, 20px);
+  }
+
+  .logo {
+    width: 56px;
+    height: 56px;
+  }
 }

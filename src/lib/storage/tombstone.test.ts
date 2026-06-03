@@ -7,7 +7,7 @@
  * mark → isDeleted → clear → isDeleted.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -16,22 +16,17 @@ let tmpDir: string;
 
 beforeAll(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tombstone-test-'));
-  process.env.FLIGHT_SCHOOL_DATA_DIR = tmpDir;
+  vi.stubEnv('FLIGHT_SCHOOL_DATA_DIR', tmpDir);
 });
 
 afterAll(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
-  delete process.env.FLIGHT_SCHOOL_DATA_DIR;
+  vi.unstubAllEnvs();
 });
 
 beforeEach(async () => {
   await fs.rm(path.join(tmpDir, 'users'), { recursive: true, force: true });
   await fs.rm(path.join(tmpDir, 'tombstones'), { recursive: true, force: true });
-  // Tombstone module caches markers in-process; bust the cache between tests.
-  const mod = await import('./tombstone');
-  // @ts-expect-error - test-only access via module reload
-  await import('./tombstone');
-  void mod;
 });
 
 describe('tombstone', () => {
@@ -52,6 +47,19 @@ describe('tombstone', () => {
     expect(await isUserDeleted('u-2')).toBe(true);
     await clearUserTombstone('u-2');
     expect(await isUserDeleted('u-2')).toBe(false);
+  });
+
+  it('reflects an out-of-band clear by another process (no positive cache)', async () => {
+    // Regression guard: a process-local positive cache would keep returning
+    // true after the marker file is removed by a SEPARATE process (e.g. the
+    // Next.js sign-in clear while this worker holds the write guard),
+    // permanently wedging a resurrected user. Deleting the file directly —
+    // not via clearUserTombstone — simulates that cross-process clear.
+    const { markUserDeleted, isUserDeleted } = await import('./tombstone');
+    await markUserDeleted('u-cross-process');
+    expect(await isUserDeleted('u-cross-process')).toBe(true);
+    await fs.rm(path.join(tmpDir, 'tombstones'), { recursive: true, force: true });
+    expect(await isUserDeleted('u-cross-process')).toBe(false);
   });
 
   it('writes the marker outside the users/ subtree', async () => {

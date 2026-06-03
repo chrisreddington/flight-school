@@ -1,99 +1,50 @@
-'use client';
-
 /**
- * Challenge Page
+ * `/challenge` wrapper page.
  *
- * Reads challenge details from URL search params and renders the full-page
- * sandbox experience. Param parsing + Monaco preload live in
- * {@link ./challenge-page-helpers}.
+ * Server-resolves challenge specs from per-user storage using `?id=...`
+ * and passes the hydrated challenge into a client island for the Monaco UI.
  */
 
-import { useSearchParams } from 'next/navigation';
-import { lazy, Suspense, useCallback, useMemo } from 'react';
+import { notFound, redirect } from 'next/navigation';
 
-import { AppHeader } from '@/components/AppHeader';
-import { useBreadcrumb } from '@/contexts/breadcrumb-context';
-import { focusStore } from '@/lib/focus';
-import { logger } from '@/lib/logger';
-import { getDateKey } from '@/lib/utils/date-utils';
+import { readUserChallengeSpec } from '@/lib/challenge/spec-storage';
+import type { ChallengeDef } from '@/lib/copilot/types';
+import { requireGuardedRscContext } from '@/lib/security/guard';
+import { SAFE_PATH_SEGMENT } from '@/lib/storage/user-scope';
 
-import { parseChallengeFromSearchParams, useMonacoPreload } from './challenge-page-helpers';
-import styles from './challenge.module.css';
+import { ChallengePageClient } from './challenge-page-client';
 
-const log = logger.withTag('ChallengePage');
-
-// PERF: Code split ChallengeSandbox (includes Monaco Editor ~200KB)
-const ChallengeSandbox = lazy(() =>
-  import('@/components/ChallengeSandbox').then((mod) => ({ default: mod.ChallengeSandbox })),
-);
-
-function ChallengePageContent() {
-  const searchParams = useSearchParams();
-
-  useMonacoPreload();
-
-  const { challengeId, challenge } = useMemo(() => parseChallengeFromSearchParams(searchParams), [searchParams]);
-
-  // Memoise the breadcrumb href so unrelated re-renders don't re-register it.
-  const breadcrumbHref = useMemo(() => {
-    const params = new URLSearchParams();
-    searchParams.forEach((value, key) => params.set(key, value));
-    return `/challenge?${params.toString()}`;
-  }, [searchParams]);
-
-  useBreadcrumb('/challenge', challenge.title, breadcrumbHref);
-
-  const handleComplete = useCallback(async () => {
-    try {
-      const dateKey = getDateKey();
-      log.info('Marking challenge as completed', { challengeId, dateKey });
-
-      // Custom challenges generated on-the-fly are passed via URL params and
-      // are not pre-loaded into the daily history, so transitionChallenge would
-      // fail with "not found". addChallenge is idempotent — safe to call always.
-      await focusStore.addChallenge(dateKey, {
-        id: challengeId,
-        title: challenge.title,
-        description: challenge.description,
-        type: challenge.type,
-        brokenCode: challenge.brokenCode,
-        difficulty: challenge.difficulty,
-        language: challenge.language ?? 'TypeScript',
-        estimatedTime: '30 minutes',
-        whyThisChallenge: [],
-        isCustom: challengeId.startsWith('custom-'),
-      });
-
-      await focusStore.transitionChallenge(dateKey, challengeId, 'completed', 'challenge-sandbox');
-      log.info('Challenge marked as completed', { challengeId, dateKey });
-    } catch (error) {
-      log.error('Failed to mark challenge as completed', { challengeId, error });
-    }
-  }, [challengeId, challenge]);
-
-  return (
-    <div className={styles.root}>
-      <AppHeader />
-      <main className={styles.main}>
-        <ChallengeSandbox challengeId={challengeId} challenge={challenge} onComplete={handleComplete} autoFocus />
-      </main>
-    </div>
-  );
+interface ChallengePageProps {
+  searchParams: Promise<{ id?: string | string[] }>;
 }
 
-function ChallengePageLoading() {
-  return (
-    <div className={styles.root}>
-      <AppHeader />
-      <div className={styles.loading}>Loading challenge...</div>
-    </div>
-  );
+function toChallengeDef(spec: NonNullable<Awaited<ReturnType<typeof readUserChallengeSpec>>>): ChallengeDef {
+  return {
+    title: spec.title,
+    description: spec.description,
+    type: spec.type,
+    brokenCode: spec.brokenCode,
+    language: spec.language,
+    difficulty: spec.difficulty,
+    estimatedTime: spec.estimatedTime,
+    testCases: [],
+  };
 }
 
-export default function ChallengePage() {
-  return (
-    <Suspense fallback={<ChallengePageLoading />}>
-      <ChallengePageContent />
-    </Suspense>
-  );
+export default async function ChallengePage({ searchParams }: ChallengePageProps) {
+  const ctx = await requireGuardedRscContext('challenge.view');
+  if (!ctx) redirect('/sign-in?callbackUrl=/challenge');
+
+  const { id } = await searchParams;
+  const challengeId = typeof id === 'string' ? id : null;
+  if (!challengeId || !SAFE_PATH_SEGMENT.test(challengeId)) {
+    notFound();
+  }
+
+  const challengeSpec = await readUserChallengeSpec(challengeId);
+  if (!challengeSpec) {
+    redirect('/');
+  }
+
+  return <ChallengePageClient challengeId={challengeId} challenge={toChallengeDef(challengeSpec)} />;
 }

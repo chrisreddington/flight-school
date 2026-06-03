@@ -6,30 +6,35 @@
  * A polished, GitHub-inspired interface for AI-powered developer learning.
  * Built with Primer React components following modern GitHub design patterns.
  *
+ * Reads as a true overview: the full learning chat now lives on the
+ * dedicated `/chat` surface, and the dashboard only links into it via the
+ * compact ContinueLearningSection.
+ *
  * Features:
  * - Dynamic user profile from GitHub API
  * - Daily Focus tabs (Challenge, Goal, Learn)
- * - Multi-thread Learning Chat with STREAMING responses
+ * - Compact "Continue learning" entry point to /chat
  * - Real-time GitHub activity stats
  */
 
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
+import { useHasMounted } from '@/hooks/use-has-mounted';
 import { useLearningChat } from '@/hooks/use-learning-chat';
 import { getDisplayName, useUserProfile } from '@/hooks/use-user-profile';
 import type { LearningTopic } from '@/lib/focus/types';
-import type { RepoReference } from '@/lib/threads/types';
-import { Stack } from '@primer/react';
-import { useCallback, useMemo } from 'react';
+import { PageHeader } from '@/components/PageHeader';
+import { SkeletonBox, SplitPageLayout, Stack } from '@primer/react';
+import { useRouter } from 'next/navigation';
 import { AppHeader } from '../AppHeader';
-import { LearningChat } from '../LearningChat';
+import { ContinueLearningSection } from './continue-learning-section';
 import { DailyFocusSection } from './daily-focus-section';
+import { getGreeting } from './dashboard-helpers';
 import styles from './Dashboard.module.css';
 import { Footer } from './footer';
 import { ProTipSection } from './pro-tip-section';
 import { ProfileActivitySection } from './profile-activity-section';
 import { ReviewDueWidget } from './review-due-widget';
-import { WelcomeSection } from './welcome-section';
 
 // ============================================================================
 // Main Component
@@ -38,6 +43,7 @@ import { WelcomeSection } from './welcome-section';
 export function Dashboard() {
   // Initialize operations manager on mount (ensures cross-page state sync)
   useActiveOperations();
+  const router = useRouter();
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useUserProfile();
   const {
@@ -45,6 +51,7 @@ export function Dashboard() {
     isAIEnabled,
     toolsUsed,
     refetch: refetchFocus,
+    regenerateChallenge,
     loadingComponents,
     skipAndReplaceTopic,
     skipAndReplaceChallenge,
@@ -60,151 +67,108 @@ export function Dashboard() {
   } = useAIFocus();
 
   // Adapter for DailyFocusSection which expects string[] format
-  const handleRefresh = useCallback(
-    (components?: string[]) => {
-      const component = components?.[0] as 'challenge' | 'goal' | 'learningTopics' | undefined;
-      refetchFocus(component);
-    },
-    [refetchFocus],
-  );
+  const handleRefresh = (components?: string[]) => {
+    const component = components?.[0] as 'challenge' | 'goal' | 'learningTopics' | undefined;
+    refetchFocus(component);
+  };
 
   // Handle skipping a single topic and generating a replacement
-  const handleSkipTopic = useCallback(
-    (skippedTopic: LearningTopic, existingTopicTitles: string[]) => {
-      skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
-    },
-    [skipAndReplaceTopic],
-  );
+  const handleSkipTopic = (skippedTopic: LearningTopic, existingTopicTitles: string[]) => {
+    skipAndReplaceTopic(skippedTopic.id, existingTopicTitles);
+  };
 
   // Handle skipping a challenge and generating a replacement
-  const handleSkipChallenge = useCallback(
-    (challengeId: string, existingChallengeTitles: string[]) => {
-      skipAndReplaceChallenge(challengeId, existingChallengeTitles);
-    },
-    [skipAndReplaceChallenge],
-  );
+  const handleSkipChallenge = (challengeId: string, existingChallengeTitles: string[]) => {
+    skipAndReplaceChallenge(challengeId, existingChallengeTitles);
+  };
 
   // Handle skipping a goal and generating a replacement
-  const handleSkipGoal = useCallback(
-    (goalId: string, existingGoalTitles: string[]) => {
-      skipAndReplaceGoal(goalId, existingGoalTitles);
-    },
-    [skipAndReplaceGoal],
-  );
+  const handleSkipGoal = (goalId: string, existingGoalTitles: string[]) => {
+    skipAndReplaceGoal(goalId, existingGoalTitles);
+  };
 
   // Handle stopping a topic skip/regeneration (receives ID from the card)
-  const handleStopSkipTopic = useCallback(
-    (topicId: string) => {
-      stopTopicSkip(topicId);
-    },
-    [stopTopicSkip],
-  );
+  const handleStopSkipTopic = (topicId: string) => {
+    stopTopicSkip(topicId);
+  };
 
   // Handle stopping a challenge skip/regeneration (receives ID from the card)
-  const handleStopSkipChallenge = useCallback(
-    (challengeId: string) => {
-      stopChallengeSkip(challengeId);
-    },
-    [stopChallengeSkip],
-  );
+  const handleStopSkipChallenge = (challengeId: string) => {
+    stopChallengeSkip(challengeId);
+  };
 
   // Handle stopping a goal skip/regeneration (receives ID from the card)
-  const handleStopSkipGoal = useCallback(
-    (goalId: string) => {
-      stopGoalSkip(goalId);
-    },
-    [stopGoalSkip],
-  );
+  const handleStopSkipGoal = (goalId: string) => {
+    stopGoalSkip(goalId);
+  };
 
-  const {
-    threads,
-    activeThreadId,
-    isThreadsLoading,
-    isStreaming,
-    streamingAssistantMessageId,
-    streamingContent,
-    streamingThreadIds,
-    streamingToolEvents,
-    sendMessage,
-    stopStreaming,
-    createThread,
-    selectThread,
-    deleteThread,
-    renameThread,
-    updateContext,
-  } = useLearningChat();
+  const { threads, createThread, sendMessage } = useLearningChat();
 
   const displayName = getDisplayName(profile);
+  const showName = displayName !== 'Developer';
 
-  // Memoize available repos to prevent unnecessary re-renders
-  const availableRepos = useMemo(
-    () =>
-      profile?.repos?.map((repo) => ({
-        fullName: repo.fullName,
-        owner: repo.owner,
-        name: repo.name,
-        language: repo.language ?? undefined,
-      })) ?? [],
-    [profile?.repos],
-  );
-
-  // PERF: Consolidate chat handlers to reduce prop drilling and prevent unnecessary re-renders
-  const chatHandlers = useMemo(
-    () => ({
-      sendMessage: async (message: string, repos?: RepoReference[]) => {
-        await sendMessage(message, { profile: 'learning', capabilities: ['github'], repos });
-      },
-      createThread,
-      selectThread: (threadId: string | null) => {
-        if (threadId) selectThread(threadId);
-      },
-      deleteThread,
-      renameThread,
-      updateContext,
-      stopStreaming,
-    }),
-    [sendMessage, createThread, selectThread, deleteThread, renameThread, updateContext, stopStreaming],
-  );
+  // getGreeting() reads the visitor's local clock, which only exists in the
+  // browser. Computing it during SSR bakes in the server's timezone (UTC in
+  // production) and mismatches the client on hydration, so defer it until
+  // after mount and show a skeleton in its place for the first paint.
+  const hasMounted = useHasMounted();
 
   /**
    * Handle exploring a learning topic (AC7.1-AC7.4).
-   * Creates a new thread pre-seeded with the topic context and sends an initial message.
+   * Creates a new thread pre-seeded with the topic context, sends the seed
+   * message, then navigates to the dedicated `/chat` surface where the
+   * in-flight stream reattaches via the shared operations manager.
    */
-  const handleExploreTopic = useCallback(
-    async (topic: LearningTopic) => {
-      // Create a new thread with the topic as title
-      const thread = await createThread(
-        {
-          title: `Explore: ${topic.title}`,
-          context: {
-            learningFocus: topic.title,
-          },
+  const handleExploreTopic = async (topic: LearningTopic) => {
+    // Create a new thread with the topic as title
+    const thread = await createThread(
+      {
+        title: `Explore: ${topic.title}`,
+        context: {
+          learningFocus: topic.title,
         },
-        true,
-      ); // Mark as active
+      },
+      true,
+    ); // Mark as active
 
-      // Send an initial message to pre-seed the conversation (AC7.2)
-      // The learning lens system prompt is applied by the backend (AC7.4)
-      // Pass threadId explicitly to avoid race condition with async state update
-      const seedMessage = `I'd like to explore "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
+    // Send an initial message to pre-seed the conversation (AC7.2)
+    // The learning lens system prompt is applied by the backend (AC7.4)
+    // Pass threadId explicitly to avoid race condition with async state update
+    const seedMessage = `I'd like to explore "${topic.title}". ${topic.description} This is related to ${topic.relatedTo}. Can you help me understand this better and suggest some practical ways to learn it?`;
 
-      await sendMessage(seedMessage, {
-        profile: 'learning',
-        capabilities: ['github'],
-        threadId: thread.id,
-      });
-    },
-    [createThread, sendMessage],
+    await sendMessage(seedMessage, {
+      profile: 'learning',
+      capabilities: ['github'],
+      threadId: thread.id,
+    });
+
+    // Navigate only after the send has registered the stream + operation, so
+    // /chat reattaches deterministically (no arbitrary settle delay needed).
+    router.push(`/chat?thread=${thread.id}`);
+  };
+
+  // Skeleton-aware greeting shown in the page header description. The greeting
+  // word waits for mount (client-local time); the name waits for the profile.
+  const greeting = (
+    <>
+      {hasMounted ? getGreeting() : <SkeletonBox height="1em" width="110px" className={styles.skeletonInline} />},{' '}
+      {profileLoading || !showName ? (
+        <SkeletonBox height="1em" width="80px" className={styles.skeletonInline} />
+      ) : (
+        displayName
+      )}
+      ! 👋 Ready to level up your skills? Here&apos;s what&apos;s lined up for you today.
+    </>
   );
 
   return (
     <div className={styles.root}>
       <AppHeader />
 
-      <main className={styles.main}>
-        <div className={styles.mainContent}>
+      <SplitPageLayout>
+        <SplitPageLayout.Content>
+          <PageHeader title="Dashboard" description={greeting} />
           <Stack direction="vertical" gap="spacious">
-            <WelcomeSection displayName={displayName} isLoading={profileLoading} />
             <ReviewDueWidget />
             <DailyFocusSection
               profile={profile}
@@ -214,6 +178,7 @@ export function Dashboard() {
               toolsUsed={toolsUsed}
               loadingComponents={loadingComponents}
               onRefresh={handleRefresh}
+              onRegenerateChallenge={regenerateChallenge}
               onSkipTopic={handleSkipTopic}
               onStopSkipTopic={handleStopSkipTopic}
               onStopComponent={stopComponent}
@@ -227,31 +192,18 @@ export function Dashboard() {
               skippingGoalIds={skippingGoalIds}
               onExploreTopic={handleExploreTopic}
             />
-            {/* Multi-thread Learning Chat Experience */}
-            <LearningChat
-              threads={threads}
-              activeThreadId={activeThreadId}
-              handlers={chatHandlers}
-              availableRepos={availableRepos}
-              isReposLoading={profileLoading}
-              isThreadsLoading={isThreadsLoading}
-              isStreaming={isStreaming}
-              streamingThreadIds={streamingThreadIds}
-              streamingAssistantMessageId={streamingAssistantMessageId}
-              streamingContent={streamingContent}
-              streamingToolEvents={streamingToolEvents}
-              userAvatarUrl={profile?.user?.avatarUrl}
-            />
+            {/* Compact entry point to the dedicated /chat surface */}
+            <ContinueLearningSection threads={threads} />
           </Stack>
-        </div>
+        </SplitPageLayout.Content>
 
-        <aside className={styles.sidebar}>
+        <SplitPageLayout.Pane position={{ regular: 'end', narrow: 'end' }} aria-label="Activity and tips">
           <Stack direction="vertical" gap="spacious">
             <ProfileActivitySection profile={profile} isLoading={profileLoading} onRefresh={refetchProfile} />
             <ProTipSection />
           </Stack>
-        </aside>
-      </main>
+        </SplitPageLayout.Pane>
+      </SplitPageLayout>
 
       <Footer />
     </div>

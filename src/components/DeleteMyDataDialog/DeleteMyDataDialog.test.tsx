@@ -1,0 +1,118 @@
+/**
+ * Tests for DeleteMyDataDialog.
+ *
+ * Focus areas (S1.5 panel fixes B & C — partial-delete safety):
+ * - A partial server deletion (`success: false`) must NOT call
+ *   `onConfirmed` (which signs the user out), and must surface an error
+ *   so the user stays authed and can retry.
+ * - A fully successful deletion calls `onConfirmed`.
+ * - A registry-only cleanup failure (`success: true`,
+ *   `registryCleanupPending: true`) still signs the user out — the data is
+ *   gone, only the owner record lingers.
+ * - (Fix C) The sign-out gate keys off `!result.success`, never
+ *   `summary.partial`: a `success: false` response with no `partial` flag
+ *   must still keep the user signed in.
+ */
+
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ThemeProvider } from '@primer/react';
+
+const { apiDeleteMock } = vi.hoisted(() => ({ apiDeleteMock: vi.fn() }));
+
+vi.mock('@/lib/api-client', () => {
+  class ApiError extends Error {
+    constructor(
+      message: string,
+      public readonly status?: number,
+      public readonly context?: Record<string, unknown>,
+    ) {
+      super(message);
+    }
+  }
+  return { ApiError, apiDelete: apiDeleteMock };
+});
+
+vi.mock('next-auth/react', () => ({ signIn: vi.fn() }));
+
+import { DeleteMyDataDialog } from './DeleteMyDataDialog';
+
+function renderDialog() {
+  let confirmedCount = 0;
+  render(
+    <ThemeProvider>
+      <DeleteMyDataDialog
+        login="octocat"
+        isOpen
+        onClose={() => {}}
+        onConfirmed={() => {
+          confirmedCount += 1;
+        }}
+      />
+    </ThemeProvider>,
+  );
+  return { getConfirmedCount: () => confirmedCount };
+}
+
+async function confirmDeletion() {
+  const input = screen.getByLabelText('Type your GitHub login to confirm');
+  fireEvent.change(input, { target: { value: 'octocat' } });
+  // Wrap the click in act(): clicking kicks off the async apiDelete flow
+  // whose resolution sets state (submitting/error). Flushing it inside act
+  // keeps those updates from escaping the test's render scope and triggering
+  // React's "not wrapped in act(...)" warnings.
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Delete everything' }));
+  });
+}
+
+afterEach(() => {
+  apiDeleteMock.mockReset();
+});
+
+describe('DeleteMyDataDialog', () => {
+  it('does not sign the user out when the server reports a partial deletion', async () => {
+    apiDeleteMock.mockResolvedValue({ success: false, summary: { partial: true, failed: ['store-data:focus'] } });
+    const { getConfirmedCount } = renderDialog();
+
+    await confirmDeletion();
+
+    await waitFor(() => expect(screen.getByText(/could not be deleted/i)).toBeInTheDocument());
+    expect(getConfirmedCount()).toBe(0);
+  });
+
+  it('signs the user out on a fully successful deletion', async () => {
+    apiDeleteMock.mockResolvedValue({ success: true, summary: {} });
+    const { getConfirmedCount } = renderDialog();
+
+    await confirmDeletion();
+
+    await waitFor(() => expect(getConfirmedCount()).toBe(1));
+  });
+
+  it('signs the user out when only the registry cleanup is pending', async () => {
+    // Data is fully gone; only the orphaned owner record lingers for a sweep.
+    apiDeleteMock.mockResolvedValue({
+      success: true,
+      summary: { failed: ['store-registry'], registryCleanupPending: true },
+    });
+    const { getConfirmedCount } = renderDialog();
+
+    await confirmDeletion();
+
+    await waitFor(() => expect(getConfirmedCount()).toBe(1));
+  });
+
+  it('keeps the user signed in when success is false even without a partial flag', async () => {
+    // Proves the sign-out gate is `!result.success`, not `summary.partial`:
+    // a success:false response carrying no `partial` field must still block
+    // sign-out. The old `summary.partial` branch would have signed out here.
+    apiDeleteMock.mockResolvedValue({ success: false, summary: { failed: ['activity'] } });
+    const { getConfirmedCount } = renderDialog();
+
+    await confirmDeletion();
+
+    await waitFor(() => expect(screen.getByText(/could not be deleted/i)).toBeInTheDocument());
+    expect(getConfirmedCount()).toBe(0);
+  });
+});

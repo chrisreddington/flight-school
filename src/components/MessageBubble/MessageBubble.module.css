@@ -4,15 +4,37 @@
   padding: var(--base-size-12) var(--base-size-16);
   border-radius: var(--borderRadius-medium);
   margin-bottom: var(--base-size-8);
+  max-width: 88%;
 }
 
 .userBubble {
-  background-color: var(--bgColor-muted);
+  background-color: var(--bgColor-accent-muted);
+  align-self: flex-end;
+  max-width: 80%;
 }
 
 .assistantBubble {
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
+  align-self: flex-start;
+  max-width: 92%;
+}
+
+/* On phones the bubbles use almost the full width so long answers and code
+   blocks stay readable; the left/right alignment still signals who's talking. */
+@media (max-width: 767px) {
+  .userBubble {
+    max-width: 92%;
+  }
+
+  .assistantBubble {
+    max-width: 100%;
+  }
+}
+
+/* User header (name + time) sits on the right edge to mirror the bubble. */
+.headerUser {
+  justify-content: flex-end;
 }
 
 .avatar {
@@ -82,6 +104,68 @@
 
 .messageContent li {
   margin-bottom: var(--base-size-4);
+}
+
+.learningLayout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-8);
+}
+
+.deepDiveDisclosure {
+  border: 1px solid var(--borderColor-muted);
+  border-radius: var(--borderRadius-medium);
+  background-color: var(--bgColor-muted);
+  padding: var(--base-size-8) var(--base-size-10);
+}
+
+.deepDiveSummary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fgColor-accent);
+  font-weight: 600;
+}
+
+.deepDiveBody {
+  margin-top: var(--base-size-8);
+}
+
+.followUpSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--base-size-6);
+}
+
+.followUpLabel {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fgColor-muted);
+}
+
+.followUpChipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--base-size-6);
+}
+
+.followUpChip {
+  border-radius: 999px;
+  height: auto;
+  min-height: 28px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+/* Primer Button defaults to nowrap + ellipsis; follow-up questions are full
+   sentences, so let the label wrap inside the chip instead of overflowing. */
+.followUpChip [data-component='buttonContent'],
+.followUpChip [data-component='text'] {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* Tables */
@@ -240,8 +324,10 @@
 }
 
 .toolEventIcon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
+  color: var(--fgColor-muted);
 }
 
 .toolEventSummary {

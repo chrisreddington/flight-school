@@ -1,5 +1,5 @@
 import type { Thread } from '@/lib/threads/types';
-import { render, act } from '@testing-library/react';
+import { render, act, fireEvent, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,8 +18,21 @@ vi.mock('../ThreadSidebar', () => ({
 }));
 
 vi.mock('../MessageBubble', () => ({
-  MessageBubble: ({ message }: { message: { content: string } }) => (
-    <div data-testid="message-bubble">{message.content}</div>
+  MessageBubble: ({
+    message,
+    onFollowUpSelect,
+  }: {
+    message: { content: string };
+    onFollowUpSelect?: (followUp: string) => void;
+  }) => (
+    <div data-testid="message-bubble">
+      <div>{message.content}</div>
+      {onFollowUpSelect && (
+        <button type="button" onClick={() => onFollowUpSelect(message.content)}>
+          Send follow-up
+        </button>
+      )}
+    </div>
   ),
 }));
 
@@ -138,8 +151,7 @@ describe('LearningChat auto-scroll', () => {
       );
     });
 
-    // Typing indicator should show (no streaming message), so scrollIntoView called
-    expect(scrollIntoViewMock).toHaveBeenCalled();
+    expect(screen.getByLabelText('Copilot is thinking')).toBeInTheDocument();
   });
 
   it('does not call scrollIntoView when active thread hydrates after initial load', async () => {
@@ -173,5 +185,33 @@ describe('LearningChat auto-scroll', () => {
     });
 
     expect(scrollIntoViewMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('LearningChat follow-up chips', () => {
+  it('sends the clicked follow-up through the existing sendMessage path with selected repos', () => {
+    const sendMessage = vi.fn();
+    const handlers = {
+      ...defaultHandlers,
+      sendMessage,
+    };
+    const selectedRepos = [{ owner: 'octo', name: 'flight-school', fullName: 'octo/flight-school' }];
+    const thread = createThread({
+      context: { repos: selectedRepos },
+      messages: [
+        {
+          id: 'msg-follow-up',
+          role: 'assistant',
+          content: 'How would you test this reducer edge case?',
+          timestamp: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(<LearningChat threads={[thread]} activeThreadId="thread-1" handlers={handlers} isStreaming={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send follow-up' }));
+
+    expect(sendMessage).toHaveBeenCalledWith('How would you test this reducer edge case?', selectedRepos);
   });
 });

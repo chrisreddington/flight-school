@@ -7,29 +7,91 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { UnauthorizedError } from '@/lib/auth/context';
+import { InvalidChallengeIdError, readUserChallengeSpec, writeUserChallengeSpec } from '@/lib/challenge/spec-storage';
+import { createSessionIdentity } from '@/lib/copilot/session-identity';
+import { generateFocus } from '@/lib/focus/handlers';
 import type { DailyChallenge } from '@/lib/focus/types';
+import { logger } from '@/lib/logger';
+import { RateLimitedError } from '@/lib/security/rate-limit';
 import { requireGuardedUserContext } from '@/lib/security/guard';
-import { readUserStorage, writeUserStorage } from '@/lib/storage/user-storage';
+import { FOCUS_GUARD } from '@/lib/security/route-defaults';
+import { TooManyConcurrentSessionsError } from '@/lib/security/session-cap';
+import { challengeQueueRepo, type CustomChallengeQueue } from '@/lib/challenge/queue-repo';
 
-const QUEUE_FILENAME = 'challenge-queue.json';
-
-interface CustomChallengeQueue {
-  challenges: DailyChallenge[];
-  lastUpdated: string;
-}
-
-const DEFAULT_QUEUE: CustomChallengeQueue = { challenges: [], lastUpdated: '' };
-
-function isCustomChallengeQueue(data: unknown): data is CustomChallengeQueue {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
-  return Array.isArray(schema.challenges) && typeof schema.lastUpdated === 'string';
-}
+const log = logger.withTag('ChallengeActions');
 
 const CHALLENGE_ACTION_GUARD = {
   eventType: 'storage.write' as const,
   auditMetadata: { route: '/challenge/edit' },
 };
+
+export interface RegenerateChallengeInput {
+  currentChallengeId?: string;
+}
+
+export type RegenerateChallengeResult =
+  | { ok: true; challenge: DailyChallenge }
+  | { ok: false; error: 'unauthenticated' }
+  | { ok: false; error: 'rate-limited'; retryAfterMs: number }
+  | { ok: false; error: 'concurrent-cap' }
+  | { ok: false; error: 'generation-failed' }
+  | { ok: false; error: 'unexpected' };
+
+export async function regenerateChallengeAction(
+  input: RegenerateChallengeInput = {},
+): Promise<RegenerateChallengeResult> {
+  let guardedContext!: Awaited<ReturnType<typeof requireGuardedUserContext>>;
+  try {
+    guardedContext = await requireGuardedUserContext({
+      ...FOCUS_GUARD,
+      eventType: 'copilot.session.create',
+      auditMetadata: { route: 'action:regenerate-challenge' },
+    });
+  } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return { ok: false, error: 'unauthenticated' };
+    }
+    if (error instanceof RateLimitedError) {
+      return { ok: false, error: 'rate-limited', retryAfterMs: error.retryAfterMs };
+    }
+    if (error instanceof TooManyConcurrentSessionsError) {
+      return { ok: false, error: 'concurrent-cap' };
+    }
+    log.error('Guard phase failed in regenerateChallengeAction', { error });
+    return { ok: false, error: 'unexpected' };
+  }
+
+  const { ctx, release } = guardedContext;
+  try {
+    const existingChallengeTitles: string[] = [];
+    if (input.currentChallengeId) {
+      const currentChallenge = await readUserChallengeSpec(input.currentChallengeId);
+      if (currentChallenge?.title) {
+        existingChallengeTitles.push(currentChallenge.title);
+      }
+    }
+
+    const generatedFocus = await generateFocus(createSessionIdentity(ctx), {
+      component: 'challenge',
+      existingChallengeTitles,
+    });
+    if (!('challenge' in generatedFocus) || !generatedFocus.challenge) {
+      return { ok: false, error: 'generation-failed' };
+    }
+
+    await writeUserChallengeSpec(generatedFocus.challenge.id, generatedFocus.challenge);
+    return { ok: true, challenge: generatedFocus.challenge };
+  } catch (error) {
+    if (error instanceof InvalidChallengeIdError) {
+      return { ok: false, error: 'unexpected' };
+    }
+    log.error('Work phase failed in regenerateChallengeAction', { error });
+    return { ok: false, error: 'unexpected' };
+  } finally {
+    release();
+  }
+}
 
 export interface UpdateChallengeState {
   ok: boolean;
@@ -75,7 +137,7 @@ export async function updateChallengeAction(
   challengeId: string,
   updates: ChallengeEditableFields,
 ): Promise<UpdateChallengeState> {
-  const { release } = await requireGuardedUserContext({
+  const { ctx, release } = await requireGuardedUserContext({
     ...CHALLENGE_ACTION_GUARD,
     auditMetadata: { ...CHALLENGE_ACTION_GUARD.auditMetadata, action: 'updateChallenge' },
   });
@@ -88,7 +150,7 @@ export async function updateChallengeAction(
       return { ok: false, error: 'Description is required' };
     }
 
-    const queue = await readUserStorage<CustomChallengeQueue>(QUEUE_FILENAME, DEFAULT_QUEUE, isCustomChallengeQueue);
+    const queue = await challengeQueueRepo.read(ctx.userId);
     const index = queue.challenges.findIndex((c) => c.id === challengeId);
     if (index === -1) {
       return { ok: false, error: 'Failed to save changes. The challenge may no longer exist.' };
@@ -99,7 +161,7 @@ export async function updateChallengeAction(
       challenges: queue.challenges.map((c, i) => (i === index ? updatedChallenge : c)),
       lastUpdated: new Date().toISOString(),
     };
-    await writeUserStorage(QUEUE_FILENAME, updatedQueue, isCustomChallengeQueue);
+    await challengeQueueRepo.write(ctx.userId, updatedQueue);
     revalidatePath('/');
     revalidatePath(`/challenge/edit/${challengeId}`);
     return { ok: true };

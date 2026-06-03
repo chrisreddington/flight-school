@@ -1,6 +1,8 @@
 import { ActivitySummary, RecentActivityList, StreakCard } from '@/components/Insights';
 import type { LearningInsights } from '@/lib/focus/analytics';
+import { GraphIcon } from '@primer/octicons-react';
 import { Banner, Spinner, Stack } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 import insightsStyles from '@/components/Insights/Insights.module.css';
 import styles from './LearningHistory.module.css';
 
@@ -32,12 +34,15 @@ export function StatsPanel({
     return (
       <>
         {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
-        <Banner
-          title="No stats yet"
-          description="Start exploring topics and completing challenges to see your stats here."
-          variant="info"
-          hideTitle
-        />
+        <Blankslate>
+          <Blankslate.Visual>
+            <GraphIcon size={24} />
+          </Blankslate.Visual>
+          <Blankslate.Heading>No stats yet</Blankslate.Heading>
+          <Blankslate.Description>
+            Start exploring topics and completing challenges to see your stats here.
+          </Blankslate.Description>
+        </Blankslate>
       </>
     );
   }

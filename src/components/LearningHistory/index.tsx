@@ -5,12 +5,11 @@
  *
  * Two-column layout with:
  * - Left sidebar: 52-week activity graph, search, filters, date navigation
- * - Right main: Flat card list for selected date range
+ * - Right main: Timeline-threaded day sections with collapsible item cards
  * - Click on activity day to filter to that day
  * - Stats shown in sidebar
  */
 
-import { ProfileNav } from '@/components/ProfileNav';
 import { useActiveOperations } from '@/hooks/use-active-operations';
 import { useAIFocus } from '@/hooks/use-ai-focus';
 import { computeInsights, type LearningInsights } from '@/lib/focus/analytics';
@@ -18,11 +17,12 @@ import { focusStore } from '@/lib/focus';
 import { habitStore } from '@/lib/habits';
 import { getDateKey } from '@/lib/utils/date-utils';
 import type { LearningTopic } from '@/lib/focus/types';
-import { CalendarIcon } from '@primer/octicons-react';
-import { Banner, Link } from '@primer/react';
-import { UnderlinePanels } from '@primer/react/experimental';
+import { PageHeader } from '@/components/PageHeader';
+import { HistoryIcon } from '@primer/octicons-react';
+import { Banner, SplitPageLayout } from '@primer/react';
+import { Blankslate, UnderlinePanels } from '@primer/react/experimental';
 import { useRouter } from 'next/navigation';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLearningChat } from '@/hooks/use-learning-chat';
 import { logger } from '@/lib/logger';
 import styles from './LearningHistory.module.css';
@@ -45,7 +45,7 @@ interface LearningHistoryProps {
   activeTab?: 'history' | 'stats';
 }
 
-export const LearningHistory = memo(function LearningHistory({ activeTab = 'history' }: LearningHistoryProps) {
+export function LearningHistory({ activeTab = 'history' }: LearningHistoryProps) {
   const todayDateKey = getDateKey();
   const { activeTopicIds, activeChallengeIds, activeGoalIds } = useActiveOperations();
   const router = useRouter();
@@ -72,7 +72,9 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(
+    () => new Set([new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })]),
+  );
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const prevActiveCountRef = useRef(activeTopicIds.size + activeChallengeIds.size + activeGoalIds.size);
@@ -124,25 +126,20 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
         });
 
         // Show toast notification
-        setToastMessage(`Chat started: "${topic.title}" - View it on Dashboard`);
+        setToastMessage(`Chat started: "${topic.title}" - opening in Chat`);
 
         // Auto-dismiss toast after 3 seconds
         setTimeout(() => setToastMessage(null), 3000);
 
-        // Navigate to dashboard after a short delay to let the stream start
-        setTimeout(() => router.push('/'), 500);
+        // Navigate to the dedicated chat surface; the awaited send above has
+        // already registered the stream + operation, so the thread reattaches.
+        router.push(`/chat?thread=${thread.id}`);
       } catch {
         setToastMessage('Failed to start chat. Please try again.');
       }
     },
     [createThread, sendMessage, router],
   );
-
-  // Auto-expand current month on load
-  useEffect(() => {
-    const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    setExpandedMonths(new Set([currentMonth]));
-  }, []);
 
   // Auto-refresh when operations complete
   useEffect(() => {
@@ -236,26 +233,14 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     [activeTab, router],
   );
 
-  // Empty state
+  // Empty state — no sidebar pane (its activity graph/filters have nothing to
+  // drive yet), so the tabs span the full content width.
   if (!isLoading && allEntries.length === 0) {
     return (
-      <div className={styles.containerV2}>
-        <div className={styles.layoutV2}>
-          <aside className={styles.sidebar}>
-            <ProfileNav />
-            <div className={styles.sidebarHeader}>
-              <CalendarIcon size={20} className={styles.sidebarIcon} />
-              <div className={styles.sidebarTitleGroup}>
-                <h2 className={styles.sidebarTitle}>Learning History</h2>
-                <p className={styles.sidebarDescription}>Your learning journey</p>
-              </div>
-            </div>
-          </aside>
+      <SplitPageLayout className={styles.layout}>
+        <SplitPageLayout.Content>
           <div className={styles.mainContent}>
-            <div className={styles.pageHeader}>
-              <h1 className={styles.pageTitle}>Learning History</h1>
-              <p className={styles.pageDescription}>Browse your learning journey over time</p>
-            </div>
+            <PageHeader title="Learning History" description="Browse your learning journey over time" />
             <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
               <UnderlinePanels.Tab aria-selected={activeTab === 'history'} onSelect={() => handleTabSelect('history')}>
                 History
@@ -265,36 +250,38 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
               </UnderlinePanels.Tab>
               <UnderlinePanels.Panel>
                 {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
-                <div className={styles.emptyState}>
-                  <Banner
-                    title="No learning history yet"
-                    description="Your daily learning will be saved here as you use the app."
-                    variant="info"
-                    hideTitle
-                  />
-                  <div className={styles.backLink}>
-                    <Link href="/">← Back to Dashboard</Link>
-                  </div>
-                </div>
+                <Blankslate>
+                  <Blankslate.Visual>
+                    <HistoryIcon size={24} />
+                  </Blankslate.Visual>
+                  <Blankslate.Heading>No learning history yet</Blankslate.Heading>
+                  <Blankslate.Description>
+                    Your daily learning will be saved here as you use the app.
+                  </Blankslate.Description>
+                  <Blankslate.PrimaryAction onClick={() => router.push('/')}>
+                    Back to Dashboard
+                  </Blankslate.PrimaryAction>
+                </Blankslate>
               </UnderlinePanels.Panel>
               <UnderlinePanels.Panel>
                 {loadError && <Banner title="Failed to load history" description={loadError} variant="critical" />}
-                <div className={styles.emptyState}>
-                  <Banner
-                    title="No learning history yet"
-                    description="Start exploring topics and completing challenges to see your stats here."
-                    variant="info"
-                    hideTitle
-                  />
-                  <div className={styles.backLink}>
-                    <Link href="/">← Back to Dashboard</Link>
-                  </div>
-                </div>
+                <Blankslate>
+                  <Blankslate.Visual>
+                    <HistoryIcon size={24} />
+                  </Blankslate.Visual>
+                  <Blankslate.Heading>No learning history yet</Blankslate.Heading>
+                  <Blankslate.Description>
+                    Start exploring topics and completing challenges to see your stats here.
+                  </Blankslate.Description>
+                  <Blankslate.PrimaryAction onClick={() => router.push('/')}>
+                    Back to Dashboard
+                  </Blankslate.PrimaryAction>
+                </Blankslate>
               </UnderlinePanels.Panel>
             </UnderlinePanels>
           </div>
-        </div>
-      </div>
+        </SplitPageLayout.Content>
+      </SplitPageLayout>
     );
   }
 
@@ -303,7 +290,7 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
     (!selectedDate || selectedDate === todayDateKey);
 
   return (
-    <div className={styles.containerV2}>
+    <>
       {/* Toast notification for "Explore from History" */}
       {toastMessage && (
         <div className={styles.toast}>
@@ -311,79 +298,83 @@ export const LearningHistory = memo(function LearningHistory({ activeTab = 'hist
         </div>
       )}
 
-      {/* Two-column layout */}
-      <div className={styles.layoutV2}>
-        <LearningHistorySidebar
-          activityData={activityData}
-          selectedDate={selectedDate}
-          onSelectDate={handleSelectDate}
-          stats={stats}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          typeFilter={typeFilter}
-          onTypeFilterChange={setTypeFilter}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          groupedEntries={groupedEntries}
-          expandedMonths={expandedMonths}
-          onToggleMonth={toggleMonth}
-        />
+      <SplitPageLayout className={styles.layout}>
+        {activeTab === 'history' && (
+          <SplitPageLayout.Pane
+            position={{ regular: 'start', narrow: 'end' }}
+            width="large"
+            aria-label="Activity and filters"
+          >
+            <LearningHistorySidebar
+              activityData={activityData}
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
+              stats={stats}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              typeFilter={typeFilter}
+              onTypeFilterChange={setTypeFilter}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              groupedEntries={groupedEntries}
+              expandedMonths={expandedMonths}
+              onToggleMonth={toggleMonth}
+            />
+          </SplitPageLayout.Pane>
+        )}
 
-        {/* Main content */}
-        <main className={styles.mainContent}>
-          {/* Page header */}
-          <div className={styles.pageHeader}>
-            <h1 className={styles.pageTitle}>Learning History</h1>
-            <p className={styles.pageDescription}>Browse your learning journey over time</p>
+        <SplitPageLayout.Content>
+          <div className={styles.mainContent}>
+            <PageHeader title="Learning History" description="Browse your learning journey over time" />
+
+            <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
+              <UnderlinePanels.Tab aria-selected={activeTab === 'history'} onSelect={() => handleTabSelect('history')}>
+                History
+              </UnderlinePanels.Tab>
+              <UnderlinePanels.Tab aria-selected={activeTab === 'stats'} onSelect={() => handleTabSelect('stats')}>
+                Stats
+              </UnderlinePanels.Tab>
+              <UnderlinePanels.Panel>
+                <HistoryPanel
+                  loadError={loadError}
+                  isLoading={isLoading}
+                  selectedDate={selectedDate}
+                  onClearSelectedDate={() => setSelectedDate(null)}
+                  hasGenerating={hasGenerating}
+                  activeTopicIds={activeTopicIds}
+                  activeChallengeIds={activeChallengeIds}
+                  activeGoalIds={activeGoalIds}
+                  filteredEntries={filteredEntries}
+                  todayDateKey={todayDateKey}
+                  collapsedDays={collapsedDays}
+                  onToggleDayCollapse={toggleDayCollapse}
+                  onRefresh={forceRefresh}
+                  onSkipTopic={skipAndReplaceTopic}
+                  onSkipChallenge={skipAndReplaceChallenge}
+                  onSkipGoal={skipAndReplaceGoal}
+                  onStopSkipTopic={stopTopicSkip}
+                  onStopSkipChallenge={stopChallengeSkip}
+                  onStopSkipGoal={stopGoalSkip}
+                  onExploreTopic={handleExploreTopic}
+                  skippingTopicIds={skippingTopicIds}
+                  skippingChallengeIds={skippingChallengeIds}
+                  skippingGoalIds={skippingGoalIds}
+                  searchQuery={searchQuery}
+                />
+              </UnderlinePanels.Panel>
+              <UnderlinePanels.Panel>
+                <StatsPanel
+                  loadError={loadError}
+                  isLoading={isLoading}
+                  hasNoInsightsHistory={hasNoInsightsHistory}
+                  insights={insights}
+                  totalGoalsCompleted={totalGoalsCompleted}
+                />
+              </UnderlinePanels.Panel>
+            </UnderlinePanels>
           </div>
-
-          <UnderlinePanels aria-label="Learning history tabs" className={styles.historyTabs}>
-            <UnderlinePanels.Tab aria-selected={activeTab === 'history'} onSelect={() => handleTabSelect('history')}>
-              History
-            </UnderlinePanels.Tab>
-            <UnderlinePanels.Tab aria-selected={activeTab === 'stats'} onSelect={() => handleTabSelect('stats')}>
-              Stats
-            </UnderlinePanels.Tab>
-            <UnderlinePanels.Panel>
-              <HistoryPanel
-                loadError={loadError}
-                isLoading={isLoading}
-                selectedDate={selectedDate}
-                onClearSelectedDate={() => setSelectedDate(null)}
-                hasGenerating={hasGenerating}
-                activeTopicIds={activeTopicIds}
-                activeChallengeIds={activeChallengeIds}
-                activeGoalIds={activeGoalIds}
-                filteredEntries={filteredEntries}
-                todayDateKey={todayDateKey}
-                collapsedDays={collapsedDays}
-                onToggleDayCollapse={toggleDayCollapse}
-                onRefresh={forceRefresh}
-                onSkipTopic={skipAndReplaceTopic}
-                onSkipChallenge={skipAndReplaceChallenge}
-                onSkipGoal={skipAndReplaceGoal}
-                onStopSkipTopic={stopTopicSkip}
-                onStopSkipChallenge={stopChallengeSkip}
-                onStopSkipGoal={stopGoalSkip}
-                onExploreTopic={handleExploreTopic}
-                skippingTopicIds={skippingTopicIds}
-                skippingChallengeIds={skippingChallengeIds}
-                skippingGoalIds={skippingGoalIds}
-                searchQuery={searchQuery}
-              />
-            </UnderlinePanels.Panel>
-            <UnderlinePanels.Panel>
-              <StatsPanel
-                loadError={loadError}
-                isLoading={isLoading}
-                hasNoInsightsHistory={hasNoInsightsHistory}
-                insights={insights}
-                totalGoalsCompleted={totalGoalsCompleted}
-              />
-            </UnderlinePanels.Panel>
-          </UnderlinePanels>
-        </main>
-      </div>
-    </div>
+        </SplitPageLayout.Content>
+      </SplitPageLayout>
+    </>
   );
-});
+}

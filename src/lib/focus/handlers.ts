@@ -25,6 +25,7 @@ import {
   getFallbackGoal,
   getFallbackLearningTopics,
 } from '@/lib/focus/server-utils';
+import { diversifyLearningTopics } from '@/lib/focus/diversify-topics';
 import type { FocusResponse, LearningTopic } from '@/lib/focus/types';
 import type { InterleavingHint } from '@/lib/focus/interleaving';
 import { buildProfileContext } from '@/lib/github/profile-context';
@@ -40,6 +41,7 @@ export interface FocusOptions {
   component?: FocusComponent;
   skillProfile?: SkillProfile;
   existingTopicTitles?: string[];
+  existingChallengeTitles?: string[];
   reviewTopics?: string[];
   interleavingHint?: InterleavingHint;
   debugMode?: boolean;
@@ -51,8 +53,10 @@ function createFallbackMeta(totalTimeMs: number) {
     aiEnabled: false,
     model: 'fallback',
     toolsUsed: [],
+    // Server-side floor only (handler/SDK time), not client-perceived E2E latency.
     totalTimeMs,
     usedCachedProfile: false,
+    skillProfileLastUpdated: undefined,
   };
 }
 
@@ -76,20 +80,27 @@ async function generateSingleComponent(
   skillProfile?: SkillProfile,
   options: {
     reviewTopics?: string[];
+    existingChallengeTitles?: string[];
     interleavingHint?: InterleavingHint;
     debugMode?: boolean;
   } = {},
 ): Promise<Partial<FocusResponse>> {
-  const { reviewTopics, interleavingHint, debugMode } = options;
+  const { reviewTopics, existingChallengeTitles, interleavingHint, debugMode } = options;
 
   const buildPrompt = () => {
     if (component === 'learningTopics') {
       return buildLearningTopicsPrompt(serializedContext, skillProfile, reviewTopics);
     }
     if (component === 'challenge') {
-      return buildChallengePrompt(serializedContext, skillProfile, interleavingHint, {
-        forceDebug: debugMode,
-      });
+      return buildChallengePrompt(
+        serializedContext,
+        skillProfile,
+        interleavingHint,
+        {
+          forceDebug: debugMode,
+        },
+        existingChallengeTitles,
+      );
     }
     return buildGoalPrompt(serializedContext, skillProfile);
   };
@@ -122,13 +133,24 @@ async function generateSingleComponent(
   }
 
   const withIds = addMissingIds(parsed, [component]);
+
+  // M3.2: when the LLM produced learningTopics (we ask for N=5), keep
+  // at most 1 `current-repo` and return at most 3 to the UI.
+  if (component === 'learningTopics' && withIds.learningTopics?.length) {
+    const before = withIds.learningTopics.length;
+    withIds.learningTopics = diversifyLearningTopics(withIds.learningTopics);
+    log.info(`[learningTopics] Diversified ${before} → ${withIds.learningTopics.length}`);
+  }
+
   withIds.meta = {
     generatedAt: now(),
     aiEnabled: true,
     model: result.meta.model,
     toolsUsed: [],
+    // Server-side floor only (handler/SDK time), not client-perceived E2E latency.
     totalTimeMs: result.meta.totalTimeMs,
     usedCachedProfile: true,
+    skillProfileLastUpdated: skillProfile?.lastUpdated,
   };
 
   return withIds;
@@ -176,7 +198,15 @@ export async function generateFocus(
   options: FocusOptions = {},
 ): Promise<Partial<FocusResponse> | { learningTopic: LearningTopic }> {
   const startTime = nowMs();
-  const { component, skillProfile, existingTopicTitles, reviewTopics, interleavingHint, debugMode } = options;
+  const {
+    component,
+    skillProfile,
+    existingTopicTitles,
+    existingChallengeTitles,
+    reviewTopics,
+    interleavingHint,
+    debugMode,
+  } = options;
 
   let serializedContext = '';
   let compactProfile: CompactDeveloperProfile | null = null;
@@ -198,6 +228,7 @@ export async function generateFocus(
     if (component) {
       const result = await generateSingleComponent(identity, component, serializedContext, skillProfile, {
         reviewTopics,
+        existingChallengeTitles,
         interleavingHint,
         debugMode: component === 'challenge' ? debugMode : undefined,
       });
@@ -240,8 +271,10 @@ export async function generateFocus(
         aiEnabled: true,
         model: 'gpt-5-mini',
         toolsUsed: [],
+        // Server-side floor only (handler/SDK time), not client-perceived E2E latency.
         totalTimeMs: totalTime,
         usedCachedProfile: serializedContext.length > 0,
+        skillProfileLastUpdated: skillProfile?.lastUpdated,
       },
     };
 

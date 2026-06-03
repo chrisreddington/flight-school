@@ -42,6 +42,7 @@ export function getTodaysFocusFromHistory(history: FocusHistory, todayKey: strin
 
   const timestamps = [challengeGenerated, goalGenerated, topicsGenerated].sort();
   const latestGeneratedAt = timestamps[timestamps.length - 1];
+  const generatedAt = record.meta?.generatedAt ?? latestGeneratedAt;
 
   const displayableTopics = latestTopics.filter((topic) => {
     const state = getCurrentTopicState(topic);
@@ -66,12 +67,13 @@ export function getTodaysFocusFromHistory(history: FocusHistory, todayKey: strin
     learningTopics: dashboardTopics.map((topic) => topic.data),
     calibrationNeeded: record.calibrationNeeded,
     meta: {
-      generatedAt: latestGeneratedAt,
+      generatedAt,
       aiEnabled: true,
       model: 'stored',
-      toolsUsed: [],
+      toolsUsed: record.meta?.toolsUsed ?? [],
       totalTimeMs: 0,
       usedCachedProfile: true,
+      skillProfileLastUpdated: record.meta?.skillProfileLastUpdated,
     },
   };
 }
@@ -127,6 +129,12 @@ export function saveFocusToHistory(history: FocusHistory, todayKey: string, focu
     const newItems = focus.calibrationNeeded.filter((item) => !existingIds.has(item.skillId));
     record.calibrationNeeded = [...(record.calibrationNeeded || []), ...newItems];
   }
+
+  record.meta = {
+    generatedAt: focus.meta.generatedAt,
+    toolsUsed: focus.meta.toolsUsed,
+    skillProfileLastUpdated: focus.meta.skillProfileLastUpdated,
+  };
 
   return pruneHistory(history);
 }

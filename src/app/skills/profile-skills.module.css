@@ -1,11 +1,64 @@
-/* Main content area */
-.content {
+/* Page layout wrapper — inset background to match the app shell */
+.layout {
+  background-color: var(--bgColor-inset, #f6f8fa);
+}
+
+/* Sidebar cards (relocated from the retired shared two-column layout module) */
+.sidebarCard {
   background-color: var(--bgColor-default, #ffffff);
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: var(--borderRadius-medium, 6px);
-  padding: var(--base-size-24, 24px);
-  min-height: 0;
-  overflow-y: auto;
+  padding: var(--base-size-20, 20px);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--base-size-8, 8px);
+  margin-bottom: var(--base-size-4, 4px);
+}
+
+.sidebarIcon {
+  color: var(--fgColor-accent, #0969da);
+}
+
+.sidebarTitle {
+  font-size: var(--text-body-size-large, 16px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  margin: 0;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.sidebarSubtitle {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
+  margin: 0 0 var(--base-size-16, 16px) 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--base-size-12, 12px);
+}
+
+.statItem {
+  text-align: center;
+  padding: var(--base-size-12, 12px);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-radius: var(--borderRadius-medium, 6px);
+}
+
+.statValue {
+  display: block;
+  font-size: var(--text-title-size-medium, 20px);
+  font-weight: var(--base-text-weight-semibold, 600);
+  line-height: 1.25;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.statLabel {
+  font-size: var(--text-body-size-small, 12px);
+  color: var(--fgColor-muted, #656d76);
 }
 
 .loadingState {
@@ -16,23 +69,6 @@
   gap: var(--base-size-16, 16px);
   padding: var(--base-size-48, 48px);
   color: var(--fgColor-muted, #656d76);
-}
-
-.pageHeader {
-  margin-bottom: var(--base-size-16, 16px);
-}
-
-.pageTitle {
-  font-size: var(--text-title-size-large, 32px);
-  font-weight: var(--base-text-weight-semibold, 600);
-  margin: 0 0 var(--base-size-8, 8px) 0;
-  color: var(--fgColor-default, #1f2328);
-}
-
-.pageDescription {
-  font-size: var(--text-body-size-medium, 14px);
-  color: var(--fgColor-muted, #656d76);
-  margin: 0;
 }
 
 .infoBox {
@@ -122,6 +158,18 @@
   gap: var(--base-size-4, 4px);
 }
 
+/* Slider + remove button group. Must be able to shrink (and go full-width when
+   the card stacks vertically on mobile) so the slider never overflows. */
+.skillControls {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .skillControls {
+    width: 100%;
+  }
+}
+
 .skillName {
   font-weight: var(--base-text-weight-medium, 500);
   font-size: var(--text-body-size-medium, 14px);
@@ -130,12 +178,6 @@
 
 .skillSource {
   font-size: var(--text-body-size-small, 12px);
-  color: var(--fgColor-muted, #656d76);
-}
-
-.emptyState {
-  padding: var(--base-size-24, 24px);
-  text-align: center;
   color: var(--fgColor-muted, #656d76);
 }
 
@@ -149,29 +191,4 @@
   font-size: var(--text-body-size-small, 12px);
   color: var(--fgColor-muted, #656d76);
   margin: 0;
-}
-
-/* Danger Zone */
-.dangerZone {
-  margin-top: var(--base-size-24, 24px);
-  padding: var(--base-size-16, 16px);
-  border: 1px solid var(--borderColor-danger-muted, #ff818266);
-  border-radius: var(--borderRadius-medium, 6px);
-  background-color: var(--bgColor-danger-muted, #ffebe9);
-}
-
-.dangerTitle {
-  display: flex;
-  align-items: center;
-  gap: var(--base-size-8, 8px);
-  font-size: var(--text-body-size-medium, 14px);
-  font-weight: var(--base-text-weight-semibold, 600);
-  margin: 0 0 var(--base-size-8, 8px) 0;
-  color: var(--fgColor-danger, #cf222e);
-}
-
-.dangerDescription {
-  font-size: var(--text-body-size-small, 12px);
-  color: var(--fgColor-default, #1f2328);
-  margin: 0 0 var(--base-size-12, 12px) 0;
 }

@@ -1,5 +1,17 @@
 import type { NextConfig } from 'next';
 
+// Next 16's cacheComponents (Partial Prerendering) currently trips a dev-only
+// upstream bug — `InvariantError: Expected workUnitAsyncStorage to have a store`
+// — that throws below the root <Suspense> on `next dev`, so the root
+// <ErrorBoundary> replaces the whole app shell with "Something went wrong"
+// (even /sign-in, blocking local sign-in entirely). Production builds prerender
+// fine, so we keep PPR ON for `next build` / `next start` / CI and disable it
+// only for `next dev` to keep the local app usable. Set
+// ENABLE_CACHE_COMPONENTS=1 to opt back in locally when you specifically need to
+// exercise PPR semantics. Remove this gate once a Next release fixes the dev
+// invariant (tracked: vercel/next.js workUnitAsyncStorage dev regression).
+const enableCacheComponents = process.env.NODE_ENV === 'production' || process.env.ENABLE_CACHE_COMPONENTS === '1';
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
@@ -32,8 +44,9 @@ const nextConfig: NextConfig = {
   },
   // Next 16 dynamic-IO model: every server fetch must be either explicitly
   // uncached (no-store) or tagged for revalidation. Enforced by
-  // scripts/check-server-fetch-tenancy.mjs at CI time.
-  cacheComponents: true,
+  // scripts/check-server-fetch-tenancy.mjs at CI time. Disabled in `next dev`
+  // only — see the enableCacheComponents note above.
+  cacheComponents: enableCacheComponents,
   // Keep `@github/copilot-sdk` as a server-only external. The package uses
   // `import.meta.resolve` internally which Turbopack cannot handle, and we
   // never want it bundled into the web image — runtime fail-loud net: if

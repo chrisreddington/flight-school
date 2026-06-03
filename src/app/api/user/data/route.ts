@@ -4,9 +4,13 @@
  * `DELETE /api/user/data` — irreversibly deletes all server-side data
  * belonging to the authenticated caller:
  *
- *   - their entire `users/{userId}/` storage subtree (threads,
- *     evaluations, suggestions, focus, anything else partitioned per
- *     user)
+ *   - their entire `users/{userId}/` storage subtree (legacy flat-file
+ *     threads, evaluations, suggestions, focus, anything else partitioned
+ *     per user)
+ *   - their DocumentStore partitions (skills, habits, focus, profile,
+ *     challenges, threads, evaluations, activity, … — persisted under
+ *     `_docstore/{container}/{userId}/`, outside the `users/` subtree),
+ *     via {@link deleteUserData}
  *   - every {@link BackgroundJob} they own (cancelling any in-flight
  *     ones first)
  *   - every {@link AIActivityEvent} they own in the in-memory activity
@@ -26,6 +30,8 @@
 import { requireUserContext, UnauthorizedError, readCredentialsFromJwt } from '@/lib/auth/context';
 import { captureTracePropagationHeaders } from '@/lib/observability/context-propagation';
 import { deleteDir } from '@/lib/storage/utils';
+import { deleteUserData, UserDataDeletionError } from '@/lib/storage/document-store/account-deletion';
+import { getDocumentStore } from '@/lib/storage/document-store/factory';
 import { markUserDeleted, clearUserTombstone } from '@/lib/storage/tombstone';
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
@@ -49,8 +55,32 @@ interface DeleteSummary {
   jobsDeleted: number;
   activityEventsCleared: boolean;
   storageDirDeleted: boolean;
-  partial?: boolean;
+  storeDataDeleted: boolean;
+  /**
+   * True only when user data may still be on the server (a partition-phase
+   * store failure, an activity-buffer clear failure, or a legacy storage-dir
+   * wipe failure). This — mirrored by the top-level `success: false` — is the
+   * signal the client uses to keep the user signed in for a retry. A
+   * registry-only cleanup failure is NOT partial: every byte of user data is
+   * gone, so it surfaces via {@link DeleteSummary.registryCleanupPending}
+   * instead.
+   */
+  partial?: true;
+  /**
+   * Best-effort wipe steps that failed. May contain blocking entries
+   * (`store-data:<containers>`, `activity`, `storage-dir`) that imply data
+   * remains, or the non-blocking `store-registry` warning that only means the
+   * owner record lingers. Use `partial` / `success` to tell the two apart.
+   */
   failed?: string[];
+  /**
+   * Every user-data partition was wiped but the discoverable owner registry
+   * entry could not be removed. The wipe is complete (safe to sign out); a
+   * later reconciliation sweep prunes the orphaned entry. Only ever emitted
+   * alongside `success: true` — if user data also remains (`partial: true`)
+   * this flag is suppressed, because its contract is "the wipe is complete".
+   */
+  registryCleanupPending?: true;
 }
 
 interface DeleteRequestBody {
@@ -165,9 +195,9 @@ export async function DELETE(request: NextRequest) {
 
     // Clear this user's slice of the activity buffer via the worker.
     // The web-side `activityLogger.clear` is a no-op in the new model;
-    // the worker DELETE is authoritative. Run it in parallel with the
-    // jobs cleanup-implied tombstone but await it BEFORE wiping the
-    // user directory so late activity writes don't recreate the dir.
+    // the worker DELETE is authoritative. This runs sequentially after the
+    // jobs cleanup and is awaited BEFORE wiping the user directory so late
+    // activity writes can't recreate the dir.
     let activityEventsCleared = true;
     const failed: string[] = [];
     try {
@@ -180,26 +210,90 @@ export async function DELETE(request: NextRequest) {
 
     // Wipe the entire per-user storage directory (threads, evaluations,
     // suggestions, focus, etc.). `deleteDir` is recursive and a no-op
-    // when the directory doesn't exist.
-    await deleteDir(`users/${userId}`);
+    // when the directory doesn't exist. A failure here is tolerated (reported
+    // via `failed`) rather than 500ing: the legacy flat-file data may remain,
+    // so this is a blocking partial like the partition/activity steps, but the
+    // client still needs the 200 summary to know it must NOT sign out.
+    let storageDirDeleted = true;
+    try {
+      await deleteDir(`users/${userId}`);
+    } catch (err) {
+      log.error(`[user ${userId}] Legacy storage directory deletion failed`, { err });
+      storageDirDeleted = false;
+      failed.push('storage-dir');
+    }
 
-    // Restore the tombstone marker after deleteDir wipes it (deleteDir
-    // recursively removes everything under `users/{userId}/` including
-    // `.deleted`). The marker must remain in place until the user signs
-    // in again so any late executor write still aborts.
-    await markUserDeleted(userId);
+    // Wipe the user's DocumentStore partitions. The file adapter persists
+    // under `_docstore/{container}/{userId}/`, NOT under `users/{userId}/`,
+    // so `deleteDir` above misses it entirely — without this call the
+    // account-deletion endpoint would leave skills/habits/focus/etc. data
+    // behind. A failure here is tolerated (reported via `failed`) rather than
+    // 500ing, so the rest of the wipe still completes. The failure phase
+    // matters: a partition-phase failure means user data is still present
+    // (so the client must NOT sign out), whereas a registry-phase failure
+    // means the data is gone and only the owner record lingers.
+    let storeDataDeleted = true;
+    let registryCleanupPending = false;
+    try {
+      await deleteUserData(await getDocumentStore(), userId);
+    } catch (err) {
+      log.error(`[user ${userId}] DocumentStore partition deletion failed`, { err });
+      if (err instanceof UserDataDeletionError && err.phase === 'registry') {
+        // Every partition cleared; only the registry entry removal failed.
+        // The user's data IS gone, so this is a completed wipe with a
+        // discoverable owner record that a sweep can reconcile later. This
+        // must NOT mark the delete partial — the client may safely sign out.
+        registryCleanupPending = true;
+        failed.push('store-registry');
+      } else {
+        // Partition-phase (or unknown) failure: some user data may remain.
+        storeDataDeleted = false;
+        const failedContainers = err instanceof UserDataDeletionError ? err.failedContainers.join(',') : 'unknown';
+        failed.push(`store-data:${failedContainers}`);
+      }
+    }
+
+    // Re-assert the tombstone. The first `markUserDeleted` (above) wrote
+    // `tombstones/{userId}`, which lives OUTSIDE the `users/{userId}/` subtree,
+    // so the `deleteDir('users/{userId}')` call above never touched it. This
+    // second mark is a defensive idempotent re-write, not recovery of a wiped
+    // marker — it guarantees the tombstone is present even if a future refactor
+    // moves tombstone storage back under the per-user directory. A failure here
+    // must not 500 the wipe and must not override the computed summary: the
+    // tombstone is best-effort and orthogonal to whether every byte of user
+    // data was wiped (which may be partial), so log-and-swallow and still
+    // return the summary the client needs.
+    try {
+      await markUserDeleted(userId);
+    } catch (err) {
+      log.error(`[user ${userId}] defensive tombstone re-write failed`, { err });
+    }
+
+    // `partial` (and the mirrored `success: false`) means user data may still
+    // be on the server, so the client keeps the user signed in for a retry.
+    // A registry-only cleanup failure is deliberately excluded: the data is
+    // gone, only the owner record lingers, so it surfaces as
+    // `registryCleanupPending` and the delete still counts as successful.
+    const userDataMayRemain = !storeDataDeleted || !activityEventsCleared || !storageDirDeleted;
 
     const summary: DeleteSummary = {
       jobsCancelled,
       jobsDeleted,
       activityEventsCleared,
-      storageDirDeleted: true,
-      ...(failed.length > 0 ? { partial: true, failed } : {}),
+      storageDirDeleted,
+      storeDataDeleted,
+      ...(failed.length > 0 ? { failed } : {}),
+      ...(userDataMayRemain ? { partial: true } : {}),
+      // `registryCleanupPending` asserts "the wipe is complete", so it can only
+      // surface when no user data remains. If activity data also failed to
+      // clear, the registry failure stays in `failed` for observability but the
+      // flag is suppressed to keep it mutually exclusive with `partial`.
+      ...(registryCleanupPending && !userDataMayRemain ? { registryCleanupPending: true } : {}),
     };
 
     log.info(`[user ${userId}] data deletion complete`, summary);
 
-    return NextResponse.json({ success: true, summary });
+    return NextResponse.json({ success: !userDataMayRemain, summary });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.json({ error: err.message }, { status: 401 });

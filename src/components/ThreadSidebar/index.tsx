@@ -1,10 +1,10 @@
 'use client';
 
 import type { Thread } from '@/lib/threads/types';
-import { PlusIcon, SidebarCollapseIcon, SidebarExpandIcon, TrashIcon } from '@primer/octicons-react';
-import { ActionList, Button, IconButton, RelativeTime, Spinner, Stack, Tooltip, Truncate } from '@primer/react';
-import type React from 'react';
-import { memo, useMemo } from 'react';
+import { PlusIcon, SidebarCollapseIcon, SidebarExpandIcon } from '@primer/octicons-react';
+import { IconButton, Stack, Tooltip } from '@primer/react';
+import { memo } from 'react';
+import { ThreadList } from './ThreadList';
 import styles from './ThreadSidebar.module.css';
 
 /**
@@ -62,17 +62,6 @@ export const ThreadSidebar = memo(function ThreadSidebar({
   collapsed = false,
   onToggleCollapsed,
 }: ThreadSidebarProps) {
-  // Sort threads by updatedAt (most recent first)
-  const sortedThreads = useMemo(
-    () => [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-    [threads],
-  );
-
-  const handleDeleteClick = (e: React.MouseEvent | React.KeyboardEvent, threadId: string) => {
-    e.stopPropagation();
-    onDeleteThread(threadId);
-  };
-
   if (collapsed) {
     return (
       <aside className={styles.sidebarCollapsed} aria-label="Thread navigation (collapsed)">
@@ -128,55 +117,15 @@ export const ThreadSidebar = memo(function ThreadSidebar({
         </div>
 
         {/* Thread List */}
-        <div className={styles.threadList}>
-          {isLoading ? (
-            <div className={styles.emptyState}>
-              <Spinner size="medium" />
-              <p className={styles.emptyStateText}>Loading conversations...</p>
-            </div>
-          ) : sortedThreads.length === 0 ? (
-            <div className={styles.emptyState}>
-              <p className={styles.emptyStateText}>No conversations yet</p>
-              <Button variant="primary" size="small" leadingVisual={PlusIcon} onClick={onNewThread}>
-                Start a conversation
-              </Button>
-            </div>
-          ) : (
-            <ActionList aria-label="Thread list">
-              {sortedThreads.map((thread) => {
-                const isStreaming = streamingThreadIds.includes(thread.id);
-                return (
-                  <ActionList.Item
-                    key={thread.id}
-                    active={thread.id === activeThreadId}
-                    onSelect={() => onSelectThread(thread.id)}
-                    as="div"
-                  >
-                    <Stack direction="vertical" gap="none">
-                      <Stack direction="horizontal" align="center" gap="condensed">
-                        <Truncate title={thread.title} inline maxWidth={isStreaming ? 150 : 180}>
-                          {thread.title}
-                        </Truncate>
-                        {isStreaming && <Spinner size="small" />}
-                      </Stack>
-                      <span className={styles.threadMeta}>
-                        <RelativeTime date={new Date(thread.updatedAt)} />
-                        {' · '}
-                        {thread.messages.length} message{thread.messages.length !== 1 ? 's' : ''}
-                      </span>
-                    </Stack>
-                    <ActionList.TrailingAction
-                      icon={TrashIcon}
-                      label="Delete"
-                      aria-label={`Delete thread: ${thread.title}`}
-                      onClick={(e: React.MouseEvent | React.KeyboardEvent) => handleDeleteClick(e, thread.id)}
-                    />
-                  </ActionList.Item>
-                );
-              })}
-            </ActionList>
-          )}
-        </div>
+        <ThreadList
+          threads={threads}
+          activeThreadId={activeThreadId}
+          streamingThreadIds={streamingThreadIds}
+          isLoading={isLoading}
+          onSelectThread={onSelectThread}
+          onNewThread={onNewThread}
+          onDeleteThread={onDeleteThread}
+        />
       </Stack>
     </aside>
   );

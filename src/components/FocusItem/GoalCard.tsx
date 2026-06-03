@@ -144,7 +144,7 @@ export function GoalCard({
           {showHistoryActions ? (
             <>
               <Button
-                variant="primary"
+                variant="default"
                 leadingVisual={CheckIcon}
                 onClick={handleMarkComplete}
                 disabled={isCompleted || isSkipped}

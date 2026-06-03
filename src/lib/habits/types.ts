@@ -91,7 +91,11 @@ export type HabitState = 'not-started' | 'active' | 'paused' | 'completed' | 'ab
 export interface DailyCheckIn {
   /** Date key (YYYY-MM-DD) */
   date: string;
-  /** Value logged (minutes for time, count for count, true for binary) */
+  /**
+   * Value logged: minutes for time mode, count for count mode, `true` for a met
+   * binary day. `false` is reserved for an explicit skip (see `skipHabitDay`);
+   * product check-in paths never log a non-skip `false`.
+   */
   value: number | boolean;
   /** Whether this check-in completed the daily requirement */
   completed: boolean;

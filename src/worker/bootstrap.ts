@@ -30,6 +30,9 @@ function isMainEntry(): boolean {
 }
 
 async function main(): Promise<void> {
+  const { requireAuditSalt } = await import('../lib/security/audit-salt');
+  requireAuditSalt('worker:bootstrap');
+
   const { startWorkerOtel } = await import('./lifecycle/otel');
   await startWorkerOtel();
   const { runWorker } = await import('./server-main');

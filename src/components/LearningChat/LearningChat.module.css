@@ -3,8 +3,43 @@
 .container {
   display: flex;
   height: 100%;
+  /* Anchor a chat-shaped panel height even when few threads keep the inline
+     sidebar short. Without a floor the panel collapses to its content height,
+     letting the composer ride up under the header and leaving dead space
+     below it on the dashboard. Cap the floor against the viewport (70svh) so
+     short phones / landscape don't get a chat block that dominates the page. */
+  min-height: min(30rem, 70svh);
   width: 100%;
   overflow: hidden;
+}
+
+/* Wraps the inline thread sidebar so it can be hidden on phones, where
+   conversations move into a drawer and the chat takes the full width. */
+.inlineSidebar {
+  display: flex;
+  height: 100%;
+}
+
+@media (max-width: 767px) {
+  .inlineSidebar {
+    display: none;
+  }
+}
+
+/* Conversations-drawer trigger lives in the chat header on phones only. */
+.threadsTrigger {
+  display: inline-flex;
+}
+
+@media (min-width: 768px) {
+  .threadsTrigger {
+    display: none;
+  }
+}
+
+/* "New conversation" action above the thread list inside the drawer. */
+.drawerActions {
+  padding: 0 0 var(--base-size-8) 0;
 }
 
 .chatArea {
@@ -75,31 +110,14 @@
 .emptyState {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Stretch (not center) so the Blankslate child fills the column width.
+     With align-items:center the flex child shrink-wraps to its min-content
+     width, collapsing the description to one word per line. */
+  align-items: stretch;
   justify-content: center;
   height: 100%;
   text-align: center;
   padding: var(--base-size-32);
-}
-
-.emptyIcon {
-  color: var(--fgColor-muted);
-  opacity: 0.5;
-  margin-bottom: var(--base-size-16);
-}
-
-.emptyTitle {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 var(--base-size-8) 0;
-  color: var(--fgColor-default);
-}
-
-.emptyDescription {
-  font-size: 14px;
-  color: var(--fgColor-muted);
-  max-width: 400px;
-  line-height: 1.5;
 }
 
 .inputArea {

@@ -141,6 +141,33 @@ function isIntermediateOrAdvanced(level: SkillLevel | undefined): boolean {
 }
 
 /**
+ * Module-internal lookup built once on first access. Resolves a `skillId`
+ * to its `SkillNode` in O(1) so the transitive walk does not re-scan
+ * `SKILL_PREREQUISITES` per prerequisite.
+ */
+const SKILL_NODES_BY_ID: Map<string, SkillNode> = new Map(SKILL_PREREQUISITES.map((node) => [node.skillId, node]));
+
+/**
+ * Returns the seed `skillId` plus all of its transitive prerequisites.
+ *
+ * The returned set INCLUDES the seed — callers consuming this from
+ * `getNextAchievableSkills` are guarded by the surrounding
+ * `!skillLevels.has(prereq)` check, so seed-inclusion is harmless there.
+ * Callers that want "transitive prereqs only" must filter the seed out
+ * themselves.
+ */
+function transitivePrerequisites(skillId: string, visited: Set<string> = new Set()): Set<string> {
+  if (visited.has(skillId)) return visited;
+  visited.add(skillId);
+  const node = SKILL_NODES_BY_ID.get(skillId);
+  if (!node) return visited;
+  for (const prereq of node.prerequisites) {
+    transitivePrerequisites(prereq, visited);
+  }
+  return visited;
+}
+
+/**
  * Returns skills from SKILL_PREREQUISITES that are "next achievable" given the user's profile.
  * A skill is next-achievable when:
  * 1. It is NOT already in the user's skill profile at intermediate+ level
@@ -153,6 +180,19 @@ export function getNextAchievableSkills(profile: SkillProfile): SkillNode[] {
     const currentLevel = skillLevels.get(userSkill.skillId);
     if (!currentLevel || SKILL_LEVEL_ORDER[userSkill.level] > SKILL_LEVEL_ORDER[currentLevel]) {
       skillLevels.set(userSkill.skillId, userSkill.level);
+    }
+  }
+
+  // Subsumption: a confirmed intermediate+ skill implies its transitive
+  // prerequisites are also satisfied. Without this, the Learning Path
+  // panel keeps recommending foundational skills (e.g. JavaScript) even
+  // for users with TypeScript Advanced confirmed.
+  for (const userSkill of profile.skills) {
+    if (!isIntermediateOrAdvanced(userSkill.level)) continue;
+    for (const prereq of transitivePrerequisites(userSkill.skillId)) {
+      if (!skillLevels.has(prereq)) {
+        skillLevels.set(prereq, MINIMUM_PREREQUISITE_LEVEL);
+      }
     }
   }
 

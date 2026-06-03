@@ -1,5 +1,6 @@
 'use client';
 
+import { MilestoneIcon } from '@primer/octicons-react';
 import { Button, Stack } from '@primer/react';
 import { getNextAchievableSkills, SKILL_PREREQUISITES } from '@/lib/skills/prerequisites';
 import type { SkillProfile } from '@/lib/skills/types';
@@ -18,7 +19,10 @@ export function LearningPathPanel({ profile, onAddSkill }: LearningPathPanelProp
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
-        <p className={styles.title}>🗺️ Learning Path</p>
+        <p className={styles.title}>
+          <MilestoneIcon size={16} className={styles.titleIcon} />
+          Learning Path
+        </p>
       </div>
       <p className={styles.subtitle}>Skills to tackle next (based on your profile)</p>
 

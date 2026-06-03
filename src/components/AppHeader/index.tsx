@@ -20,19 +20,16 @@ import { useBreadcrumbContext } from '@/contexts/breadcrumb-context';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import {
-  BugIcon,
   ChevronRightIcon,
   CopilotIcon,
-  FlameIcon,
-  HistoryIcon,
-  HomeIcon,
-  MortarBoardIcon,
-  PersonIcon,
+  GearIcon,
+  LinkExternalIcon,
   RocketIcon,
   StarIcon,
 } from '@primer/octicons-react';
 import { ActionList, ActionMenu, Avatar, Label, Spinner, Stack } from '@primer/react';
 import Link from 'next/link';
+import { PrimaryNav } from './PrimaryNav';
 import styles from './AppHeader.module.css';
 
 /**
@@ -41,21 +38,27 @@ import styles from './AppHeader.module.css';
  * Features:
  * - Flight School logo (always links home)
  * - Dynamic breadcrumb trail based on navigation history
- * - Debug mode toggle
  * - User profile menu
  */
 export function AppHeader() {
   const { data: profile, isLoading } = useUserProfile();
   const avatarUrl = profile?.user?.avatarUrl || 'https://avatars.githubusercontent.com/u/0?v=4';
   const username = profile?.user?.login || 'user';
-  const { isDebugMode, toggleDebugMode } = useDebugMode();
+  const { isDebugMode } = useDebugMode();
   const { breadcrumbs } = useBreadcrumbContext();
 
   return (
     <header className={styles.header}>
-      <Stack direction="horizontal" align="center" justify="space-between" wrap="wrap" gap="normal">
+      <Stack
+        direction="horizontal"
+        align="center"
+        justify="space-between"
+        wrap="nowrap"
+        gap="normal"
+        className={styles.topRow}
+      >
         {/* Left side: Logo + Breadcrumbs */}
-        <Stack direction="horizontal" align="center" gap="condensed">
+        <Stack direction="horizontal" align="center" gap="condensed" className={styles.leftGroup}>
           <Link href="/" className={styles.logoLink}>
             <Stack direction="horizontal" align="center" gap="condensed">
               <span className={styles.logoIcon}>
@@ -64,17 +67,6 @@ export function AppHeader() {
               <span className={styles.logoText}>Flight School</span>
             </Stack>
           </Link>
-
-          <a
-            href="https://github.com/github/copilot-sdk"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.sdkBadgeLink}
-          >
-            <Label variant="accent" size="small">
-              Copilot SDK Demo
-            </Label>
-          </a>
 
           {isDebugMode && (
             <Label variant="danger" size="small">
@@ -124,93 +116,67 @@ export function AppHeader() {
                 )}
               </button>
             </ActionMenu.Anchor>
-            <ActionMenu.Overlay width="medium">
+            <ActionMenu.Overlay width="small">
               <ActionList>
-                <ActionList.Item inert>
+                {/* Identity row: avatar + handle mirrors GitHub's own user menu.
+                    Single-line, no description — the avatar and handle make
+                    "your profile" self-evident; the external-link glyph signals
+                    it opens github.com. */}
+                <ActionList.LinkItem href={`https://github.com/${username}`} target="_blank" rel="noopener noreferrer">
                   <ActionList.LeadingVisual>
-                    <PersonIcon />
+                    <Avatar src={avatarUrl} size={20} alt="" />
                   </ActionList.LeadingVisual>
                   @{username}
-                </ActionList.Item>
+                  <ActionList.TrailingVisual>
+                    <LinkExternalIcon />
+                  </ActionList.TrailingVisual>
+                </ActionList.LinkItem>
                 <ActionList.Divider />
-                <ActionList.Group title="Learning">
-                  <ActionList.LinkItem href="/">
+                <ActionList.LinkItem href="/settings">
+                  <ActionList.LeadingVisual>
+                    <GearIcon />
+                  </ActionList.LeadingVisual>
+                  Settings
+                </ActionList.LinkItem>
+                <ActionList.Divider />
+                <ActionList.Group>
+                  <ActionList.GroupHeading>Resources</ActionList.GroupHeading>
+                  <ActionList.LinkItem
+                    href="https://github.com/chrisreddington/flight-school"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <ActionList.LeadingVisual>
-                      <HomeIcon />
+                      <StarIcon />
                     </ActionList.LeadingVisual>
-                    Dashboard
-                    <ActionList.Description>Your learning overview</ActionList.Description>
+                    Star Flight School
+                    <ActionList.TrailingVisual>
+                      <LinkExternalIcon />
+                    </ActionList.TrailingVisual>
                   </ActionList.LinkItem>
-                  <ActionList.LinkItem href="/skills">
+                  <ActionList.LinkItem
+                    href="https://github.com/github/copilot-sdk"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <ActionList.LeadingVisual>
-                      <MortarBoardIcon />
+                      <CopilotIcon />
                     </ActionList.LeadingVisual>
-                    Skills
-                    <ActionList.Description>Calibrate your skill levels</ActionList.Description>
-                  </ActionList.LinkItem>
-                  <ActionList.LinkItem href="/habits">
-                    <ActionList.LeadingVisual>
-                      <FlameIcon />
-                    </ActionList.LeadingVisual>
-                    Habits
-                    <ActionList.Description>Track your learning habits</ActionList.Description>
-                  </ActionList.LinkItem>
-                  <ActionList.LinkItem href="/history">
-                    <ActionList.LeadingVisual>
-                      <HistoryIcon />
-                    </ActionList.LeadingVisual>
-                    History
-                    <ActionList.Description>View past learning items</ActionList.Description>
+                    Copilot SDK
+                    <ActionList.TrailingVisual>
+                      <LinkExternalIcon />
+                    </ActionList.TrailingVisual>
                   </ActionList.LinkItem>
                 </ActionList.Group>
-                <ActionList.Divider />
-                <ActionList.LinkItem
-                  href="https://github.com/chrisreddington/flight-school"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ActionList.LeadingVisual>
-                    <StarIcon />
-                  </ActionList.LeadingVisual>
-                  Flight School
-                  <ActionList.Description>Star or contribute on GitHub</ActionList.Description>
-                </ActionList.LinkItem>
-                <ActionList.LinkItem
-                  href="https://github.com/github/copilot-sdk"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ActionList.LeadingVisual>
-                    <CopilotIcon />
-                  </ActionList.LeadingVisual>
-                  Copilot SDK
-                  <ActionList.Description>Build your own AI apps</ActionList.Description>
-                </ActionList.LinkItem>
-                {process.env.NODE_ENV === 'development' && (
-                  <>
-                    <ActionList.Divider />
-                    <ActionList.Item onSelect={toggleDebugMode}>
-                      <ActionList.LeadingVisual>
-                        <BugIcon />
-                      </ActionList.LeadingVisual>
-                      Debug Mode
-                      <ActionList.TrailingVisual>{isDebugMode ? 'On' : 'Off'}</ActionList.TrailingVisual>
-                    </ActionList.Item>
-                  </>
-                )}
-                <ActionList.Divider />
-                <ActionList.Item disabled>
-                  {profile?.meta?.authMethod === 'github-oauth' && 'Signed in with GitHub'}
-                  {(!profile?.meta?.authMethod || profile?.meta?.authMethod === 'none') &&
-                    (profile?.user?.login && profile.user.login !== 'demo-user'
-                      ? 'Signed in with GitHub'
-                      : 'Not authenticated')}
-                </ActionList.Item>
               </ActionList>
             </ActionMenu.Overlay>
           </ActionMenu>
         </Stack>
       </Stack>
+
+      <div className={styles.navRow}>
+        <PrimaryNav />
+      </div>
     </header>
   );
 }

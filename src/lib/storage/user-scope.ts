@@ -18,6 +18,8 @@
 
 import 'server-only';
 
+import { SAFE_PATH_SEGMENT } from './safe-segment';
+
 /**
  * Allowed characters in a userId used as a path segment. GitHub IDs are
  * numeric, but we accept the full alphanumeric + `_-` set so tests and
@@ -26,6 +28,16 @@ import 'server-only';
  * rejected.
  */
 export const SAFE_USER_ID = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Re-export of the canonical {@link import('./safe-segment').SAFE_PATH_SEGMENT}
+ * for callers that already reach for it through `@/lib/storage/user-scope`
+ * (the storage adapters, the workspace/challenge repos, the storage routes).
+ * The one definition lives in the dependency-free `./safe-segment` module so
+ * backend-portable domain code (e.g. the tracks catalog) can validate ids
+ * against the same class without importing this `server-only` module.
+ */
+export { SAFE_PATH_SEGMENT };
 
 /**
  * Build the per-user storage path for a logical filename.

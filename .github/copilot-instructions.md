@@ -27,7 +27,8 @@ Next.js 16 App Router application on React 19.2 with Primer React UI. All API ca
 must respect:
 
 - **`reactCompiler: true`** — the compiler auto-memoises components, so don't add `useMemo` / `useCallback` / `React.memo` unless a profile shows it's needed. If a Primer component breaks the compiler's Rules of React, opt that file out with `"use no memo"` and leave a `TODO:` comment.
-- **`experimental.cacheComponents: true`** — Partial Prerender mode. Any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
+- **`cacheComponents` (Partial Prerender mode)** — enabled for `next build` / `next start` / CI, but **gated off in `next dev`** by the `enableCacheComponents` const in `next.config.ts` (set `ENABLE_CACHE_COMPONENTS=1` to opt back in locally). A dev-only upstream Next bug (`InvariantError: Expected workUnitAsyncStorage to have a store`) throws below the root `<Suspense>` and makes the root `<ErrorBoundary>` blank the whole app shell — including `/sign-in` — so local dev would be unusable with it on. Production prerendering is unaffected. Regardless of the dev gate, write code as if PPR is always on: any dynamic IO (cookies, request body, `usePathname`, `useSearchParams`, uncached `fetch`) must live below a `<Suspense>` boundary. Root layout already wraps `<Providers>` in `<Suspense>` to cover the breadcrumb context's `usePathname()` call.
+- **`reactStrictMode: true`** — React dev-mode double-mounts every component (mount, unmount, remount). On `/challenge` that races the Monaco editor's disposal against its init, so Monaco rejects with a benign `Canceled` error (`name` and `message` both `Canceled`) that Next's dev overlay would otherwise surface as a scary red herring. `src/instrumentation-client.ts` registers `registerMonacoCancellationSuppressor()` (in `src/lib/dev/`) at client boot — a capture-phase `unhandledrejection`/`error` listener that `stopImmediatePropagation()`s **only** that Monaco-stack `Canceled` error so it never reaches the overlay. It self-gates to non-production and matches narrowly (canceled shape **and** a `monaco-editor`/`editor.api` stack) so genuine cancellation bugs still surface. This is a known upstream interaction (`microsoft/monaco-editor#2467`, `suren-atoyan/monaco-react#263`), not a Flight School bug.
 
 **Route-segment config is forbidden under `cacheComponents`.** Do not add
 `export const dynamic = '…'` or `export const runtime = 'nodejs'` to any
@@ -276,6 +277,23 @@ Rules of the road:
   network promise. See `src/hooks/use-user-profile.ts` `refetch()` for
   the reference implementation and the divergent-settlement regression
   test alongside it.
+- **Session-validating queries must defeat the cache.** A query whose fetch
+  doubles as the live GitHub-token check (e.g. `useUserProfile` → `/api/profile`)
+  must use `staleTime: 0` **and** `refetchOnMount: 'always'` +
+  `refetchOnWindowFocus: 'always'`. The plain `true` form only refetches STALE
+  queries, so a remount or window-focus inside the stale window would serve
+  cached `query.data` and mask a revoked token (HTTP 200 with stale data
+  instead of a `/sign-in` redirect). With these options the cached value may
+  flash SWR-style for a sub-second background refetch, but it never suppresses
+  the revalidation. See `src/hooks/use-user-profile.ts` and its
+  remount-within-stale-window regression test.
+- **Focus invalidation is cross-tab and storage-first.** `invalidateFocusCache()`
+  in `src/lib/operations/focus-broadcast.ts` clears today's focus record
+  and then calls `broadcastFocusInvalidate()`, which fans out through a
+  `focus-invalidate` window event, a `BroadcastChannel`, and a
+  `localStorage` fallback tick for browsers without `BroadcastChannel`.
+  Consumers subscribe via `subscribeFocusInvalidate(handler)` and refresh
+  from storage on receipt instead of forcing an immediate network refetch.
 
 ## Code Organization
 
@@ -322,6 +340,26 @@ When answering questions:
 
 Focus on building understanding, not just providing solutions.`;
 ```
+
+### Follow-up questions rendering contract
+- `LEARNING_LENS_PROMPT` in `src/lib/copilot/prompts.ts` ends answers with
+  the exact heading `## Follow-up questions` followed by `-` bullet items.
+- `MessageBubble` in `src/components/MessageBubble/index.tsx` parses that
+  exact heading and bullet list to render clickable follow-up chips.
+- The heading text and bullet format are a prompt↔parser contract; changing
+  either side without updating the other drops follow-up chips.
+
+### Tool-event icon contract
+- `tool-summary.ts` in `src/lib/copilot/` is **framework-free** (no JSX) and
+  returns an `iconKind` category from the `ToolIconKind` union
+  (`'search'|'file'|'commit'|'pull-request'|'issue'|'repository'|'branch'|'profile'|'tool'`)
+  — never an emoji or icon element.
+- `MessageBubble` maps each `iconKind` to a Primer Octicon via the exhaustive
+  `TOOL_ICON_BY_KIND: Record<ToolIconKind, Icon>` and renders it in the
+  tool-event timeline (shown to ALL users, not just debug mode). The
+  `Record` is exhaustive, so adding a kind without a mapping fails `tsc`.
+- Adding a new tool category means adding the kind to the union AND a mapping
+  in `MessageBubble`; the two sides are a contract.
 
 ### When to Apply Learning Lens
 - User asks "why" or "how does this work"
@@ -430,6 +468,18 @@ Guidelines:
 2. **Generation phase**: Create structured challenge when sufficient context
 3. **Validation phase**: Ensure challenge is coherent and achievable
 
+### Server-side spec storage
+Generated challenge specs are persisted per user at
+`users/{userId}/challenges/{id}.json` through
+`src/lib/challenge/spec-storage.ts` (`readUserChallengeSpec` /
+`writeUserChallengeSpec`).
+
+- `/challenge?id=...` resolves the spec on the server by `id`; URL query
+  fields like `title`/`description` are ignored.
+- Missing spec is treated as expired content and redirects to `/`.
+- All reads/writes are user-scoped; one user cannot overwrite another
+  user's spec even when ids match.
+
 ### Challenge Generation Format
 When generating a challenge, return a structured JSON object:
 ```typescript
@@ -463,7 +513,7 @@ AUTH_GITHUB_ID=               # GitHub App client id
 AUTH_GITHUB_SECRET=           # GitHub App client secret
 AUTH_TRUST_HOST=true          # required behind a proxy (ACA, Codespaces, etc.)
 
-# Per-user abuse controls (defaults match in-code values)
+# Per-user abuse controls
 AUDIT_SALT=                   # openssl rand -hex 32
 # RATE_LIMIT_CHAT_PER_MIN=30
 # RATE_LIMIT_CHAT_CAP=3
@@ -514,5 +564,3 @@ proactively — they are not optional:
 - **[`panel-review`](.github/skills/panel-review/SKILL.md)** — *Mandatory for any non-trivial architectural change.* Convenes a six-reviewer panel (three models × architect + developer personas) that critiques the plan before code lands and re-reviews every milestone until consensus. Every finding of every severity fix-forwards in the next round; the loop exits only when 6/6 SHIP with zero findings. Use the panel for multi-file refactors, cross-cutting cleanups, performance work, or any change where "wrong design" costs more than "wrong implementation".
 
 - **[`doc-currency`](.github/skills/doc-currency/SKILL.md)** — *Mandatory before `task_complete` for any non-trivial change.* Maps the area you touched to its authoritative docs (OTel skill, multi-tenant arch doc, copilot-instructions, README, …) and updates the specifics that drifted. Doc updates ship in the same commit as the code, never as a follow-up PR.
-
-

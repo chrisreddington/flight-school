@@ -6,15 +6,27 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, type Mock } from 'vitest';
 
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { createQueryTestWrapper } from '@/test/query-test-wrapper';
-import { getDateKey } from '@/lib/utils/date-utils';
 
 import { getDisplayName, useUserProfile } from './use-user-profile';
 
 const fetchMock = global.fetch as unknown as Mock;
+
+/**
+ * Wrapper bound to a caller-supplied QueryClient so a single client (with a
+ * non-zero gcTime) can survive an unmount and be reused across remounts —
+ * needed to exercise the in-memory-cache revalidation path.
+ */
+function persistentClientWrapper(client: QueryClient) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  };
+}
 
 function makeProfile(over: Partial<ProfileResponse['user']> = {}): ProfileResponse {
   return {
@@ -34,7 +46,7 @@ function makeProfile(over: Partial<ProfileResponse['user']> = {}): ProfileRespon
     stats: { experienceLevel: 'intermediate', yearsOnGitHub: 3, topLanguages: ['TypeScript'] },
     pastSevenDays: { commits: 12, pullRequests: 3, reposUpdated: 2 },
     repos: [],
-    meta: { cached: true, aiEnabled: true, method: 'cache', totalTimeMs: 50, authMethod: 'oauth' },
+    meta: { cached: true, aiEnabled: true, method: 'cache', totalTimeMs: 50, authMethod: 'github-oauth' },
   };
 }
 
@@ -47,27 +59,14 @@ function notOk(status: number) {
 }
 
 /**
- * Routes the global fetch mock by URL+method so the hook exercises both
- * the storage cache endpoint and the live profile endpoint via real code
- * paths.
+ * Routes the global fetch mock for `/api/profile`. The hook no longer reads a
+ * client-side cache — every load validates the token through `/api/profile` —
+ * so the mock only needs to model that endpoint.
  */
-function mountApi(opts: {
-  cached?: ProfileResponse | null;
-  cachedDate?: string;
-  live?: ProfileResponse | (() => Promise<ProfileResponse>);
-  liveFails?: boolean;
-}) {
-  const date = opts.cachedDate ?? getDateKey();
+function mountApi(opts: { live?: ProfileResponse | (() => Promise<ProfileResponse>); liveFails?: boolean }) {
   const liveCalls = { count: 0 };
-  fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+  fetchMock.mockImplementation(async (url: string | URL) => {
     const target = typeof url === 'string' ? url : url.toString();
-    const method = (init?.method ?? 'GET').toUpperCase();
-
-    if (target.includes('/api/profile/storage')) {
-      if (method === 'POST') return okJson({});
-      if (!opts.cached) return okJson(null);
-      return okJson({ date, profile: opts.cached });
-    }
 
     if (target.includes('/api/profile')) {
       liveCalls.count += 1;
@@ -86,9 +85,9 @@ beforeEach(() => {
 });
 
 describe('useUserProfile — initial load', () => {
-  it('starts in loading state then exposes the live profile when no cache exists', async () => {
+  it('starts in loading state then exposes the live profile', async () => {
     const live = makeProfile({ login: 'live-user' });
-    const liveCalls = mountApi({ cached: null, live });
+    const liveCalls = mountApi({ live });
 
     const { wrapper } = createQueryTestWrapper();
     const { result } = renderHook(() => useUserProfile(), { wrapper });
@@ -102,35 +101,13 @@ describe('useUserProfile — initial load', () => {
     expect(liveCalls.count).toBe(1);
   });
 
-  it('serves cached data without hitting the live profile endpoint', async () => {
-    const cached = makeProfile({ login: 'cached-user' });
-    const liveCalls = mountApi({ cached, live: makeProfile({ login: 'live-user' }) });
-
-    const { wrapper } = createQueryTestWrapper();
-    const { result } = renderHook(() => useUserProfile(), { wrapper });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.data?.user.login).toBe('cached-user');
-    expect(liveCalls.count).toBe(0);
-  });
-
-  it('falls through to live fetch when cache is from a previous day', async () => {
-    const liveCalls = mountApi({
-      cached: makeProfile({ login: 'stale-user' }),
-      cachedDate: '2000-01-01',
-      live: makeProfile({ login: 'live-user' }),
-    });
-
-    const { wrapper } = createQueryTestWrapper();
-    const { result } = renderHook(() => useUserProfile(), { wrapper });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.data?.user.login).toBe('live-user');
-    expect(liveCalls.count).toBe(1);
-  });
-
-  it('surfaces an error string when the live fetch fails', async () => {
-    mountApi({ cached: null, liveFails: true });
+  it('validates through /api/profile on every mount — never serves stale data when re-auth fails', async () => {
+    // Regression for the "expired token kept rendering profile data" bug.
+    // There is no client-side cache to short-circuit `/api/profile`, so when
+    // the live endpoint rejects the session (here a 500; in production a 401
+    // that `api-client` turns into a `/sign-in` redirect) the hook surfaces an
+    // error and exposes NO data rather than masking the dead session.
+    const liveCalls = mountApi({ liveFails: true });
 
     const { wrapper } = createQueryTestWrapper();
     const { result } = renderHook(() => useUserProfile(), { wrapper });
@@ -138,41 +115,94 @@ describe('useUserProfile — initial load', () => {
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data).toBeNull();
+    expect(liveCalls.count).toBe(1);
+  });
+
+  it('revalidates through /api/profile on remount within the stale window instead of trusting the in-memory cache', async () => {
+    // Regression: TanStack Query's QueryClient is the de-facto client cache.
+    // Without `staleTime: 0` + `refetchOnMount: 'always'`, a remount inside the
+    // stale window would serve the cached `query.data` WITHOUT re-hitting
+    // `/api/profile`, so a token revoked mid-session would keep rendering
+    // stale data. A long `gcTime` keeps the cache entry alive across the
+    // unmount so this test exercises the remount-revalidation path.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 5 * 60_000 } },
+    });
+    const wrapper = persistentClientWrapper(client);
+
+    let liveCount = 0;
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const target = typeof url === 'string' ? url : url.toString();
+      if (target.includes('/api/profile')) {
+        liveCount += 1;
+        return okJson(makeProfile({ login: `user-${liveCount}` }));
+      }
+      return okJson({});
+    });
+
+    const firstMount = renderHook(() => useUserProfile(), { wrapper });
+    await waitFor(() => expect(firstMount.result.current.data?.user.login).toBe('user-1'));
+    firstMount.unmount();
+
+    const secondMount = renderHook(() => useUserProfile(), { wrapper });
+    // SWR shows last-known-good `user-1` immediately, then the forced
+    // background revalidation settles to the fresh `user-2` payload.
+    await waitFor(() => expect(secondMount.result.current.data?.user.login).toBe('user-2'));
+
+    // The remount must have issued a SECOND validation rather than serving the
+    // cached user-1 data untouched.
+    expect(liveCount).toBe(2);
+    expect(secondMount.result.current.data?.user.login).toBe('user-2');
   });
 });
 
-describe('useUserProfile — refetch bypass', () => {
-  it('skips the cache check on refetch and writes fresh data into the query cache', async () => {
-    const cached = makeProfile({ login: 'cached-user' });
-    const live = makeProfile({ login: 'fresh-user' });
-    const liveCalls = mountApi({ cached, live });
+describe('useUserProfile — refetch', () => {
+  it('issues a fresh /api/profile request and writes the result into the query cache', async () => {
+    let liveCount = 0;
+    const initial = makeProfile({ login: 'initial-user' });
+    const fresh = makeProfile({ login: 'fresh-user' });
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const target = typeof url === 'string' ? url : url.toString();
+      if (target.includes('/api/profile')) {
+        liveCount += 1;
+        return okJson(liveCount === 1 ? initial : fresh);
+      }
+      return okJson({});
+    });
 
     const { wrapper } = createQueryTestWrapper();
     const { result } = renderHook(() => useUserProfile(), { wrapper });
 
-    await waitFor(() => expect(result.current.data?.user.login).toBe('cached-user'));
-    expect(liveCalls.count).toBe(0);
+    await waitFor(() => expect(result.current.data?.user.login).toBe('initial-user'));
 
     await act(async () => {
       await result.current.refetch();
     });
 
-    expect(liveCalls.count).toBe(1);
     expect(result.current.data?.user.login).toBe('fresh-user');
+    expect(liveCount).toBeGreaterThanOrEqual(2);
   });
 
   it('flips isLoading true while a manual refetch is in flight', async () => {
-    const cached = makeProfile({ login: 'cached-user' });
+    let liveCount = 0;
+    const initial = makeProfile({ login: 'initial-user' });
     let resolveLive!: (value: ProfileResponse) => void;
     const livePromise = new Promise<ProfileResponse>((resolve) => {
       resolveLive = resolve;
     });
-    mountApi({ cached, live: () => livePromise });
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const target = typeof url === 'string' ? url : url.toString();
+      if (target.includes('/api/profile')) {
+        liveCount += 1;
+        return okJson(liveCount === 1 ? initial : await livePromise);
+      }
+      return okJson({});
+    });
 
     const { wrapper } = createQueryTestWrapper();
     const { result } = renderHook(() => useUserProfile(), { wrapper });
 
-    await waitFor(() => expect(result.current.data?.user.login).toBe('cached-user'));
+    await waitFor(() => expect(result.current.data?.user.login).toBe('initial-user'));
 
     let refetchPromise!: Promise<void>;
     act(() => {
@@ -191,13 +221,21 @@ describe('useUserProfile — refetch bypass', () => {
   });
 
   it('preserves previous data, clears loading, and surfaces error when a manual refetch fails', async () => {
-    const cached = makeProfile({ login: 'cached-user' });
-    mountApi({ cached, liveFails: true });
+    let liveCount = 0;
+    const initial = makeProfile({ login: 'initial-user' });
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const target = typeof url === 'string' ? url : url.toString();
+      if (target.includes('/api/profile')) {
+        liveCount += 1;
+        return liveCount === 1 ? okJson(initial) : notOk(500);
+      }
+      return okJson({});
+    });
 
     const { wrapper } = createQueryTestWrapper();
     const { result } = renderHook(() => useUserProfile(), { wrapper });
 
-    await waitFor(() => expect(result.current.data?.user.login).toBe('cached-user'));
+    await waitFor(() => expect(result.current.data?.user.login).toBe('initial-user'));
     expect(result.current.error).toBeNull();
 
     await act(async () => {
@@ -205,72 +243,11 @@ describe('useUserProfile — refetch bypass', () => {
     });
 
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.data?.user.login).toBe('cached-user');
+    expect(result.current.data?.user.login).toBe('initial-user');
     // Contract: refetch failures surface through `error` so consumers can
     // toast or retry — the imperative refetch must route through TanStack's
     // pipeline rather than swallow errors.
     expect(result.current.error).not.toBeNull();
-  });
-
-  it('runs the bypass queryFn even when the initial mount query is still in flight', async () => {
-    // Regression: TanStack's fetchQuery dedupes on same key. Without a
-    // cancelQueries before the bypass, the manual refetch would await
-    // the in-flight initial query (which uses bypassCache: false) and
-    // return cached data instead of the fresh /api/profile response.
-    const cached = makeProfile({ login: 'cached-user' });
-    const fresh = makeProfile({ login: 'fresh-from-bypass' });
-
-    let resolveCacheCheck!: (value: ProfileResponse | null) => void;
-    const cacheCheckPromise = new Promise<ProfileResponse | null>((resolve) => {
-      resolveCacheCheck = resolve;
-    });
-
-    const liveCalls = { count: 0 };
-    fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
-      const target = typeof url === 'string' ? url : url.toString();
-      const method = (init?.method ?? 'GET').toUpperCase();
-
-      if (target.includes('/api/profile/storage')) {
-        if (method === 'POST') return okJson({});
-        const value = await cacheCheckPromise;
-        if (!value) return okJson(null);
-        return okJson({ date: getDateKey(), profile: value });
-      }
-
-      if (target.includes('/api/profile')) {
-        liveCalls.count += 1;
-        return okJson(fresh);
-      }
-
-      return okJson({});
-    });
-
-    const { wrapper } = createQueryTestWrapper();
-    const { result } = renderHook(() => useUserProfile(), { wrapper });
-
-    // Initial query is in flight (cache-check is pending).
-    expect(result.current.isLoading).toBe(true);
-
-    let refetchPromise!: Promise<void>;
-    act(() => {
-      refetchPromise = result.current.refetch();
-    });
-
-    // Unblock the cache check so the initial-query promise resolves —
-    // if cancellation hadn't happened, the bypass would now return the
-    // cached value via dedupe.
-    resolveCacheCheck(cached);
-
-    await act(async () => {
-      await refetchPromise;
-    });
-
-    // The /api/profile endpoint must have been hit exactly once (the
-    // bypass call) — not zero (which would mean cancellation failed and
-    // dedupe won) and not more than one (which would mean the bypass
-    // fired redundantly).
-    expect(liveCalls.count).toBe(1);
-    expect(result.current.data?.user.login).toBe('fresh-from-bypass');
   });
 
   it('keeps isLoading true between divergent refetch settlements', async () => {
@@ -294,25 +271,20 @@ describe('useUserProfile — refetch bypass', () => {
     const initial = makeProfile({ login: 'initial' });
     const fresh = makeProfile({ login: 'fresh' });
 
+    let liveCount = 0;
     let resolveLive!: (value: ProfileResponse) => void;
     const liveGate = new Promise<ProfileResponse>((resolve) => {
       resolveLive = resolve;
     });
 
-    fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+    fetchMock.mockImplementation(async (url: string | URL) => {
       const target = typeof url === 'string' ? url : url.toString();
-      const method = (init?.method ?? 'GET').toUpperCase();
-
-      if (target.includes('/api/profile/storage')) {
-        if (method === 'POST') return okJson({});
-        return okJson({ date: getDateKey(), profile: initial });
-      }
-
       if (target.includes('/api/profile')) {
-        const value = await liveGate;
-        return okJson(value);
+        liveCount += 1;
+        // First load resolves immediately so the hook paints `initial`;
+        // every later (refetch) request awaits the shared gate.
+        return okJson(liveCount === 1 ? initial : await liveGate);
       }
-
       return okJson({});
     });
 
@@ -321,19 +293,14 @@ describe('useUserProfile — refetch bypass', () => {
 
     await waitFor(() => expect(result.current.data?.user.login).toBe('initial'));
 
-    // Dispatch call 1 and wait until its bypass fetch is actually awaiting
+    // Dispatch call 1 and wait until its refetch fetch is actually awaiting
     // the gate inside the mock. Only then will call 2's `cancelQueries`
     // land on an in-flight retryer and trigger the revert path.
     let firstRefetch!: Promise<void>;
     act(() => {
       firstRefetch = result.current.refetch();
     });
-    await waitFor(() => {
-      const bypassCalls = fetchMock.mock.calls.filter(
-        (call) => String(call[0]).endsWith('/api/profile') && (call[1] as RequestInit | undefined)?.method !== 'POST',
-      );
-      expect(bypassCalls.length).toBeGreaterThanOrEqual(1);
-    });
+    await waitFor(() => expect(liveCount).toBeGreaterThanOrEqual(2));
 
     // Dispatch call 2 — its `cancelQueries` will revert call 1.
     let secondRefetch!: Promise<void>;

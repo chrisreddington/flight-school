@@ -2,27 +2,18 @@
  * Focus Storage API Route
  * GET/POST/DELETE /api/focus/storage
  *
- * Manages persistent storage of daily focus data in a JSON file.
+ * Browser-facing persistence for the user's Daily Focus history. Filename,
+ * default, and schema guard are derived from {@link focusRepo} so the route and
+ * the document store share one source of truth.
  */
 
 import { createStorageRoute } from '@/lib/api';
-import type { FocusStorageSchema } from '@/lib/focus/types';
+import { focusRepo } from '@/lib/focus/repo';
 import { logger } from '@/lib/logger';
 
-const DEFAULT_SCHEMA: FocusStorageSchema = { history: {} };
-
-/**
- * Validates focus storage schema structure.
- */
-function validateSchema(data: unknown): data is FocusStorageSchema {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
-  return typeof schema.history === 'object' && schema.history !== null;
-}
-
 export const { GET, POST, DELETE } = createStorageRoute({
-  filename: 'focus-storage.json',
-  defaultSchema: DEFAULT_SCHEMA,
+  filename: focusRepo.filename,
+  defaultSchema: focusRepo.defaultValue,
   logger: logger.withTag('Focus Storage API'),
-  validateSchema,
+  validateSchema: focusRepo.guard,
 });

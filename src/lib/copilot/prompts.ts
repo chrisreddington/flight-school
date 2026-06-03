@@ -47,12 +47,21 @@ Be conversational, helpful, and concise.`;
 export const LEARNING_LENS_PROMPT = `You are a developer learning companion.
 
 When responding:
-1. Explain your reasoning step-by-step
-2. Suggest 2-3 follow-up questions or experiments
-3. Reference the user's code when relevant
-4. Be conversational but focused
+1. **Lead with a TL;DR** — one short paragraph (≤ 60 words) summarising the
+   answer up front. The learner sees this first and can decide whether to
+   read on.
+2. Then explain your reasoning step-by-step under the TL;DR.
+3. End with this exact markdown structure:
+   ## Follow-up questions
+   - <question or experiment 1>
+   - <question or experiment 2>
+   - <question or experiment 3 (optional)>
+   Use 2–3 bullet items, each as a single question or experiment.
+4. Reference the user's code when relevant.
+5. Be conversational but focused.
 
-If user wants a quick answer, skip the explanations.`;
+If the user wants a quick answer, give them just the TL;DR and skip the
+explanation.`;
 
 /**
  * Coach-scoped GitHub MCP addendum. The coach profile restricts the
@@ -75,16 +84,21 @@ export function buildChallengePrompt(
   skillProfile?: SkillProfile,
   interleavingHint?: InterleavingHint,
   options?: { forceDebug?: boolean },
+  existingChallengeTitles: string[] = [],
 ): string {
   const skillSections = buildSkillProfileSections(skillProfile);
   const interleavingSection = buildInterleavingSection(interleavingHint);
+  const excludeList =
+    existingChallengeTitles.length > 0
+      ? `\nDo NOT suggest these challenges (already shown): ${existingChallengeTitles.join(', ')}`
+      : '';
   const issueContextNote = profileContext.includes('issues:[')
     ? '\nConsider drawing inspiration from the developer\'s open issues when relevant.\nKeep it authentic and practical to their current work context.\nSet contextSource to "issue" when challenge is inspired by open issues, "skills" when driven by skill gaps, "activity" otherwise.'
     : '';
   const challengeTypeInstruction = options?.forceDebug
     ? 'REQUIRED: Generate a debug challenge. Set type: "debug", include brokenCode with 1-3 intentional bugs, and describe what bugs to find in the description.'
     : 'Optionally, if appropriate for the developer\'s skill level, you may generate a debug challenge.\nFor debug challenges, set type: "debug", include brokenCode with 1-3 intentional bugs, and mention bugs to find.\nOtherwise use type: "implement".';
-  return `Developer profile: ${profileContext}${skillSections}${interleavingSection}
+  return `Developer profile: ${profileContext}${skillSections}${interleavingSection}${excludeList}
 
 Generate ONE coding challenge (15-30 min, ZPD-appropriate).
 ${skillProfile?.skills.length ? 'Prioritize SK: skills, exclude EX: skills.' : ''}
@@ -124,12 +138,17 @@ export function buildLearningTopicsPrompt(
       : '';
   return `Developer profile: ${profileContext}${skillSections}${reviewSection}
 
-Generate THREE learning topics for growth areas.
+Generate FIVE learning topic candidates for growth areas.
 ${skillProfile?.skills.length ? 'Exclude EX: skills.' : ''}
 ${reviewTopics?.length ? 'PRIORITIZE any RT: topics (spaced repetition — learner explored them before and needs review).' : ''}
 
+For each topic, classify dominantSignal as one of:
+- "current-repo": tied to a specific repo the user is working in
+- "top-language": tied to one of the user's top languages broadly
+- "declared-skill": tied to an EX: skill or a stated focus area
+
 JSON only:
-{"learningTopics":[{"id":"","title":"","description":"","type":"concept|pattern|best-practice","relatedTo":""}]}`;
+{"learningTopics":[{"id":"","title":"","description":"","type":"concept|pattern|best-practice","relatedTo":"","dominantSignal":"current-repo|top-language|declared-skill"}]}`;
 }
 
 /**

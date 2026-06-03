@@ -92,6 +92,26 @@ export function formatTimestamp(isoTimestamp: string): string {
 }
 
 /**
+ * Format an absolute calendar date for display (e.g. "May 28, 2026").
+ *
+ * Pins both locale (`en-US`) and timezone (`UTC`) so the string is identical
+ * whether produced by the SSR Node process or a browser in any locale/zone.
+ * A bare `toLocaleDateString()` picks up the runtime locale (server `5/28/2026`
+ * vs en-GB browser `28/05/2026`), which triggers React hydration mismatches.
+ *
+ * @param isoTimestamp - ISO timestamp string
+ * @returns Locale- and timezone-stable date label
+ */
+export function formatDate(isoTimestamp: string): string {
+  return new Date(isoTimestamp).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
  * Check whether a date key is today.
  *
  * @param dateKey - Date key in YYYY-MM-DD format

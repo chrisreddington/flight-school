@@ -3,37 +3,20 @@
  * Two-column layout with:
  * - 52-week contribution graph (interactive)
  * - Sidebar with filters, stats, date navigation
- * - Main content with flat card list
+ * - Main content with Timeline-threaded day sections and collapsible item cards
  */
 
 /* ============================================================================
-   Container V2 - Clean two-column layout
+   Container - Clean two-column layout
    ============================================================================ */
 
-.containerV2 {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* No separate header - title moves into sidebar */
-.headerV2 {
-  display: none;
-}
-
-.layoutV2 {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: var(--base-size-24);
-  flex: 1;
-  min-height: 0;
+/* Page layout wrapper — inset background to match the app shell */
+.layout {
+  background-color: var(--bgColor-inset, #f6f8fa);
 }
 
 /* ============================================================================
-   Sidebar - Contains ProfileNav and filter cards
+   Sidebar - Contains activity graph and filter cards
    ============================================================================ */
 
 .sidebar {
@@ -227,19 +210,19 @@
 }
 
 .activityCell52[data-intensity='1'] {
-  background-color: #9be9a8;
+  background-color: var(--bgColor-success-muted);
 }
 
 .activityCell52[data-intensity='2'] {
-  background-color: #40c463;
+  background-color: var(--bgColor-success-subtle);
 }
 
 .activityCell52[data-intensity='3'] {
-  background-color: #30a14e;
+  background-color: var(--bgColor-success-emphasis);
 }
 
 .activityCell52[data-intensity='4'] {
-  background-color: #216e39;
+  background-color: var(--fgColor-success);
 }
 
 .activityCellSelected {
@@ -406,7 +389,6 @@
    ============================================================================ */
 
 .mainContent {
-  flex: 1;
   padding: var(--base-size-24);
   background-color: var(--bgColor-default);
   border: 1px solid var(--borderColor-default);
@@ -415,24 +397,6 @@
   flex-direction: column;
   gap: var(--base-size-16);
   /* No independent scroll - flows with page */
-}
-
-/* Page header in main content */
-.pageHeader {
-  margin-bottom: var(--base-size-8);
-}
-
-.pageTitle {
-  font-size: var(--text-title-size-large, 32px);
-  font-weight: var(--base-text-weight-semibold, 600);
-  margin: 0 0 var(--base-size-4, 4px) 0;
-  color: var(--fgColor-default, #1f2328);
-}
-
-.pageDescription {
-  font-size: var(--text-body-size-medium, 14px);
-  color: var(--fgColor-muted, #656d76);
-  margin: 0;
 }
 
 .historyTabs {
@@ -578,14 +542,17 @@
   opacity: 0.7;
 }
 
-.itemCardCollapsed {
-  /* Slightly more compact when collapsed */
+.itemCardCollapsed .itemCardHeader {
+  /* Tighten the header's vertical padding when the card is collapsed. */
+  padding-top: var(--base-size-6);
+  padding-bottom: var(--base-size-6);
 }
 
 .itemCardHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--base-size-8);
   padding: var(--base-size-8) var(--base-size-12);
   background-color: var(--bgColor-muted);
   border: none;
@@ -602,14 +569,12 @@
   background-color: var(--bgColor-neutral-muted);
 }
 
-.itemCardHeader:disabled {
-  cursor: default;
-}
-
 .itemCardMeta {
   display: flex;
   align-items: center;
   gap: var(--base-size-8);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .itemCardChevron {
@@ -629,7 +594,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .itemCardTime {
@@ -745,15 +711,6 @@
    Empty & Loading States
    ============================================================================ */
 
-.emptyState {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--base-size-32);
-}
-
 .loadingState {
   display: flex;
   align-items: center;
@@ -761,10 +718,6 @@
   gap: var(--base-size-8);
   padding: var(--base-size-32);
   color: var(--fgColor-muted);
-}
-
-.backLink {
-  margin-top: var(--base-size-24);
 }
 
 /* ============================================================================
@@ -835,16 +788,6 @@
    ============================================================================ */
 
 @media (max-width: 900px) {
-  .layoutV2 {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--borderColor-default);
-    max-height: 400px;
-  }
-
   .activityGrid52 {
     max-width: 100%;
     overflow-x: scroll;
@@ -934,19 +877,19 @@
 }
 
 .activityCell[data-intensity='1'] {
-  background-color: var(--bgColor-success-muted, #9be9a8);
+  background-color: var(--bgColor-success-muted);
 }
 
 .activityCell[data-intensity='2'] {
-  background-color: var(--bgColor-success-emphasis, #40c463);
+  background-color: var(--bgColor-success-subtle);
 }
 
 .activityCell[data-intensity='3'] {
-  background-color: #30a14e;
+  background-color: var(--bgColor-success-emphasis);
 }
 
 .activityCell[data-intensity='4'] {
-  background-color: #216e39;
+  background-color: var(--fgColor-success);
 }
 
 /* Filters V1 */

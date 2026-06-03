@@ -32,56 +32,19 @@
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
-import type {
-  ChallengeWorkspace,
-  WorkspaceFile,
-  WorkspaceFileMetadata,
-  WorkspaceMetadata,
-  WorkspaceStoreInterface,
-} from './types';
+import { WORKSPACES_DIR, toFileMetadata } from './legacy-tree';
+import type { ChallengeWorkspace, WorkspaceMetadata, WorkspaceStoreInterface } from './types';
 import { MAX_WORKSPACE_SIZE_BYTES } from './types';
 
 const log = logger.withTag('WorkspaceStore');
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-const WORKSPACES_DIR = 'workspaces';
-const METADATA_FILENAME = '_workspace.json';
-
-// =============================================================================
 // Utility Functions
 // =============================================================================
 
-/**
- * Calculates the size of a string in bytes (UTF-8).
- */
-function getByteSize(str: string): number {
-  return new Blob([str]).size;
-}
-
-/**
- * Converts a WorkspaceFile to metadata (strips content).
- */
-function toFileMetadata(file: WorkspaceFile): WorkspaceFileMetadata {
-  return {
-    id: file.id,
-    name: file.name,
-    language: file.language,
-    createdAt: file.createdAt,
-    updatedAt: file.updatedAt,
-  };
-}
-
-/**
- * Converts metadata + content back to a WorkspaceFile.
- */
-function toWorkspaceFile(meta: WorkspaceFileMetadata, content: string): WorkspaceFile {
-  return {
-    ...meta,
-    content,
-  };
+/** Returns the UTF-8 byte length of `text`. */
+function getByteSize(text: string): number {
+  return new Blob([text]).size;
 }
 
 // =============================================================================
@@ -89,11 +52,11 @@ function toWorkspaceFile(meta: WorkspaceFileMetadata, content: string): Workspac
 // =============================================================================
 
 /**
- * Server-backed implementation of WorkspaceStoreInterface using file-based storage.
+ * Server-backed implementation of WorkspaceStoreInterface using file storage.
  *
  * @remarks
- * Each workspace is stored in its own directory under .data/workspaces/{challengeId}/
- * with actual files for content and a _workspace.json metadata sidecar.
+ * Each workspace lives under `users/{userId}/workspaces/{challengeId}/` with
+ * real files for content and a `_workspace.json` metadata sidecar.
  */
 class ServerWorkspaceStore implements WorkspaceStoreInterface {
   /**
@@ -297,4 +260,4 @@ export const workspaceStore = new ServerWorkspaceStore();
 // Server-Side Utilities (for API routes)
 // =============================================================================
 
-export { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile };
+export { WORKSPACES_DIR, toFileMetadata };

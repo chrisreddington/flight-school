@@ -79,4 +79,24 @@ describe('SkillsClient add-skill action', () => {
     expect(await screen.findByText('Skill already exists.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'New skill name' })).toBeInTheDocument();
   });
+
+  it('shows the confirmed/detected headline with a detected-suggestions link', async () => {
+    calibrationNeededMock.mockResolvedValueOnce([]);
+
+    render(
+      <SkillsClient
+        initialProfile={{
+          skills: [
+            { skillId: 'react', displayName: 'React', level: 'intermediate', source: 'manual' },
+            { skillId: 'typescript', displayName: 'TypeScript', level: 'beginner', source: 'github' },
+          ],
+          lastUpdated: '2025-01-01T00:00:00.000Z',
+        }}
+      />,
+    );
+
+    const detectedLink = await screen.findByRole('link', { name: '1 detected' });
+    expect(detectedLink).toHaveAttribute('href', '#skill-suggestions-panel');
+    expect(detectedLink.closest('p')).toHaveTextContent('1 confirmed · 1 detected');
+  });
 });

@@ -1,4 +1,3 @@
-import { ProfileNav } from '@/components/ProfileNav';
 import { CalendarIcon } from '@primer/octicons-react';
 import { memo } from 'react';
 import { ActivityGraph } from './activity-graph';
@@ -38,10 +37,10 @@ export const LearningHistorySidebar = memo(function LearningHistorySidebar({
   expandedMonths,
   onToggleMonth,
 }: LearningHistorySidebarProps) {
+  // This sidebar drives only the History timeline (activity graph, filters,
+  // date navigation), so the caller renders it for the History tab alone.
   return (
     <aside className={styles.sidebar}>
-      <ProfileNav />
-
       <div className={styles.sidebarCard}>
         <div className={styles.sidebarHeader}>
           <CalendarIcon size={20} className={styles.sidebarIcon} />

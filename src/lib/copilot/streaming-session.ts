@@ -272,8 +272,8 @@ export async function createGenericStreamingSession(config: StreamingSessionConf
     stream: generateStream(),
     cleanup: () => {
       if (!conversationId) {
-        session.destroy().catch((err) => {
-          log.warn('Session destroy warning:', err);
+        session.disconnect().catch((err) => {
+          log.warn('Session disconnect warning:', err);
         });
       }
     },

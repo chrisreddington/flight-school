@@ -1,10 +1,18 @@
 /**
  * Evaluation Storage (per-user)
  *
- * File-based storage for challenge evaluation progress, polled by the
- * Challenge Sandbox client. Every file is partitioned per authenticated
- * user via `users/{userId}/evaluations.json` (see
- * `@/lib/storage/user-scope`).
+ * Challenge evaluation progress, polled by the Challenge Sandbox client and
+ * written by the worker's evaluation executor. Each user has exactly one
+ * evaluations singleton, stored through the envelope
+ * {@link import('@/lib/storage/document-store/singleton-repo')} via the
+ * `'evaluations'` container mapping (legacy path `users/{userId}/evaluations`).
+ *
+ * This module is **worker-reached**: the evaluation executor persists progress
+ * from the Next-free worker process. Because a user can delete their account
+ * while an evaluation job is still streaming, {@link writeEvaluationStorage}
+ * swallows {@link UserDeletedError} — the store refuses the write for a
+ * tombstoned user and we silently abort rather than surfacing an error to the
+ * poller.
  *
  * `userId` MUST come from a server-resolved identity (Auth.js session
  * or the persisted job payload populated by an authenticated request),
@@ -13,8 +21,8 @@
  * @module jobs/evaluation-storage
  */
 
-import { readStorage, writeStorage, ensureDir } from '@/lib/storage/utils';
-import { userScopedFilename } from '@/lib/storage/user-scope';
+import { createSingletonRepo } from '@/lib/storage/document-store/singleton-repo';
+import { UserDeletedError } from '@/lib/storage/document-store/user-scoped-store';
 
 /** Evaluation progress stored in file */
 export interface EvaluationProgress {
@@ -54,7 +62,6 @@ interface EvaluationStorageSchema {
   version: number;
 }
 
-const STORAGE_KEY = 'evaluations';
 const DEFAULT_SCHEMA: EvaluationStorageSchema = { evaluations: {}, version: 1 };
 
 function validateSchema(data: unknown): data is EvaluationStorageSchema {
@@ -63,15 +70,29 @@ function validateSchema(data: unknown): data is EvaluationStorageSchema {
   return typeof obj.evaluations === 'object' && typeof obj.version === 'number';
 }
 
+const evaluationsRepo = createSingletonRepo<EvaluationStorageSchema>({
+  filename: 'evaluations',
+  defaultValue: DEFAULT_SCHEMA,
+  guard: validateSchema,
+});
+
 /** Read evaluation storage for a specific user. */
 export async function readEvaluationStorage(userId: string): Promise<EvaluationStorageSchema> {
-  return readStorage<EvaluationStorageSchema>(userScopedFilename(userId, STORAGE_KEY), DEFAULT_SCHEMA, validateSchema);
+  return evaluationsRepo.read(userId);
 }
 
-/** Write evaluation storage for a specific user. */
+/**
+ * Write evaluation storage for a specific user. Silently aborts when the user
+ * has been deleted mid-job (the store rejects the write with
+ * {@link UserDeletedError}).
+ */
 export async function writeEvaluationStorage(userId: string, data: EvaluationStorageSchema): Promise<void> {
-  await ensureDir(`users/${userId}`, { mode: 0o700 });
-  return writeStorage(userScopedFilename(userId, STORAGE_KEY), data);
+  try {
+    await evaluationsRepo.write(userId, data);
+  } catch (error) {
+    if (error instanceof UserDeletedError) return;
+    throw error;
+  }
 }
 
 /** Get evaluation progress by challenge ID for a specific user. */

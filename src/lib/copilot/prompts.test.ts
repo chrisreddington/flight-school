@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   COACH_BASE_PROMPT,
+  LEARNING_LENS_PROMPT,
   buildChallengePrompt,
   buildGoalPrompt,
   buildLearningTopicsPrompt,
@@ -24,6 +25,13 @@ describe('System Prompts', () => {
     // never in the base prompt — see capabilities.ts / profiles.ts.
     expect(COACH_BASE_PROMPT).not.toMatch(/\bMCP\b/);
     expect(COACH_BASE_PROMPT).not.toMatch(/list_user_repositories/);
+  });
+
+  it('LEARNING_LENS_PROMPT requires a strict markdown follow-up heading and bullet list contract', () => {
+    expect(LEARNING_LENS_PROMPT).toContain('## Follow-up questions');
+    expect(LEARNING_LENS_PROMPT).toContain('- ');
+    expect(LEARNING_LENS_PROMPT).toContain('2–3');
+    expect(LEARNING_LENS_PROMPT).toContain('quick answer');
   });
 });
 
@@ -66,6 +74,12 @@ describe('buildChallengePrompt', () => {
     const prompt = buildChallengePrompt(profileContext);
     expect(prompt).toContain('type: "debug"');
     expect(prompt).toContain('Otherwise use type: "implement".');
+  });
+
+  it('should include existing challenge titles to avoid duplicates', () => {
+    const prompt = buildChallengePrompt(profileContext, undefined, undefined, undefined, ['Foo Challenge']);
+    expect(prompt).toContain('Do NOT suggest these challenges');
+    expect(prompt).toContain('Foo Challenge');
   });
 
   it('should require a debug challenge when forceDebug is enabled', () => {
@@ -192,9 +206,10 @@ describe('buildLearningTopicsPrompt', () => {
     expect(prompt).toContain('concept|pattern|best-practice');
   });
 
-  it('should request THREE topics', () => {
+  it('should request FIVE candidate topics (so the post-processor can diversify down to 3)', () => {
     const prompt = buildLearningTopicsPrompt(profileContext);
-    expect(prompt).toContain('THREE');
+    expect(prompt).toContain('FIVE');
+    expect(prompt).toContain('dominantSignal');
   });
 
   describe('with skill profile', () => {

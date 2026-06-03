@@ -44,13 +44,13 @@ describe('wrapSessionWithLogging', () => {
 
   it('should log tool activity and return response details', async () => {
     let eventHandler: CopilotSession['on'] extends (handler: infer T) => unknown ? T : never;
-    const destroyMock = vi.fn().mockResolvedValue(undefined);
+    const disconnectMock = vi.fn().mockResolvedValue(undefined);
     const session = {
       on: vi.fn((handler) => {
         eventHandler = handler;
       }),
       sendAndWait: vi.fn().mockResolvedValue({ data: { content: 'Hello from Copilot' } }),
-      destroy: destroyMock,
+      disconnect: disconnectMock,
     } as unknown as CopilotSession;
 
     const loggedSession = wrapSessionWithLogging('u1', session, 'Chat', 'prompt', 'gpt-5-mini');
@@ -92,6 +92,6 @@ describe('wrapSessionWithLogging', () => {
       }),
     );
     expect(mocks.recordAiOperationMock).toHaveBeenCalledWith('sendAndWait', expect.any(Number), 'gpt-5-mini', 'ok');
-    expect(destroyMock).toHaveBeenCalled();
+    expect(disconnectMock).toHaveBeenCalled();
   });
 });

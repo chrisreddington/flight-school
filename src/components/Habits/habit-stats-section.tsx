@@ -8,8 +8,8 @@
  * - Completed habits count
  */
 
-import { FlameIcon, PlusIcon } from '@primer/octicons-react';
-import { Button } from '@primer/react';
+import { FlameIcon } from '@primer/octicons-react';
+import { Text } from '@primer/react';
 import styles from '@/app/habits/habits.module.css';
 
 interface HabitStatsSectionProps {
@@ -17,7 +17,6 @@ interface HabitStatsSectionProps {
   totalCheckIns: number;
   currentStreaks: number;
   totalCompletions: number;
-  onNewHabitClick: () => void;
 }
 
 export function HabitStatsSection({
@@ -25,46 +24,34 @@ export function HabitStatsSection({
   totalCheckIns,
   currentStreaks,
   totalCompletions,
-  onNewHabitClick,
 }: HabitStatsSectionProps) {
+  // A zero stat is muted rather than rendered at full strength so an empty
+  // tracker reads as calm guidance instead of a wall of bold zeros.
+  const stats = [
+    { label: 'Active', value: activeHabitsCount },
+    { label: 'Check-ins', value: totalCheckIns },
+    { label: 'Streaks', value: currentStreaks },
+    { label: 'Completed', value: totalCompletions },
+  ];
+
   return (
     <div className={styles.sidebarCard}>
       <div className={styles.sidebarHeader}>
         <FlameIcon size={20} className={styles.sidebarIcon} />
-        <p className={styles.sidebarTitle}>Habit Tracker</p>
+        <Text as="h2" className={styles.sidebarTitle}>
+          Habit Tracker
+        </Text>
       </div>
       <p className={styles.sidebarSubtitle}>Build lasting habits</p>
 
       <div className={styles.statsGrid}>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{activeHabitsCount}</span>
-          <span className={styles.statLabel}>Active</span>
-        </div>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{totalCheckIns}</span>
-          <span className={styles.statLabel}>Check-ins</span>
-        </div>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{currentStreaks}</span>
-          <span className={styles.statLabel}>Streaks</span>
-        </div>
-        <div className={styles.statItem}>
-          <span className={styles.statValue}>{totalCompletions}</span>
-          <span className={styles.statLabel}>Completed</span>
-        </div>
+        {stats.map((stat) => (
+          <div key={stat.label} className={styles.statItem}>
+            <span className={`${styles.statValue} ${stat.value === 0 ? styles.statValueMuted : ''}`}>{stat.value}</span>
+            <span className={styles.statLabel}>{stat.label}</span>
+          </div>
+        ))}
       </div>
-
-      {activeHabitsCount > 0 && (
-        <Button
-          variant="primary"
-          leadingVisual={PlusIcon}
-          onClick={onNewHabitClick}
-          block
-          className={styles.newHabitButton}
-        >
-          New Habit
-        </Button>
-      )}
     </div>
   );
 }

@@ -16,7 +16,12 @@ export function formatDateForDisplay(dateKey: string): string {
   const today = getDateKey();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayKey = yesterday.toISOString().split('T')[0];
+  // Use the local date key (not toISOString, which is UTC) so the "Yesterday"
+  // label matches the local-date keys the rest of the feature produces; a UTC
+  // split mislabels days for any timezone with a non-zero UTC offset near the
+  // local midnight boundary (next UTC day for negative offsets, previous for
+  // positive).
+  const yesterdayKey = getDateKey(yesterday);
 
   if (dateKey === today) return 'Today';
   if (dateKey === yesterdayKey) return 'Yesterday';
@@ -24,6 +29,20 @@ export function formatDateForDisplay(dateKey: string): string {
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * Absolute, unambiguous date for assistive tech — never relative.
+ * `formatDateForDisplay` collapses today/yesterday to relative words, which is
+ * friendly visually but useless as a screen-reader date; this is the spoken date.
+ */
+export function formatAccessibleDate(dateKey: string): string {
+  return new Date(dateKey + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
     day: 'numeric',
   });
 }
@@ -91,7 +110,9 @@ export function generate52WeekActivity(entries: HistoryEntry[]): ActivityDay[] {
     for (let day = 0; day < DAYS_IN_WEEK; day++) {
       const date = new Date(startDate);
       date.setDate(date.getDate() + week * DAYS_IN_WEEK + day);
-      const dateKey = date.toISOString().split('T')[0];
+      // Local date key so grid cells match entry.dateKey (also local); a UTC
+      // split would shift counts onto the wrong cell near the day boundary.
+      const dateKey = getDateKey(date);
 
       // Don't include future dates
       if (date > today) continue;

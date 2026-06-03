@@ -19,7 +19,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { logger } from '@/lib/logger';
 import { threadStore, type CreateThreadOptions, type Message, type Thread, type ThreadContext } from '@/lib/threads';
@@ -28,6 +28,7 @@ import { now, nowMs } from '@/lib/utils/date-utils';
 const log = logger.withTag('useThreads');
 
 const THREADS_KEY = ['threads'] as const;
+const EMPTY_THREADS: Thread[] = [];
 
 /** State returned by the useThreads hook */
 interface UseThreadsState {
@@ -103,10 +104,22 @@ export function useThreads(): UseThreadsReturn {
   const threadsQuery = useQuery({
     queryKey: THREADS_KEY,
     queryFn: () => threadStore.getAll(),
+    // Threads only change via this hook's own mutations (which call
+    // `invalidateQueries`) or via the cross-tab `THREAD_DATA_CHANGED_EVENT`
+    // listener. Background-polling every focus event was producing 8+
+    // GET /api/threads/storage round-trips per chat message; bumping
+    // staleTime to 30s reduces that to ≤2 without losing freshness on
+    // user-initiated changes.
+    staleTime: 30_000,
   });
 
-  const threads = threadsQuery.data ?? [];
+  const threads = threadsQuery.data ?? EMPTY_THREADS;
   const isLoading = threadsQuery.isPending;
+  const threadsRef = useRef<Thread[]>(threads);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   const activeThreadId = selectedThreadId ?? threads[0]?.id ?? null;
 
@@ -156,7 +169,15 @@ export function useThreads(): UseThreadsReturn {
 
   const updateThreadMutation = useMutation({
     mutationFn: (updated: Thread) => threadStore.update(updated),
-    onSuccess: () => invalidateThreads(),
+    onSuccess: (updatedThread) => {
+      queryClient.setQueryData<Thread[]>(THREADS_KEY, (cachedThreads = []) => {
+        const withoutUpdatedThread = cachedThreads.filter((thread) => thread.id !== updatedThread.id);
+        const threadsWithUpdate = [updatedThread, ...withoutUpdatedThread];
+        return threadsWithUpdate.sort((left, right) => {
+          return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+        });
+      });
+    },
   });
   const { mutateAsync: updateThreadAsync } = updateThreadMutation;
 
@@ -219,10 +240,7 @@ export function useThreads(): UseThreadsReturn {
       try {
         if (!activeThreadId) return;
 
-        // Single source of truth: avoids stale TQ cache during in-flight
-        // invalidation when the caller has just renamed or otherwise mutated
-        // this same thread moments before.
-        const thread = await threadStore.getById(activeThreadId);
+        const thread = threadsRef.current.find((candidate) => candidate.id === activeThreadId) ?? null;
         if (!thread) return;
 
         const newMessage: Message = {
@@ -251,8 +269,7 @@ export function useThreads(): UseThreadsReturn {
         const threadId = targetThreadId ?? activeThreadId;
         if (!threadId) return;
 
-        // Fresh server read — see addMessage comment.
-        const thread = await threadStore.getById(threadId);
+        const thread = threadsRef.current.find((candidate) => candidate.id === threadId) ?? null;
         if (!thread) return;
 
         const updated: Thread = {

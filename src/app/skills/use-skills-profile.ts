@@ -16,17 +16,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { challengeQueueStore } from '@/lib/challenge/custom-queue';
 import { focusStore } from '@/lib/focus/storage';
 import type { CalibrationNeededItem } from '@/lib/focus/types';
-import { habitStore } from '@/lib/habits/storage';
 import { logger } from '@/lib/logger';
 import { skillsStore } from '@/lib/skills/storage';
 import type { SkillLevel, SkillProfile, UserSkill } from '@/lib/skills/types';
 import { DEFAULT_SKILL_PROFILE } from '@/lib/skills/types';
-import { threadStore } from '@/lib/threads/storage';
 import { now } from '@/lib/utils/date-utils';
-import { workspaceStore } from '@/lib/workspace/storage';
 
 export interface UseSkillsProfileResult {
   profile: SkillProfile;
@@ -39,7 +35,6 @@ export interface UseSkillsProfileResult {
   handleSkillChange: (skillId: string, level: SkillLevel, notInterested: boolean) => Promise<void>;
   handleRemoveSkill: (skillId: string) => Promise<void>;
   handleAddSkill: (suggested?: { skillId: string; displayName: string }, displayNameOverride?: string) => Promise<void>;
-  handleClearAllData: () => Promise<void>;
 }
 
 export function useSkillsProfile(options?: { initialProfile?: SkillProfile }): UseSkillsProfileResult {
@@ -158,29 +153,6 @@ export function useSkillsProfile(options?: { initialProfile?: SkillProfile }): U
     [profile],
   );
 
-  const handleClearAllData = useCallback(async () => {
-    // Each store is cleared independently so a single failure doesn't block
-    // the rest of the wipe. Best-effort: errors are logged but not surfaced.
-    const stores: Array<{ name: string; clear: () => Promise<void> }> = [
-      { name: 'skills', clear: () => skillsStore.clear() },
-      { name: 'focus', clear: () => focusStore.clear() },
-      { name: 'threads', clear: () => threadStore.clearAll() },
-      { name: 'workspaces', clear: () => workspaceStore.clearAll() },
-      { name: 'habits', clear: () => habitStore.clear() },
-      { name: 'challenge queue', clear: () => challengeQueueStore.clear() },
-    ];
-
-    for (const { name, clear } of stores) {
-      try {
-        await clear();
-      } catch (error) {
-        logger.error(`Failed to clear ${name} storage`, { error }, 'SkillsPage');
-      }
-    }
-
-    window.location.href = '/';
-  }, []);
-
   return {
     profile,
     isLoading,
@@ -192,6 +164,5 @@ export function useSkillsProfile(options?: { initialProfile?: SkillProfile }): U
     handleSkillChange,
     handleRemoveSkill,
     handleAddSkill,
-    handleClearAllData,
   };
 }

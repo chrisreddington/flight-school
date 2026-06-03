@@ -506,7 +506,6 @@ describe('multi-tenant auth/token isolation', () => {
     });
   });
 });
-
 afterAll(async () => {
   try {
     await fs.rm(STORAGE_DIR, { recursive: true, force: true });

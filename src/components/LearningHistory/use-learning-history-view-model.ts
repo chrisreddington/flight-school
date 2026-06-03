@@ -3,6 +3,7 @@ import type { DailyFocusRecord, FocusHistory } from '@/lib/focus/types';
 import type { DailyCheckIn, HabitCollection, HabitWithHistory } from '@/lib/habits/types';
 import type { HistoryEntry, HistoryItem, ItemStatus, Stats, StatusFilter, TypeFilter } from './types';
 import {
+  formatAccessibleDate,
   formatDateForDisplay,
   generate52WeekActivity,
   getItemStatus,
@@ -22,13 +23,59 @@ interface LearningHistoryViewModelInput {
   totalGoalsCompleted: number;
 }
 
+/**
+ * Empty focus record reused for habit-only days. `buildHistoryEntry` only reads
+ * from the record (never mutates it), so a single frozen instance is safe to
+ * share across every habit-only date in the feed.
+ */
+const EMPTY_FOCUS_RECORD: DailyFocusRecord = Object.freeze({
+  challenges: [],
+  goals: [],
+  learningTopics: [],
+});
+
+/**
+ * Collect every date that should become a history row: the union of focus-history
+ * dates, habit check-in dates, and today when any habit is still pending. Keying
+ * on focus dates alone would silently drop habit-only days (e.g. a weekend log
+ * with no generated focus) and today's not-yet-checked-in active habits, hiding
+ * them from the timeline, activity graph, and stats.
+ */
+function collectHistoryDateKeys(rawHistory: FocusHistory, habits: HabitWithHistory[], todayDateKey: string): string[] {
+  const dateKeys = new Set<string>(Object.keys(rawHistory));
+  for (const habit of habits) {
+    for (const checkIn of habit.checkIns) {
+      dateKeys.add(checkIn.date);
+    }
+  }
+  // A pending (active or not-started) habit gives today a not-yet-logged habit
+  // to surface; buildHistoryEntry injects it, but only when today is a key.
+  const hasPendingHabitToday = habits.some((habit) => habit.state === 'active' || habit.state === 'not-started');
+  if (hasPendingHabitToday) {
+    dateKeys.add(todayDateKey);
+  }
+  return Array.from(dateKeys);
+}
+
+/**
+ * Map a habit check-in to a status: a skip (`value: false`) is 'skipped',
+ * a met requirement (`completed`) is 'completed', otherwise 'active'.
+ */
+function deriveHabitCheckInStatus(checkIn: DailyCheckIn): ItemStatus {
+  if (checkIn.value === false) return 'skipped';
+  if (checkIn.completed) return 'completed';
+  return 'active';
+}
+
 export function buildHistoryEntries(
   rawHistory: FocusHistory,
   habitsCollection: HabitCollection,
   todayDateKey: string,
 ): HistoryEntry[] {
-  return Object.entries(rawHistory)
-    .map(([dateKey, record]) => buildHistoryEntry(dateKey, record, habitsCollection.habits, todayDateKey))
+  return collectHistoryDateKeys(rawHistory, habitsCollection.habits, todayDateKey)
+    .map((dateKey) =>
+      buildHistoryEntry(dateKey, rawHistory[dateKey] ?? EMPTY_FOCUS_RECORD, habitsCollection.habits, todayDateKey),
+    )
     .filter((entry) => entry.items.length > 0)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
 }
@@ -92,7 +139,7 @@ function buildHistoryEntry(
     const isActiveHabit = habit.state === 'active' || habit.state === 'not-started';
 
     if (checkInForDate) {
-      const status: ItemStatus = checkInForDate.completed ? 'completed' : 'active';
+      const status = deriveHabitCheckInStatus(checkInForDate);
       items.push({
         type: 'habit',
         data: habit,
@@ -100,6 +147,7 @@ function buildHistoryEntry(
         status,
       });
       if (status === 'completed') completedCount++;
+      if (status === 'skipped') skippedCount++;
     } else if (dateKey === todayDateKey && isActiveHabit) {
       items.push({
         type: 'habit',
@@ -115,6 +163,7 @@ function buildHistoryEntry(
   return {
     dateKey,
     displayDate: formatDateForDisplay(dateKey),
+    accessibleDate: formatAccessibleDate(dateKey),
     items,
     totalCount: items.length,
     completedCount,

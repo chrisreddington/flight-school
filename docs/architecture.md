@@ -381,7 +381,7 @@ What each script actually does:
 | --- | --- | --- |
 | `npm run dev` (alias `npm run aspire:run`) | AppHost → web on `:3000` + worker on `:3001` + dashboard wiring. | **Default.** Mirrors prod shape; AI features work. |
 | `npm run dev:web-only` | Just Next.js web on `:3000`, no worker. | UI work that doesn't exercise Copilot chat. AI routes intentionally fail fast. |
-| `npm run dev:worker` | Just the Hono worker on `:3001` (`tsx watch src/worker/bootstrap.ts`). | Combine with `dev:web-worker` to debug the worker in isolation. |
+| `npm run dev:worker` | Just the Hono worker on `:3001` via the esbuild-watch supervisor (`scripts/dev-worker.mjs`). | Combine with `dev:web-worker` to debug the worker in isolation. |
 | `npm run dev:web-worker` | Web on `:3000` pointed at a manually started local worker. | Two-terminal debug flow. |
 | `npm run build:worker` | Bundles the worker to `dist-worker/*.mjs` via esbuild + writes a minimal runtime `package.json`. | Container build (consumed by `Dockerfile.worker`). |
 | `npm run start:worker` | Runs the bundled worker (`node dist-worker/bootstrap.mjs`). | Local production-shape check. |
@@ -391,13 +391,21 @@ AppHost wiring (read alongside the code):
 
 - The resource graph is declared in [`apphost.ts`](../apphost.ts). The
   worker is wired via `addExecutable('copilot-worker', 'npm', '.', ['run', 'dev:worker'])`
-  which spawns `tsx watch src/worker/bootstrap.ts` as a plain Node
-  process — Aspire never treats it as a Next.js app. The deployed
-  container ([`Dockerfile.worker`](../Dockerfile.worker) over
-  `dist-worker/`) runs the same plain-Node process shape — no Next.js
-  machinery in either environment — though the toolchain differs (local
-  dev runs `tsx watch` against TypeScript source; the container runs
-  the esbuild-compiled `bootstrap.mjs`).
+  which spawns a plain Node process — Aspire never treats it as a Next.js
+  app. The deployed container ([`Dockerfile.worker`](../Dockerfile.worker)
+  over `dist-worker/`) runs the same plain-Node process shape — no Next.js
+  machinery in either environment — though the toolchain differs. Local
+  `dev:worker` runs a small esbuild-watch supervisor
+  ([`scripts/dev-worker.mjs`](../scripts/dev-worker.mjs)) that mirrors the
+  production bundle options and respawns `node dist-worker/bootstrap.mjs`
+  on each rebuild; the container runs that same esbuild-compiled
+  `bootstrap.mjs` directly. (We can't use `tsx watch` here: it doesn't
+  apply esbuild's bundle-time `server-only` alias, so worker boot would
+  fail — see the `dev-worker.mjs` header for the full rationale.) The
+  supervisor spawns the worker over an IPC channel with a `--import`
+  parent-death watchdog ([`scripts/dev-worker-watchdog.mjs`](../scripts/dev-worker-watchdog.mjs))
+  so an Aspire force-stop or crash of the supervisor can't orphan a worker
+  that keeps squatting `:3001` and EADDRINUSE-crash-loops the replacement.
 - The worker resource sets a shared `COPILOT_WORKER_SECRET` and a
   distinct `OTEL_SERVICE_NAME=flight-school-worker` so the dashboard
   can tell the two processes apart.
@@ -456,11 +464,27 @@ call. See
 [`architecture-multitenant.md#storage-isolation`](architecture-multitenant.md#storage-isolation)
 for the full invariant list and migration notes.
 
+### Storage backend (document store)
+
+Per-user documents are persisted through a pluggable document store
+([`src/lib/storage/document-store/`](../src/lib/storage/document-store/)).
+A **fresh** data directory defaults to the SQLite backend; an **existing**
+directory is pinned by a `.storage-backend` sentinel that is authoritative —
+a dir already committed to `file` stays on `file` with no migration. The
+shared `resolveEffectiveBackend(dataDir)` resolves the backend with
+precedence `override > persisted sentinel > explicit STORAGE_BACKEND env >
+default`; an explicit `STORAGE_BACKEND` that contradicts the sentinel throws
+(operator misconfig), but the default deferring to the sentinel does not.
+The one-shot legacy-JSON importer ([`migrate.ts`](../src/lib/storage/migrate.ts))
+shares the same resolver so its file-backend quiesce guard always matches the
+live store.
+
 ## Observability
 
-OpenTelemetry is registered via `@vercel/otel` on both processes; the
-two emit OTLP to the Aspire Dashboard locally and to App Insights in
-ACA.
+OpenTelemetry is registered via `@vercel/otel` in the Next.js web
+process and via `@opentelemetry/sdk-node` (`NodeSDK`) in the standalone
+worker; both emit OTLP to the Aspire Dashboard locally and to App
+Insights in ACA.
 
 ```mermaid
 flowchart LR
@@ -469,7 +493,7 @@ flowchart LR
         WInstr["instrumentation.ts<br/>service.name=flight-school-web"]
     end
     subgraph Worker["Worker"]
-        KInstr["instrumentation.ts<br/>service.name=flight-school-worker"]
+        KInstr["worker/lifecycle/otel.ts<br/>service.name=flight-school-worker"]
     end
     Otel[[Aspire Dashboard<br/>/ App Insights]]
 
@@ -486,6 +510,7 @@ Hot paths in the code:
 | --- | --- |
 | Server-side OTel bootstrap (both processes) | [`src/instrumentation.ts`](../src/instrumentation.ts) |
 | Browser OTel bootstrap | [`src/lib/observability/browser-otel.ts`](../src/lib/observability/browser-otel.ts) |
+| Browser OTLP proxy routes (auth + anonymous, shared forwarding path) | [`src/app/api/otel/v1/traces/route.ts`](../src/app/api/otel/v1/traces/route.ts), [`src/app/api/otel/v1/traces/anonymous/route.ts`](../src/app/api/otel/v1/traces/anonymous/route.ts), [`src/app/api/otel/v1/traces/shared.ts`](../src/app/api/otel/v1/traces/shared.ts) |
 | Cross-process trace context capture / inject | [`src/lib/observability/context-propagation.ts`](../src/lib/observability/context-propagation.ts) |
 | GenAI semantic conventions (span/metric names, buckets) | [`src/lib/observability/semconv.ts`](../src/lib/observability/semconv.ts) |
 | Hygiene sampler + bubble-filter exporter (drops Next.js self-spans) | [`src/lib/observability/proxy-sampler.ts`](../src/lib/observability/proxy-sampler.ts), [`bubble-filter-exporter.ts`](../src/lib/observability/bubble-filter-exporter.ts) |

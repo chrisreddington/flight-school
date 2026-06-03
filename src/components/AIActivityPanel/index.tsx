@@ -403,7 +403,7 @@ export const AIActivityPanel = memo(function AIActivityPanel({ initialState = 'h
             <strong>{stats.avgLatency}</strong>ms avg
           </span>
           <span className="f6 color-fg-muted">
-            <strong>{stats.totalTokens.toLocaleString()}</strong> tokens
+            <strong>{stats.totalTokens.toLocaleString('en-US')}</strong> tokens
           </span>
         </div>
 

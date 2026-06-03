@@ -7,13 +7,12 @@
 
 'use client';
 
-import Link from 'next/link';
-
 import { SkillSlider } from '@/components/SkillSlider';
 import type { SkillLevel, SkillProfile, SkillSource } from '@/lib/skills/types';
 import { SKILL_SOURCE_LABELS } from '@/lib/skills/types';
-import { TrashIcon } from '@primer/octicons-react';
+import { MortarBoardIcon, TrashIcon } from '@primer/octicons-react';
 import { Button, Stack } from '@primer/react';
+import { Blankslate } from '@primer/react/experimental';
 
 import styles from '../profile-skills.module.css';
 
@@ -26,13 +25,16 @@ interface SkillsListProps {
 export function SkillsList({ profile, onSkillChange, onRemoveSkill }: SkillsListProps): React.JSX.Element {
   if (profile?.skills.length === 0) {
     return (
-      <div className={styles.emptyState}>
-        <p>
-          No skills configured yet. Skills will be detected automatically from your GitHub activity, or you can add them
-          manually.
-        </p>
-        <Link href="/">Return to Dashboard</Link>
-      </div>
+      <Blankslate>
+        <Blankslate.Visual>
+          <MortarBoardIcon size={24} />
+        </Blankslate.Visual>
+        <Blankslate.Heading>No skills configured yet</Blankslate.Heading>
+        <Blankslate.Description>
+          Skills will be detected automatically from your GitHub activity, or you can add them manually.
+        </Blankslate.Description>
+        <Blankslate.PrimaryAction href="/">Return to Dashboard</Blankslate.PrimaryAction>
+      </Blankslate>
     );
   }
 
@@ -40,14 +42,19 @@ export function SkillsList({ profile, onSkillChange, onRemoveSkill }: SkillsList
     <Stack direction="vertical" gap="normal" className={styles.skillsList}>
       {profile?.skills.map((skill) => (
         <div key={skill.skillId} className={styles.skillCard}>
-          <Stack direction="horizontal" align="start" justify="space-between" gap="normal">
+          <Stack
+            direction={{ narrow: 'vertical', regular: 'horizontal' }}
+            align="start"
+            justify="space-between"
+            gap="normal"
+          >
             <div className={styles.skillInfo}>
               <span className={styles.skillName}>{skill.displayName || skill.skillId}</span>
               <span className={styles.skillSource}>
                 {SKILL_SOURCE_LABELS[skill.source as SkillSource] || skill.source}
               </span>
             </div>
-            <Stack direction="horizontal" align="start" gap="condensed">
+            <Stack direction="horizontal" align="start" gap="condensed" className={styles.skillControls}>
               <SkillSlider
                 skillId={skill.skillId}
                 skillName={skill.displayName || skill.skillId}

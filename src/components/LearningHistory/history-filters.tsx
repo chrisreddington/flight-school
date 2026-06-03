@@ -52,10 +52,13 @@ export function HistoryFilters({
       {/* Filters - cleaner button group style */}
       <div className={styles.sidebarFilters}>
         <div className={styles.filterSection}>
-          <span className={styles.filterLabel}>Type</span>
-          <div className={styles.filterButtons}>
+          <span id="history-type-filter-label" className={styles.filterLabel}>
+            Type
+          </span>
+          <div className={styles.filterButtons} role="group" aria-labelledby="history-type-filter-label">
             <button
               type="button"
+              aria-pressed={typeFilter === 'all'}
               onClick={() => onTypeFilterChange('all')}
               className={`${styles.filterBtn} ${typeFilter === 'all' ? styles.filterBtnActive : ''}`}
             >
@@ -63,6 +66,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={typeFilter === 'challenge'}
               onClick={() => onTypeFilterChange('challenge')}
               className={`${styles.filterBtn} ${typeFilter === 'challenge' ? styles.filterBtnActive : ''}`}
             >
@@ -70,6 +74,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={typeFilter === 'goal'}
               onClick={() => onTypeFilterChange('goal')}
               className={`${styles.filterBtn} ${typeFilter === 'goal' ? styles.filterBtnActive : ''}`}
             >
@@ -77,6 +82,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={typeFilter === 'topic'}
               onClick={() => onTypeFilterChange('topic')}
               className={`${styles.filterBtn} ${typeFilter === 'topic' ? styles.filterBtnActive : ''}`}
             >
@@ -84,6 +90,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={typeFilter === 'habit'}
               onClick={() => onTypeFilterChange('habit')}
               className={`${styles.filterBtn} ${typeFilter === 'habit' ? styles.filterBtnActive : ''}`}
             >
@@ -93,10 +100,13 @@ export function HistoryFilters({
         </div>
 
         <div className={styles.filterSection}>
-          <span className={styles.filterLabel}>Status</span>
-          <div className={styles.filterButtons}>
+          <span id="history-status-filter-label" className={styles.filterLabel}>
+            Status
+          </span>
+          <div className={styles.filterButtons} role="group" aria-labelledby="history-status-filter-label">
             <button
               type="button"
+              aria-pressed={statusFilter === 'all'}
               onClick={() => onStatusFilterChange('all')}
               className={`${styles.filterBtn} ${statusFilter === 'all' ? styles.filterBtnActive : ''}`}
             >
@@ -104,6 +114,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={statusFilter === 'active'}
               onClick={() => onStatusFilterChange('active')}
               className={`${styles.filterBtn} ${statusFilter === 'active' ? styles.filterBtnActive : ''}`}
             >
@@ -111,6 +122,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={statusFilter === 'completed'}
               onClick={() => onStatusFilterChange('completed')}
               className={`${styles.filterBtn} ${statusFilter === 'completed' ? styles.filterBtnActive : ''}`}
             >
@@ -118,6 +130,7 @@ export function HistoryFilters({
             </button>
             <button
               type="button"
+              aria-pressed={statusFilter === 'skipped'}
               onClick={() => onStatusFilterChange('skipped')}
               className={`${styles.filterBtn} ${statusFilter === 'skipped' ? styles.filterBtnActive : ''}`}
             >

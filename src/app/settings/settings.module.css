@@ -1,14 +1,56 @@
-.main {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: var(--base-size-32, 32px) var(--base-size-16, 16px);
+/* Full-height inset background so the page matches the app-shell palette. */
+.layout {
+  min-height: 100vh;
+  background-color: var(--bgColor-inset, #f6f8fa);
 }
 
-.pageHeading {
-  margin-bottom: var(--base-size-24, 24px);
+.dangerZoneSection {
+  margin-top: var(--base-size-24, 24px);
+}
+
+/* Neutral section group (Account, Preferences) — same rhythm as the danger
+   zone but with default foreground/border instead of the danger palette. */
+.section {
+  margin-top: var(--base-size-24, 24px);
+}
+
+.sectionGroupHeading {
+  font: var(--text-title-shorthand-medium);
+  margin-bottom: var(--base-size-16, 16px);
+  padding-bottom: var(--base-size-8, 8px);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.accountName {
+  font-weight: var(--base-text-weight-semibold, 600);
+}
+
+.accountLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--base-size-4, 4px);
+  font-size: var(--text-body-size-small, 12px);
+}
+
+/* Danger-zone heading matches the section rhythm and stays typographically
+   neutral — the destructive signal lives on the red action buttons, not on
+   oversized red heading text (GitHub's danger-zone pattern). */
+.dangerZoneHeading {
+  font: var(--text-title-shorthand-medium);
+  margin-bottom: var(--base-size-16, 16px);
+  padding-bottom: var(--base-size-8, 8px);
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.card {
+  background-color: var(--bgColor-default, #ffffff);
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: var(--borderRadius-medium, 6px);
+  padding: var(--base-size-24, 24px);
 }
 
 .sectionHeading {
+  font: var(--text-title-shorthand-small);
   margin-bottom: var(--base-size-8, 8px);
 }
 

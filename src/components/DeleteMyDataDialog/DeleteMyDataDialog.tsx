@@ -11,13 +11,35 @@
  *
  * On success it calls {@link onConfirmed} (typically signs the user
  * out) so the page doesn't immediately attempt to refetch state for
- * an account that no longer has data.
+ * an account that no longer has data. The authoritative signal is the
+ * response's `success` flag: when it is `false` the server kept some
+ * user data behind, so {@link onConfirmed} is NOT called and the user
+ * stays signed in to retry. The `summary.partial` field is purely
+ * informational/diagnostic — the dialog never branches on it. A
+ * registry-only cleanup failure reports `success: true` (the data is
+ * gone, only the owner record lingers), so it still signs out.
  */
 
 import { ApiError, apiDelete } from '@/lib/api-client';
 import { Banner, Dialog, FormControl, Stack, Text, TextInput } from '@primer/react';
 import React, { useCallback, useState } from 'react';
 import { signIn } from 'next-auth/react';
+
+interface DeleteDataResponse {
+  /**
+   * Authoritative completion signal: `false` means user data may still be on
+   * the server (a partition, activity-buffer, or legacy storage-dir wipe
+   * failure), so the dialog keeps the user signed in for a retry. A
+   * registry-only cleanup failure still reports `true` — the data is gone,
+   * only the owner record lingers.
+   */
+  success: boolean;
+  summary?: {
+    partial?: true;
+    failed?: string[];
+    registryCleanupPending?: true;
+  };
+}
 
 export interface DeleteMyDataDialogProps {
   /** Caller's GitHub login as known to the authenticated session. */
@@ -40,9 +62,17 @@ export function DeleteMyDataDialog({ login, isOpen, onClose, onConfirmed }: Dele
     setSubmitting(true);
     setError(null);
     try {
-      await apiDelete<{ success: boolean }>('/api/user/data', {
+      const result = await apiDelete<DeleteDataResponse>('/api/user/data', {
         body: JSON.stringify({ confirmLogin: login }),
       });
+      if (!result.success) {
+        // The server kept some user data behind. Don't sign the user out —
+        // surface the failure so they can retry from a still-authed session.
+        // A registry-only cleanup failure reports `success: true`, so it
+        // correctly falls through to sign-out below.
+        setError('Some of your data could not be deleted. Please try again in a moment.');
+        return;
+      }
       onConfirmed();
     } catch (err) {
       if (err instanceof ApiError && err.context?.code === 'recent_auth_required') {

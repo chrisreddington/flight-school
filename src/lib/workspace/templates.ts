@@ -178,28 +178,36 @@ function generateStarterCode(challenge: ChallengeDef): string {
   // Language-specific starters
   const starters: Record<string, string> = {
     ts: `// ${challenge.title}
+// #region Challenge description
 // ${challenge.description.split('\n')[0]}
+// #endregion
 
 export function solution() {
   // Your code here
 }
 `,
     js: `// ${challenge.title}
+// #region Challenge description
 // ${challenge.description.split('\n')[0]}
+// #endregion
 
 export function solution() {
   // Your code here
 }
 `,
     py: `# ${challenge.title}
+# region Challenge description
 # ${challenge.description.split('\n')[0]}
+# endregion
 
 def solution():
     # Your code here
     pass
 `,
     java: `// ${challenge.title}
+// #region Challenge description
 // ${challenge.description.split('\n')[0]}
+// #endregion
 
 public class Solution {
     public static void main(String[] args) {
@@ -208,7 +216,9 @@ public class Solution {
 }
 `,
     go: `// ${challenge.title}
+// #region Challenge description
 // ${challenge.description.split('\n')[0]}
+// #endregion
 
 package main
 
@@ -217,7 +227,9 @@ func solution() {
 }
 `,
     rs: `// ${challenge.title}
+// #region Challenge description
 // ${challenge.description.split('\n')[0]}
+// #endregion
 
 fn solution() {
     // Your code here

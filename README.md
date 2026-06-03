@@ -57,6 +57,7 @@ GitHub App and supply `AUTH_*` credentials.
    AUTH_GITHUB_ID=               # GitHub App client id
    AUTH_GITHUB_SECRET=           # GitHub App client secret
    AUTH_TRUST_HOST=true
+   AUDIT_SALT=                   # openssl rand -hex 32
    ```
 3. **Install and run:**
 
@@ -178,6 +179,7 @@ The chat and challenge evaluation experiences stream feedback in real-time using
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run check:otel-emitted -- <trace-export.json>` | Assert trace export includes web + worker service names |
 | `npm run dashboard` | Start Aspire Dashboard (standalone OTLP receiver) |
 | `npm run aspire:run` | Run the Aspire TypeScript AppHost |
 | `npm run aspire:mcp` | Start Aspire MCP server against the dashboard |

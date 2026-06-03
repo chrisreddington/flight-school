@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => {
       return () => {};
     }),
     send,
-    destroy: vi.fn(async () => undefined),
+    disconnect: vi.fn(async () => undefined),
   } as unknown as CopilotSession;
 
   return {

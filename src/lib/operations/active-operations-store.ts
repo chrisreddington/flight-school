@@ -1,13 +1,16 @@
 /**
- * Active operations materialized view.
+ * Active operations materialized view (in-memory).
  *
- * On the server, persists to disk for recovery across restarts.
- * On the client, uses in-memory storage only (no fs module available).
+ * Tracks which background jobs the operations manager is currently following
+ * so it can de-duplicate concurrent regenerations. State is per-process and
+ * non-durable: the browser is the only caller that mutates it, and the
+ * authoritative cross-reload restore source is `/api/jobs` (see
+ * `restore-active-jobs.ts`), not this view. Kept free of `node:fs` so it never
+ * drags filesystem modules into the client bundle.
  */
 
 import { now, nowMs } from '@/lib/utils/date-utils';
 
-const STORAGE_FILE = 'active-operations.json';
 const OPERATION_TTL_MS = 5 * 60 * 1000;
 
 export type ActiveOperationItemType = 'topic' | 'challenge' | 'goal' | 'chat';
@@ -41,56 +44,12 @@ const DEFAULT_SCHEMA: ActiveOperationsSchema = {
   entries: [],
 };
 
-function validateSchema(data: unknown): data is ActiveOperationsSchema {
-  if (typeof data !== 'object' || data === null) return false;
-  const schema = data as Record<string, unknown>;
-  if (schema.version !== 1) return false;
-  if (typeof schema.updatedAt !== 'string') return false;
-  if (!Array.isArray(schema.entries)) return false;
-  return schema.entries.every((entry) => {
-    if (typeof entry !== 'object' || entry === null) return false;
-    const record = entry as Record<string, unknown>;
-    return (
-      typeof record.itemId === 'string' &&
-      typeof record.itemType === 'string' &&
-      typeof record.jobId === 'string' &&
-      typeof record.startedAt === 'string'
-    );
-  });
-}
-
 function pruneExpiredEntries(entries: ActiveOperationEntry[], nowTimestamp: number): ActiveOperationEntry[] {
   return entries.filter((entry) => {
     const startedAtMs = Date.parse(entry.startedAt);
     if (Number.isNaN(startedAtMs)) return false;
     return nowTimestamp - startedAtMs <= OPERATION_TTL_MS;
   });
-}
-
-/**
- * Check if we're running on the server (Node.js) vs browser.
- */
-function isServer(): boolean {
-  return typeof window === 'undefined';
-}
-
-/**
- * Dynamically import storage utils only on the server.
- * Returns null on the client where fs is not available.
- */
-async function getStorageUtils(): Promise<{
-  readStorage: typeof import('@/lib/storage/utils').readStorage;
-  writeStorage: typeof import('@/lib/storage/utils').writeStorage;
-} | null> {
-  if (!isServer()) {
-    return null;
-  }
-  try {
-    const utils = await import('@/lib/storage/utils');
-    return { readStorage: utils.readStorage, writeStorage: utils.writeStorage };
-  } catch {
-    return null;
-  }
 }
 
 export class ActiveOperationsStore {
@@ -101,29 +60,10 @@ export class ActiveOperationsStore {
    * Returns active operations after applying TTL cleanup.
    */
   async getEntries(): Promise<ActiveOperationEntry[]> {
-    const storageUtils = await getStorageUtils();
+    const prunedEntries = pruneExpiredEntries(this.memoryCache.entries, nowMs());
 
-    let schema: ActiveOperationsSchema;
-    if (storageUtils) {
-      schema = await storageUtils.readStorage(STORAGE_FILE, DEFAULT_SCHEMA, validateSchema);
-    } else {
-      schema = this.memoryCache;
-    }
-
-    const nowTimestamp = nowMs();
-    const prunedEntries = pruneExpiredEntries(schema.entries, nowTimestamp);
-
-    if (prunedEntries.length !== schema.entries.length) {
-      const updatedSchema = {
-        ...schema,
-        updatedAt: now(),
-        entries: prunedEntries,
-      };
-      if (storageUtils) {
-        await storageUtils.writeStorage(STORAGE_FILE, updatedSchema);
-      } else {
-        this.memoryCache = updatedSchema;
-      }
+    if (prunedEntries.length !== this.memoryCache.entries.length) {
+      this.memoryCache = { ...this.memoryCache, updatedAt: now(), entries: prunedEntries };
     }
 
     return prunedEntries;
@@ -133,66 +73,31 @@ export class ActiveOperationsStore {
    * Adds or replaces an active operation entry.
    */
   async addEntry(entry: ActiveOperationEntry): Promise<void> {
-    const storageUtils = await getStorageUtils();
-
-    let schema: ActiveOperationsSchema;
-    if (storageUtils) {
-      schema = await storageUtils.readStorage(STORAGE_FILE, DEFAULT_SCHEMA, validateSchema);
-    } else {
-      schema = this.memoryCache;
-    }
-
-    const nowTimestamp = nowMs();
-    const prunedEntries = pruneExpiredEntries(schema.entries, nowTimestamp);
+    const prunedEntries = pruneExpiredEntries(this.memoryCache.entries, nowMs());
 
     const filteredEntries = prunedEntries.filter((existing) => {
       if (existing.jobId === entry.jobId) return false;
       return !(existing.itemId === entry.itemId && existing.itemType === entry.itemType);
     });
 
-    const updatedSchema: ActiveOperationsSchema = {
+    this.memoryCache = {
       version: 1,
       updatedAt: now(),
       entries: [...filteredEntries, entry],
     };
-
-    if (storageUtils) {
-      await storageUtils.writeStorage(STORAGE_FILE, updatedSchema);
-    } else {
-      this.memoryCache = updatedSchema;
-    }
   }
 
   /**
    * Removes an entry by job ID.
    */
   async removeByJobId(jobId: string): Promise<void> {
-    const storageUtils = await getStorageUtils();
+    const remainingEntries = this.memoryCache.entries.filter((entry) => entry.jobId !== jobId);
 
-    let schema: ActiveOperationsSchema;
-    if (storageUtils) {
-      schema = await storageUtils.readStorage(STORAGE_FILE, DEFAULT_SCHEMA, validateSchema);
-    } else {
-      schema = this.memoryCache;
-    }
-
-    const remainingEntries = schema.entries.filter((entry) => entry.jobId !== jobId);
-
-    if (remainingEntries.length === schema.entries.length) {
+    if (remainingEntries.length === this.memoryCache.entries.length) {
       return;
     }
 
-    const updatedSchema = {
-      ...schema,
-      updatedAt: now(),
-      entries: remainingEntries,
-    };
-
-    if (storageUtils) {
-      await storageUtils.writeStorage(STORAGE_FILE, updatedSchema);
-    } else {
-      this.memoryCache = updatedSchema;
-    }
+    this.memoryCache = { ...this.memoryCache, updatedAt: now(), entries: remainingEntries };
   }
 }
 

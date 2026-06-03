@@ -3,10 +3,14 @@
  *
  * Server-side reads/writes for thread storage used by background job
  * executors. The HTTP route `/api/threads/storage` writes per-user via
- * {@link createStorageRoute}, which routes through
- * `users/{userId}/threads.json` (see `@/lib/storage/user-scope`).
- * These helpers MUST use the same per-user partitioning so executors
- * read the same file the client wrote.
+ * {@link createStorageRoute}, which routes the `threads.json` filename through
+ * the same envelope {@link import('@/lib/storage/document-store/singleton-repo')}
+ * these helpers use, so executors read the same document the client wrote.
+ *
+ * This module is **worker-reached** (job executors persist thread deltas). The
+ * envelope chain stays Next-free for the worker bundle: the worker esbuild
+ * shims `server-only` and nothing here imports `next/*`
+ * (`scripts/check-worker-next-free.mjs` enforces it).
  *
  * Every function takes `userId` from a server-resolved identity
  * (Auth.js session or the persisted job payload populated by an
@@ -15,9 +19,8 @@
  * @module jobs/threads-storage
  */
 
-import { readStorage, writeStorage, ensureDir } from '@/lib/storage/utils';
-import { isUserDeleted } from '@/lib/storage/tombstone';
-import { userScopedFilename } from '@/lib/storage/user-scope';
+import { createSingletonRepo } from '@/lib/storage/document-store/singleton-repo';
+import { UserDeletedError } from '@/lib/storage/document-store/user-scoped-store';
 import type { Thread } from '@/lib/threads';
 import { stripLegacyCursorFromThread } from '@/lib/threads/legacy-cursor';
 import { now } from '@/lib/utils/date-utils';
@@ -34,13 +37,20 @@ function validateThreadsSchema(data: unknown): data is ThreadsStorageSchema {
   return Array.isArray(schema.threads);
 }
 
-/** Read threads directly from storage for a specific user. */
-async function readThreadsStorage(userId: string): Promise<Thread[]> {
-  const storage = await readStorage<ThreadsStorageSchema>(
-    userScopedFilename(userId, 'threads.json'),
-    DEFAULT_THREADS_SCHEMA,
-    validateThreadsSchema,
-  );
+const threadsRepo = createSingletonRepo<ThreadsStorageSchema>({
+  filename: 'threads.json',
+  defaultValue: DEFAULT_THREADS_SCHEMA,
+  guard: validateThreadsSchema,
+});
+
+/**
+ * Read threads directly from storage for a specific user.
+ *
+ * Exported so the retention sweeper can bulk-read, filter, and rewrite a
+ * user's threads through the same envelope the executors use.
+ */
+export async function readThreadsStorage(userId: string): Promise<Thread[]> {
+  const storage = await threadsRepo.read(userId);
   return storage.threads;
 }
 
@@ -49,13 +59,17 @@ async function readThreadsStorage(userId: string): Promise<Thread[]> {
  *
  * Aborts silently when the user's deletion tombstone is set so
  * `DELETE /api/user/data` can't be raced by a late-arriving executor
- * delta (rubber-duck #6). The tombstone is cleared on next successful
- * sign-in.
+ * delta (rubber-duck #6) — the store rejects the write with
+ * {@link UserDeletedError}. The tombstone is cleared on next successful
+ * sign-in. Exported for the retention sweeper.
  */
-async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<void> {
-  if (await isUserDeleted(userId)) return;
-  await ensureDir(`users/${userId}`, { mode: 0o700 });
-  await writeStorage(userScopedFilename(userId, 'threads.json'), { threads });
+export async function writeThreadsStorage(userId: string, threads: Thread[]): Promise<void> {
+  try {
+    await threadsRepo.write(userId, { threads });
+  } catch (error) {
+    if (error instanceof UserDeletedError) return;
+    throw error;
+  }
 }
 
 /** Get a thread by ID directly from storage for a specific user. */

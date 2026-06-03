@@ -49,6 +49,7 @@ export interface FocusResponse {
     toolsUsed: string[];
     totalTimeMs: number;
     usedCachedProfile: boolean;
+    skillProfileLastUpdated?: string;
   };
 }
 
@@ -89,6 +90,11 @@ export interface DailyFocusRecord {
    * Items are removed when confirmed or dismissed by the user.
    */
   calibrationNeeded?: CalibrationNeededItem[];
+  meta?: {
+    generatedAt: string;
+    toolsUsed: string[];
+    skillProfileLastUpdated?: string;
+  };
 }
 
 /**

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { now, nowMs, getDateKey, formatTimestamp } from './date-utils';
+import { now, nowMs, getDateKey, formatTimestamp, formatDate } from './date-utils';
 
 describe('now', () => {
   beforeEach(() => {
@@ -44,6 +44,27 @@ describe('nowMs', () => {
 
   it('should return number type', () => {
     expect(typeof nowMs()).toBe('number');
+  });
+});
+
+describe('formatDate', () => {
+  it('should format an absolute date with a spelled-out month', () => {
+    expect(formatDate('2026-05-28T09:15:00.000Z')).toBe('May 28, 2026');
+  });
+
+  it('should be locale-independent (deterministic regardless of runtime locale)', () => {
+    // The bare Date.prototype.toLocaleDateString() picks up the runtime
+    // locale, which differs between the SSR Node process (en-US) and a
+    // browser (e.g. en-GB), causing hydration mismatches. A spelled-out
+    // month under a pinned locale renders identically on both sides.
+    const original = formatDate('2026-12-05T00:00:00.000Z');
+    expect(original).toBe('December 5, 2026');
+    // Numeric ordering ambiguity (5/12 vs 12/5) cannot occur with a month name.
+    expect(original).not.toMatch(/^\d/);
+  });
+
+  it('should accept an ISO string and not depend on time-of-day', () => {
+    expect(formatDate('2026-01-01T23:59:59.000Z')).toMatch(/^January 1, 2026$/);
   });
 });
 

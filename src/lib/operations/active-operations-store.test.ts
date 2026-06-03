@@ -1,29 +1,19 @@
-import { createTestStorageContext, ensureTestStorageDirectory } from '@/test/mocks/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActiveOperationEntry, ActiveOperationsStore } from './active-operations-store';
+import { ActiveOperationsStore, type ActiveOperationEntry } from './active-operations-store';
 
 const BASE_TIME = new Date('2026-01-25T00:00:00.000Z');
 
 describe('ActiveOperationsStore', () => {
   let store: ActiveOperationsStore;
-  let cleanup: () => Promise<void>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(BASE_TIME);
-
-    const context = createTestStorageContext();
-    cleanup = context.cleanup;
-    await ensureTestStorageDirectory(context.storageDir);
-
-    vi.resetModules();
-    const storeModule = await import('./active-operations-store');
-    store = storeModule.activeOperationsStore;
+    store = new ActiveOperationsStore();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.useRealTimers();
-    await cleanup();
   });
 
   it('should add and return active entries', async () => {

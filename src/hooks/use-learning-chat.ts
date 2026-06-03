@@ -251,9 +251,8 @@ export function useLearningChat(): UseLearningChatReturn {
       // so the SSE-attach effect finds a pre-existing record.
       registerStream(jobId, targetThreadId, assistantMessageId);
       operationsManager.registerExistingJob(jobId, 'chat-response', targetThreadId, assistantMessageId);
-      await refreshThreads();
     },
-    [refreshThreads, registerStream],
+    [registerStream],
   );
 
   const sendMessage = useCallback(
@@ -276,7 +275,14 @@ export function useLearningChat(): UseLearningChatReturn {
         content: message,
         timestamp: now(),
       };
-      await updateActiveThread({ messages: [...thread.messages, userMessage] }, thread.id);
+      await updateActiveThread(
+        {
+          title: thread.title,
+          context: thread.context,
+          messages: [...thread.messages, userMessage],
+        },
+        thread.id,
+      );
 
       // Mark pending IMMEDIATELY so polling fires before storage flips isStreaming.
       markStreamPending(thread.id, userMessage.id);
