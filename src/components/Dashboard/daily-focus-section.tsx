@@ -2,6 +2,7 @@
 
 import type { ProfileResponse } from '@/app/api/profile/route';
 import { ChallengeCard, GoalCard, TopicCard } from '@/components/FocusItem';
+import { SkippingCard } from '@/components/FocusItem/SkippingCard';
 import { HabitsSection } from './habits-section';
 import { useDebugMode } from '@/contexts/debug-context';
 import { useCustomChallengeQueue } from '@/hooks/use-custom-challenge-queue';
@@ -91,6 +92,10 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   // Local state for calibration items - allows persistence on dismiss/confirm
   const [calibrationItems, setCalibrationItems] = useState<CalibrationNeededItem[] | null>(null);
   const [isChallengeRefreshSuggested, setIsChallengeRefreshSuggested] = useState(false);
+  // The "New challenge" / "Refresh suggestion" actions call an awaited server
+  // action that swaps the card in place. Without this flag the old card would
+  // sit unchanged until the swap, giving no sign the request was accepted.
+  const [isRegeneratingChallenge, setIsRegeneratingChallenge] = useState(false);
 
   // Use local state if set, otherwise fall back to aiFocus data
   const calibrationNeeded: CalibrationNeededItem[] = calibrationItems ?? aiFocus?.calibrationNeeded ?? [];
@@ -179,12 +184,24 @@ export const DailyFocusSection = memo(function DailyFocusSection({
   const isGoalRefreshDisabled = isGoalLoading || isRateLimited;
   const isTopicsLoading = isProfileLoading || loadingComponents.includes('learningTopics');
 
-  function handleRefreshSuggestionClick(): void {
-    if (onRegenerateChallenge) {
-      void onRegenerateChallenge(challenge.id);
-    } else {
+  // Regenerate today's challenge, showing an in-progress skeleton for the
+  // duration of the awaited server action. Falls back to the streaming refresh
+  // (which sets its own loading state) when no regenerate handler is wired.
+  const handleRegenerateChallenge = useCallback(async () => {
+    if (!onRegenerateChallenge) {
       onRefresh(['challenge']);
+      return;
     }
+    setIsRegeneratingChallenge(true);
+    try {
+      await onRegenerateChallenge(challenge.id);
+    } finally {
+      setIsRegeneratingChallenge(false);
+    }
+  }, [onRegenerateChallenge, onRefresh, challenge.id]);
+
+  function handleRefreshSuggestionClick(): void {
+    void handleRegenerateChallenge();
     setIsChallengeRefreshSuggested(false);
   }
 
@@ -261,20 +278,14 @@ export const DailyFocusSection = memo(function DailyFocusSection({
                 <SkeletonBox height="20px" width="70%" className={styles.skeletonMbSm} />
                 <SkeletonBox height="40px" width="100%" />
               </div>
+            ) : isRegeneratingChallenge ? (
+              <SkippingCard id={challenge.id} itemType="challenge" skeletonLines={3} />
             ) : (
               <>
                 <ChallengeCard
                   challenge={challenge}
                   isCustom={isCustomChallenge}
-                  onRefresh={
-                    !isCustomChallenge
-                      ? onRegenerateChallenge
-                        ? () => {
-                            void onRegenerateChallenge(challenge.id);
-                          }
-                        : () => onRefresh(['challenge'])
-                      : undefined
-                  }
+                  onRefresh={!isCustomChallenge ? handleRegenerateChallenge : undefined}
                   onEdit={isCustomChallenge ? () => router.push(`/challenge/edit/${challenge.id}`) : undefined}
                   onCreate={handleCreateChallenge}
                   onSkipAndReplace={isCustomChallenge ? handleSkipCustomChallenge : onSkipChallenge}

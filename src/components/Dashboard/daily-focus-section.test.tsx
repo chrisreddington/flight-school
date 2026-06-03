@@ -272,4 +272,67 @@ describe('DailyFocusSection', () => {
     });
     expect(onRefresh.mock.calls.length).toBe(0);
   });
+
+  it('shows an in-progress skeleton while a challenge is being regenerated', async () => {
+    let resolveRegenerate: ((result: { ok: true }) => void) | undefined;
+    const onRegenerateChallenge = vi.fn().mockReturnValue(
+      new Promise<{ ok: true }>((resolve) => {
+        resolveRegenerate = resolve;
+      }),
+    );
+    const challenge = {
+      id: 'challenge-1',
+      title: 'Challenge 1',
+      description: 'desc',
+      language: 'TypeScript',
+      difficulty: 'beginner',
+      whyThisChallenge: [],
+    };
+
+    useCustomChallengeQueueMock.mockReturnValue({
+      activeChallenge: challenge,
+      activeSource: 'daily-focus',
+      queueRemaining: 0,
+      advanceQueue: advanceQueueMock,
+    });
+
+    const aiFocus: FocusResponse = {
+      challenge,
+      goal: { id: 'goal-1', title: 'Goal', actions: [] },
+      learningTopics: [],
+      calibrationNeeded: [{ skillId: 'ts', displayName: 'TypeScript', suggestedLevel: 'intermediate' }],
+      meta: {
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        aiEnabled: true,
+        model: 'test-model',
+        toolsUsed: [],
+        totalTimeMs: 1,
+        usedCachedProfile: false,
+      },
+    };
+
+    render(
+      <DailyFocusSection
+        profile={null}
+        isLoading={false}
+        aiFocus={aiFocus}
+        isAIEnabled={true}
+        toolsUsed={[]}
+        loadingComponents={[]}
+        onRefresh={vi.fn()}
+        onRegenerateChallenge={onRegenerateChallenge}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm calibration' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh suggestion' }));
+
+    expect(await screen.findByText('Generating new challenge...')).toBeInTheDocument();
+
+    resolveRegenerate?.({ ok: true });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Generating new challenge...')).not.toBeInTheDocument();
+    });
+  });
 });
