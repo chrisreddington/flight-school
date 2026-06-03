@@ -26,7 +26,7 @@
 import { safeChildPath } from '@/lib/storage/safe-path';
 
 /** Maximum length allowed for a workspace filename (incl. any subpath). */
-export const MAX_WORKSPACE_FILENAME_LENGTH = 255;
+const MAX_WORKSPACE_FILENAME_LENGTH = 255;
 
 /** Per-segment character class. Permits dots (unlike `SAFE_PATH_SEGMENT`). */
 const SEGMENT_PATTERN = /^[a-zA-Z0-9._-]+$/;

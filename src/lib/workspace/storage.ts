@@ -32,7 +32,7 @@
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import { now } from '@/lib/utils/date-utils';
-import { METADATA_FILENAME, WORKSPACES_DIR, toFileMetadata, toWorkspaceFile } from './legacy-tree';
+import { WORKSPACES_DIR, toFileMetadata } from './legacy-tree';
 import type { ChallengeWorkspace, WorkspaceMetadata, WorkspaceStoreInterface } from './types';
 import { MAX_WORKSPACE_SIZE_BYTES } from './types';
 
@@ -260,4 +260,4 @@ export const workspaceStore = new ServerWorkspaceStore();
 // Server-Side Utilities (for API routes)
 // =============================================================================
 
-export { WORKSPACES_DIR, METADATA_FILENAME, toFileMetadata, toWorkspaceFile };
+export { WORKSPACES_DIR, toFileMetadata };

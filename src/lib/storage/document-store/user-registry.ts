@@ -102,7 +102,7 @@ export async function removeUserRegistration(store: DocumentStore, userId: strin
  * shard-by-shard, page-by-page. Bounded and deterministic — the bucket set is
  * known a priori, so retention never falls back to a cross-partition scan.
  */
-export async function* iterateRegisteredUsers(store: DocumentStore): AsyncGenerator<string> {
+async function* iterateRegisteredUsers(store: DocumentStore): AsyncGenerator<string> {
   for await (const entry of iterateRegisteredEntries(store)) {
     yield entry.userId;
   }

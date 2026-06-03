@@ -89,7 +89,7 @@ export interface TrackEnrollment {
 }
 
 /** Lifecycle status of a {@link TrackStepInstance}. */
-export type StepInstanceStatus = 'not-started' | 'in-progress' | 'completed';
+type StepInstanceStatus = 'not-started' | 'in-progress' | 'completed';
 
 /**
  * One learner's progress on one step of one enrollment.
