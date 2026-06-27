@@ -108,7 +108,7 @@ jobs:
           echo "short=${sha:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout deploy SHA
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ steps.sha.outputs.value }}
           fetch-depth: 0
@@ -181,7 +181,7 @@ jobs:
       - name: Paths filter (workflow_run only)
         id: filter
         if: github.event_name == 'workflow_run' && steps.stale.outputs.superseded == 'false' && steps.filter-base.outputs.first_deploy == 'false'
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
           ref: ${{ steps.sha.outputs.value }}
           base: ${{ steps.filter-base.outputs.value }}
@@ -232,7 +232,7 @@ jobs:
       # run_id (≤20) + `-` (1) + run_attempt (≤2) = 42 max.
       DEPLOY_NAME: infra-${{ needs.should-deploy.outputs.sha_short }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ needs.should-deploy.outputs.sha }}
           fetch-depth: 1
