@@ -57,7 +57,7 @@ jobs:
       comment_repo: ""
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw/actions/setup@4d44d0e89851a877f4ddc0cb6c0197e42b1016c5 # v0.73.0
+        uses: github/gh-aw/actions/setup@9441310fb463ae6c16e58a793e8cb1796c49d053 # v0.80.5
         with:
           destination: /opt/gh-aw/actions
       - name: Validate context variables
@@ -69,7 +69,7 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/validate_context_variables.cjs');
             await main();
       - name: Checkout .github and .agents folders
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout: |
             .github
@@ -244,11 +244,11 @@ jobs:
       secret_verification_result: ${{ steps.validate-secret.outputs.verification_result }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw/actions/setup@4d44d0e89851a877f4ddc0cb6c0197e42b1016c5 # v0.73.0
+        uses: github/gh-aw/actions/setup@9441310fb463ae6c16e58a793e8cb1796c49d053 # v0.80.5
         with:
           destination: /opt/gh-aw/actions
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - name: Create gh-aw temp directory
@@ -1071,7 +1071,7 @@ jobs:
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw/actions/setup@4d44d0e89851a877f4ddc0cb6c0197e42b1016c5 # v0.73.0
+        uses: github/gh-aw/actions/setup@9441310fb463ae6c16e58a793e8cb1796c49d053 # v0.80.5
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent output artifact
@@ -1182,7 +1182,7 @@ jobs:
       matched_command: ''
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw/actions/setup@4d44d0e89851a877f4ddc0cb6c0197e42b1016c5 # v0.73.0
+        uses: github/gh-aw/actions/setup@9441310fb463ae6c16e58a793e8cb1796c49d053 # v0.80.5
         with:
           destination: /opt/gh-aw/actions
       - name: Check stop-time limit
@@ -1225,7 +1225,7 @@ jobs:
       process_safe_outputs_temporary_id_map: ${{ steps.process_safe_outputs.outputs.temporary_id_map }}
     steps:
       - name: Setup Scripts
-        uses: github/gh-aw/actions/setup@4d44d0e89851a877f4ddc0cb6c0197e42b1016c5 # v0.73.0
+        uses: github/gh-aw/actions/setup@9441310fb463ae6c16e58a793e8cb1796c49d053 # v0.80.5
         with:
           destination: /opt/gh-aw/actions
       - name: Download agent output artifact
@@ -1247,7 +1247,7 @@ jobs:
           path: /tmp/gh-aw/
       - name: Checkout repository
         if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'create_pull_request'))
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.base_ref || github.ref_name }}
           token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
