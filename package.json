@@ -104,7 +104,7 @@
     "eventsource-parser": "^3.1.0",
     "hono": "^4.13.0",
     "jose": "^6.2.4",
-    "next": "16.2.12",
+    "next": "16.3.0",
     "next-auth": "^5.0.0-beta.32",
     "octokit": "^5.0.5",
     "react": "19.2.8",
