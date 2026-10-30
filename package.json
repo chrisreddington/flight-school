@@ -73,7 +73,7 @@
   },
   "dependencies": {
     "@azure/cosmos": "^4.10.1",
-    "@azure/identity": "^4.14.0",
+    "@azure/identity": "^4.14.1",
     "@azure/keyvault-keys": "^4.10.2",
     "@github/copilot-sdk": "^1.0.25",
     "@hono/node-server": "^2.1.5",
